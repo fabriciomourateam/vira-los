@@ -28,7 +28,7 @@ interface RoteiroItem {
 
 interface RoteiroSection {
   id: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<any>;
   titulo: string;
   accent: string;
   bg: string;
