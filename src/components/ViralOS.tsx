@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const easing = [0.25, 0.1, 0.25, 1];
+const easing = [0.25, 0.1, 0.25, 1] as const;
 
 interface RoteiroItem {
   id: string;
