@@ -238,6 +238,7 @@ const keywords = [
 ];
 
 export default function ViralOS() {
+  const [activeTab, setActiveTab] = useState<TabId>('roteiro');
   const [state, setState] = useState<AppState>(initialState);
 
   useEffect(() => {
