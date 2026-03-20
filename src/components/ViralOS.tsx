@@ -13,8 +13,20 @@ import {
   Trash2,
   Info,
   Copy,
+  Calculator,
+  ShoppingBag,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import MetricasCalculadora from './MetricasCalculadora';
+import ProdutosEscalaveis from './ProdutosEscalaveis';
+
+type TabId = 'roteiro' | 'metricas' | 'produtos';
+
+const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
+  { id: 'roteiro', label: 'Roteiro', icon: Zap },
+  { id: 'metricas', label: 'Métricas', icon: Calculator },
+  { id: 'produtos', label: 'Produtos', icon: ShoppingBag },
+];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
 
@@ -226,6 +238,7 @@ const keywords = [
 ];
 
 export default function ViralOS() {
+  const [activeTab, setActiveTab] = useState<TabId>('roteiro');
   const [state, setState] = useState<AppState>(initialState);
 
   useEffect(() => {
@@ -296,7 +309,7 @@ export default function ViralOS() {
               <Zap size={18} className="text-background" />
             </div>
             <span className="font-extrabold tracking-tight text-sm uppercase">
-              ViralOS <span className="text-muted-foreground font-medium">v1.0</span>
+              ViralOS <span className="text-muted-foreground font-medium">v2.0</span>
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -307,23 +320,48 @@ export default function ViralOS() {
             >
               <Trash2 size={18} />
             </button>
-            <div className="flex items-center gap-3 bg-secondary px-3 py-1.5 rounded-full">
-              <div className="w-24 h-1.5 bg-border rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-foreground rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.5, ease: easing }}
-                />
+            {activeTab === 'roteiro' && (
+              <div className="flex items-center gap-3 bg-secondary px-3 py-1.5 rounded-full">
+                <div className="w-24 h-1.5 bg-border rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-foreground rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.5, ease: easing }}
+                  />
+                </div>
+                <span className="text-xs font-mono font-bold tabular-nums">{progress}%</span>
               </div>
-              <span className="text-xs font-mono font-bold tabular-nums">{progress}%</span>
-            </div>
+            )}
           </div>
+        </div>
+        {/* Tab Bar */}
+        <div className="max-w-3xl mx-auto px-4 flex gap-1">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+                  isActive
+                    ? 'border-foreground text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground/70'
+                }`}
+              >
+                <Icon size={14} />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 pt-8">
-        {/* Hero */}
+        {activeTab === 'metricas' && <MetricasCalculadora />}
+        {activeTab === 'produtos' && <ProdutosEscalaveis />}
+        {activeTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-3xl font-extrabold tracking-tight mb-2 text-balance">
             Roteiro de Viralização
@@ -528,6 +566,7 @@ export default function ViralOS() {
             Analise, ajuste e repita.
           </p>
         </footer>
+        </>)}
       </main>
     </div>
   );
