@@ -13,8 +13,20 @@ import {
   Trash2,
   Info,
   Copy,
+  Calculator,
+  ShoppingBag,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import MetricasCalculadora from './MetricasCalculadora';
+import ProdutosEscalaveis from './ProdutosEscalaveis';
+
+type TabId = 'roteiro' | 'metricas' | 'produtos';
+
+const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
+  { id: 'roteiro', label: 'Roteiro', icon: Zap },
+  { id: 'metricas', label: 'Métricas', icon: Calculator },
+  { id: 'produtos', label: 'Produtos', icon: ShoppingBag },
+];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
 
