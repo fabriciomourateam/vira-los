@@ -15,17 +15,23 @@ import {
   Copy,
   Calculator,
   ShoppingBag,
+  Calendar,
+  BookOpen,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MetricasCalculadora from './MetricasCalculadora';
 import ProdutosEscalaveis from './ProdutosEscalaveis';
+import Agendador from './Agendador';
+import PesquisaConteudo from './PesquisaConteudo';
 
-type TabId = 'roteiro' | 'metricas' | 'produtos';
+type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
-  { id: 'roteiro', label: 'Roteiro', icon: Zap },
-  { id: 'metricas', label: 'Métricas', icon: Calculator },
-  { id: 'produtos', label: 'Produtos', icon: ShoppingBag },
+  { id: 'roteiro',   label: 'Roteiro',   icon: Zap },
+  { id: 'metricas',  label: 'Métricas',  icon: Calculator },
+  { id: 'produtos',  label: 'Produtos',  icon: ShoppingBag },
+  { id: 'agendador', label: 'Agendar',   icon: Calendar },
+  { id: 'pesquisa',  label: 'Pesquisa',  icon: BookOpen },
 ];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
@@ -359,8 +365,10 @@ export default function ViralOS() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 pt-8">
-        {activeTab === 'metricas' && <MetricasCalculadora />}
-        {activeTab === 'produtos' && <ProdutosEscalaveis />}
+        {activeTab === 'metricas'  && <MetricasCalculadora />}
+        {activeTab === 'produtos'  && <ProdutosEscalaveis />}
+        {activeTab === 'agendador' && <Agendador />}
+        {activeTab === 'pesquisa'  && <PesquisaConteudo />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-3xl font-extrabold tracking-tight mb-2 text-balance">
