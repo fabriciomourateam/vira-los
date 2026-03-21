@@ -231,19 +231,26 @@ router.get('/tiktok-search', async (req, res) => {
     });
 
     const list = response.data?.data?.videos || [];
-    const videos = list.map((v) => ({
-      id: v.video_id || v.aweme_id,
-      title: v.title || v.desc || '',
-      author: v.author || '',
-      author_handle: v.author || '',
-      views: v.play_count || 0,
-      likes: v.digg_count || 0,
-      comments: v.comment_count || 0,
-      shares: v.share_count || 0,
-      cover: v.cover || v.origin_cover || '',
-      url: `https://www.tiktok.com/@${v.author}/video/${v.video_id || v.aweme_id}`,
-      platform: 'tiktok',
-    }));
+    const videos = list.map((v) => {
+      // author pode ser string ou objeto { id, unique_id, nickname, avatar }
+      const authorObj = typeof v.author === 'object' && v.author !== null ? v.author : null;
+      const authorHandle = authorObj ? (authorObj.unique_id || authorObj.id || '') : String(v.author || '');
+      const authorName = authorObj ? (authorObj.nickname || authorHandle) : authorHandle;
+      const videoId = v.video_id || v.aweme_id || '';
+      return {
+        id: String(videoId),
+        title: String(v.title || v.desc || ''),
+        author: authorName,
+        author_handle: authorHandle,
+        views: Number(v.play_count || 0),
+        likes: Number(v.digg_count || 0),
+        comments: Number(v.comment_count || 0),
+        shares: Number(v.share_count || 0),
+        cover: String(v.cover || v.origin_cover || ''),
+        url: `https://www.tiktok.com/@${authorHandle}/video/${videoId}`,
+        platform: 'tiktok',
+      };
+    });
 
     res.set('Cache-Control', 'no-store');
     res.json(videos);
