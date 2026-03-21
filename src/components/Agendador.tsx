@@ -89,13 +89,25 @@ export default function Agendador() {
   }
 
   useEffect(() => {
-    load();
-    // Detecta retorno do OAuth via query params
+    // Se este é o popup retornando do OAuth, sinaliza a janela pai e fecha
     const params = new URLSearchParams(window.location.search);
-    if (params.get('youtube') === 'connected' || params.get('tiktok') === 'connected') {
-      setPlatformsOpen(true);
-      window.history.replaceState({}, '', window.location.pathname);
+    const platform = params.get('youtube') ? 'youtube' : params.get('tiktok') ? 'tiktok' : null;
+    if (platform) {
+      localStorage.setItem('oauth_done', JSON.stringify({ platform, ts: Date.now() }));
+      window.close();
+      return;
     }
+    load();
+    // Escuta sinal do popup via localStorage
+    const handler = (e: StorageEvent) => {
+      if (e.key === 'oauth_done') {
+        load();
+        setPlatformsOpen(true);
+        localStorage.removeItem('oauth_done');
+      }
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
   }, []);
 
   async function deleteContent(id: string) {
@@ -971,11 +983,12 @@ function PlatformsModal({ platforms, onClose, onRefresh }: {
     setSaving(platform);
     try {
       const { url } = await api.get<{ url: string }>(`/api/platforms/${platform}/auth-url`);
-      window.location.href = url;
+      window.open(url, '_blank', 'width=600,height=700');
+      setMsg(`Autorize na janela que abriu...`);
     } catch (e: any) {
       setMsg(`❌ ${e.message}`);
-      setSaving(null);
     }
+    setSaving(null);
   }
 
   async function disconnect(platform: Platform) {
