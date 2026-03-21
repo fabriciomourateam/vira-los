@@ -115,4 +115,4 @@ async function exchangeCode(code) {
   return { username: channel?.snippet?.title || 'Canal YouTube' };
 }
 
-module.exports = { post, getAuthUrl, exchangeCode };
+module.exports = { post, getAuthUrl, exchangeCode, getAuthenticatedClient };

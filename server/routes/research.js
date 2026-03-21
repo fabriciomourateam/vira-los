@@ -4,81 +4,97 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const db = require('../db/database');
 
-// ── Busca Viral (Scraptik / RapidAPI) ─────────────────────────────────────────
+// ── Busca Viral (YouTube Data API) ────────────────────────────────────────────
 
 router.get('/viral', async (req, res) => {
   const { q = '', count = 20 } = req.query;
-  const apiKey = process.env.RAPIDAPI_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada no servidor' });
   if (!q.trim()) return res.json([]);
 
   try {
-    const response = await axios.get('https://scraptik.p.rapidapi.com/search_posts', {
-      params: { keyword: q.trim(), count, offset: 0 },
-      headers: {
-        'X-RapidAPI-Key': apiKey,
-        'X-RapidAPI-Host': 'scraptik.p.rapidapi.com',
-      },
-      timeout: 15000,
+    const yt = require('../services/youtube');
+    const auth = await yt.getAuthenticatedClient();
+    const { google } = require('googleapis');
+    const youtube = google.youtube({ version: 'v3', auth });
+
+    const searchRes = await youtube.search.list({
+      part: ['snippet'],
+      q: q.trim(),
+      type: ['video'],
+      videoDuration: 'short',
+      order: 'viewCount',
+      maxResults: Number(count),
     });
 
-    const list = response.data?.aweme_list || response.data?.data || [];
-    const videos = list.map((v) => ({
-      id: v.aweme_id || v.id || String(Math.random()),
-      title: v.desc || '',
-      author: v.author?.nickname || v.author?.unique_id || '',
-      author_handle: v.author?.unique_id || '',
-      views: v.statistics?.play_count || 0,
-      likes: v.statistics?.digg_count || 0,
-      comments: v.statistics?.comment_count || 0,
-      shares: v.statistics?.share_count || 0,
-      cover: v.video?.cover?.url_list?.[0] || v.video?.origin_cover?.url_list?.[0] || '',
-      url: `https://www.tiktok.com/@${v.author?.unique_id}/video/${v.aweme_id}`,
-      platform: 'tiktok',
-    }));
+    const ids = searchRes.data.items.map((i) => i.id.videoId).filter(Boolean);
+    if (!ids.length) return res.json([]);
+
+    const statsRes = await youtube.videos.list({
+      part: ['statistics'],
+      id: ids,
+    });
+
+    const statsMap = {};
+    statsRes.data.items.forEach((v) => { statsMap[v.id] = v.statistics; });
+
+    const videos = searchRes.data.items.map((item) => {
+      const stats = statsMap[item.id.videoId] || {};
+      return {
+        id: item.id.videoId,
+        title: item.snippet.title,
+        author: item.snippet.channelTitle,
+        author_handle: item.snippet.channelTitle,
+        views: parseInt(stats.viewCount || '0'),
+        likes: parseInt(stats.likeCount || '0'),
+        comments: parseInt(stats.commentCount || '0'),
+        shares: 0,
+        cover: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url || '',
+        url: `https://www.youtube.com/shorts/${item.id.videoId}`,
+        platform: 'youtube',
+      };
+    });
 
     res.set('Cache-Control', 'no-store');
     res.json(videos);
   } catch (e) {
-    console.error('[Viral search] Error:', e.response?.data || e.message);
-    res.status(500).json({ error: e.response?.data?.message || e.message });
+    console.error('[Viral search] Error:', e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
 router.get('/trending', async (req, res) => {
-  const apiKey = process.env.RAPIDAPI_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada no servidor' });
-
   try {
-    const response = await axios.get('https://scraptik.p.rapidapi.com/challenge_posts', {
-      params: { challenge_name: 'fyp', count: 20, offset: 0 },
-      headers: {
-        'X-RapidAPI-Key': apiKey,
-        'X-RapidAPI-Host': 'scraptik.p.rapidapi.com',
-      },
-      timeout: 15000,
+    const yt = require('../services/youtube');
+    const auth = await yt.getAuthenticatedClient();
+    const { google } = require('googleapis');
+    const youtube = google.youtube({ version: 'v3', auth });
+
+    const trendRes = await youtube.videos.list({
+      part: ['snippet', 'statistics'],
+      chart: 'mostPopular',
+      regionCode: 'BR',
+      videoCategoryId: '22',
+      maxResults: 20,
     });
 
-    const list = response.data?.aweme_list || response.data?.data || [];
-    const videos = list.map((v) => ({
-      id: v.aweme_id || v.id || String(Math.random()),
-      title: v.desc || '',
-      author: v.author?.nickname || v.author?.unique_id || '',
-      author_handle: v.author?.unique_id || '',
-      views: v.statistics?.play_count || 0,
-      likes: v.statistics?.digg_count || 0,
-      comments: v.statistics?.comment_count || 0,
-      shares: v.statistics?.share_count || 0,
-      cover: v.video?.cover?.url_list?.[0] || v.video?.origin_cover?.url_list?.[0] || '',
-      url: `https://www.tiktok.com/@${v.author?.unique_id}/video/${v.aweme_id}`,
-      platform: 'tiktok',
+    const videos = trendRes.data.items.map((v) => ({
+      id: v.id,
+      title: v.snippet.title,
+      author: v.snippet.channelTitle,
+      author_handle: v.snippet.channelTitle,
+      views: parseInt(v.statistics?.viewCount || '0'),
+      likes: parseInt(v.statistics?.likeCount || '0'),
+      comments: parseInt(v.statistics?.commentCount || '0'),
+      shares: 0,
+      cover: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url || '',
+      url: `https://www.youtube.com/watch?v=${v.id}`,
+      platform: 'youtube',
     }));
 
     res.set('Cache-Control', 'no-store');
     res.json(videos);
   } catch (e) {
-    console.error('[Trending] Error:', e.response?.data || e.message);
-    res.status(500).json({ error: e.response?.data?.message || e.message });
+    console.error('[Trending] Error:', e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
