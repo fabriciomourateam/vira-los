@@ -101,6 +101,64 @@ router.get('/trending', async (req, res) => {
   }
 });
 
+// ── Busca Viral Instagram (Graph API via hashtag) ─────────────────────────────
+
+router.get('/viral-instagram', async (req, res) => {
+  const { q = '', type = 'top' } = req.query;
+  if (!q.trim()) return res.json([]);
+
+  const token = db.getPlatformToken('instagram');
+  if (!token) return res.status(503).json({ error: 'Conecte o Instagram primeiro nas configurações' });
+
+  try {
+    const igUserId = token.user_id;
+    const accessToken = token.access_token;
+
+    // 1. Busca o ID da hashtag
+    const hashtagSearch = await axios.get('https://graph.facebook.com/v19.0/ig_hashtag_search', {
+      params: { user_id: igUserId, q: q.trim().replace(/^#/, ''), access_token: accessToken },
+    });
+
+    const hashtagId = hashtagSearch.data?.data?.[0]?.id;
+    if (!hashtagId) return res.json([]);
+
+    // 2. Busca posts pela hashtag (top_media ou recent_media)
+    const mediaEndpoint = type === 'recent' ? 'recent_media' : 'top_media';
+    const mediaRes = await axios.get(`https://graph.facebook.com/v19.0/${hashtagId}/${mediaEndpoint}`, {
+      params: {
+        user_id: igUserId,
+        fields: 'id,media_type,like_count,comments_count,timestamp,permalink,thumbnail_url,media_url,caption',
+        access_token: accessToken,
+        limit: 20,
+      },
+    });
+
+    const items = mediaRes.data?.data || [];
+    const videos = items
+      .filter((m) => m.media_type === 'VIDEO' || m.media_type === 'REEL')
+      .map((m) => ({
+        id: m.id,
+        title: m.caption ? m.caption.substring(0, 100) : '',
+        author: '',
+        author_handle: '',
+        views: 0,
+        likes: m.like_count || 0,
+        comments: m.comments_count || 0,
+        shares: 0,
+        cover: m.thumbnail_url || m.media_url || '',
+        url: m.permalink,
+        platform: 'instagram',
+        timestamp: m.timestamp,
+      }));
+
+    res.set('Cache-Control', 'no-store');
+    res.json(videos);
+  } catch (e) {
+    console.error('[Instagram viral] Error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.response?.data?.error?.message || e.message });
+  }
+});
+
 // ── Referências Virais ────────────────────────────────────────────────────────
 
 router.get('/references', (_req, res) => res.json(db.getAllReferences()));

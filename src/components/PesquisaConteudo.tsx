@@ -89,8 +89,18 @@ export default function PesquisaConteudo() {
   // Cópia confirmada
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Instagram viral
+  const [igQuery, setIgQuery] = useState('');
+  const [igResults, setIgResults] = useState<ViralVideo[]>([]);
+  const [igLoading, setIgLoading] = useState(false);
+  const [igError, setIgError] = useState('');
+  const [igType, setIgType] = useState<'top' | 'recent'>('top');
+  const [igMinLikes, setIgMinLikes] = useState('');
+  const [igMinComments, setIgMinComments] = useState('');
+  const [igSortBy, setIgSortBy] = useState<'likes' | 'comments'>('likes');
+
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'viral' | 'referencias' | 'hooks' | 'ideias'>('viral');
+  const [activeTab, setActiveTab] = useState<'viral' | 'instagram' | 'referencias' | 'hooks' | 'ideias'>('viral');
 
   async function load() {
     const ok = await checkBackend();
@@ -146,6 +156,25 @@ export default function PesquisaConteudo() {
     loadTrending();
   }
 
+  async function searchInstagram(e: React.FormEvent) {
+    e.preventDefault();
+    if (!igQuery.trim()) return;
+    setIgLoading(true);
+    setIgError('');
+    try {
+      const data = await api.get<ViralVideo[]>(`/api/research/viral-instagram?q=${encodeURIComponent(igQuery.replace(/^#/, ''))}&type=${igType}`);
+      setIgResults(data);
+    } catch (e: any) {
+      setIgError(e?.message || 'Erro na busca');
+    }
+    setIgLoading(false);
+  }
+
+  const filteredIg = igResults
+    .filter((v) => !igMinLikes || v.likes >= Number(igMinLikes))
+    .filter((v) => !igMinComments || v.comments >= Number(igMinComments))
+    .sort((a, b) => b[igSortBy] - a[igSortBy]);
+
   async function saveAsReference(v: ViralVideo) {
     try {
       const item = await api.post<ViralReference>('/api/research/references', {
@@ -200,10 +229,11 @@ export default function PesquisaConteudo() {
   const filteredIdeas = ideaStatusFilter === 'all' ? ideas : ideas.filter((i) => i.status === ideaStatusFilter);
 
   const TABS = [
-    { id: 'viral',      label: 'Busca Viral',      icon: <Flame size={14} />,    color: 'text-red-500' },
-    { id: 'referencias', label: 'Referências',      icon: <Link2 size={14} />,    color: 'text-blue-500' },
-    { id: 'hooks',      label: 'Hooks',             icon: <Lightbulb size={14} />, color: 'text-orange-500' },
-    { id: 'ideias',     label: 'Ideias',            icon: <BookOpen size={14} />, color: 'text-emerald-500' },
+    { id: 'viral',      label: 'YouTube',      icon: <Flame size={14} />,    color: 'text-red-500' },
+    { id: 'instagram',  label: 'Instagram',    icon: <Heart size={14} />,    color: 'text-pink-500' },
+    { id: 'referencias', label: 'Referências', icon: <Link2 size={14} />,    color: 'text-blue-500' },
+    { id: 'hooks',      label: 'Hooks',        icon: <Lightbulb size={14} />, color: 'text-orange-500' },
+    { id: 'ideias',     label: 'Ideias',       icon: <BookOpen size={14} />, color: 'text-emerald-500' },
   ] as const;
 
   return (
@@ -353,6 +383,94 @@ export default function PesquisaConteudo() {
           <div className="py-6 text-center text-muted-foreground">
             <Flame size={24} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">Busque por palavras-chave para encontrar vídeos virais</p>
+          </div>
+        )}
+      </section>}
+
+      {/* ── Instagram Viral ── */}
+      {activeTab === 'instagram' && <section className="space-y-3">
+        <form onSubmit={searchInstagram} className="flex gap-2">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Hashtag (ex: treino, fitness, marketing)"
+              value={igQuery}
+              onChange={(e) => setIgQuery(e.target.value)}
+              className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
+            />
+          </div>
+          <button type="submit" disabled={igLoading}
+            className="px-4 py-2 bg-pink-500 text-white rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {igLoading ? <Loader2 size={16} className="animate-spin" /> : 'Buscar'}
+          </button>
+        </form>
+
+        {/* Filtros */}
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex rounded-lg overflow-hidden border border-border">
+            {(['top', 'recent'] as const).map((t) => (
+              <button key={t} onClick={() => setIgType(t)}
+                className={`px-3 py-1.5 text-xs font-bold transition-all ${igType === t ? 'bg-pink-500 text-white' : 'bg-secondary text-muted-foreground'}`}>
+                {t === 'top' ? 'Top Posts' : 'Recentes'}
+              </button>
+            ))}
+          </div>
+          <input type="number" placeholder="Mín. curtidas" value={igMinLikes} onChange={(e) => setIgMinLikes(e.target.value)}
+            className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+          <input type="number" placeholder="Mín. comentários" value={igMinComments} onChange={(e) => setIgMinComments(e.target.value)}
+            className="w-36 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+          <select value={igSortBy} onChange={(e) => setIgSortBy(e.target.value as any)}
+            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            <option value="likes">Ordenar: Curtidas</option>
+            <option value="comments">Ordenar: Comentários</option>
+          </select>
+        </div>
+
+        {igError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{igError}</div>}
+
+        {igLoading ? (
+          <div className="py-8 flex justify-center"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
+        ) : filteredIg.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {filteredIg.map((v) => (
+              <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group" style={{ boxShadow: 'var(--shadow-card)' }}>
+                <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
+                  {v.cover ? (
+                    <img src={v.cover} alt={v.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <a href={v.url} target="_blank" rel="noreferrer"
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30">
+                      <ExternalLink size={16} />
+                    </a>
+                    <button onClick={() => saveAsReference(v)}
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Salvar como referência">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-2">
+                  <p className="text-[11px] font-semibold line-clamp-2 mb-1">{v.title || 'Reel'}</p>
+                  <div className="flex gap-3">
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Heart size={10} className="text-pink-500" />{fmtNum(v.likes)}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <MessageCircle size={10} />{fmtNum(v.comments)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !igLoading && (
+          <div className="py-6 text-center text-muted-foreground">
+            <Heart size={24} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Digite uma hashtag para buscar Reels do Instagram</p>
+            <p className="text-xs mt-1">Ex: treino, motivacao, marketing</p>
           </div>
         )}
       </section>}
