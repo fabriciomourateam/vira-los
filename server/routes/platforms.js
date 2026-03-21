@@ -4,6 +4,7 @@ const db = require('../db/database');
 
 // GET /api/platforms/status
 router.get('/status', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   const names = ['instagram', 'tiktok', 'youtube'];
   const status = {};
   for (const p of names) {
