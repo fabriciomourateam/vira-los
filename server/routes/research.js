@@ -153,7 +153,11 @@ router.get('/instagram-hashtag', async (req, res) => {
     res.json(videos);
   } catch (e) {
     console.error('[Instagram hashtag] Error:', e.response?.data || e.message);
-    res.status(500).json({ error: e.response?.data?.error?.message || e.message });
+    const apiMsg = e.response?.data?.error?.message || e.message || '';
+    const friendly = apiMsg.includes('instagram_basic')
+      ? 'Token sem permissão instagram_basic. Vá em developers.facebook.com → Graph API Explorer, adicione a permissão instagram_basic e gere um novo token.'
+      : apiMsg;
+    res.status(500).json({ error: friendly });
   }
 });
 
