@@ -13,7 +13,7 @@ router.get('/viral', async (req, res) => {
   if (!q.trim()) return res.json([]);
 
   try {
-    const response = await axios.get('https://scraptik.p.rapidapi.com/search-posts', {
+    const response = await axios.get('https://scraptik.p.rapidapi.com/search_posts', {
       params: { keyword: q.trim(), count, offset: 0 },
       headers: {
         'X-RapidAPI-Key': apiKey,
@@ -50,8 +50,8 @@ router.get('/trending', async (req, res) => {
   if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada no servidor' });
 
   try {
-    const response = await axios.get('https://scraptik.p.rapidapi.com/trending-feed', {
-      params: { count: 20 },
+    const response = await axios.get('https://scraptik.p.rapidapi.com/challenge_posts', {
+      params: { challenge_name: 'fyp', count: 20, offset: 0 },
       headers: {
         'X-RapidAPI-Key': apiKey,
         'X-RapidAPI-Host': 'scraptik.p.rapidapi.com',
