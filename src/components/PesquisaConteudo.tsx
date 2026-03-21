@@ -85,6 +85,9 @@ export default function PesquisaConteudo() {
   // Cópia confirmada
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Aba ativa
+  const [activeTab, setActiveTab] = useState<'viral' | 'referencias' | 'hooks' | 'ideias'>('viral');
+
   async function load() {
     const ok = await checkBackend();
     setBackendOk(ok);
@@ -185,25 +188,49 @@ export default function PesquisaConteudo() {
   const filteredHooks = hookCatFilter === 'all' ? hooks : hooks.filter((h) => h.category === hookCatFilter);
   const filteredIdeas = ideaStatusFilter === 'all' ? ideas : ideas.filter((i) => i.status === ideaStatusFilter);
 
+  const TABS = [
+    { id: 'viral',      label: 'Busca Viral',      icon: <Flame size={14} />,    color: 'text-red-500' },
+    { id: 'referencias', label: 'Referências',      icon: <Link2 size={14} />,    color: 'text-blue-500' },
+    { id: 'hooks',      label: 'Hooks',             icon: <Lightbulb size={14} />, color: 'text-orange-500' },
+    { id: 'ideias',     label: 'Ideias',            icon: <BookOpen size={14} />, color: 'text-emerald-500' },
+  ] as const;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <section>
         <h2 className="text-2xl font-extrabold tracking-tight mb-1">🔍 Pesquisa de Conteúdo</h2>
         <p className="text-muted-foreground text-sm">
-          Salve referências virais, organize hooks e desenvolva ideias de conteúdo
+          Encontre vídeos virais, salve referências, organize hooks e ideias
         </p>
       </section>
 
       {!backendOk && !loading && (
         <div className="p-4 bg-orange-50 border border-orange-200 rounded-2xl text-xs text-orange-700">
           <strong>Servidor offline</strong> — os dados serão carregados quando o servidor estiver rodando.
-          Inicie com <code className="bg-orange-100 px-1 rounded">cd server && npm run dev</code>
         </div>
       )}
 
-      {/* ── Busca Viral TikTok ── */}
-      <section className="space-y-3">
+      {/* ── Tab Bar ── */}
+      <div className="flex gap-1 bg-secondary p-1 rounded-xl">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+              activeTab === tab.id
+                ? 'bg-background shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <span className={activeTab === tab.id ? tab.color : ''}>{tab.icon}</span>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Busca Viral ── */}
+      {activeTab === 'viral' && <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Flame size={18} className="text-red-500" />
           <h3 className="font-bold text-sm uppercase tracking-wider">Busca Viral TikTok</h3>
@@ -284,12 +311,10 @@ export default function PesquisaConteudo() {
             <p className="text-sm">Busque por palavras-chave para encontrar vídeos virais</p>
           </div>
         )}
-      </section>
-
-      <div className="h-px bg-border" />
+      </section>}
 
       {/* ── Referências Virais ── */}
-      <section className="space-y-3">
+      {activeTab === 'referencias' && <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Link2 size={18} className="text-blue-500" />
@@ -331,12 +356,10 @@ export default function PesquisaConteudo() {
             ))}
           </div>
         )}
-      </section>
-
-      <div className="h-px bg-border" />
+      </section>}
 
       {/* ── Hook Templates ── */}
-      <section className="space-y-3">
+      {activeTab === 'hooks' && <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Lightbulb size={18} className="text-orange-500" />
@@ -385,12 +408,10 @@ export default function PesquisaConteudo() {
             ))}
           </div>
         )}
-      </section>
-
-      <div className="h-px bg-border" />
+      </section>}
 
       {/* ── Ideias de Conteúdo ── */}
-      <section className="space-y-3">
+      {activeTab === 'ideias' && <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BookOpen size={18} className="text-emerald-500" />
@@ -440,7 +461,7 @@ export default function PesquisaConteudo() {
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
       {/* Modais */}
       {addRefOpen && (
