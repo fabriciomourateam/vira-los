@@ -90,7 +90,7 @@ export default function PesquisaConteudo() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // TikTok viral
-  const [ttMode, setTtMode] = useState<'creators' | 'videos'>('creators');
+  const [ttMode, setTtMode] = useState<'search' | 'creators' | 'videos'>('search');
   const [ttQuery, setTtQuery] = useState('');
   const [ttResults, setTtResults] = useState<ViralVideo[]>([]);
   const [ttCreators, setTtCreators] = useState<any[]>([]);
@@ -177,6 +177,10 @@ export default function PesquisaConteudo() {
         const data = await api.get<any[]>(`/api/research/tiktok-creators?q=${encodeURIComponent(ttQuery)}`);
         setTtCreators(data);
         setTtResults([]);
+      } else if (ttMode === 'search') {
+        const data = await api.get<ViralVideo[]>(`/api/research/tiktok-search?q=${encodeURIComponent(ttQuery)}`);
+        setTtResults(data);
+        setTtCreators([]);
       } else {
         const data = await api.get<ViralVideo[]>(`/api/research/viral-tiktok?q=${encodeURIComponent(ttQuery)}`);
         setTtResults(data);
@@ -327,7 +331,7 @@ export default function PesquisaConteudo() {
       {activeTab === 'viral' && <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Flame size={18} className="text-red-500" />
-          <h3 className="font-bold text-sm uppercase tracking-wider">Busca Viral TikTok</h3>
+          <h3 className="font-bold text-sm uppercase tracking-wider">Busca Viral YouTube</h3>
         </div>
 
         <form onSubmit={searchViral} className="flex gap-2">
@@ -443,10 +447,10 @@ export default function PesquisaConteudo() {
       {/* ── TikTok Viral ── */}
       {activeTab === 'tiktok' && <section className="space-y-3">
         <div className="flex rounded-lg overflow-hidden border border-border w-fit">
-          {(['creators', 'videos'] as const).map((m) => (
+          {(['search', 'creators', 'videos'] as const).map((m) => (
             <button key={m} onClick={() => { setTtMode(m); setTtResults([]); setTtCreators([]); }}
               className={`px-4 py-1.5 text-xs font-bold transition-all ${ttMode === m ? 'bg-foreground text-background' : 'bg-secondary text-muted-foreground'}`}>
-              {m === 'creators' ? '🔍 Criadores por nicho' : '🎬 Vídeos por @username'}
+              {m === 'search' ? '🔥 Por palavra-chave' : m === 'creators' ? '🔍 Criadores por nicho' : '🎬 Vídeos por @username'}
             </button>
           ))}
         </div>
@@ -455,7 +459,7 @@ export default function PesquisaConteudo() {
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input type="text"
-              placeholder={ttMode === 'creators' ? 'Palavra-chave (ex: treino, marketing, saúde)' : '@username (ex: @cbum, @khaby.lame)'}
+              placeholder={ttMode === 'search' ? 'Palavra-chave (ex: treino, marketing, saúde)' : ttMode === 'creators' ? 'Nicho (ex: treino, marketing, saúde)' : '@username (ex: @cbum, @khaby.lame)'}
               value={ttQuery} onChange={(e) => setTtQuery(e.target.value)}
               className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
           </div>
@@ -528,7 +532,9 @@ export default function PesquisaConteudo() {
         ) : !ttLoading && (
           <div className="py-6 text-center text-muted-foreground">
             <TrendingUp size={24} className="mx-auto mb-2 opacity-30" />
-            {ttMode === 'creators'
+            {ttMode === 'search'
+              ? <><p className="text-sm">Busque vídeos virais por palavra-chave</p><p className="text-xs mt-1">Ex: treino, marketing, saúde, finanças</p></>
+              : ttMode === 'creators'
               ? <><p className="text-sm">Busque por nicho para ver os top criadores</p><p className="text-xs mt-1">Ex: treino, marketing, saúde, finanças</p></>
               : <><p className="text-sm">Digite o @ de uma conta viral do TikTok</p><p className="text-xs mt-1">Ex: @cbum, @khaby.lame</p></>
             }
