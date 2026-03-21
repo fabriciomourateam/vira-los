@@ -100,15 +100,21 @@ router.get('/youtube/auth-url', (_req, res) => {
 });
 
 router.get('/youtube/callback', async (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
   try {
-    const { code } = req.query;
+    const { code, error } = req.query;
+    if (error) {
+      console.error('[YouTube callback] Google error:', error);
+      return res.redirect(`${frontendUrl}?youtube=error&msg=${encodeURIComponent(error)}`);
+    }
     if (!code) return res.status(400).send('Código não encontrado');
+    console.log('[YouTube callback] Exchanging code...');
     const yt = require('../services/youtube');
     const result = await yt.exchangeCode(code);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+    console.log('[YouTube callback] Connected:', result.username);
     res.redirect(`${frontendUrl}?youtube=connected&user=${encodeURIComponent(result.username)}`);
   } catch (e) {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+    console.error('[YouTube callback] Error:', e.message);
     res.redirect(`${frontendUrl}?youtube=error&msg=${encodeURIComponent(e.message)}`);
   }
 });
