@@ -90,8 +90,10 @@ export default function PesquisaConteudo() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // TikTok viral
+  const [ttMode, setTtMode] = useState<'creators' | 'videos'>('creators');
   const [ttQuery, setTtQuery] = useState('');
   const [ttResults, setTtResults] = useState<ViralVideo[]>([]);
+  const [ttCreators, setTtCreators] = useState<any[]>([]);
   const [ttLoading, setTtLoading] = useState(false);
   const [ttError, setTtError] = useState('');
   const [ttMinViews, setTtMinViews] = useState('');
@@ -171,10 +173,32 @@ export default function PesquisaConteudo() {
     setTtLoading(true);
     setTtError('');
     try {
-      const data = await api.get<ViralVideo[]>(`/api/research/viral-tiktok?q=${encodeURIComponent(ttQuery)}`);
-      setTtResults(data);
+      if (ttMode === 'creators') {
+        const data = await api.get<any[]>(`/api/research/tiktok-creators?q=${encodeURIComponent(ttQuery)}`);
+        setTtCreators(data);
+        setTtResults([]);
+      } else {
+        const data = await api.get<ViralVideo[]>(`/api/research/viral-tiktok?q=${encodeURIComponent(ttQuery)}`);
+        setTtResults(data);
+        setTtCreators([]);
+      }
     } catch (e: any) {
       setTtError(e?.message || 'Erro na busca');
+    }
+    setTtLoading(false);
+  }
+
+  async function loadTikTokVideos(username: string) {
+    setTtMode('videos');
+    setTtQuery(username);
+    setTtLoading(true);
+    setTtError('');
+    setTtCreators([]);
+    try {
+      const data = await api.get<ViralVideo[]>(`/api/research/viral-tiktok?q=${encodeURIComponent(username)}`);
+      setTtResults(data);
+    } catch (e: any) {
+      setTtError(e?.message || 'Erro');
     }
     setTtLoading(false);
   }
@@ -418,10 +442,20 @@ export default function PesquisaConteudo() {
 
       {/* ── TikTok Viral ── */}
       {activeTab === 'tiktok' && <section className="space-y-3">
+        <div className="flex rounded-lg overflow-hidden border border-border w-fit">
+          {(['creators', 'videos'] as const).map((m) => (
+            <button key={m} onClick={() => { setTtMode(m); setTtResults([]); setTtCreators([]); }}
+              className={`px-4 py-1.5 text-xs font-bold transition-all ${ttMode === m ? 'bg-foreground text-background' : 'bg-secondary text-muted-foreground'}`}>
+              {m === 'creators' ? '🔍 Criadores por nicho' : '🎬 Vídeos por @username'}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={searchTikTok} className="flex gap-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input type="text" placeholder="@username (ex: @cbum, @khaby.lame)"
+            <input type="text"
+              placeholder={ttMode === 'creators' ? 'Palavra-chave (ex: treino, marketing, saúde)' : '@username (ex: @cbum, @khaby.lame)'}
               value={ttQuery} onChange={(e) => setTtQuery(e.target.value)}
               className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
           </div>
@@ -448,6 +482,24 @@ export default function PesquisaConteudo() {
 
         {ttLoading ? (
           <div className="py-8 flex justify-center"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
+        ) : ttCreators.length > 0 ? (
+          <div className="grid gap-2">
+            {ttCreators.map((c) => (
+              <div key={c.uid} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 group" style={{ boxShadow: 'var(--shadow-card)' }}>
+                {c.avatar && <img src={c.avatar} alt={c.nickname} className="w-10 h-10 rounded-full object-cover shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{c.nickname}</p>
+                  <p className="text-xs text-muted-foreground">@{c.username} · {fmtNum(c.followers)} seguidores</p>
+                </div>
+                <button onClick={() => loadTikTokVideos(c.username)}
+                  className="px-3 py-1.5 text-xs font-bold bg-secondary hover:bg-foreground hover:text-background rounded-lg transition-all shrink-0">
+                  Ver vídeos
+                </button>
+                <a href={`https://www.tiktok.com/@${c.username}`} target="_blank" rel="noreferrer"
+                  className="p-1.5 text-muted-foreground hover:text-foreground"><ExternalLink size={14} /></a>
+              </div>
+            ))}
+          </div>
         ) : filteredTt.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {filteredTt.map((v) => (
@@ -476,8 +528,10 @@ export default function PesquisaConteudo() {
         ) : !ttLoading && (
           <div className="py-6 text-center text-muted-foreground">
             <TrendingUp size={24} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">Digite o @ de uma conta viral do TikTok</p>
-            <p className="text-xs mt-1">Ex: @cbum, @khaby.lame, @nataliamills</p>
+            {ttMode === 'creators'
+              ? <><p className="text-sm">Busque por nicho para ver os top criadores</p><p className="text-xs mt-1">Ex: treino, marketing, saúde, finanças</p></>
+              : <><p className="text-sm">Digite o @ de uma conta viral do TikTok</p><p className="text-xs mt-1">Ex: @cbum, @khaby.lame</p></>
+            }
           </div>
         )}
       </section>}

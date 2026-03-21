@@ -158,6 +158,42 @@ router.get('/viral-instagram', async (req, res) => {
   }
 });
 
+// ── Busca Criadores TikTok por palavra-chave ──────────────────────────────────
+
+router.get('/tiktok-creators', async (req, res) => {
+  const { q = '' } = req.query;
+  if (!q.trim()) return res.json([]);
+
+  const apiKey = process.env.RAPIDAPI_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
+
+  try {
+    const response = await axios.get('https://scraptik.p.rapidapi.com/search-users', {
+      params: { keyword: q.trim(), count: 15 },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'scraptik.p.rapidapi.com' },
+      timeout: 15000,
+    });
+
+    const list = response.data?.user_list || [];
+    const creators = list
+      .map((u) => ({
+        uid: u.user_info?.uid || u.uid,
+        username: u.user_info?.unique_id || u.unique_id,
+        nickname: u.user_info?.nickname || u.nickname,
+        followers: u.user_info?.follower_count || u.follower_count || 0,
+        avatar: u.user_info?.avatar_thumb?.url_list?.[0] || '',
+        verified: u.user_info?.custom_verify || false,
+      }))
+      .sort((a, b) => b.followers - a.followers);
+
+    res.set('Cache-Control', 'no-store');
+    res.json(creators);
+  } catch (e) {
+    console.error('[TikTok creators] Error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Busca Viral TikTok (por @username via Scraptik) ───────────────────────────
 
 router.get('/viral-tiktok', async (req, res) => {
