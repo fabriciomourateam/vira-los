@@ -68,13 +68,17 @@ router.get('/tiktok/auth-url', (_req, res) => {
   }
 });
 
-router.post('/tiktok/callback', async (req, res) => {
+router.get('/tiktok/callback', async (req, res) => {
   try {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('Código não encontrado');
     const tt = require('../services/tiktok');
-    const result = await tt.exchangeCode(req.body.code);
-    res.json(result);
+    const result = await tt.exchangeCode(code);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+    res.redirect(`${frontendUrl}?tiktok=connected&user=${encodeURIComponent(result.username)}`);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+    res.redirect(`${frontendUrl}?tiktok=error&msg=${encodeURIComponent(e.message)}`);
   }
 });
 
@@ -94,13 +98,17 @@ router.get('/youtube/auth-url', (_req, res) => {
   }
 });
 
-router.post('/youtube/callback', async (req, res) => {
+router.get('/youtube/callback', async (req, res) => {
   try {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('Código não encontrado');
     const yt = require('../services/youtube');
-    const result = await yt.exchangeCode(req.body.code);
-    res.json(result);
+    const result = await yt.exchangeCode(code);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+    res.redirect(`${frontendUrl}?youtube=connected&user=${encodeURIComponent(result.username)}`);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+    res.redirect(`${frontendUrl}?youtube=error&msg=${encodeURIComponent(e.message)}`);
   }
 });
 
