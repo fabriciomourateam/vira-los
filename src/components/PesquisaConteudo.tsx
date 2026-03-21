@@ -101,7 +101,6 @@ export default function PesquisaConteudo() {
   const [ttSortBy, setTtSortBy] = useState<'views' | 'likes' | 'comments'>('views');
 
   // Instagram viral
-  const [igMode, setIgMode] = useState<'username' | 'hashtag'>('hashtag');
   const [igQuery, setIgQuery] = useState('');
   const [igResults, setIgResults] = useState<ViralVideo[]>([]);
   const [igLoading, setIgLoading] = useState(false);
@@ -222,10 +221,7 @@ export default function PesquisaConteudo() {
     setIgLoading(true);
     setIgError('');
     try {
-      const endpoint = igMode === 'hashtag'
-        ? `/api/research/instagram-hashtag?q=${encodeURIComponent(igQuery.replace(/^#/, ''))}`
-        : `/api/research/viral-instagram?q=${encodeURIComponent(igQuery.replace(/^@/, ''))}`;
-      const data = await api.get<ViralVideo[]>(endpoint);
+      const data = await api.get<ViralVideo[]>(`/api/research/viral-instagram?q=${encodeURIComponent(igQuery.replace(/^@/, ''))}`);
       setIgResults(data);
     } catch (e: any) {
       setIgError(e?.message || 'Erro na busca');
@@ -575,21 +571,12 @@ export default function PesquisaConteudo() {
 
       {/* ── Instagram Viral ── */}
       {activeTab === 'instagram' && <section className="space-y-3">
-        <div className="flex rounded-lg overflow-hidden border border-border w-fit">
-          {(['hashtag', 'username'] as const).map((m) => (
-            <button key={m} onClick={() => { setIgMode(m); setIgResults([]); setIgQuery(''); }}
-              className={`px-4 py-1.5 text-xs font-bold transition-all ${igMode === m ? 'bg-pink-500 text-white' : 'bg-secondary text-muted-foreground'}`}>
-              {m === 'hashtag' ? '#️⃣ Por hashtag' : '👤 Por @username'}
-            </button>
-          ))}
-        </div>
-
         <form onSubmit={searchInstagram} className="flex gap-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder={igMode === 'hashtag' ? '#hashtag (ex: treino, saúde, marketing)' : '@username (ex: @cbum, @leomessi)'}
+              placeholder="@username (ex: @cbum, @leomessi, @fabriciomourateam)"
               value={igQuery}
               onChange={(e) => setIgQuery(e.target.value)}
               className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
@@ -656,10 +643,8 @@ export default function PesquisaConteudo() {
         ) : !igLoading && (
           <div className="py-6 text-center text-muted-foreground">
             <Heart size={24} className="mx-auto mb-2 opacity-30" />
-            {igMode === 'hashtag'
-              ? <><p className="text-sm">Busque por hashtag para ver os posts mais populares</p><p className="text-xs mt-1">Ex: treino, marketing, emagrecimento</p></>
-              : <><p className="text-sm">Digite o @ de um perfil para ver os reels</p><p className="text-xs mt-1">Ex: @cbum, @nataliamills</p></>
-            }
+            <p className="text-sm">Digite o @ de um perfil viral do seu nicho para ver os reels</p>
+            <p className="text-xs mt-1">Ex: @cbum, @nataliamills, @khabylame</p>
           </div>
         )}
       </section>}
