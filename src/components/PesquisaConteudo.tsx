@@ -229,7 +229,7 @@ export default function PesquisaConteudo() {
   const filteredIdeas = ideaStatusFilter === 'all' ? ideas : ideas.filter((i) => i.status === ideaStatusFilter);
 
   const TABS = [
-    { id: 'viral',      label: 'YouTube',      icon: <Flame size={14} />,    color: 'text-red-500' },
+    { id: 'viral',      label: 'Busca Viral',  icon: <Flame size={14} />,    color: 'text-red-500' },
     { id: 'instagram',  label: 'Instagram',    icon: <Heart size={14} />,    color: 'text-pink-500' },
     { id: 'referencias', label: 'Referências', icon: <Link2 size={14} />,    color: 'text-blue-500' },
     { id: 'hooks',      label: 'Hooks',        icon: <Lightbulb size={14} />, color: 'text-orange-500' },
