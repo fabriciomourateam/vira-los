@@ -88,7 +88,15 @@ export default function Agendador() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // Detecta retorno do OAuth via query params
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('youtube') === 'connected' || params.get('tiktok') === 'connected') {
+      setPlatformsOpen(true);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   async function deleteContent(id: string) {
     await api.delete(`/api/content/${id}`);
@@ -963,21 +971,11 @@ function PlatformsModal({ platforms, onClose, onRefresh }: {
     setSaving(platform);
     try {
       const { url } = await api.get<{ url: string }>(`/api/platforms/${platform}/auth-url`);
-      const popup = window.open(url, '_blank', 'width=600,height=700');
-      setMsg(`Autorize no popup...`);
-      // Poll until popup closes, then refresh status
-      const timer = setInterval(async () => {
-        if (!popup || popup.closed) {
-          clearInterval(timer);
-          setMsg(`Verificando conexão...`);
-          await onRefresh();
-          setMsg('');
-        }
-      }, 1000);
+      window.location.href = url;
     } catch (e: any) {
       setMsg(`❌ ${e.message}`);
+      setSaving(null);
     }
-    setSaving(null);
   }
 
   async function disconnect(platform: Platform) {
