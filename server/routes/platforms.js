@@ -61,6 +61,7 @@ router.delete('/instagram', (_req, res) => {
 // ── TikTok ────────────────────────────────────────────────────────────────────
 
 router.get('/tiktok/auth-url', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   try {
     const tt = require('../services/tiktok');
     res.json({ url: tt.getAuthUrl() });
@@ -91,6 +92,7 @@ router.delete('/tiktok', (_req, res) => {
 // ── YouTube ───────────────────────────────────────────────────────────────────
 
 router.get('/youtube/auth-url', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   try {
     const yt = require('../services/youtube');
     res.json({ url: yt.getAuthUrl() });
