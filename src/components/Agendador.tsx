@@ -963,8 +963,17 @@ function PlatformsModal({ platforms, onClose, onRefresh }: {
     setSaving(platform);
     try {
       const { url } = await api.get<{ url: string }>(`/api/platforms/${platform}/auth-url`);
-      window.open(url, '_blank', 'width=600,height=700');
-      setMsg(`Autorize no popup e atualize esta página`);
+      const popup = window.open(url, '_blank', 'width=600,height=700');
+      setMsg(`Autorize no popup...`);
+      // Poll until popup closes, then refresh status
+      const timer = setInterval(async () => {
+        if (!popup || popup.closed) {
+          clearInterval(timer);
+          setMsg(`Verificando conexão...`);
+          await onRefresh();
+          setMsg('');
+        }
+      }, 1000);
     } catch (e: any) {
       setMsg(`❌ ${e.message}`);
     }
