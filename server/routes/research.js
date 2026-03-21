@@ -161,6 +161,44 @@ router.get('/instagram-hashtag', async (req, res) => {
   }
 });
 
+// ── Busca Criadores Instagram por palavra-chave (RapidAPI) ───────────────────
+
+router.get('/instagram-creators', async (req, res) => {
+  const { q = '' } = req.query;
+  const keyword = q.trim();
+  if (!keyword) return res.json([]);
+
+  const apiKey = process.env.RAPIDAPI_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
+
+  try {
+    const response = await axios.get('https://instagram-api-fast-reliable-data-scraper.p.rapidapi.com/search_users', {
+      params: { q: keyword, count: 15 },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-api-fast-reliable-data-scraper.p.rapidapi.com' },
+      timeout: 15000,
+    });
+
+    const raw = response.data;
+    const list = raw?.users || raw?.data?.users || raw?.data || (Array.isArray(raw) ? raw : []);
+    const creators = list
+      .map((u) => ({
+        username: String(u.username || ''),
+        nickname: String(u.full_name || u.name || u.username || ''),
+        followers: Number(u.follower_count || u.edge_followed_by?.count || u.followers || 0),
+        avatar: String(u.profile_pic_url || u.profile_pic_url_hd || ''),
+        is_verified: Boolean(u.is_verified || false),
+      }))
+      .filter((u) => u.username)
+      .sort((a, b) => b.followers - a.followers);
+
+    res.set('Cache-Control', 'no-store');
+    res.json(creators);
+  } catch (e) {
+    console.error('[Instagram creators] Error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.response?.data?.message || e.message });
+  }
+});
+
 // ── Busca Viral Instagram (por @username via RapidAPI) ────────────────────────
 
 router.get('/viral-instagram', async (req, res) => {
