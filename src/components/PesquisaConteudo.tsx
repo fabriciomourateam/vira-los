@@ -89,6 +89,15 @@ export default function PesquisaConteudo() {
   // Cópia confirmada
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // TikTok viral
+  const [ttQuery, setTtQuery] = useState('');
+  const [ttResults, setTtResults] = useState<ViralVideo[]>([]);
+  const [ttLoading, setTtLoading] = useState(false);
+  const [ttError, setTtError] = useState('');
+  const [ttMinViews, setTtMinViews] = useState('');
+  const [ttMinLikes, setTtMinLikes] = useState('');
+  const [ttSortBy, setTtSortBy] = useState<'views' | 'likes' | 'comments'>('views');
+
   // Instagram viral
   const [igQuery, setIgQuery] = useState('');
   const [igResults, setIgResults] = useState<ViralVideo[]>([]);
@@ -100,7 +109,7 @@ export default function PesquisaConteudo() {
   const [igSortBy, setIgSortBy] = useState<'likes' | 'comments'>('likes');
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'viral' | 'instagram' | 'referencias' | 'hooks' | 'ideias'>('viral');
+  const [activeTab, setActiveTab] = useState<'viral' | 'tiktok' | 'instagram' | 'referencias' | 'hooks' | 'ideias'>('viral');
 
   async function load() {
     const ok = await checkBackend();
@@ -155,6 +164,25 @@ export default function PesquisaConteudo() {
     setViralQuery('');
     loadTrending();
   }
+
+  async function searchTikTok(e: React.FormEvent) {
+    e.preventDefault();
+    if (!ttQuery.trim()) return;
+    setTtLoading(true);
+    setTtError('');
+    try {
+      const data = await api.get<ViralVideo[]>(`/api/research/viral-tiktok?q=${encodeURIComponent(ttQuery)}`);
+      setTtResults(data);
+    } catch (e: any) {
+      setTtError(e?.message || 'Erro na busca');
+    }
+    setTtLoading(false);
+  }
+
+  const filteredTt = ttResults
+    .filter((v) => !ttMinViews || v.views >= Number(ttMinViews))
+    .filter((v) => !ttMinLikes || v.likes >= Number(ttMinLikes))
+    .sort((a, b) => b[ttSortBy] - a[ttSortBy]);
 
   async function searchInstagram(e: React.FormEvent) {
     e.preventDefault();
@@ -229,7 +257,8 @@ export default function PesquisaConteudo() {
   const filteredIdeas = ideaStatusFilter === 'all' ? ideas : ideas.filter((i) => i.status === ideaStatusFilter);
 
   const TABS = [
-    { id: 'viral',      label: 'Busca Viral',  icon: <Flame size={14} />,    color: 'text-red-500' },
+    { id: 'viral',      label: 'YouTube',      icon: <Flame size={14} />,    color: 'text-red-500' },
+    { id: 'tiktok',     label: 'TikTok',       icon: <TrendingUp size={14} />, color: 'text-foreground' },
     { id: 'instagram',  label: 'Instagram',    icon: <Heart size={14} />,    color: 'text-pink-500' },
     { id: 'referencias', label: 'Referências', icon: <Link2 size={14} />,    color: 'text-blue-500' },
     { id: 'hooks',      label: 'Hooks',        icon: <Lightbulb size={14} />, color: 'text-orange-500' },
@@ -383,6 +412,72 @@ export default function PesquisaConteudo() {
           <div className="py-6 text-center text-muted-foreground">
             <Flame size={24} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">Busque por palavras-chave para encontrar vídeos virais</p>
+          </div>
+        )}
+      </section>}
+
+      {/* ── TikTok Viral ── */}
+      {activeTab === 'tiktok' && <section className="space-y-3">
+        <form onSubmit={searchTikTok} className="flex gap-2">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input type="text" placeholder="@username (ex: @cbum, @khaby.lame)"
+              value={ttQuery} onChange={(e) => setTtQuery(e.target.value)}
+              className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10" />
+          </div>
+          <button type="submit" disabled={ttLoading}
+            className="px-4 py-2 bg-foreground text-background rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {ttLoading ? <Loader2 size={16} className="animate-spin" /> : 'Buscar'}
+          </button>
+        </form>
+
+        <div className="flex gap-2 flex-wrap">
+          <input type="number" placeholder="Mín. views" value={ttMinViews} onChange={(e) => setTtMinViews(e.target.value)}
+            className="w-28 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+          <input type="number" placeholder="Mín. curtidas" value={ttMinLikes} onChange={(e) => setTtMinLikes(e.target.value)}
+            className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+          <select value={ttSortBy} onChange={(e) => setTtSortBy(e.target.value as any)}
+            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            <option value="views">Ordenar: Views</option>
+            <option value="likes">Ordenar: Curtidas</option>
+            <option value="comments">Ordenar: Comentários</option>
+          </select>
+        </div>
+
+        {ttError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{ttError}</div>}
+
+        {ttLoading ? (
+          <div className="py-8 flex justify-center"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
+        ) : filteredTt.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {filteredTt.map((v) => (
+              <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group" style={{ boxShadow: 'var(--shadow-card)' }}>
+                <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
+                  {v.cover ? <img src={v.cover} alt={v.title} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <a href={v.url} target="_blank" rel="noreferrer" className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30"><ExternalLink size={16} /></a>
+                    <button onClick={() => saveAsReference(v)} className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30"><Plus size={16} /></button>
+                  </div>
+                </div>
+                <div className="p-2">
+                  <p className="text-[11px] font-semibold line-clamp-2 mb-1">{v.title || `@${v.author_handle}`}</p>
+                  <p className="text-[10px] text-muted-foreground mb-1.5">@{v.author_handle}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Eye size={10} />{fmtNum(v.views)}</div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Heart size={10} />{fmtNum(v.likes)}</div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><MessageCircle size={10} />{fmtNum(v.comments)}</div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Share2 size={10} />{fmtNum(v.shares)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !ttLoading && (
+          <div className="py-6 text-center text-muted-foreground">
+            <TrendingUp size={24} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Digite o @ de uma conta viral do TikTok</p>
+            <p className="text-xs mt-1">Ex: @cbum, @khaby.lame, @nataliamills</p>
           </div>
         )}
       </section>}

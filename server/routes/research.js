@@ -158,6 +158,57 @@ router.get('/viral-instagram', async (req, res) => {
   }
 });
 
+// ── Busca Viral TikTok (por @username via Scraptik) ───────────────────────────
+
+router.get('/viral-tiktok', async (req, res) => {
+  const { q = '' } = req.query;
+  const username = q.trim().replace(/^@/, '');
+  if (!username) return res.json([]);
+
+  const apiKey = process.env.RAPIDAPI_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
+
+  try {
+    // 1. Busca user_id pelo username
+    const userRes = await axios.get('https://scraptik.p.rapidapi.com/get-user', {
+      params: { username },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'scraptik.p.rapidapi.com' },
+      timeout: 15000,
+    });
+
+    const uid = userRes.data?.user?.uid;
+    if (!uid) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    // 2. Busca posts do usuário
+    const postsRes = await axios.get('https://scraptik.p.rapidapi.com/user-posts', {
+      params: { user_id: uid, count: 20 },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'scraptik.p.rapidapi.com' },
+      timeout: 15000,
+    });
+
+    const list = postsRes.data?.aweme_list || [];
+    const videos = list.map((v) => ({
+      id: v.aweme_id,
+      title: v.desc || '',
+      author: v.author?.nickname || username,
+      author_handle: v.author?.unique_id || username,
+      views: v.statistics?.play_count || 0,
+      likes: v.statistics?.digg_count || 0,
+      comments: v.statistics?.comment_count || 0,
+      shares: v.statistics?.share_count || 0,
+      cover: v.video?.cover?.url_list?.[0] || v.video?.origin_cover?.url_list?.[0] || '',
+      url: `https://www.tiktok.com/@${v.author?.unique_id}/video/${v.aweme_id}`,
+      platform: 'tiktok',
+    }));
+
+    res.set('Cache-Control', 'no-store');
+    res.json(videos);
+  } catch (e) {
+    console.error('[TikTok viral] Error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.response?.data?.message || e.message });
+  }
+});
+
 // ── Referências Virais ────────────────────────────────────────────────────────
 
 router.get('/references', (_req, res) => res.json(db.getAllReferences()));
