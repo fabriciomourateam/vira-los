@@ -1,10 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import {
   Search, Plus, Trash2, Copy, CheckCircle2, X, ExternalLink,
-  Loader2, Lightbulb, Link2, BookOpen, Tag, TrendingUp,
+  Loader2, Lightbulb, Link2, BookOpen, TrendingUp, Eye, Heart,
+  MessageCircle, Share2, Flame,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, checkBackend, ViralReference, HookTemplate, ContentIdea } from '../lib/api';
+
+interface ViralVideo {
+  id: string;
+  title: string;
+  author: string;
+  author_handle: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  cover: string;
+  url: string;
+  platform: string;
+}
+
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  return String(n);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const FORMAT_OPTIONS = [
@@ -44,6 +65,13 @@ export default function PesquisaConteudo() {
   const [loading, setLoading] = useState(true);
   const [backendOk, setBackendOk] = useState(false);
 
+  // Busca viral
+  const [viralQuery, setViralQuery] = useState('');
+  const [viralResults, setViralResults] = useState<ViralVideo[]>([]);
+  const [viralLoading, setViralLoading] = useState(false);
+  const [viralError, setViralError] = useState('');
+  const [viralMode, setViralMode] = useState<'search' | 'trending'>('trending');
+
   // Modais
   const [addRefOpen, setAddRefOpen] = useState(false);
   const [addHookOpen, setAddHookOpen] = useState(false);
@@ -74,7 +102,51 @@ export default function PesquisaConteudo() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadTrending(); }, []);
+
+  async function loadTrending() {
+    setViralLoading(true);
+    setViralError('');
+    try {
+      const data = await api.get<ViralVideo[]>('/api/research/trending');
+      setViralResults(data);
+    } catch (e: any) {
+      setViralError(e?.message || 'Erro ao carregar trending');
+    }
+    setViralLoading(false);
+  }
+
+  async function searchViral(e: React.FormEvent) {
+    e.preventDefault();
+    if (!viralQuery.trim()) return;
+    setViralMode('search');
+    setViralLoading(true);
+    setViralError('');
+    try {
+      const data = await api.get<ViralVideo[]>(`/api/research/viral?q=${encodeURIComponent(viralQuery)}`);
+      setViralResults(data);
+    } catch (e: any) {
+      setViralError(e?.message || 'Erro na busca');
+    }
+    setViralLoading(false);
+  }
+
+  async function switchTrending() {
+    setViralMode('trending');
+    setViralQuery('');
+    loadTrending();
+  }
+
+  async function saveAsReference(v: ViralVideo) {
+    try {
+      const item = await api.post<ViralReference>('/api/research/references', {
+        url: v.url, title: v.title || `@${v.author_handle}`, platform: 'tiktok',
+        notes: `👁 ${fmtNum(v.views)} views · ❤️ ${fmtNum(v.likes)} likes`,
+        tags: [],
+      });
+      setReferences((p) => [item, ...p]);
+    } catch { /* silent */ }
+  }
 
   async function copyHook(hook: HookTemplate) {
     await navigator.clipboard.writeText(hook.text);
@@ -129,6 +201,92 @@ export default function PesquisaConteudo() {
           Inicie com <code className="bg-orange-100 px-1 rounded">cd server && npm run dev</code>
         </div>
       )}
+
+      {/* ── Busca Viral TikTok ── */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Flame size={18} className="text-red-500" />
+          <h3 className="font-bold text-sm uppercase tracking-wider">Busca Viral TikTok</h3>
+        </div>
+
+        <form onSubmit={searchViral} className="flex gap-2">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Buscar vídeos virais... (ex: treino, marketing, saúde)"
+              value={viralQuery}
+              onChange={(e) => setViralQuery(e.target.value)}
+              className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
+            />
+          </div>
+          <button type="submit" disabled={viralLoading}
+            className="px-4 py-2 bg-foreground text-background rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {viralLoading ? <Loader2 size={16} className="animate-spin" /> : 'Buscar'}
+          </button>
+          <button type="button" onClick={switchTrending} disabled={viralLoading}
+            className={`px-3 py-2 rounded-xl text-sm font-bold transition-all ${viralMode === 'trending' ? 'bg-red-500 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}>
+            <TrendingUp size={16} />
+          </button>
+        </form>
+
+        {viralError && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{viralError}</div>
+        )}
+
+        {viralLoading ? (
+          <div className="py-8 flex justify-center"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
+        ) : viralResults.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {viralResults.map((v) => (
+              <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group" style={{ boxShadow: 'var(--shadow-card)' }}>
+                <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
+                  {v.cover ? (
+                    <img src={v.cover} alt={v.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <a href={v.url} target="_blank" rel="noreferrer"
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30">
+                      <ExternalLink size={16} />
+                    </a>
+                    <button onClick={() => saveAsReference(v)}
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Salvar como referência">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-2">
+                  <p className="text-[11px] font-semibold line-clamp-2 mb-1">{v.title || `@${v.author_handle}`}</p>
+                  <p className="text-[10px] text-muted-foreground mb-1.5">@{v.author_handle}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Eye size={10} />{fmtNum(v.views)}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Heart size={10} />{fmtNum(v.likes)}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <MessageCircle size={10} />{fmtNum(v.comments)}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Share2 size={10} />{fmtNum(v.shares)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !viralLoading && (
+          <div className="py-6 text-center text-muted-foreground">
+            <Flame size={24} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Busque por palavras-chave para encontrar vídeos virais</p>
+          </div>
+        )}
+      </section>
+
+      <div className="h-px bg-border" />
 
       {/* ── Referências Virais ── */}
       <section className="space-y-3">
