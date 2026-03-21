@@ -7,7 +7,7 @@ const db = require('../db/database');
 // ── Busca Viral (YouTube Data API) ────────────────────────────────────────────
 
 router.get('/viral', async (req, res) => {
-  const { q = '', count = 20 } = req.query;
+  const { q = '', count = 20, publishedAfter } = req.query;
   if (!q.trim()) return res.json([]);
 
   try {
@@ -16,14 +16,17 @@ router.get('/viral', async (req, res) => {
     const { google } = require('googleapis');
     const youtube = google.youtube({ version: 'v3', auth });
 
-    const searchRes = await youtube.search.list({
+    const searchParams = {
       part: ['snippet'],
       q: q.trim(),
       type: ['video'],
       videoDuration: 'short',
       order: 'viewCount',
       maxResults: Number(count),
-    });
+    };
+    if (publishedAfter) searchParams.publishedAfter = publishedAfter;
+
+    const searchRes = await youtube.search.list(searchParams);
 
     const ids = searchRes.data.items.map((i) => i.id.videoId).filter(Boolean);
     if (!ids.length) return res.json([]);

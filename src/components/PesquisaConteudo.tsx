@@ -71,6 +71,10 @@ export default function PesquisaConteudo() {
   const [viralLoading, setViralLoading] = useState(false);
   const [viralError, setViralError] = useState('');
   const [viralMode, setViralMode] = useState<'search' | 'trending'>('trending');
+  const [minViews, setMinViews] = useState('');
+  const [minLikes, setMinLikes] = useState('');
+  const [sortBy, setSortBy] = useState<'views' | 'likes' | 'comments'>('views');
+  const [publishedAfter, setPublishedAfter] = useState('');
 
   // Modais
   const [addRefOpen, setAddRefOpen] = useState(false);
@@ -126,7 +130,9 @@ export default function PesquisaConteudo() {
     setViralLoading(true);
     setViralError('');
     try {
-      const data = await api.get<ViralVideo[]>(`/api/research/viral?q=${encodeURIComponent(viralQuery)}`);
+      const params = new URLSearchParams({ q: viralQuery });
+      if (publishedAfter) params.set('publishedAfter', publishedAfter);
+      const data = await api.get<ViralVideo[]>(`/api/research/viral?${params}`);
       setViralResults(data);
     } catch (e: any) {
       setViralError(e?.message || 'Erro na busca');
@@ -178,6 +184,11 @@ export default function PesquisaConteudo() {
     await api.patch(`/api/research/ideas/${id}`, { status });
     setIdeas((p) => p.map((i) => i.id === id ? { ...i, status } : i));
   }
+
+  const filteredViral = viralResults
+    .filter((v) => !minViews || v.views >= Number(minViews.replace(/[kKmM]/g, (m) => m.toLowerCase() === 'k' ? '000' : '000000')))
+    .filter((v) => !minLikes || v.likes >= Number(minLikes.replace(/[kKmM]/g, (m) => m.toLowerCase() === 'k' ? '000' : '000000')))
+    .sort((a, b) => b[sortBy] - a[sortBy]);
 
   const filteredRefs = references.filter((r) =>
     !refFilter || r.title?.toLowerCase().includes(refFilter.toLowerCase()) ||
@@ -257,15 +268,43 @@ export default function PesquisaConteudo() {
           </button>
         </form>
 
+        {/* Filtros */}
+        <div className="flex gap-2 flex-wrap">
+          <input type="number" placeholder="Mín. views" value={minViews} onChange={(e) => setMinViews(e.target.value)}
+            className="w-28 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+          <input type="number" placeholder="Mín. curtidas" value={minLikes} onChange={(e) => setMinLikes(e.target.value)}
+            className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+          <select value={publishedAfter} onChange={(e) => setPublishedAfter(e.target.value)}
+            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            <option value="">Qualquer data</option>
+            <option value={new Date(Date.now() - 7*86400000).toISOString()}>Última semana</option>
+            <option value={new Date(Date.now() - 30*86400000).toISOString()}>Último mês</option>
+            <option value={new Date(Date.now() - 90*86400000).toISOString()}>Últimos 3 meses</option>
+            <option value={new Date(Date.now() - 365*86400000).toISOString()}>Último ano</option>
+          </select>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            <option value="views">Ordenar: Views</option>
+            <option value="likes">Ordenar: Curtidas</option>
+            <option value="comments">Ordenar: Comentários</option>
+          </select>
+          {(minViews || minLikes || publishedAfter) && (
+            <button onClick={() => { setMinViews(''); setMinLikes(''); setPublishedAfter(''); }}
+              className="px-2 py-1.5 text-xs text-muted-foreground hover:text-red-500 flex items-center gap-1">
+              <X size={12} /> Limpar
+            </button>
+          )}
+        </div>
+
         {viralError && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{viralError}</div>
         )}
 
         {viralLoading ? (
           <div className="py-8 flex justify-center"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
-        ) : viralResults.length > 0 ? (
+        ) : filteredViral.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {viralResults.map((v) => (
+            {filteredViral.map((v) => (
               <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group" style={{ boxShadow: 'var(--shadow-card)' }}>
                 <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
                   {v.cover ? (
@@ -304,6 +343,11 @@ export default function PesquisaConteudo() {
                 </div>
               </div>
             ))}
+          </div>
+        ) : viralResults.length > 0 && filteredViral.length === 0 ? (
+          <div className="py-6 text-center text-muted-foreground">
+            <Search size={24} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Nenhum resultado com esses filtros</p>
           </div>
         ) : !viralLoading && (
           <div className="py-6 text-center text-muted-foreground">
