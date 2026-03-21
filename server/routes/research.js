@@ -101,61 +101,60 @@ router.get('/trending', async (req, res) => {
   }
 });
 
-// ── Busca Viral Instagram (Graph API via hashtag) ─────────────────────────────
+// ── Busca Viral Instagram (por @username via RapidAPI) ────────────────────────
 
 router.get('/viral-instagram', async (req, res) => {
-  const { q = '', type = 'top' } = req.query;
-  if (!q.trim()) return res.json([]);
+  const { q = '' } = req.query;
+  const username = q.trim().replace(/^@/, '');
+  if (!username) return res.json([]);
 
-  const token = db.getPlatformToken('instagram');
-  if (!token) return res.status(503).json({ error: 'Conecte o Instagram primeiro nas configurações' });
+  const apiKey = process.env.RAPIDAPI_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
 
   try {
-    const igUserId = token.user_id;
-    const accessToken = token.access_token;
-
-    // 1. Busca o ID da hashtag
-    const hashtagSearch = await axios.get('https://graph.facebook.com/v19.0/ig_hashtag_search', {
-      params: { user_id: igUserId, q: q.trim().replace(/^#/, ''), access_token: accessToken },
+    // 1. Busca o user_id pelo username
+    const userRes = await axios.get('https://instagram-api-fast-reliable-data-scraper.p.rapidapi.com/user_id_by_username', {
+      params: { username },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-api-fast-reliable-data-scraper.p.rapidapi.com' },
+      timeout: 15000,
     });
 
-    const hashtagId = hashtagSearch.data?.data?.[0]?.id;
-    if (!hashtagId) return res.json([]);
+    const userId = userRes.data?.UserID;
+    if (!userId) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-    // 2. Busca posts pela hashtag (top_media ou recent_media)
-    const mediaEndpoint = type === 'recent' ? 'recent_media' : 'top_media';
-    const mediaRes = await axios.get(`https://graph.facebook.com/v19.0/${hashtagId}/${mediaEndpoint}`, {
-      params: {
-        user_id: igUserId,
-        fields: 'id,media_type,like_count,comments_count,timestamp,permalink,thumbnail_url,media_url,caption',
-        access_token: accessToken,
-        limit: 20,
-      },
+    // 2. Busca os reels do usuário
+    const reelsRes = await axios.get('https://instagram-api-fast-reliable-data-scraper.p.rapidapi.com/reels', {
+      params: { user_id: userId, include_feed_video: true },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-api-fast-reliable-data-scraper.p.rapidapi.com' },
+      timeout: 15000,
     });
 
-    const items = mediaRes.data?.data || [];
+    const items = reelsRes.data?.data?.items || [];
     const videos = items
-      .filter((m) => m.media_type === 'VIDEO' || m.media_type === 'REEL')
-      .map((m) => ({
-        id: m.id,
-        title: m.caption ? m.caption.substring(0, 100) : '',
-        author: '',
-        author_handle: '',
-        views: 0,
-        likes: m.like_count || 0,
-        comments: m.comments_count || 0,
-        shares: 0,
-        cover: m.thumbnail_url || m.media_url || '',
-        url: m.permalink,
-        platform: 'instagram',
-        timestamp: m.timestamp,
-      }));
+      .filter((i) => i.media?.media_type === 2)
+      .map((i) => {
+        const m = i.media;
+        const cover = m.image_versions2?.candidates?.[0]?.url || '';
+        return {
+          id: m.id,
+          title: m.caption?.text ? m.caption.text.substring(0, 120) : '',
+          author: username,
+          author_handle: username,
+          views: m.play_count || m.view_count || 0,
+          likes: m.like_count || 0,
+          comments: m.comment_count || 0,
+          shares: 0,
+          cover,
+          url: `https://www.instagram.com/reel/${m.code}/`,
+          platform: 'instagram',
+        };
+      });
 
     res.set('Cache-Control', 'no-store');
     res.json(videos);
   } catch (e) {
     console.error('[Instagram viral] Error:', e.response?.data || e.message);
-    res.status(500).json({ error: e.response?.data?.error?.message || e.message });
+    res.status(500).json({ error: e.response?.data?.message || e.message });
   }
 });
 

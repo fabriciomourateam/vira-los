@@ -394,7 +394,7 @@ export default function PesquisaConteudo() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Hashtag (ex: treino, fitness, marketing)"
+              placeholder="@username (ex: @cbum, @leomessi)"
               value={igQuery}
               onChange={(e) => setIgQuery(e.target.value)}
               className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
@@ -408,14 +408,7 @@ export default function PesquisaConteudo() {
 
         {/* Filtros */}
         <div className="flex gap-2 flex-wrap">
-          <div className="flex rounded-lg overflow-hidden border border-border">
-            {(['top', 'recent'] as const).map((t) => (
-              <button key={t} onClick={() => setIgType(t)}
-                className={`px-3 py-1.5 text-xs font-bold transition-all ${igType === t ? 'bg-pink-500 text-white' : 'bg-secondary text-muted-foreground'}`}>
-                {t === 'top' ? 'Top Posts' : 'Recentes'}
-              </button>
-            ))}
-          </div>
+          <span className="text-xs text-muted-foreground px-1">Digite o @ de um perfil viral do seu nicho para ver os reels dele</span>
           <input type="number" placeholder="Mín. curtidas" value={igMinLikes} onChange={(e) => setIgMinLikes(e.target.value)}
             className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <input type="number" placeholder="Mín. comentários" value={igMinComments} onChange={(e) => setIgMinComments(e.target.value)}
@@ -469,8 +462,8 @@ export default function PesquisaConteudo() {
         ) : !igLoading && (
           <div className="py-6 text-center text-muted-foreground">
             <Heart size={24} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">Digite uma hashtag para buscar Reels do Instagram</p>
-            <p className="text-xs mt-1">Ex: treino, motivacao, marketing</p>
+            <p className="text-sm">Digite o @ de um perfil para ver os reels</p>
+            <p className="text-xs mt-1">Ex: @cbum, @nataliamills, @fabriciomourateam</p>
           </div>
         )}
       </section>}
