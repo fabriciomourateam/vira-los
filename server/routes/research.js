@@ -7,7 +7,7 @@ const db = require('../db/database');
 // ── Busca Viral (YouTube Data API) ────────────────────────────────────────────
 
 router.get('/viral', async (req, res) => {
-  const { q = '', count = 20, publishedAfter } = req.query;
+  const { q = '', count = 20, publishedAfter, regionCode = 'BR' } = req.query;
   if (!q.trim()) return res.json([]);
 
   try {
@@ -23,6 +23,7 @@ router.get('/viral', async (req, res) => {
       videoDuration: 'short',
       order: 'viewCount',
       maxResults: Number(count),
+      regionCode,
     };
     if (publishedAfter) searchParams.publishedAfter = publishedAfter;
 
@@ -65,6 +66,7 @@ router.get('/viral', async (req, res) => {
 });
 
 router.get('/trending', async (req, res) => {
+  const { regionCode = 'BR' } = req.query;
   try {
     const yt = require('../services/youtube');
     const auth = await yt.getAuthenticatedClient();
@@ -74,7 +76,7 @@ router.get('/trending', async (req, res) => {
     const trendRes = await youtube.videos.list({
       part: ['snippet', 'statistics'],
       chart: 'mostPopular',
-      regionCode: 'BR',
+      regionCode,
       videoCategoryId: '22',
       maxResults: 20,
     });
@@ -98,6 +100,60 @@ router.get('/trending', async (req, res) => {
   } catch (e) {
     console.error('[Trending] Error:', e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Busca Instagram por hashtag (Meta Graph API) ─────────────────────────────
+
+router.get('/instagram-hashtag', async (req, res) => {
+  const { q = '' } = req.query;
+  const hashtag = q.trim().replace(/^#/, '').toLowerCase();
+  if (!hashtag) return res.json([]);
+
+  const igToken = db.getPlatformToken('instagram');
+  if (!igToken) return res.status(503).json({ error: 'Instagram não conectado. Configure nas Plataformas.' });
+
+  const { access_token, user_id } = igToken;
+
+  try {
+    // 1. Busca ID da hashtag
+    const hashRes = await axios.get('https://graph.facebook.com/v21.0/ig_hashtag_search', {
+      params: { user_id, q: hashtag, access_token },
+      timeout: 15000,
+    });
+    const hashId = hashRes.data?.data?.[0]?.id;
+    if (!hashId) return res.json([]);
+
+    // 2. Busca top media da hashtag
+    const mediaRes = await axios.get(`https://graph.facebook.com/v21.0/${hashId}/top_media`, {
+      params: {
+        user_id,
+        fields: 'id,media_type,like_count,comments_count,thumbnail_url,media_url,permalink,caption',
+        access_token,
+      },
+      timeout: 15000,
+    });
+
+    const items = mediaRes.data?.data || [];
+    const videos = items.map((i) => ({
+      id: i.id,
+      title: i.caption ? i.caption.substring(0, 120) : '',
+      author: '',
+      author_handle: hashtag,
+      views: 0,
+      likes: i.like_count || 0,
+      comments: i.comments_count || 0,
+      shares: 0,
+      cover: i.thumbnail_url || i.media_url || '',
+      url: i.permalink,
+      platform: 'instagram',
+    }));
+
+    res.set('Cache-Control', 'no-store');
+    res.json(videos);
+  } catch (e) {
+    console.error('[Instagram hashtag] Error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.response?.data?.error?.message || e.message });
   }
 });
 
@@ -215,13 +271,20 @@ router.get('/tiktok-creators', async (req, res) => {
 
     const list = response.data?.user_list || [];
     const creators = list
-      .map((u) => ({
-        uid: u.user_info?.uid || u.uid,
-        username: u.user_info?.unique_id || u.unique_id,
-        nickname: u.user_info?.nickname || u.nickname,
-        followers: u.user_info?.follower_count || u.follower_count || 0,
-        avatar: u.user_info?.avatar_thumb?.url_list?.[0] || '',
-      }))
+      .map((u) => {
+        // Scraptik retorna { user_info: {...} } ou diretamente { id, unique_id, nickname, avatar }
+        const info = u.user_info || u;
+        const avatarRaw = info.avatar_thumb?.url_list?.[0] || info.avatar_medium?.url_list?.[0];
+        const avatar = typeof avatarRaw === 'string' ? avatarRaw
+          : (typeof info.avatar === 'string' ? info.avatar : '');
+        return {
+          uid: String(info.uid || info.id || ''),
+          username: String(info.unique_id || ''),
+          nickname: String(info.nickname || ''),
+          followers: Number(info.follower_count || 0),
+          avatar,
+        };
+      })
       .sort((a, b) => b.followers - a.followers);
 
     res.set('Cache-Control', 'no-store');

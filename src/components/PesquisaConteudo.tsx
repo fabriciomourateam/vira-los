@@ -101,14 +101,18 @@ export default function PesquisaConteudo() {
   const [ttSortBy, setTtSortBy] = useState<'views' | 'likes' | 'comments'>('views');
 
   // Instagram viral
+  const [igMode, setIgMode] = useState<'username' | 'hashtag'>('hashtag');
   const [igQuery, setIgQuery] = useState('');
   const [igResults, setIgResults] = useState<ViralVideo[]>([]);
   const [igLoading, setIgLoading] = useState(false);
   const [igError, setIgError] = useState('');
-  const [igType, setIgType] = useState<'top' | 'recent'>('top');
   const [igMinLikes, setIgMinLikes] = useState('');
   const [igMinComments, setIgMinComments] = useState('');
   const [igSortBy, setIgSortBy] = useState<'likes' | 'comments'>('likes');
+
+  // Região
+  const [ytRegion, setYtRegion] = useState('BR');
+  const [ttRegion, setTtRegion] = useState('br');
 
   // Aba ativa
   const [activeTab, setActiveTab] = useState<'viral' | 'tiktok' | 'instagram' | 'referencias' | 'hooks' | 'ideias'>('viral');
@@ -132,11 +136,11 @@ export default function PesquisaConteudo() {
 
   useEffect(() => { load(); loadTrending(); }, []);
 
-  async function loadTrending() {
+  async function loadTrending(region = ytRegion) {
     setViralLoading(true);
     setViralError('');
     try {
-      const data = await api.get<ViralVideo[]>('/api/research/trending');
+      const data = await api.get<ViralVideo[]>(`/api/research/trending?regionCode=${region}`);
       setViralResults(data);
     } catch (e: any) {
       setViralError(e?.message || 'Erro ao carregar trending');
@@ -151,7 +155,7 @@ export default function PesquisaConteudo() {
     setViralLoading(true);
     setViralError('');
     try {
-      const params = new URLSearchParams({ q: viralQuery });
+      const params = new URLSearchParams({ q: viralQuery, regionCode: ytRegion });
       if (publishedAfter) params.set('publishedAfter', publishedAfter);
       const data = await api.get<ViralVideo[]>(`/api/research/viral?${params}`);
       setViralResults(data);
@@ -178,7 +182,7 @@ export default function PesquisaConteudo() {
         setTtCreators(data);
         setTtResults([]);
       } else if (ttMode === 'search') {
-        const data = await api.get<ViralVideo[]>(`/api/research/tiktok-search?q=${encodeURIComponent(ttQuery)}`);
+        const data = await api.get<ViralVideo[]>(`/api/research/tiktok-search?q=${encodeURIComponent(ttQuery)}&region=${ttRegion}`);
         setTtResults(data);
         setTtCreators([]);
       } else {
@@ -218,7 +222,10 @@ export default function PesquisaConteudo() {
     setIgLoading(true);
     setIgError('');
     try {
-      const data = await api.get<ViralVideo[]>(`/api/research/viral-instagram?q=${encodeURIComponent(igQuery.replace(/^#/, ''))}&type=${igType}`);
+      const endpoint = igMode === 'hashtag'
+        ? `/api/research/instagram-hashtag?q=${encodeURIComponent(igQuery.replace(/^#/, ''))}`
+        : `/api/research/viral-instagram?q=${encodeURIComponent(igQuery.replace(/^@/, ''))}`;
+      const data = await api.get<ViralVideo[]>(endpoint);
       setIgResults(data);
     } catch (e: any) {
       setIgError(e?.message || 'Erro na busca');
@@ -369,6 +376,17 @@ export default function PesquisaConteudo() {
             <option value={new Date(Date.now() - 90*86400000).toISOString()}>Últimos 3 meses</option>
             <option value={new Date(Date.now() - 365*86400000).toISOString()}>Último ano</option>
           </select>
+          <select value={ytRegion} onChange={(e) => { setYtRegion(e.target.value); if (viralMode === 'trending') loadTrending(e.target.value); }}
+            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            <option value="BR">🇧🇷 Brasil</option>
+            <option value="US">🇺🇸 EUA</option>
+            <option value="PT">🇵🇹 Portugal</option>
+            <option value="ES">🇪🇸 Espanha</option>
+            <option value="MX">🇲🇽 México</option>
+            <option value="AR">🇦🇷 Argentina</option>
+            <option value="CO">🇨🇴 Colômbia</option>
+            <option value="GB">🇬🇧 Reino Unido</option>
+          </select>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
             className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
             <option value="views">Ordenar: Views</option>
@@ -474,6 +492,19 @@ export default function PesquisaConteudo() {
             className="w-28 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <input type="number" placeholder="Mín. curtidas" value={ttMinLikes} onChange={(e) => setTtMinLikes(e.target.value)}
             className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+          {ttMode === 'search' && (
+            <select value={ttRegion} onChange={(e) => setTtRegion(e.target.value)}
+              className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+              <option value="br">🇧🇷 Brasil</option>
+              <option value="us">🇺🇸 EUA</option>
+              <option value="pt">🇵🇹 Portugal</option>
+              <option value="es">🇪🇸 Espanha</option>
+              <option value="mx">🇲🇽 México</option>
+              <option value="ar">🇦🇷 Argentina</option>
+              <option value="co">🇨🇴 Colômbia</option>
+              <option value="gb">🇬🇧 Reino Unido</option>
+            </select>
+          )}
           <select value={ttSortBy} onChange={(e) => setTtSortBy(e.target.value as any)}
             className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
             <option value="views">Ordenar: Views</option>
@@ -544,12 +575,21 @@ export default function PesquisaConteudo() {
 
       {/* ── Instagram Viral ── */}
       {activeTab === 'instagram' && <section className="space-y-3">
+        <div className="flex rounded-lg overflow-hidden border border-border w-fit">
+          {(['hashtag', 'username'] as const).map((m) => (
+            <button key={m} onClick={() => { setIgMode(m); setIgResults([]); setIgQuery(''); }}
+              className={`px-4 py-1.5 text-xs font-bold transition-all ${igMode === m ? 'bg-pink-500 text-white' : 'bg-secondary text-muted-foreground'}`}>
+              {m === 'hashtag' ? '#️⃣ Por hashtag' : '👤 Por @username'}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={searchInstagram} className="flex gap-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="@username (ex: @cbum, @leomessi)"
+              placeholder={igMode === 'hashtag' ? '#hashtag (ex: treino, saúde, marketing)' : '@username (ex: @cbum, @leomessi)'}
               value={igQuery}
               onChange={(e) => setIgQuery(e.target.value)}
               className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
@@ -563,7 +603,6 @@ export default function PesquisaConteudo() {
 
         {/* Filtros */}
         <div className="flex gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground px-1">Digite o @ de um perfil viral do seu nicho para ver os reels dele</span>
           <input type="number" placeholder="Mín. curtidas" value={igMinLikes} onChange={(e) => setIgMinLikes(e.target.value)}
             className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <input type="number" placeholder="Mín. comentários" value={igMinComments} onChange={(e) => setIgMinComments(e.target.value)}
@@ -617,8 +656,10 @@ export default function PesquisaConteudo() {
         ) : !igLoading && (
           <div className="py-6 text-center text-muted-foreground">
             <Heart size={24} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">Digite o @ de um perfil para ver os reels</p>
-            <p className="text-xs mt-1">Ex: @cbum, @nataliamills, @fabriciomourateam</p>
+            {igMode === 'hashtag'
+              ? <><p className="text-sm">Busque por hashtag para ver os posts mais populares</p><p className="text-xs mt-1">Ex: treino, marketing, emagrecimento</p></>
+              : <><p className="text-sm">Digite o @ de um perfil para ver os reels</p><p className="text-xs mt-1">Ex: @cbum, @nataliamills</p></>
+            }
           </div>
         )}
       </section>}
