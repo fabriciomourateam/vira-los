@@ -62,4 +62,54 @@ router.post('/:id/trigger', async (req, res) => {
   }
 });
 
+// POST /api/schedule/:id/retry — resetar status e retentar publicação
+router.post('/:id/retry', async (req, res) => {
+  try {
+    const schedule = db.getSchedule(req.params.id);
+    if (!schedule) return res.status(404).json({ error: 'Agendamento não encontrado' });
+    db.updateScheduleStatus(schedule.id, 'pending', null, null);
+    const fresh = db.getSchedule(req.params.id);
+    const { processSchedule } = require('../services/schedulerService');
+    await processSchedule(fresh);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/schedule/generate-caption — gera legenda com Claude
+router.post('/generate-caption', async (req, res) => {
+  try {
+    const { title, platform, keywords } = req.body;
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(400).json({ error: 'ANTHROPIC_API_KEY não configurada' });
+    }
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      messages: [{
+        role: 'user',
+        content: `Crie uma legenda viral para um post de ${platform || 'Instagram/TikTok'} sobre: "${title || 'conteúdo de saúde e bem-estar'}".
+${keywords ? `Palavras-chave: ${keywords}` : ''}
+
+A legenda deve:
+- Ter um gancho forte na primeira linha que gere curiosidade
+- Ser envolvente e criar urgência ou conexão emocional
+- Ter um CTA claro no final (ex: "Salva esse post", "Comenta abaixo", "Segue pra mais")
+- Ter no máximo 3-4 linhas
+- Ser natural e autêntica, não genérica
+
+Retorne APENAS a legenda, sem explicações ou aspas.`,
+      }],
+    });
+
+    res.json({ caption: msg.content[0].text.trim() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

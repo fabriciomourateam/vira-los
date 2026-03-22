@@ -760,7 +760,7 @@ router.get('/ideas', (_req, res) => res.json(db.getAllIdeas()));
 
 router.post('/ideas', (req, res) => {
   try {
-    const item = { id: uuidv4(), ...req.body };
+    const item = { id: uuidv4(), status: 'idea', ...req.body };
     db.createIdea(item);
     res.json(item);
   } catch (e) {

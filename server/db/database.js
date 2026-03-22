@@ -166,10 +166,17 @@ const incrementHookUse = (id) => { const db = readDb('hooks').map((h) => h.id ==
 const deleteHook      = (id) => writeDb('hooks', readDb('hooks').filter((h) => h.id !== id));
 
 // ── Content Ideas ─────────────────────────────────────────────────────────────
-const getAllIdeas      = () => readDb('ideas').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const getAllIdeas      = () => readDb('ideas').map(i => ({ status: 'idea', ...i })).sort((a, b) => b.created_at.localeCompare(a.created_at));
 const createIdea      = (i) => { const db = readDb('ideas'); db.push({ ...i, tags: JSON.stringify(i.tags || []), created_at: now() }); writeDb('ideas', db); };
 const updateIdea      = (id, data) => { const db = readDb('ideas').map((i) => i.id === id ? { ...i, ...data } : i); writeDb('ideas', db); };
 const deleteIdea      = (id) => writeDb('ideas', readDb('ideas').filter((i) => i.id !== id));
+
+// ── Post Results (log de publicações) ────────────────────────────────────────
+function logPostResult(result) {
+  const db = readDb('post_results');
+  db.push({ ...result, logged_at: now() });
+  writeDb('post_results', db);
+}
 
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
@@ -179,4 +186,5 @@ module.exports = {
   getAllReferences, createReference, deleteReference,
   getAllHooks, createHook, incrementHookUse, deleteHook,
   getAllIdeas, createIdea, updateIdea, deleteIdea,
+  logPostResult,
 };

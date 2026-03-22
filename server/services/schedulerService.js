@@ -23,17 +23,13 @@ async function processSchedule(schedule) {
         externalId = await yt.post(schedule, schedule);
       }
 
-      db.prepare(
-        'INSERT INTO post_results (id, scheduled_post_id, platform, platform_post_id, status) VALUES (?, ?, ?, ?, ?)'
-      ).run(uuidv4(), schedule.id, platform, externalId || null, 'success');
+      db.logPostResult({ id: uuidv4(), scheduled_post_id: schedule.id, platform, platform_post_id: externalId || null, status: 'success' });
 
       console.log(`✅ [${platform}] Publicado: "${schedule.content_title}" → ${externalId}`);
       results.push({ platform, success: true });
     } catch (err) {
       console.error(`❌ [${platform}] Falha em "${schedule.content_title}": ${err.message}`);
-      db.prepare(
-        'INSERT INTO post_results (id, scheduled_post_id, platform, status, error_message) VALUES (?, ?, ?, ?, ?)'
-      ).run(uuidv4(), schedule.id, platform, 'failed', err.message);
+      db.logPostResult({ id: uuidv4(), scheduled_post_id: schedule.id, platform, status: 'failed', error_message: err.message });
       results.push({ platform, success: false, error: err.message });
     }
   }
