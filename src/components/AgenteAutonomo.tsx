@@ -35,11 +35,23 @@ interface AgentResults {
 
 interface ScheduleConfig {
   active: boolean;
+  mode?: 'daily' | 'weekly';
   hour?: number;
   minute?: number;
   keyword?: string;
   platforms?: string[];
+  weekdays?: number[];  // 0=Dom 1=Seg 2=Ter 3=Qua 4=Qui 5=Sex 6=Sáb
 }
+
+const WEEK_DAYS = [
+  { value: 1, label: 'Seg' },
+  { value: 2, label: 'Ter' },
+  { value: 3, label: 'Qua' },
+  { value: 4, label: 'Qui' },
+  { value: 5, label: 'Sex' },
+  { value: 6, label: 'Sáb' },
+  { value: 0, label: 'Dom' },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,6 +81,8 @@ export default function AgenteAutonomo() {
   const [schedule, setSchedule]       = useState<ScheduleConfig>({ active: false });
   const [schedHour, setSchedHour]     = useState('07');
   const [schedMin, setSchedMin]       = useState('00');
+  const [schedMode, setSchedMode]     = useState<'daily' | 'weekly'>('daily');
+  const [schedWeekdays, setSchedWeekdays] = useState<number[]>([1, 2, 3, 4, 5]); // Seg-Sex
   const [showScheduler, setShowScheduler] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -103,6 +117,8 @@ export default function AgenteAutonomo() {
       if (data.active) {
         setSchedHour(String(data.hour).padStart(2, '0'));
         setSchedMin(String(data.minute).padStart(2, '0'));
+        setSchedMode(data.mode || 'daily');
+        if (data.weekdays?.length) setSchedWeekdays(data.weekdays);
       }
     } catch (_) {}
   }
@@ -180,6 +196,8 @@ export default function AgenteAutonomo() {
         body: JSON.stringify({
           hour: Number(schedHour),
           minute: Number(schedMin),
+          mode: schedMode,
+          weekdays: schedMode === 'weekly' ? schedWeekdays : [],
           keyword: keyword.trim(),
           platforms,
         }),
@@ -187,6 +205,22 @@ export default function AgenteAutonomo() {
       const data = await r.json();
       if (data.ok) setSchedule(data.schedule);
     } catch (_) {}
+  }
+
+  function toggleWeekday(d: number) {
+    setSchedWeekdays(prev =>
+      prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
+    );
+  }
+
+  function scheduleLabel(s: ScheduleConfig) {
+    if (!s.active) return null;
+    const time = `${String(s.hour).padStart(2,'0')}:${String(s.minute).padStart(2,'0')}`;
+    if (s.mode === 'weekly' && s.weekdays?.length) {
+      const DAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+      return s.weekdays.map(d => DAYS[d]).join(', ') + ' ' + time;
+    }
+    return 'Todo dia ' + time;
   }
 
   async function removeSchedule() {
@@ -220,7 +254,7 @@ export default function AgenteAutonomo() {
         {schedule.active && (
           <div className="ml-auto flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
             <Clock className="w-3 h-3" />
-            Agendado {String(schedule.hour).padStart(2,'0')}:{String(schedule.minute).padStart(2,'0')}
+            {scheduleLabel(schedule)}
           </div>
         )}
       </div>
@@ -297,38 +331,93 @@ export default function AgenteAutonomo() {
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="border-t border-zinc-800 pt-4 space-y-3">
-                <p className="text-zinc-400 text-xs">Executar diariamente às:</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number" min="0" max="23"
-                    value={schedHour}
-                    onChange={e => setSchedHour(e.target.value.padStart(2,'0'))}
-                    className="w-16 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-orange-500"
-                  />
-                  <span className="text-zinc-400">:</span>
-                  <input
-                    type="number" min="0" max="59"
-                    value={schedMin}
-                    onChange={e => setSchedMin(e.target.value.padStart(2,'0'))}
-                    className="w-16 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-orange-500"
-                  />
-                  <span className="text-zinc-400 text-xs">(Horário de Brasília)</span>
-                  <button
-                    onClick={saveSchedule}
-                    className="ml-auto px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition-colors"
-                  >
-                    Salvar
-                  </button>
-                  {schedule.active && (
-                    <button
-                      onClick={removeSchedule}
-                      className="p-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+              <div className="border-t border-zinc-800 pt-4 space-y-4">
+
+                {/* Modo: todo dia vs dias específicos */}
+                <div>
+                  <p className="text-zinc-400 text-xs mb-2">Frequência</p>
+                  <div className="flex gap-2">
+                    {(['daily', 'weekly'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setSchedMode(m)}
+                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-medium transition-all
+                          ${schedMode === m
+                            ? 'bg-orange-500/10 border-orange-500/40 text-orange-400'
+                            : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-600'}`}
+                      >
+                        {m === 'daily' ? 'Todo dia' : 'Dias específicos'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Dias da semana (só aparece no modo weekly) */}
+                <AnimatePresence>
+                  {schedMode === 'weekly' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <p className="text-zinc-400 text-xs mb-2">Dias da semana</p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {WEEK_DAYS.map(({ value, label }) => {
+                          const active = schedWeekdays.includes(value);
+                          return (
+                            <button
+                              key={value}
+                              onClick={() => toggleWeekday(value)}
+                              className={`w-10 h-9 rounded-lg border text-xs font-medium transition-all
+                                ${active
+                                  ? 'bg-orange-500/15 border-orange-500/50 text-orange-300'
+                                  : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-600'}`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Horário */}
+                <div>
+                  <p className="text-zinc-400 text-xs mb-2">Horário (Brasília)</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" min="0" max="23"
+                      value={schedHour}
+                      onChange={e => setSchedHour(String(e.target.value).padStart(2,'0'))}
+                      className="w-16 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-orange-500"
+                    />
+                    <span className="text-zinc-400 font-bold">:</span>
+                    <input
+                      type="number" min="0" max="59"
+                      value={schedMin}
+                      onChange={e => setSchedMin(String(e.target.value).padStart(2,'0'))}
+                      className="w-16 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-orange-500"
+                    />
+                    <button
+                      onClick={saveSchedule}
+                      className="ml-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition-colors"
+                    >
+                      Salvar
+                    </button>
+                    {schedule.active && (
+                      <button
+                        onClick={removeSchedule}
+                        className="p-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Remover agendamento"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <p className="text-zinc-500 text-xs">
                   ⚠️ O PC (ou servidor) precisa estar ligado no horário agendado.
                 </p>

@@ -4,9 +4,14 @@
  * POST /api/agent/start          → inicia a pesquisa
  * GET  /api/agent/stream         → SSE com updates em tempo real
  * GET  /api/agent/status         → status atual (polling fallback)
- * POST /api/agent/schedule       → agenda execução diária (cron)
+ * POST /api/agent/schedule       → agenda execução (cron)
  * DELETE /api/agent/schedule     → remove agendamento
- * GET  /api/agent/schedule       → retorna horário agendado
+ * GET  /api/agent/schedule       → retorna agendamento salvo
+ *
+ * Modos de agendamento:
+ *  - mode: 'daily'   → todo dia às HH:MM
+ *  - mode: 'weekly'  → dias específicos da semana (weekdays: [0-6]) às HH:MM
+ *                       0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb
  */
 
 const express = require('express');
@@ -87,14 +92,38 @@ function saveSchedule(data) {
   fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(data, null, 2));
 }
 
+function buildCronExpr(scheduleData) {
+  const { hour, minute, mode, weekdays } = scheduleData;
+  // mode 'weekly' com dias específicos: ex "30 7 * * 1,3,5" (seg, qua, sex)
+  if (mode === 'weekly' && Array.isArray(weekdays) && weekdays.length > 0) {
+    return `${minute} ${hour} * * ${weekdays.join(',')}`;
+  }
+  // mode 'daily' (padrão): todo dia
+  return `${minute} ${hour} * * *`;
+}
+
+function humanCronLabel(scheduleData) {
+  const { hour, minute, mode, weekdays } = scheduleData;
+  const time = `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+  if (mode === 'weekly' && Array.isArray(weekdays) && weekdays.length > 0) {
+    const DAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    const names = weekdays.map(d => DAYS[d]).join(', ');
+    return `${names} às ${time}`;
+  }
+  return `Todo dia às ${time}`;
+}
+
 function applySchedule(scheduleData) {
   if (scheduledTask) { scheduledTask.stop(); scheduledTask = null; }
   if (!scheduleData || !scheduleData.active) return;
 
-  const { hour, minute, keyword, platforms } = scheduleData;
-  const cronExpr = `${minute} ${hour} * * *`;
+  const { keyword, platforms } = scheduleData;
+  const cronExpr = buildCronExpr(scheduleData);
 
-  if (!cron.validate(cronExpr)) return;
+  if (!cron.validate(cronExpr)) {
+    console.error('[Agent Schedule] Expressão cron inválida:', cronExpr);
+    return;
+  }
 
   scheduledTask = cron.schedule(cronExpr, () => {
     const state = getState();
@@ -104,7 +133,7 @@ function applySchedule(scheduleData) {
     }
   }, { timezone: 'America/Sao_Paulo' });
 
-  console.log(`[Agent Schedule] Agendado: ${cronExpr} BRT — "${keyword}"`);
+  console.log(`[Agent Schedule] Agendado: ${humanCronLabel(scheduleData)} BRT — "${keyword}"`);
 }
 
 // Restaura agendamento ao iniciar
@@ -116,18 +145,24 @@ router.get('/schedule', (req, res) => {
 });
 
 router.post('/schedule', (req, res) => {
-  const { hour, minute, keyword, platforms } = req.body;
+  const { hour, minute, keyword, platforms, mode, weekdays } = req.body;
 
   if (hour === undefined || minute === undefined || !keyword) {
     return res.status(400).json({ error: 'hour, minute e keyword são obrigatórios' });
   }
 
+  if (mode === 'weekly' && (!Array.isArray(weekdays) || weekdays.length === 0)) {
+    return res.status(400).json({ error: 'Selecione pelo menos 1 dia da semana' });
+  }
+
   const data = {
     active: true,
+    mode: mode || 'daily',
     hour: Number(hour),
     minute: Number(minute),
     keyword: keyword.trim(),
     platforms: platforms || ['tiktok', 'instagram', 'youtube'],
+    weekdays: mode === 'weekly' ? weekdays.map(Number) : [],
   };
 
   saveSchedule(data);
