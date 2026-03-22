@@ -309,26 +309,19 @@ export default function ViralOS() {
     <div className="min-h-screen bg-background text-foreground pb-20">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-md border-b border-border">
-        <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-3xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center">
-              <Zap size={18} className="text-background" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-foreground rounded-lg flex items-center justify-center">
+              <Zap size={16} className="text-background" />
             </div>
             <span className="font-extrabold tracking-tight text-sm uppercase">
-              ViralOS <span className="text-muted-foreground font-medium">v2.0</span>
+              ViralOS <span className="hidden sm:inline text-muted-foreground font-medium">v2.0</span>
             </span>
           </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={resetProgress}
-              className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-              title="Resetar Progresso"
-            >
-              <Trash2 size={18} />
-            </button>
+          <div className="flex items-center gap-2 sm:gap-4">
             {activeTab === 'roteiro' && (
-              <div className="flex items-center gap-3 bg-secondary px-3 py-1.5 rounded-full">
-                <div className="w-24 h-1.5 bg-border rounded-full overflow-hidden">
+              <div className="flex items-center gap-2 bg-secondary px-2.5 sm:px-3 py-1.5 rounded-full">
+                <div className="w-16 sm:w-24 h-1.5 bg-border rounded-full overflow-hidden">
                   <motion.div
                     className="h-full bg-foreground rounded-full"
                     initial={{ width: 0 }}
@@ -339,10 +332,17 @@ export default function ViralOS() {
                 <span className="text-xs font-mono font-bold tabular-nums">{progress}%</span>
               </div>
             )}
+            <button
+              onClick={resetProgress}
+              className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+              title="Resetar Progresso"
+            >
+              <Trash2 size={16} />
+            </button>
           </div>
         </div>
-        {/* Tab Bar */}
-        <div className="max-w-3xl mx-auto px-4 flex gap-1">
+        {/* Tab Bar — ícone+label no desktop, só ícone no mobile */}
+        <div className="max-w-3xl mx-auto flex">
           {tabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -350,31 +350,32 @@ export default function ViralOS() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+                title={tab.label}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
                   isActive
                     ? 'border-foreground text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground/70'
                 }`}
               >
-                <Icon size={14} />
-                {tab.label}
+                <Icon size={15} />
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             );
           })}
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 pt-8">
+      <main className="max-w-3xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8">
         {activeTab === 'metricas'  && <MetricasCalculadora />}
         {activeTab === 'produtos'  && <ProdutosEscalaveis />}
         {activeTab === 'agendador' && <Agendador />}
         {activeTab === 'pesquisa'  && <PesquisaConteudo />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">
-          <h1 className="text-3xl font-extrabold tracking-tight mb-2 text-balance">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 text-balance">
             Roteiro de Viralização
           </h1>
-          <p className="text-muted-foreground text-sm mb-6">
+          <p className="text-muted-foreground text-xs sm:text-sm mb-4 sm:mb-6 hidden sm:block">
             Meio de Funil Viral — Estratégia Completa de Alta Performance
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

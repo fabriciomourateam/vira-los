@@ -54,8 +54,8 @@ export default function MetricasCalculadora() {
     <div className="space-y-6">
       {/* Header */}
       <section>
-        <h2 className="text-2xl font-extrabold tracking-tight mb-1">📊 Métricas & Calculadora</h2>
-        <p className="text-muted-foreground text-sm">Analise a performance dos seus Reels com foco em meio de funil viral</p>
+        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight mb-1">📊 Métricas & Calculadora</h2>
+        <p className="text-muted-foreground text-xs sm:text-sm hidden sm:block">Analise a performance dos seus Reels com foco em meio de funil viral</p>
       </section>
 
       {/* Retention Benchmarks */}

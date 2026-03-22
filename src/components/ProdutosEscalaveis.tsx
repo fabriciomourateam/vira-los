@@ -89,8 +89,8 @@ export default function ProdutosEscalaveis() {
     <div className="space-y-6">
       {/* Header */}
       <section>
-        <h2 className="text-2xl font-extrabold tracking-tight mb-1">💰 Produtos Escaláveis</h2>
-        <p className="text-muted-foreground text-sm">Formatos de entrega e precificação para faturar R$50k-100k/mês orgânico</p>
+        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight mb-1">💰 Produtos Escaláveis</h2>
+        <p className="text-muted-foreground text-xs sm:text-sm hidden sm:block">Formatos de entrega e precificação para faturar R$50k-100k/mês orgânico</p>
       </section>
 
       {/* Funil Alicerce */}

@@ -129,8 +129,8 @@ export default function Agendador() {
     <div className="space-y-5">
       {/* Header */}
       <section>
-        <h2 className="text-2xl font-extrabold tracking-tight mb-1">📅 Agendador de Posts</h2>
-        <p className="text-muted-foreground text-sm">
+        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight mb-1">📅 Agendador de Posts</h2>
+        <p className="text-muted-foreground text-xs sm:text-sm hidden sm:block">
           Suba seus vídeos, programe datas e publique automaticamente no Instagram, TikTok e YouTube
         </p>
       </section>
@@ -282,13 +282,13 @@ function BibliotecaView({
       <div className="flex gap-2">
         <button
           onClick={onUpload}
-          className="flex items-center gap-2 px-4 py-2.5 bg-foreground text-background rounded-xl text-sm font-bold hover:opacity-90 transition-opacity"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-foreground text-background rounded-xl text-sm font-bold hover:opacity-90 transition-opacity"
         >
           <Upload size={15} /> Subir Vídeo
         </button>
         <button
           onClick={onUploadCarousel}
-          className="flex items-center gap-2 px-4 py-2.5 bg-secondary text-foreground rounded-xl text-sm font-bold hover:bg-secondary/70 transition-colors border border-border"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-secondary text-foreground rounded-xl text-sm font-bold hover:bg-secondary/70 transition-colors border border-border"
         >
           <Image size={15} /> Carrossel
         </button>

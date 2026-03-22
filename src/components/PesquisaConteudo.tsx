@@ -328,8 +328,8 @@ export default function PesquisaConteudo() {
     <div className="space-y-6">
       {/* Header */}
       <section>
-        <h2 className="text-2xl font-extrabold tracking-tight mb-1">🔍 Pesquisa de Conteúdo</h2>
-        <p className="text-muted-foreground text-sm">
+        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight mb-1">🔍 Pesquisa de Conteúdo</h2>
+        <p className="text-muted-foreground text-xs sm:text-sm hidden sm:block">
           Encontre vídeos virais, salve referências, organize hooks e ideias
         </p>
       </section>
@@ -341,12 +341,12 @@ export default function PesquisaConteudo() {
       )}
 
       {/* ── Tab Bar ── */}
-      <div className="flex gap-1 bg-secondary p-1 rounded-xl">
+      <div className="flex gap-1 bg-secondary p-1 rounded-xl overflow-x-auto scrollbar-hide">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+            className={`flex-shrink-0 flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-background shadow-sm text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
@@ -387,13 +387,13 @@ export default function PesquisaConteudo() {
         </form>
 
         {/* Filtros */}
-        <div className="flex gap-2 flex-wrap">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <input type="number" placeholder="Mín. views" value={minViews} onChange={(e) => setMinViews(e.target.value)}
-            className="w-28 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+            className="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <input type="number" placeholder="Mín. curtidas" value={minLikes} onChange={(e) => setMinLikes(e.target.value)}
-            className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+            className="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <select value={publishedAfter} onChange={(e) => setPublishedAfter(e.target.value)}
-            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            className="col-span-2 sm:w-auto bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
             <option value="">Qualquer data</option>
             <option value={new Date(Date.now() - 7*86400000).toISOString()}>Última semana</option>
             <option value={new Date(Date.now() - 30*86400000).toISOString()}>Último mês</option>
@@ -401,7 +401,7 @@ export default function PesquisaConteudo() {
             <option value={new Date(Date.now() - 365*86400000).toISOString()}>Último ano</option>
           </select>
           <select value={ytRegion} onChange={(e) => { setYtRegion(e.target.value); if (viralMode === 'trending') loadTrending(e.target.value); }}
-            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            className="col-span-2 sm:w-auto bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
             <option value="BR">🇧🇷 Brasil</option>
             <option value="US">🇺🇸 EUA</option>
             <option value="PT">🇵🇹 Portugal</option>
@@ -412,14 +412,14 @@ export default function PesquisaConteudo() {
             <option value="GB">🇬🇧 Reino Unido</option>
           </select>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
-            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            className="col-span-2 sm:w-auto bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
             <option value="views">Ordenar: Views</option>
             <option value="likes">Ordenar: Curtidas</option>
             <option value="comments">Ordenar: Comentários</option>
           </select>
           {(minViews || minLikes || publishedAfter) && (
             <button onClick={() => { setMinViews(''); setMinLikes(''); setPublishedAfter(''); }}
-              className="px-2 py-1.5 text-xs text-muted-foreground hover:text-red-500 flex items-center gap-1">
+              className="col-span-2 sm:w-auto px-2 py-1.5 text-xs text-muted-foreground hover:text-red-500 flex items-center gap-1">
               <X size={12} /> Limpar
             </button>
           )}
@@ -432,7 +432,7 @@ export default function PesquisaConteudo() {
         {viralLoading ? (
           <div className="py-8 flex justify-center"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
         ) : filteredViral.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
             {filteredViral.map((v) => (
               <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group" style={{ boxShadow: 'var(--shadow-card)' }}>
                 <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
@@ -488,11 +488,11 @@ export default function PesquisaConteudo() {
 
       {/* ── TikTok Viral ── */}
       {activeTab === 'tiktok' && <section className="space-y-3">
-        <div className="flex rounded-lg overflow-hidden border border-border w-fit">
+        <div className="flex w-full rounded-lg overflow-hidden border border-border">
           {(['search', 'creators', 'videos'] as const).map((m) => (
             <button key={m} onClick={() => { setTtMode(m); setTtResults([]); setTtCreators([]); }}
-              className={`px-4 py-1.5 text-xs font-bold transition-all ${ttMode === m ? 'bg-foreground text-background' : 'bg-secondary text-muted-foreground'}`}>
-              {m === 'search' ? '🔥 Por palavra-chave' : m === 'creators' ? '🔍 Criadores por nicho' : '🎬 Vídeos por @username'}
+              className={`flex-1 px-2 py-2 text-xs font-bold text-center transition-all leading-tight ${ttMode === m ? 'bg-foreground text-background' : 'bg-secondary text-muted-foreground'}`}>
+              {m === 'search' ? '🔥 Palavra-chave' : m === 'creators' ? '🔍 Criadores' : '🎬 @Username'}
             </button>
           ))}
         </div>
@@ -511,14 +511,14 @@ export default function PesquisaConteudo() {
           </button>
         </form>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <input type="number" placeholder="Mín. views" value={ttMinViews} onChange={(e) => setTtMinViews(e.target.value)}
-            className="w-28 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+            className="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <input type="number" placeholder="Mín. curtidas" value={ttMinLikes} onChange={(e) => setTtMinLikes(e.target.value)}
-            className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+            className="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           {ttMode === 'search' && (
             <select value={ttRegion} onChange={(e) => setTtRegion(e.target.value)}
-              className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+              className="col-span-2 sm:w-auto bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
               <option value="br">🇧🇷 Brasil</option>
               <option value="us">🇺🇸 EUA</option>
               <option value="pt">🇵🇹 Portugal</option>
@@ -530,7 +530,7 @@ export default function PesquisaConteudo() {
             </select>
           )}
           <select value={ttSortBy} onChange={(e) => setTtSortBy(e.target.value as any)}
-            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            className="col-span-2 sm:w-auto bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
             <option value="views">Ordenar: Views</option>
             <option value="likes">Ordenar: Curtidas</option>
             <option value="comments">Ordenar: Comentários</option>
@@ -560,7 +560,7 @@ export default function PesquisaConteudo() {
             ))}
           </div>
         ) : filteredTt.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
             {filteredTt.map((v) => (
               <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group" style={{ boxShadow: 'var(--shadow-card)' }}>
                 <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
@@ -600,11 +600,11 @@ export default function PesquisaConteudo() {
       {/* ── Instagram Viral ── */}
       {activeTab === 'instagram' && <section className="space-y-3">
         {/* Modo */}
-        <div className="flex rounded-lg overflow-hidden border border-border w-fit">
+        <div className="flex w-full rounded-lg overflow-hidden border border-border">
           {(['search', 'creators', 'username'] as const).map((m) => (
             <button key={m} onClick={() => { setIgMode(m); setIgResults([]); setIgCreators([]); setIgQuery(''); }}
-              className={`px-4 py-1.5 text-xs font-bold transition-all ${igMode === m ? 'bg-pink-500 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}>
-              {m === 'search' ? '🔍 Por palavra-chave' : m === 'creators' ? '🧑‍💻 Criadores por nicho' : '🎬 Reels por @username'}
+              className={`flex-1 px-2 py-2 text-xs font-bold text-center transition-all leading-tight ${igMode === m ? 'bg-pink-500 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}>
+              {m === 'search' ? '🔍 Palavra-chave' : m === 'creators' ? '🧑‍💻 Criadores' : '🎬 @Username'}
             </button>
           ))}
         </div>
@@ -627,13 +627,13 @@ export default function PesquisaConteudo() {
         </form>
 
         {/* Filtros (só no modo de vídeos) */}
-        {igMode !== 'creators' && <div className="flex gap-2 flex-wrap">
+        {igMode !== 'creators' && <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <input type="number" placeholder="Mín. curtidas" value={igMinLikes} onChange={(e) => setIgMinLikes(e.target.value)}
-            className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+            className="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <input type="number" placeholder="Mín. comentários" value={igMinComments} onChange={(e) => setIgMinComments(e.target.value)}
-            className="w-36 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+            className="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <select value={igSortBy} onChange={(e) => setIgSortBy(e.target.value as any)}
-            className="bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            className="col-span-2 sm:w-auto bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
             <option value="likes">Ordenar: Curtidas</option>
             <option value="comments">Ordenar: Comentários</option>
           </select>
@@ -662,7 +662,7 @@ export default function PesquisaConteudo() {
             ))}
           </div>
         ) : filteredIg.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
             {filteredIg.map((v) => (
               <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group" style={{ boxShadow: 'var(--shadow-card)' }}>
                 <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
