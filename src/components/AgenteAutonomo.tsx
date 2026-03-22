@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bot, Play, Square, Clock, CheckCircle2, XCircle,
   Loader2, ChevronDown, ChevronUp, ExternalLink,
-  Calendar, Trash2, TrendingUp, Search,
+  Calendar, Trash2, TrendingUp, Search, Zap,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -68,9 +68,65 @@ const STEP_ICON = {
   error:   <XCircle className="w-4 h-4 text-red-400" />,
 };
 
+// ─── Markdown renderer simples ────────────────────────────────────────────────
+
+function renderInlineMd(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="text-white font-semibold">{part.slice(2, -2)}</strong>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+function MarkdownAnalysis({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+
+  lines.forEach((line, i) => {
+    if (line.startsWith('## ')) {
+      nodes.push(
+        <h3 key={i} className="text-white font-bold text-sm mt-4 mb-1.5 first:mt-0">
+          {line.slice(3)}
+        </h3>
+      );
+    } else if (line.startsWith('# ')) {
+      nodes.push(
+        <h2 key={i} className="text-white font-bold text-base mt-4 mb-2 first:mt-0">
+          {line.slice(2)}
+        </h2>
+      );
+    } else if (line.match(/^[-•*] /)) {
+      nodes.push(
+        <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed mb-0.5">
+          <span className="text-orange-400 shrink-0 mt-0.5">•</span>
+          <span>{renderInlineMd(line.slice(2))}</span>
+        </div>
+      );
+    } else if (line.trim() === '') {
+      nodes.push(<div key={i} className="h-1.5" />);
+    } else {
+      nodes.push(
+        <p key={i} className="text-sm text-zinc-300 leading-relaxed mb-0.5">
+          {renderInlineMd(line)}
+        </p>
+      );
+    }
+  });
+
+  return <div className="pt-4">{nodes}</div>;
+}
+
+// ─── Tipos de props ───────────────────────────────────────────────────────────
+
+interface AgenteProps {
+  onUseInRoteiro?: (data: { references: string }) => void;
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function AgenteAutonomo() {
+export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
   const [keyword, setKeyword]         = useState('testosterona');
   const [platforms, setPlatforms]     = useState(['tiktok', 'instagram', 'youtube']);
   const [steps, setSteps]             = useState<AgentStep[]>([]);
@@ -554,6 +610,24 @@ export default function AgenteAutonomo() {
               </div>
             </div>
 
+            {/* Botão: usar no Roteiro */}
+            {onUseInRoteiro && results.videos.length > 0 && (
+              <div className="p-4 border-t border-zinc-800">
+                <button
+                  onClick={() => {
+                    const refsText = results.videos
+                      .map((v, i) => `${i + 1}. ${v.title || '(sem título)'} [${v.platform}] — ${v.url}`)
+                      .join('\n');
+                    onUseInRoteiro({ references: refsText });
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition-colors"
+                >
+                  <Zap className="w-4 h-4" />
+                  Usar esses vídeos no Roteiro (passo 1.5)
+                </button>
+              </div>
+            )}
+
             {/* Análise Claude */}
             {results.analysis && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
@@ -577,9 +651,7 @@ export default function AgenteAutonomo() {
                       className="overflow-hidden"
                     >
                       <div className="px-4 pb-4 border-t border-zinc-800">
-                        <pre className="text-zinc-300 text-sm whitespace-pre-wrap font-sans leading-relaxed pt-4">
-                          {results.analysis}
-                        </pre>
+                        <MarkdownAnalysis text={results.analysis} />
                       </div>
                     </motion.div>
                   )}

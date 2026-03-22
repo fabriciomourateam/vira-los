@@ -19,6 +19,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Toaster, toast } from 'sonner';
 import MetricasCalculadora from './MetricasCalculadora';
 import ProdutosEscalaveis from './ProdutosEscalaveis';
 import Agendador from './Agendador';
@@ -299,6 +300,18 @@ export default function ViralOS() {
     }
   };
 
+  const handleAgenteUseInRoteiro = ({ references }: { references: string }) => {
+    setState((prev) => ({
+      ...prev,
+      inputs: { ...prev.inputs, '1.5': references },
+      checkedItems: { ...prev.checkedItems, '1.5': true },
+      expandedSections: { ...prev.expandedSections, passo1: true, passo2: true },
+      expandedItems: { ...prev.expandedItems, '1.5': true },
+    }));
+    setActiveTab('roteiro');
+    toast.success('Referências adicionadas ao Roteiro — passo 1.5!');
+  };
+
   const totalTasks = roteiro.reduce((acc, s) => acc + s.itens.length, 0);
   const completedTasks = Object.values(state.checkedItems).filter(Boolean).length;
   const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -310,6 +323,7 @@ export default function ViralOS() {
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
+      <Toaster position="bottom-center" richColors />
       {/* Header */}
       <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-md border-b border-border">
         <div className="max-w-3xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
@@ -373,7 +387,7 @@ export default function ViralOS() {
         {activeTab === 'produtos'  && <ProdutosEscalaveis />}
         {activeTab === 'agendador' && <Agendador />}
         {activeTab === 'pesquisa'  && <PesquisaConteudo />}
-        {activeTab === 'agente'    && <AgenteAutonomo />}
+        {activeTab === 'agente'    && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 text-balance">
@@ -555,7 +569,10 @@ export default function ViralOS() {
               >
                 <span>{kw}</span>
                 <button
-                  onClick={() => navigator.clipboard.writeText(kw.split(' / ')[0])}
+                  onClick={() => {
+                    navigator.clipboard.writeText(kw.split(' / ')[0]);
+                    toast.success('Copiado!', { duration: 1500 });
+                  }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                   title="Copiar"
                 >

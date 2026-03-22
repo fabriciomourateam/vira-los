@@ -1194,22 +1194,25 @@ function IdeaCard({ idea, onDelete, onStatusChange }: {
   onStatusChange: (id: string, status: ContentIdea['status']) => void;
 }) {
   const tags = parseTagsSafe(idea.tags);
-  const statusEmoji = { idea: '💡', in_progress: '🎬', done: '✅' }[idea.status];
-  const nextStatus: Record<ContentIdea['status'], ContentIdea['status']> = {
-    idea: 'in_progress', in_progress: 'done', done: 'idea',
+
+  const STATUS_CONFIG: Record<ContentIdea['status'], { emoji: string; label: string; color: string }> = {
+    idea:        { emoji: '💡', label: 'Ideia',      color: 'bg-yellow-100 text-yellow-700' },
+    in_progress: { emoji: '🎬', label: 'Produzindo', color: 'bg-blue-100 text-blue-700' },
+    done:        { emoji: '✅', label: 'Feito',      color: 'bg-emerald-100 text-emerald-700' },
   };
+
+  const cfg = STATUS_CONFIG[idea.status];
 
   return (
     <div className="bg-card rounded-xl p-4 border border-border group" style={{ boxShadow: 'var(--shadow-card)' }}>
       <div className="flex items-start gap-3">
-        <button
-          onClick={() => onStatusChange(idea.id, nextStatus[idea.status])}
-          className="text-lg mt-0.5 shrink-0 hover:scale-110 transition-transform"
-          title="Avançar status"
-        >
-          {statusEmoji}
-        </button>
+        <span className="text-lg mt-0.5 shrink-0">{cfg.emoji}</span>
         <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.color}`}>
+              {cfg.label}
+            </span>
+          </div>
           <p className={`text-sm font-semibold ${idea.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
             {idea.title}
           </p>
@@ -1221,6 +1224,33 @@ function IdeaCard({ idea, onDelete, onStatusChange }: {
               ))}
             </div>
           )}
+          {/* Botões de status */}
+          <div className="flex gap-1.5 mt-3 flex-wrap">
+            {idea.status !== 'in_progress' && idea.status !== 'done' && (
+              <button
+                onClick={() => onStatusChange(idea.id, 'in_progress')}
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+              >
+                🎬 Produzindo
+              </button>
+            )}
+            {idea.status !== 'done' && (
+              <button
+                onClick={() => onStatusChange(idea.id, 'done')}
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
+              >
+                ✅ Feito
+              </button>
+            )}
+            {idea.status !== 'idea' && (
+              <button
+                onClick={() => onStatusChange(idea.id, 'idea')}
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Voltar para ideia
+              </button>
+            )}
+          </div>
         </div>
         <button
           onClick={() => onDelete(idea.id)}

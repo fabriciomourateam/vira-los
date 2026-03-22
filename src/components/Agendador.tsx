@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Upload, Clock, CheckCircle2, AlertCircle, Loader2, Trash2,
   Instagram, Youtube, Plus, X, Play, Image, ChevronLeft, ChevronRight,
-  RefreshCw, Zap, Link2, Settings, Grid3X3,
+  RefreshCw, Zap, Link2, Settings, Grid3X3, RotateCcw, Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, parseISO, addMonths, subMonths } from 'date-fns';
@@ -125,6 +125,11 @@ export default function Agendador() {
     await load();
   }
 
+  async function retrySchedule(id: string) {
+    await api.post(`/api/schedule/${id}/retry`);
+    await load();
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -223,6 +228,7 @@ export default function Agendador() {
               onDaySelect={setSelectedDay}
               onDelete={deleteSchedule}
               onTrigger={triggerSchedule}
+              onRetry={retrySchedule}
             />
           )}
           {view === 'fila' && (
@@ -230,6 +236,7 @@ export default function Agendador() {
               schedules={schedules}
               onDelete={deleteSchedule}
               onTrigger={triggerSchedule}
+              onRetry={retrySchedule}
               onRefresh={load}
             />
           )}
@@ -370,7 +377,7 @@ function ContentCard({ item, onSchedule, onDelete }: {
 
 // ── Calendário ────────────────────────────────────────────────────────────────
 function CalendarioView({
-  schedules, month, selectedDay, onMonthChange, onDaySelect, onDelete, onTrigger,
+  schedules, month, selectedDay, onMonthChange, onDaySelect, onDelete, onTrigger, onRetry,
 }: {
   schedules: Schedule[];
   month: Date;
@@ -379,6 +386,7 @@ function CalendarioView({
   onDaySelect: (d: Date | null) => void;
   onDelete: (id: string) => void;
   onTrigger: (id: string) => void;
+  onRetry: (id: string) => void;
 }) {
   const start = startOfMonth(month);
   const end = endOfMonth(month);
@@ -463,7 +471,7 @@ function CalendarioView({
             {format(selectedDay, "d 'de' MMMM", { locale: ptBR })} — {daySchedules.length} post(s)
           </p>
           {daySchedules.map((s) => (
-            <ScheduleRow key={s.id} schedule={s} onDelete={onDelete} onTrigger={onTrigger} />
+            <ScheduleRow key={s.id} schedule={s} onDelete={onDelete} onTrigger={onTrigger} onRetry={onRetry} />
           ))}
         </div>
       )}
@@ -475,10 +483,11 @@ function CalendarioView({
 }
 
 // ── Fila ──────────────────────────────────────────────────────────────────────
-function FilaView({ schedules, onDelete, onTrigger, onRefresh }: {
+function FilaView({ schedules, onDelete, onTrigger, onRetry, onRefresh }: {
   schedules: Schedule[];
   onDelete: (id: string) => void;
   onTrigger: (id: string) => void;
+  onRetry: (id: string) => void;
   onRefresh: () => void;
 }) {
   const now = new Date();
@@ -505,7 +514,7 @@ function FilaView({ schedules, onDelete, onTrigger, onRefresh }: {
       ) : (
         <div className="space-y-2">
           {upcoming.map((s) => (
-            <ScheduleRow key={s.id} schedule={s} onDelete={onDelete} onTrigger={onTrigger} />
+            <ScheduleRow key={s.id} schedule={s} onDelete={onDelete} onTrigger={onTrigger} onRetry={onRetry} />
           ))}
         </div>
       )}
@@ -516,7 +525,7 @@ function FilaView({ schedules, onDelete, onTrigger, onRefresh }: {
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Histórico</p>
           <div className="space-y-2">
             {history.slice(0, 20).map((s) => (
-              <ScheduleRow key={s.id} schedule={s} onDelete={onDelete} onTrigger={onTrigger} compact />
+              <ScheduleRow key={s.id} schedule={s} onDelete={onDelete} onTrigger={onTrigger} onRetry={onRetry} compact />
             ))}
           </div>
         </>
@@ -525,10 +534,11 @@ function FilaView({ schedules, onDelete, onTrigger, onRefresh }: {
   );
 }
 
-function ScheduleRow({ schedule: s, onDelete, onTrigger, compact = false }: {
+function ScheduleRow({ schedule: s, onDelete, onTrigger, onRetry, compact = false }: {
   schedule: Schedule;
   onDelete: (id: string) => void;
   onTrigger: (id: string) => void;
+  onRetry: (id: string) => void;
   compact?: boolean;
 }) {
   const plats = parseJsonSafe<Platform[]>(s.platforms, []);
@@ -588,6 +598,15 @@ function ScheduleRow({ schedule: s, onDelete, onTrigger, compact = false }: {
             className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
           >
             <Zap size={14} />
+          </button>
+        )}
+        {(s.status === 'failed' || s.status === 'partial') && (
+          <button
+            onClick={() => onRetry(s.id)}
+            title="Tentar novamente"
+            className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-orange-500 hover:text-orange-600"
+          >
+            <RotateCcw size={14} />
           </button>
         )}
         <button
@@ -737,6 +756,24 @@ function ScheduleModal({ item, platforms, onClose, onSuccess }: {
   const [repeatEndDate, setRepeatEndDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [generatingCaption, setGeneratingCaption] = useState(false);
+
+  async function generateCaption() {
+    setGeneratingCaption(true);
+    try {
+      const platform = selPlatforms[0] || 'instagram';
+      const result = await api.post<{ caption: string }>('/api/schedule/generate-caption', {
+        title: item.title,
+        platform,
+        keywords: hashtags,
+      });
+      setCaption(result.caption);
+    } catch {
+      // silent: user can still write manually
+    } finally {
+      setGeneratingCaption(false);
+    }
+  }
 
   function togglePlatform(p: Platform) {
     setSelPlatforms((prev) =>
@@ -845,13 +882,29 @@ function ScheduleModal({ item, platforms, onClose, onSuccess }: {
           </div>
 
           {/* Caption */}
-          <textarea
-            placeholder="Legenda / Caption (opcional — usa o padrão do conteúdo)"
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            rows={2}
-            className="w-full bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-foreground/10"
-          />
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Legenda</label>
+              <button
+                type="button"
+                onClick={generateCaption}
+                disabled={generatingCaption}
+                className="flex items-center gap-1 text-xs font-bold text-violet-600 hover:text-violet-700 disabled:opacity-50 transition-colors"
+              >
+                {generatingCaption
+                  ? <><Loader2 size={12} className="animate-spin" /> Gerando...</>
+                  : <><Sparkles size={12} /> Gerar com IA</>
+                }
+              </button>
+            </div>
+            <textarea
+              placeholder="Legenda / Caption (opcional — usa o padrão do conteúdo)"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              rows={3}
+              className="w-full bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-foreground/10"
+            />
+          </div>
           <input
             type="text"
             placeholder="#hashtags (opcional)"
