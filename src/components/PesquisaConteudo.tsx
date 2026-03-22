@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Search, Plus, Trash2, Copy, CheckCircle2, X, ExternalLink,
   Loader2, Lightbulb, Link2, BookOpen, TrendingUp, Eye, Heart,
-  MessageCircle, Share2, Flame,
+  MessageCircle, Share2, Flame, Sparkles, Zap,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, checkBackend, ViralReference, HookTemplate, ContentIdea } from '../lib/api';
@@ -111,12 +111,23 @@ export default function PesquisaConteudo() {
   const [igMinComments, setIgMinComments] = useState('');
   const [igSortBy, setIgSortBy] = useState<'likes' | 'comments'>('likes');
 
+  // IA Descoberta Viral
+  const [aiNiche, setAiNiche] = useState('testosterona hormônios shape ganho muscular perda de gordura');
+  const [aiResults, setAiResults] = useState<(ViralVideo & { viral_score: number; niche_fit: number; gancho_score: number; roteiro_format: string; ai_why: string; keyword: string; region: string; lang: string })[]>([]);
+  const [aiCreators, setAiCreators] = useState<{ username: string; nickname: string; followers: number; avatar: string; is_verified: boolean; keyword: string }[]>([]);
+  const [aiKeywords, setAiKeywords] = useState<{ pt: string[]; en: string[]; es: string[] }>({ pt: [], en: [], es: [] });
+  const [aiInsights, setAiInsights] = useState('');
+  const [aiPlatformStatus, setAiPlatformStatus] = useState<any>(null);
+  const [aiPlatformErrors, setAiPlatformErrors] = useState<{ platform: string; error: string }[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+
   // Região
   const [ytRegion, setYtRegion] = useState('BR');
   const [ttRegion, setTtRegion] = useState('br');
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'viral' | 'tiktok' | 'instagram' | 'referencias' | 'hooks' | 'ideias'>('viral');
+  const [activeTab, setActiveTab] = useState<'viral' | 'tiktok' | 'instagram' | 'ia' | 'referencias' | 'hooks' | 'ideias'>('viral');
 
   async function load() {
     const ok = await checkBackend();
@@ -262,6 +273,36 @@ export default function PesquisaConteudo() {
     .filter((v) => !igMinComments || v.comments >= Number(igMinComments))
     .sort((a, b) => b[igSortBy] - a[igSortBy]);
 
+  async function discoverWithAI(e: React.FormEvent) {
+    e.preventDefault();
+    setAiLoading(true);
+    setAiError('');
+    setAiResults([]);
+    setAiCreators([]);
+    setAiKeywords({ pt: [], en: [], es: [] });
+    setAiInsights('');
+    setAiPlatformStatus(null);
+    setAiPlatformErrors([]);
+    try {
+      const res = await fetch('/api/research/ai-discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: aiNiche.trim() || 'testosterona hormônios shape perda de gordura' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro na descoberta');
+      setAiResults(data.videos || []);
+      setAiCreators(data.creators || []);
+      setAiKeywords(data.keywords || { pt: [], en: [], es: [] });
+      setAiInsights(data.insights || '');
+      setAiPlatformStatus(data.platformStatus || null);
+      setAiPlatformErrors(data.errors || []);
+    } catch (err: any) {
+      setAiError(err.message || 'Erro ao descobrir conteúdo');
+    }
+    setAiLoading(false);
+  }
+
   async function saveAsReference(v: ViralVideo) {
     try {
       const item = await api.post<ViralReference>('/api/research/references', {
@@ -319,6 +360,7 @@ export default function PesquisaConteudo() {
     { id: 'viral',      label: 'YouTube',      icon: <Flame size={14} />,    color: 'text-red-500' },
     { id: 'tiktok',     label: 'TikTok',       icon: <TrendingUp size={14} />, color: 'text-foreground' },
     { id: 'instagram',  label: 'Instagram',    icon: <Heart size={14} />,    color: 'text-pink-500' },
+    { id: 'ia',         label: 'IA Viral',     icon: <Sparkles size={14} />, color: 'text-violet-500' },
     { id: 'referencias', label: 'Referências', icon: <Link2 size={14} />,    color: 'text-blue-500' },
     { id: 'hooks',      label: 'Hooks',        icon: <Lightbulb size={14} />, color: 'text-orange-500' },
     { id: 'ideias',     label: 'Ideias',       icon: <BookOpen size={14} />, color: 'text-emerald-500' },
@@ -702,6 +744,178 @@ export default function PesquisaConteudo() {
               ? <><p className="text-sm">Busque por nicho para ver os top criadores</p><p className="text-xs mt-1">Ex: treino, marketing, saúde, finanças</p></>
               : <><p className="text-sm">Digite o @ de um perfil viral do seu nicho</p><p className="text-xs mt-1">Ex: @cbum, @nataliamills, @khabylame</p></>
             }
+          </div>
+        )}
+      </section>}
+
+      {/* ── IA Viral: Descoberta Automática ── */}
+      {activeTab === 'ia' && <section className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles size={18} className="text-violet-500" />
+            <h3 className="font-bold text-sm uppercase tracking-wider">IA Viral — Roteiro Automático</h3>
+          </div>
+          <p className="text-xs text-muted-foreground hidden sm:block">
+            A IA gera palavras-chave em PT/EN/ES, busca TikTok em 🇧🇷·🇵🇹·🇺🇸·🇲🇽 ordenado por <strong>mais curtidas + último mês</strong> e pontua alinhamento ao Roteiro.
+          </p>
+        </div>
+
+        <form onSubmit={discoverWithAI} className="flex gap-2">
+          <div className="relative flex-1">
+            <Sparkles size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-violet-400" />
+            <input
+              type="text"
+              placeholder="Seu nicho (ex: testosterona, hormônios, treino, emagrecimento)"
+              value={aiNiche}
+              onChange={(e) => setAiNiche(e.target.value)}
+              className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={aiLoading}
+            className="px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-bold hover:bg-violet-700 disabled:opacity-50 transition-all flex items-center gap-2 whitespace-nowrap"
+          >
+            {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+            {aiLoading ? 'Descobrindo...' : 'Descobrir'}
+          </button>
+        </form>
+
+        {aiError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{aiError}</div>}
+
+        {aiLoading && (
+          <div className="p-4 bg-violet-50 border border-violet-200 rounded-2xl text-xs text-violet-700 space-y-1.5">
+            <div className="flex items-center gap-2 font-bold"><Loader2 size={14} className="animate-spin" /> IA trabalhando...</div>
+            <p>① Gerando palavras-chave PT/EN/ES alinhadas ao Roteiro</p>
+            <p>② Buscando TikTok em 🇧🇷·🇵🇹·🇺🇸·🇲🇽 — filtro <strong>mais curtidas + último mês</strong></p>
+            <p>③ Buscando criadores Instagram relevantes</p>
+            <p>④ Pontuando: formato do Roteiro + alinhamento ao nicho + força do gancho</p>
+            <p>⑤ Gerando insight sobre padrão viral atual</p>
+          </div>
+        )}
+
+        {!aiLoading && aiPlatformStatus && (
+          <div className="flex flex-wrap gap-2">
+            <div className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ${aiPlatformStatus.tiktok?.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+              {aiPlatformStatus.tiktok?.ok ? '✓' : '✗'} TikTok {aiPlatformStatus.tiktok?.ok ? `— ${aiPlatformStatus.tiktok.videos_found} vídeos` : '— erro'}
+            </div>
+            <div className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ${aiPlatformStatus.instagram?.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+              {aiPlatformStatus.instagram?.ok ? '✓' : '✗'} Instagram {aiPlatformStatus.instagram?.ok ? `— ${aiPlatformStatus.instagram.creators_found} criadores` : '— erro'}
+            </div>
+            {aiPlatformStatus.tiktok?.countries?.length > 0 && (
+              <div className="text-[11px] text-muted-foreground px-2.5 py-1 bg-secondary rounded-full">
+                🌍 {aiPlatformStatus.tiktok.countries.join(' · ')}
+              </div>
+            )}
+          </div>
+        )}
+        {!aiLoading && aiPlatformErrors.map((e) => (
+          <div key={e.platform} className="p-2.5 bg-orange-50 border border-orange-200 rounded-lg text-[11px] text-orange-700">
+            ⚠️ <strong>{e.platform}</strong>: {e.error}
+          </div>
+        ))}
+
+        {!aiLoading && (aiKeywords.pt.length > 0 || aiKeywords.en.length > 0) && (
+          <div className="p-3 bg-secondary rounded-xl space-y-2">
+            <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Palavras-chave geradas pela IA</span>
+            <div className="flex flex-wrap gap-1.5">
+              {aiKeywords.pt.map((kw) => <span key={kw} className="text-[11px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">🇧🇷 {kw}</span>)}
+              {aiKeywords.en.map((kw) => <span key={kw} className="text-[11px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">🇺🇸 {kw}</span>)}
+              {aiKeywords.es.map((kw) => <span key={kw} className="text-[11px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">🇲🇽 {kw}</span>)}
+            </div>
+          </div>
+        )}
+
+        {!aiLoading && aiInsights && (
+          <div className="p-4 bg-violet-50 border border-violet-200 rounded-2xl space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-bold text-violet-700"><Sparkles size={13} /> Padrão Viral do Momento</div>
+            <p className="text-xs text-violet-800 leading-relaxed whitespace-pre-line">{aiInsights}</p>
+          </div>
+        )}
+
+        {!aiLoading && aiCreators.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-pink-600 uppercase tracking-wide"><Heart size={13} /> Criadores Instagram</div>
+            <div className="grid gap-2">
+              {aiCreators.map((c) => (
+                <div key={c.username} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
+                  {c.avatar && <img src={c.avatar} alt={c.nickname} className="w-9 h-9 rounded-full object-cover shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{c.nickname}{c.is_verified && ' ✓'}</p>
+                    <p className="text-xs text-muted-foreground">@{c.username} · {fmtNum(c.followers)} seguidores</p>
+                  </div>
+                  <a href={`https://www.instagram.com/${c.username}`} target="_blank" rel="noreferrer"
+                    className="p-1.5 text-muted-foreground hover:text-pink-500"><ExternalLink size={14} /></a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!aiLoading && aiResults.length > 0 && (() => {
+          const RF: Record<string, string> = {
+            lista: '📋 Lista', revelacao: '💡 Revelação', antes_depois: '↔️ Antes/Depois',
+            medo: '😨 Medo', curiosidade: '🤔 Curiosidade', prova_social: '✅ Prova Social',
+            tutorial: '🎓 Tutorial', outro: '📌 Outro',
+          };
+          const FLAG: Record<string, string> = { br: '🇧🇷', pt: '🇵🇹', us: '🇺🇸', mx: '🇲🇽', ar: '🇦🇷' };
+          return (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide"><TrendingUp size={13} /> {aiResults.length} vídeos ranqueados</div>
+                <span className="text-[11px] text-muted-foreground">viral score + curtidas + views</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+                {aiResults.map((v) => {
+                  const sc = v.viral_score >= 8 ? 'bg-emerald-500' : v.viral_score >= 6 ? 'bg-yellow-500' : 'bg-gray-400';
+                  const nc = v.niche_fit >= 8 ? 'text-emerald-600' : v.niche_fit >= 6 ? 'text-yellow-600' : 'text-gray-400';
+                  return (
+                    <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group relative" style={{ boxShadow: 'var(--shadow-card)' }}>
+                      <div className={`absolute top-2 left-2 z-10 ${sc} text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5`}>
+                        <Zap size={9} /> {v.viral_score}/10
+                      </div>
+                      <div className="absolute top-2 right-2 z-10 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                        {FLAG[v.region] || v.region}
+                      </div>
+                      <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
+                        {v.cover
+                          ? <img src={v.cover} alt={v.title} className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <a href={v.url} target="_blank" rel="noreferrer" className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30"><ExternalLink size={16} /></a>
+                          <button onClick={() => saveAsReference(v)} className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30"><Plus size={16} /></button>
+                        </div>
+                      </div>
+                      <div className="p-2 space-y-1.5">
+                        <p className="text-[11px] font-semibold line-clamp-2">{v.title || `@${v.author_handle}`}</p>
+                        <p className="text-[10px] text-muted-foreground">@{v.author_handle}</p>
+                        <span className="inline-block text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full font-medium">{RF[v.roteiro_format] || v.roteiro_format}</span>
+                        <div className="flex gap-2 text-[10px]">
+                          <span className={`font-bold ${nc}`}>nicho {v.niche_fit}/10</span>
+                          <span className="text-muted-foreground">gancho {v.gancho_score}/10</span>
+                        </div>
+                        {v.ai_why && <p className="text-[10px] text-muted-foreground italic line-clamp-2">"{v.ai_why}"</p>}
+                        <div className="grid grid-cols-2 gap-1">
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Eye size={10} />{fmtNum(v.views)}</div>
+                          <div className="flex items-center gap-1 text-[10px] font-semibold text-rose-500"><Heart size={10} />{fmtNum(v.likes)}</div>
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><MessageCircle size={10} />{fmtNum(v.comments)}</div>
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Share2 size={10} />{fmtNum(v.shares)}</div>
+                        </div>
+                        <span className="inline-block text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">#{v.keyword}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        {!aiLoading && aiResults.length === 0 && !aiPlatformStatus && (
+          <div className="py-12 text-center text-muted-foreground">
+            <Sparkles size={32} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm font-medium">IA pronta para trabalhar</p>
+            <p className="text-xs mt-1 max-w-xs mx-auto">Descreva seu nicho e clique em Descobrir. A IA busca em PT/EN/ES, ranqueia por curtidas + views e aponta formatos do Roteiro que estão viralizando.</p>
           </div>
         )}
       </section>}
