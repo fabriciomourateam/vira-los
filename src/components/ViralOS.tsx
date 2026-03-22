@@ -386,7 +386,7 @@ export default function ViralOS() {
         {activeTab === 'metricas'  && <MetricasCalculadora />}
         {activeTab === 'produtos'  && <ProdutosEscalaveis />}
         {activeTab === 'agendador' && <Agendador />}
-        {activeTab === 'pesquisa'  && <PesquisaConteudo />}
+        {activeTab === 'pesquisa'  && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
         {activeTab === 'agente'    && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">

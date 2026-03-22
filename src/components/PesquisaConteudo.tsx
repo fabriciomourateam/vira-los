@@ -58,7 +58,7 @@ function parseTagsSafe(str: string): string[] {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function PesquisaConteudo() {
+export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: (data: { references: string }) => void } = {}) {
   const [references, setReferences] = useState<ViralReference[]>([]);
   const [hooks, setHooks] = useState<HookTemplate[]>([]);
   const [ideas, setIdeas] = useState<ContentIdea[]>([]);
@@ -829,7 +829,16 @@ export default function PesquisaConteudo() {
         {!aiLoading && aiInsights && (
           <div className="p-4 bg-violet-50 border border-violet-200 rounded-2xl space-y-1.5">
             <div className="flex items-center gap-2 text-xs font-bold text-violet-700"><Sparkles size={13} /> Padrão Viral do Momento</div>
-            <p className="text-xs text-violet-800 leading-relaxed whitespace-pre-line">{aiInsights}</p>
+            <div className="text-xs text-violet-800 leading-relaxed">
+              {aiInsights.split('\n').map((line, i) => {
+                if (line.startsWith('## ') || line.startsWith('# '))
+                  return <p key={i} className="font-bold mt-2 first:mt-0">{line.replace(/^#+\s/, '')}</p>;
+                if (line.match(/^[-•*] /))
+                  return <div key={i} className="flex gap-1.5 mt-0.5"><span className="shrink-0 text-violet-500">•</span><span>{line.slice(2)}</span></div>;
+                if (line.trim() === '') return <div key={i} className="h-1" />;
+                return <p key={i} className="mt-0.5">{line}</p>;
+              })}
+            </div>
           </div>
         )}
 
@@ -947,6 +956,20 @@ export default function PesquisaConteudo() {
             className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
           />
         </div>
+
+        {onUseInRoteiro && filteredRefs.length > 0 && (
+          <button
+            onClick={() => {
+              const text = filteredRefs
+                .map((r, i) => `${i + 1}. ${r.title || r.url} [${r.platform}] — ${r.url}`)
+                .join('\n');
+              onUseInRoteiro({ references: text });
+            }}
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+          >
+            <Zap size={12} /> Usar todas as referências no Roteiro (passo 1.5)
+          </button>
+        )}
 
         {loading ? (
           <div className="py-8 flex justify-center"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
@@ -1201,7 +1224,7 @@ function IdeaCard({ idea, onDelete, onStatusChange }: {
     done:        { emoji: '✅', label: 'Feito',      color: 'bg-emerald-100 text-emerald-700' },
   };
 
-  const cfg = STATUS_CONFIG[idea.status];
+  const cfg = STATUS_CONFIG[idea.status] || STATUS_CONFIG.idea;
 
   return (
     <div className="bg-card rounded-xl p-4 border border-border group" style={{ boxShadow: 'var(--shadow-card)' }}>

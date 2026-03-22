@@ -5,6 +5,7 @@ import {
   RefreshCw, Zap, Link2, Settings, Grid3X3, RotateCcw, Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, parseISO, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -768,8 +769,9 @@ function ScheduleModal({ item, platforms, onClose, onSuccess }: {
         keywords: hashtags,
       });
       setCaption(result.caption);
-    } catch {
-      // silent: user can still write manually
+      toast.success('Legenda gerada!');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao gerar legenda — configure a ANTHROPIC_API_KEY');
     } finally {
       setGeneratingCaption(false);
     }
