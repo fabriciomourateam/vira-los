@@ -23,8 +23,10 @@ import MetricasCalculadora from './MetricasCalculadora';
 import ProdutosEscalaveis from './ProdutosEscalaveis';
 import Agendador from './Agendador';
 import PesquisaConteudo from './PesquisaConteudo';
+import AgenteAutonomo from './AgenteAutonomo';
+import { Bot } from 'lucide-react';
 
-type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa';
+type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa' | 'agente';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'roteiro',   label: 'Roteiro',   icon: Zap },
@@ -32,6 +34,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'produtos',  label: 'Produtos',  icon: ShoppingBag },
   { id: 'agendador', label: 'Agendar',   icon: Calendar },
   { id: 'pesquisa',  label: 'Pesquisa',  icon: BookOpen },
+  { id: 'agente',    label: 'Agente',    icon: Bot },
 ];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
@@ -370,6 +373,7 @@ export default function ViralOS() {
         {activeTab === 'produtos'  && <ProdutosEscalaveis />}
         {activeTab === 'agendador' && <Agendador />}
         {activeTab === 'pesquisa'  && <PesquisaConteudo />}
+        {activeTab === 'agente'    && <AgenteAutonomo />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 text-balance">

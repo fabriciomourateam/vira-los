@@ -24,6 +24,7 @@ app.use('/api/content',    require('./routes/posts'));
 app.use('/api/schedule',   require('./routes/schedule'));
 app.use('/api/platforms',  require('./routes/platforms'));
 app.use('/api/research',   require('./routes/research'));
+app.use('/api/agent',      require('./routes/agent'));
 
 // Health check
 app.get('/api/health', (_req, res) =>
