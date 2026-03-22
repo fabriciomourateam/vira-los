@@ -101,8 +101,10 @@ export default function PesquisaConteudo() {
   const [ttSortBy, setTtSortBy] = useState<'views' | 'likes' | 'comments'>('views');
 
   // Instagram viral
+  const [igMode, setIgMode] = useState<'search' | 'creators' | 'username'>('search');
   const [igQuery, setIgQuery] = useState('');
   const [igResults, setIgResults] = useState<ViralVideo[]>([]);
+  const [igCreators, setIgCreators] = useState<any[]>([]);
   const [igLoading, setIgLoading] = useState(false);
   const [igError, setIgError] = useState('');
   const [igMinLikes, setIgMinLikes] = useState('');
@@ -221,10 +223,36 @@ export default function PesquisaConteudo() {
     setIgLoading(true);
     setIgError('');
     try {
-      const data = await api.get<ViralVideo[]>(`/api/research/viral-instagram?q=${encodeURIComponent(igQuery.replace(/^@/, ''))}`);
-      setIgResults(data);
+      if (igMode === 'search') {
+        const data = await api.get<ViralVideo[]>(`/api/research/instagram-search?q=${encodeURIComponent(igQuery)}`);
+        setIgResults(data);
+        setIgCreators([]);
+      } else if (igMode === 'creators') {
+        const data = await api.get<any[]>(`/api/research/instagram-creators?q=${encodeURIComponent(igQuery)}`);
+        setIgCreators(data);
+        setIgResults([]);
+      } else {
+        const data = await api.get<ViralVideo[]>(`/api/research/viral-instagram?q=${encodeURIComponent(igQuery.replace(/^@/, ''))}`);
+        setIgResults(data);
+        setIgCreators([]);
+      }
     } catch (e: any) {
       setIgError(e?.message || 'Erro na busca');
+    }
+    setIgLoading(false);
+  }
+
+  async function loadIgVideos(username: string) {
+    setIgMode('username');
+    setIgQuery(username);
+    setIgLoading(true);
+    setIgError('');
+    setIgCreators([]);
+    try {
+      const data = await api.get<ViralVideo[]>(`/api/research/viral-instagram?q=${encodeURIComponent(username)}`);
+      setIgResults(data);
+    } catch (e: any) {
+      setIgError(e?.message || 'Erro');
     }
     setIgLoading(false);
   }
@@ -571,12 +599,22 @@ export default function PesquisaConteudo() {
 
       {/* ── Instagram Viral ── */}
       {activeTab === 'instagram' && <section className="space-y-3">
+        {/* Modo */}
+        <div className="flex rounded-lg overflow-hidden border border-border w-fit">
+          {(['search', 'creators', 'username'] as const).map((m) => (
+            <button key={m} onClick={() => { setIgMode(m); setIgResults([]); setIgCreators([]); setIgQuery(''); }}
+              className={`px-4 py-1.5 text-xs font-bold transition-all ${igMode === m ? 'bg-pink-500 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}>
+              {m === 'search' ? '🔍 Por palavra-chave' : m === 'creators' ? '🧑‍💻 Criadores por nicho' : '🎬 Reels por @username'}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={searchInstagram} className="flex gap-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="@username (ex: @cbum, @leomessi, @fabriciomourateam)"
+              placeholder={igMode === 'search' ? 'Palavra-chave (ex: treino, marketing, saúde)' : igMode === 'creators' ? 'Nicho (ex: treino, finanças, moda)' : '@username (ex: @cbum, @leomessi)'}
               value={igQuery}
               onChange={(e) => setIgQuery(e.target.value)}
               className="w-full bg-secondary border border-border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10"
@@ -588,8 +626,8 @@ export default function PesquisaConteudo() {
           </button>
         </form>
 
-        {/* Filtros */}
-        <div className="flex gap-2 flex-wrap">
+        {/* Filtros (só no modo de vídeos) */}
+        {igMode !== 'creators' && <div className="flex gap-2 flex-wrap">
           <input type="number" placeholder="Mín. curtidas" value={igMinLikes} onChange={(e) => setIgMinLikes(e.target.value)}
             className="w-32 bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <input type="number" placeholder="Mín. comentários" value={igMinComments} onChange={(e) => setIgMinComments(e.target.value)}
@@ -599,12 +637,30 @@ export default function PesquisaConteudo() {
             <option value="likes">Ordenar: Curtidas</option>
             <option value="comments">Ordenar: Comentários</option>
           </select>
-        </div>
+        </div>}
 
         {igError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{igError}</div>}
 
         {igLoading ? (
           <div className="py-8 flex justify-center"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
+        ) : igCreators.length > 0 ? (
+          <div className="grid gap-2">
+            {igCreators.map((c) => (
+              <div key={c.username} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3" style={{ boxShadow: 'var(--shadow-card)' }}>
+                {c.avatar && <img src={c.avatar} alt={c.nickname} className="w-10 h-10 rounded-full object-cover shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{c.nickname || c.username}{c.is_verified && <span className="ml-1 text-blue-400 text-xs">✓</span>}</p>
+                  <p className="text-xs text-muted-foreground">@{c.username}{c.followers > 0 && ` · ${fmtNum(c.followers)} seguidores`}</p>
+                </div>
+                <button onClick={() => loadIgVideos(c.username)}
+                  className="px-3 py-1.5 text-xs font-bold bg-secondary hover:bg-pink-500 hover:text-white rounded-lg transition-all shrink-0">
+                  Ver reels
+                </button>
+                <a href={`https://www.instagram.com/${c.username}`} target="_blank" rel="noreferrer"
+                  className="p-1.5 text-muted-foreground hover:text-foreground shrink-0"><ExternalLink size={14} /></a>
+              </div>
+            ))}
+          </div>
         ) : filteredIg.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {filteredIg.map((v) => (
@@ -628,13 +684,10 @@ export default function PesquisaConteudo() {
                 </div>
                 <div className="p-2">
                   <p className="text-[11px] font-semibold line-clamp-2 mb-1">{v.title || 'Reel'}</p>
-                  <div className="flex gap-3">
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Heart size={10} className="text-pink-500" />{fmtNum(v.likes)}
-                    </div>
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <MessageCircle size={10} />{fmtNum(v.comments)}
-                    </div>
+                  <div className="flex gap-3 flex-wrap">
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Eye size={10} />{fmtNum(v.views)}</div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Heart size={10} className="text-pink-500" />{fmtNum(v.likes)}</div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><MessageCircle size={10} />{fmtNum(v.comments)}</div>
                   </div>
                 </div>
               </div>
@@ -643,8 +696,12 @@ export default function PesquisaConteudo() {
         ) : !igLoading && (
           <div className="py-6 text-center text-muted-foreground">
             <Heart size={24} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">Digite o @ de um perfil viral do seu nicho para ver os reels</p>
-            <p className="text-xs mt-1">Ex: @cbum, @nataliamills, @khabylame</p>
+            {igMode === 'search'
+              ? <><p className="text-sm">Busque reels virais por palavra-chave</p><p className="text-xs mt-1">Ex: treino, marketing, saúde, finanças</p></>
+              : igMode === 'creators'
+              ? <><p className="text-sm">Busque por nicho para ver os top criadores</p><p className="text-xs mt-1">Ex: treino, marketing, saúde, finanças</p></>
+              : <><p className="text-sm">Digite o @ de um perfil viral do seu nicho</p><p className="text-xs mt-1">Ex: @cbum, @nataliamills, @khabylame</p></>
+            }
           </div>
         )}
       </section>}

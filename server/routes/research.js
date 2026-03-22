@@ -161,7 +161,56 @@ router.get('/instagram-hashtag', async (req, res) => {
   }
 });
 
-// ── Busca Criadores Instagram por palavra-chave (RapidAPI) ───────────────────
+// ── Busca Reels por palavra-chave (instagram-scraper-20251) ─────────────────
+
+router.get('/instagram-search', async (req, res) => {
+  const { q = '' } = req.query;
+  const keyword = q.trim();
+  if (!keyword) return res.json([]);
+
+  const apiKey = process.env.RAPIDAPI_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
+
+  try {
+    const response = await axios.get('https://instagram-scraper-20251.p.rapidapi.com/searchreels/', {
+      params: { keyword },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com' },
+      timeout: 15000,
+    });
+
+    const raw = response.data;
+    const list = raw?.data?.reels_list || raw?.reels_list || raw?.data || (Array.isArray(raw) ? raw : []);
+    const videos = list.map((v) => {
+      const user = v.user || v.owner || {};
+      const cover =
+        v.image_versions2?.candidates?.[0]?.url ||
+        v.thumbnail_url ||
+        v.display_url ||
+        '';
+      return {
+        id: String(v.pk || v.id || v.code || Math.random()),
+        title: v.caption?.text ? String(v.caption.text).substring(0, 150) : '',
+        author: String(user.full_name || user.username || ''),
+        author_handle: String(user.username || ''),
+        views: Number(v.view_count || v.play_count || 0),
+        likes: Number(v.like_count || 0),
+        comments: Number(v.comment_count || 0),
+        shares: Number(v.reshare_count || 0),
+        cover,
+        url: `https://www.instagram.com/reel/${v.code || v.shortcode || v.pk}/`,
+        platform: 'instagram',
+      };
+    }).filter((v) => v.id);
+
+    res.set('Cache-Control', 'no-store');
+    res.json(videos);
+  } catch (e) {
+    console.error('[Instagram search] Error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.response?.data?.message || e.message });
+  }
+});
+
+// ── Busca Criadores Instagram por palavra-chave (instagram-scraper-20251) ────
 
 router.get('/instagram-creators', async (req, res) => {
   const { q = '' } = req.query;
@@ -172,14 +221,14 @@ router.get('/instagram-creators', async (req, res) => {
   if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
 
   try {
-    const response = await axios.get('https://instagram-api-fast-reliable-data-scraper.p.rapidapi.com/search_users', {
-      params: { q: keyword, count: 15 },
-      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-api-fast-reliable-data-scraper.p.rapidapi.com' },
+    const response = await axios.get('https://instagram-scraper-20251.p.rapidapi.com/searchusers/', {
+      params: { keyword },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com' },
       timeout: 15000,
     });
 
     const raw = response.data;
-    const list = raw?.users || raw?.data?.users || raw?.data || (Array.isArray(raw) ? raw : []);
+    const list = raw?.data?.users || raw?.users || raw?.data || (Array.isArray(raw) ? raw : []);
     const creators = list
       .map((u) => ({
         username: String(u.username || ''),
