@@ -239,18 +239,10 @@ router.get('/instagram-search', async (req, res) => {
     // Passo 1: Search → pega top usuários do nicho
     const searchRes = await igPost('search_ig.php', { search_query: keyword });
     const rawSearch = searchRes.data;
-    console.log('[IG search] keys:', Object.keys(rawSearch || {}));
-    console.log('[IG search] users count:', rawSearch?.users?.length, '| hashtags count:', rawSearch?.hashtags?.length);
-    console.log('[IG search] sample:', JSON.stringify(rawSearch).slice(0, 400));
-
     const users = rawSearch?.users || [];
     const topUsers = users.slice(0, 4).map((item) => (item.user || item).username).filter(Boolean);
-    console.log('[IG search] topUsers:', topUsers);
 
-    if (!topUsers.length) {
-      console.log('[IG search] No users found — returning []');
-      return res.json([]);
-    }
+    if (!topUsers.length) return res.json([]);
 
     // Passo 2: User Reels de cada usuário em paralelo
     const reelsResults = await Promise.allSettled(
@@ -262,20 +254,11 @@ router.get('/instagram-search', async (req, res) => {
 
     reelsResults.forEach((result, idx) => {
       const username = topUsers[idx];
-      if (result.status !== 'fulfilled') {
-        console.error(`[IG reels] ${username} FAILED:`, result.reason?.response?.data || result.reason?.message);
-        return;
-      }
+      if (result.status !== 'fulfilled') return;
       const raw = result.value.data;
-      console.log(`[IG reels] ${username} keys:`, Object.keys(raw || {}), '| sample:', JSON.stringify(raw).slice(0, 300));
-      const list =
-        raw?.data?.items ||
-        raw?.items ||
-        raw?.reels ||
-        raw?.data ||
-        (Array.isArray(raw) ? raw : []);
-      console.log(`[IG reels] ${username} list.length:`, Array.isArray(list) ? list.length : typeof list);
-      (Array.isArray(list) ? list : []).forEach((v) => {
+      // Estrutura: { reels: [ { node: { media: {...} } } ], pagination_token }
+      const list = (raw?.reels || raw?.data?.reels || []).map((item) => item?.node?.media || item?.node || item);
+      list.forEach((v) => {
         const normalized = normalizeIgReel(v, username);
         if (!normalized.id || seenIds.has(normalized.id)) return;
         seenIds.add(normalized.id);
