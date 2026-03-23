@@ -176,4 +176,58 @@ router.delete('/schedule', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Cookies de sessão (para manter login nas plataformas) ───────────────────
+
+router.get('/cookies', (req, res) => {
+  const creds = getCredentials();
+  const cookies = (creds.storageState?.cookies || []);
+  res.json({
+    instagram: cookies.some(c => c.name === 'sessionid' && c.domain.includes('instagram')),
+    tiktok:    cookies.some(c => c.name === 'sessionid' && c.domain.includes('tiktok')),
+  });
+});
+
+router.post('/cookies', (req, res) => {
+  const { instagram, tiktok } = req.body;
+  const creds = getCredentials();
+  const existing = creds.storageState?.cookies || [];
+
+  // Remove cookies antigos das plataformas que estão sendo atualizadas
+  let cookies = existing.filter(c => {
+    if (instagram && c.domain.includes('instagram')) return false;
+    if (tiktok    && c.domain.includes('tiktok'))    return false;
+    return true;
+  });
+
+  const now = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30; // 30 dias
+
+  if (instagram) {
+    cookies.push(
+      { name: 'sessionid', value: instagram.trim(), domain: '.instagram.com', path: '/', expires: now, httpOnly: true,  secure: true, sameSite: 'Lax' },
+      { name: 'ig_did',    value: 'session',         domain: '.instagram.com', path: '/', expires: now, httpOnly: false, secure: true, sameSite: 'Lax' }
+    );
+  }
+
+  if (tiktok) {
+    cookies.push(
+      { name: 'sessionid', value: tiktok.trim(), domain: '.tiktok.com', path: '/', expires: now, httpOnly: true, secure: true, sameSite: 'Lax' }
+    );
+  }
+
+  const newState = { ...(creds.storageState || {}), cookies, origins: creds.storageState?.origins || [] };
+  saveCredentials({ ...creds, storageState: newState });
+  res.json({ ok: true });
+});
+
+router.delete('/cookies', (req, res) => {
+  const { platform } = req.body;
+  const creds = getCredentials();
+  let cookies = creds.storageState?.cookies || [];
+  if (platform === 'instagram') cookies = cookies.filter(c => !c.domain.includes('instagram'));
+  if (platform === 'tiktok')    cookies = cookies.filter(c => !c.domain.includes('tiktok'));
+  if (!platform)                cookies = [];
+  saveCredentials({ ...creds, storageState: { ...(creds.storageState || {}), cookies, origins: [] } });
+  res.json({ ok: true });
+});
+
 module.exports = router;

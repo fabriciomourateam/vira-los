@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bot, Play, Square, Clock, CheckCircle2, XCircle,
   Loader2, ChevronDown, ChevronUp, ExternalLink,
-  Calendar, Trash2, TrendingUp, Search, Zap, AlertTriangle,
+  Calendar, Trash2, TrendingUp, Search, Zap, AlertTriangle, KeyRound, LogIn,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -140,6 +140,11 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
   const [schedMode, setSchedMode]     = useState<'daily' | 'weekly'>('daily');
   const [schedWeekdays, setSchedWeekdays] = useState<number[]>([1, 2, 3, 4, 5]); // Seg-Sex
   const [showScheduler, setShowScheduler] = useState(false);
+  const [showSessions, setShowSessions]   = useState(false);
+  const [igSession, setIgSession]         = useState('');
+  const [ttSession, setTtSession]         = useState('');
+  const [sessionStatus, setSessionStatus] = useState<{ instagram: boolean; tiktok: boolean }>({ instagram: false, tiktok: false });
+  const [sessionSaving, setSessionSaving] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const stepsEndRef    = useRef<HTMLDivElement | null>(null);
@@ -148,6 +153,7 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
   useEffect(() => {
     fetchStatus();
     fetchSchedule();
+    fetchSessionStatus();
   }, []);
 
   // ── Scroll automático nos steps ──
@@ -163,6 +169,39 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
       if (data.results)       setResults(data.results);
       if (data.running)       { setRunning(true); connectSSE(); }
     } catch (_) {}
+  }
+
+  async function fetchSessionStatus() {
+    try {
+      const r = await fetch(`${API}/api/agent/cookies`);
+      const data = await r.json();
+      setSessionStatus(data);
+    } catch (_) {}
+  }
+
+  async function saveSessions() {
+    if (!igSession && !ttSession) return;
+    setSessionSaving(true);
+    try {
+      await fetch(`${API}/api/agent/cookies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instagram: igSession || undefined, tiktok: ttSession || undefined }),
+      });
+      setIgSession('');
+      setTtSession('');
+      await fetchSessionStatus();
+    } catch (_) {}
+    setSessionSaving(false);
+  }
+
+  async function removeSession(platform: 'instagram' | 'tiktok') {
+    await fetch(`${API}/api/agent/cookies`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform }),
+    });
+    await fetchSessionStatus();
   }
 
   async function fetchSchedule() {
@@ -373,6 +412,14 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
           </button>
 
           <button
+            onClick={() => setShowSessions(s => !s)}
+            className={`px-3 py-2.5 rounded-xl border transition-colors ${sessionStatus.instagram || sessionStatus.tiktok ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600' : 'bg-secondary border-border text-muted-foreground hover:text-foreground'}`}
+            title="Sessões de login"
+          >
+            <KeyRound className="w-4 h-4" />
+          </button>
+
+          <button
             onClick={() => setShowScheduler(s => !s)}
             className="px-3 py-2.5 rounded-xl bg-secondary border border-border text-muted-foreground hover:text-foreground transition-colors"
             title="Agendar"
@@ -380,6 +427,82 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
             <Calendar className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Sessões de login */}
+        <AnimatePresence>
+          {showSessions && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="border-t border-border pt-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <LogIn size={15} className="text-emerald-500" />
+                  <span className="text-sm font-bold">Sessões de Login</span>
+                  <span className="text-xs text-muted-foreground ml-1">— mais conteúdo com conta logada</span>
+                </div>
+
+                <div className="bg-secondary/50 rounded-xl p-3 text-xs text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">Como obter o Session ID:</p>
+                  <p>1. Abra o Instagram/TikTok no Chrome e faça login</p>
+                  <p>2. Aperte F12 → aba <strong>Application</strong> → <strong>Cookies</strong></p>
+                  <p>3. Copie o valor do cookie <strong>sessionid</strong></p>
+                </div>
+
+                {/* Instagram */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold flex items-center gap-1.5">
+                      <span>📸 Instagram — sessionid</span>
+                      {sessionStatus.instagram && <span className="text-emerald-500 text-[10px] font-bold">● ATIVO</span>}
+                    </label>
+                    {sessionStatus.instagram && (
+                      <button onClick={() => removeSession('instagram')} className="text-[10px] text-red-400 hover:text-red-500">Remover</button>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    value={igSession}
+                    onChange={e => setIgSession(e.target.value)}
+                    placeholder={sessionStatus.instagram ? '••••• (sessão ativa — cole para atualizar)' : 'Cole o valor do cookie sessionid aqui'}
+                    className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                  />
+                </div>
+
+                {/* TikTok */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold flex items-center gap-1.5">
+                      <span>🎵 TikTok — sessionid</span>
+                      {sessionStatus.tiktok && <span className="text-emerald-500 text-[10px] font-bold">● ATIVO</span>}
+                    </label>
+                    {sessionStatus.tiktok && (
+                      <button onClick={() => removeSession('tiktok')} className="text-[10px] text-red-400 hover:text-red-500">Remover</button>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    value={ttSession}
+                    onChange={e => setTtSession(e.target.value)}
+                    placeholder={sessionStatus.tiktok ? '••••• (sessão ativa — cole para atualizar)' : 'Cole o valor do cookie sessionid aqui'}
+                    className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                  />
+                </div>
+
+                <button
+                  onClick={saveSessions}
+                  disabled={sessionSaving || (!igSession && !ttSession)}
+                  className="w-full py-2.5 bg-foreground text-background rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+                >
+                  {sessionSaving ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                  {sessionSaving ? 'Salvando...' : 'Salvar Sessões'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Agendador */}
         <AnimatePresence>
