@@ -4,6 +4,25 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const db = require('../db/database');
 
+// ── Proxy de imagens (evita ERR_BLOCKED_BY_RESPONSE.NotSameOrigin do CDN Instagram) ──
+router.get('/proxy-image', async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') return res.status(400).end();
+  try {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 8000,
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    const ct = response.headers['content-type'] || 'image/jpeg';
+    res.set('Content-Type', ct);
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(response.data));
+  } catch {
+    res.status(404).end();
+  }
+});
+
 // ── Busca Viral (YouTube Data API) ────────────────────────────────────────────
 
 router.get('/viral', async (req, res) => {

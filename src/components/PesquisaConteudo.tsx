@@ -7,6 +7,16 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, checkBackend, ViralReference, HookTemplate, ContentIdea } from '../lib/api';
 
+// Proxy imagens do CDN do Instagram (bloqueadas por Cross-Origin-Resource-Policy)
+const BASE = (import.meta as any).env?.VITE_API_URL || '';
+function proxyImg(url: string): string {
+  if (!url) return '';
+  if (url.includes('cdninstagram.com') || url.includes('fbcdn.net')) {
+    return `${BASE}/api/research/proxy-image?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 interface ViralVideo {
   id: string;
   title: string;
@@ -603,7 +613,7 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
           <div className="grid gap-2">
             {ttCreators.map((c) => (
               <div key={c.uid} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 group" style={{ boxShadow: 'var(--shadow-card)' }}>
-                {c.avatar && <img src={c.avatar} alt={c.nickname} className="w-10 h-10 rounded-full object-cover shrink-0" />}
+                {c.avatar && <img src={proxyImg(c.avatar)} alt={c.nickname} className="w-10 h-10 rounded-full object-cover shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate">{c.nickname}</p>
                   <p className="text-xs text-muted-foreground">@{c.username} · {fmtNum(c.followers)} seguidores</p>
@@ -705,7 +715,7 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
           <div className="grid gap-2">
             {igCreators.map((c) => (
               <div key={c.username} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3" style={{ boxShadow: 'var(--shadow-card)' }}>
-                {c.avatar && <img src={c.avatar} alt={c.nickname} className="w-10 h-10 rounded-full object-cover shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+                {c.avatar && <img src={proxyImg(c.avatar)} alt={c.nickname} className="w-10 h-10 rounded-full object-cover shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate">{c.nickname || c.username}{c.is_verified && <span className="ml-1 text-blue-400 text-xs">✓</span>}</p>
                   <p className="text-xs text-muted-foreground">@{c.username}{c.followers > 0 && ` · ${fmtNum(c.followers)} seguidores`}</p>
@@ -864,7 +874,7 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
             <div className="grid gap-2">
               {aiCreators.map((c) => (
                 <div key={c.username} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
-                  {c.avatar && <img src={c.avatar} alt={c.nickname} className="w-9 h-9 rounded-full object-cover shrink-0" />}
+                  {c.avatar && <img src={proxyImg(c.avatar)} alt={c.nickname} className="w-9 h-9 rounded-full object-cover shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{c.nickname}{c.is_verified && ' ✓'}</p>
                     <p className="text-xs text-muted-foreground">@{c.username} · {fmtNum(c.followers)} seguidores</p>
