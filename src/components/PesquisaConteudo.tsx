@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Search, Plus, Trash2, Copy, CheckCircle2, X, ExternalLink,
   Loader2, Lightbulb, Link2, BookOpen, TrendingUp, Eye, Heart,
-  MessageCircle, Share2, Flame, Sparkles, Zap,
+  MessageCircle, Share2, Flame, Sparkles, Zap, FileText,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, checkBackend, ViralReference, HookTemplate, ContentIdea } from '../lib/api';
@@ -121,6 +121,9 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
   const [aiPlatformErrors, setAiPlatformErrors] = useState<{ platform: string; error: string }[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [roteiroLoading, setRoteiroLoading] = useState(false);
+  const [roteiroText, setRoteiroText] = useState('');
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
   // Região
   const [ytRegion, setYtRegion] = useState('BR');
@@ -307,7 +310,24 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
         tags: [],
       });
       setReferences((p) => [item, ...p]);
+      setSavedIds((p) => new Set([...p, v.id]));
     } catch { /* silent */ }
+  }
+
+  async function generateRoteiro() {
+    if (!aiResults.length) return;
+    setRoteiroLoading(true);
+    setRoteiroText('');
+    try {
+      const data = await api.post<{ roteiro: string }>('/api/research/roteiro-from-videos', {
+        videos: aiResults.slice(0, 8),
+        niche: aiNiche,
+      });
+      setRoteiroText(data.roteiro);
+    } catch (e: any) {
+      setRoteiroText('Erro ao gerar roteiro: ' + e.message);
+    }
+    setRoteiroLoading(false);
   }
 
   async function copyHook(hook: HookTemplate) {
@@ -866,9 +886,16 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
           const FLAG: Record<string, string> = { br: '🇧🇷', pt: '🇵🇹', us: '🇺🇸', mx: '🇲🇽', ar: '🇦🇷' };
           return (
             <div className="space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-1">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide"><TrendingUp size={13} /> {aiResults.length} vídeos ranqueados</div>
-                <span className="text-[11px] text-muted-foreground">viral score + curtidas + views</span>
+                <button
+                  onClick={generateRoteiro}
+                  disabled={roteiroLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background rounded-lg text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-all"
+                >
+                  {roteiroLoading ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                  {roteiroLoading ? 'Gerando...' : 'Gerar Roteiro'}
+                </button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
                 {aiResults.map((v) => {
@@ -886,9 +913,15 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
                         {v.cover
                           ? <img src={v.cover} alt={v.title} className="w-full h-full object-cover" />
                           : <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>}
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          <a href={v.url} target="_blank" rel="noreferrer" className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30"><ExternalLink size={16} /></a>
-                          <button onClick={() => saveAsReference(v)} className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30"><Plus size={16} /></button>
+                        <div className="absolute top-2 right-2 z-20 flex flex-col gap-1">
+                          <a href={v.url} target="_blank" rel="noreferrer" className="p-1.5 bg-black/50 backdrop-blur rounded-lg text-white hover:bg-black/70"><ExternalLink size={13} /></a>
+                          <button
+                            onClick={() => saveAsReference(v)}
+                            className={`p-1.5 backdrop-blur rounded-lg transition-colors ${savedIds.has(v.id) ? 'bg-emerald-500 text-white' : 'bg-black/50 text-white hover:bg-black/70'}`}
+                            title={savedIds.has(v.id) ? 'Salvo!' : 'Salvar como referência'}
+                          >
+                            {savedIds.has(v.id) ? <CheckCircle2 size={13} /> : <Plus size={13} />}
+                          </button>
                         </div>
                       </div>
                       <div className="p-2 space-y-1.5">
@@ -915,6 +948,26 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
             </div>
           );
         })()}
+
+        {roteiroText && (
+          <div className="bg-card border border-border rounded-2xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-orange-500" />
+                <span className="text-sm font-bold">Roteiro Gerado para Replicar</span>
+              </div>
+              <button
+                onClick={() => navigator.clipboard.writeText(roteiroText)}
+                className="flex items-center gap-1 px-2.5 py-1 bg-secondary rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Copy size={11} /> Copiar
+              </button>
+            </div>
+            <div className="p-4 space-y-2 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+              {roteiroText}
+            </div>
+          </div>
+        )}
 
         {!aiLoading && aiResults.length === 0 && !aiPlatformStatus && (
           <div className="py-12 text-center text-muted-foreground">

@@ -527,8 +527,8 @@ Responda APENAS com JSON: { "pt": [...], "en": [...], "es": [...] }`,
       ),
       Promise.allSettled(
         keywords.pt.slice(0, 3).map((kw) =>
-          axios.get('https://instagram-scraper-20251.p.rapidapi.com/search/users/', {
-            params: { query: kw },
+          axios.get('https://instagram-scraper-20251.p.rapidapi.com/searchusers/', {
+            params: { q: kw },
             headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com' },
             timeout: 15000,
           })
@@ -780,6 +780,62 @@ router.patch('/ideas/:id', (req, res) => {
 router.delete('/ideas/:id', (req, res) => {
   db.deleteIdea(req.params.id);
   res.json({ ok: true });
+});
+
+// ── Gerar Roteiro a partir dos vídeos virais encontrados ─────────────────────
+router.post('/roteiro-from-videos', async (req, res) => {
+  const { videos = [], niche = '' } = req.body;
+  if (!videos.length) return res.status(400).json({ error: 'Nenhum vídeo enviado' });
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY não configurada' });
+
+  const Anthropic = require('@anthropic-ai/sdk');
+  const anthropic = new Anthropic({ apiKey: anthropicKey });
+
+  const top = videos.slice(0, 8);
+  const videoList = top.map((v, i) =>
+    `${i + 1}. "${v.title || '(sem título)'}" — formato: ${v.roteiro_format || '?'}, viral: ${v.viral_score || '?'}/10, nicho: ${v.niche_fit || '?'}/10, ❤️ ${v.likes?.toLocaleString?.() || v.likes}, 👁 ${v.views?.toLocaleString?.() || v.views}`
+  ).join('\n');
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      system: `Você é especialista em roteiros virais de saúde/fitness/hormônios para TikTok e Instagram Reels.
+REGRAS DO ROTEIRO VIRA-LOS:
+- GANCHO (2-4s): Visual + auditivo + textual + verbal — deve parar o scroll imediatamente
+- DESENVOLVIMENTO (40-60s): Dinamismo, quebras de padrão, técnica + entretenimento
+- CTA: Comentar, seguir ou compartilhar — no começo, meio e final
+- EMOÇÃO CENTRAL: Curiosidade, surpresa, medo, urgência
+- DURAÇÃO IDEAL: 50s a 1min20`,
+      messages: [{
+        role: 'user',
+        content: `Nicho do criador: "${niche || 'saúde hormonal, testosterona, shape'}".
+
+Esses são os TOP vídeos virais encontrados pela IA (ordenados por score):
+${videoList}
+
+Com base nesses vídeos virais, gere 2 roteiros completos que eu possa REPLICAR adaptando para o meu nicho.
+Para cada roteiro:
+
+## Roteiro [N] — [Formato: Lista/Revelação/Medo/etc]
+**Gancho (0-3s):** [texto exato que aparece na tela + o que falar]
+**Desenvolvimento (10-60s):**
+- [ponto 1]
+- [ponto 2]
+- [ponto 3]
+**CTA:** [o que falar no final]
+**Por que vai viralizar:** [1 frase]
+
+Adapte os títulos e exemplos para o nicho informado, mas mantenha a ESTRUTURA dos vídeos que mais viralizaram.`,
+      }],
+    });
+
+    res.json({ roteiro: msg.content[0].text });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
