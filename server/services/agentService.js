@@ -124,119 +124,143 @@ function saveCredentials(data) {
   fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(data, null, 2));
 }
 
-// ─── TikTok ──────────────────────────────────────────────────────────────────
+// ─── TikTok via API (RapidAPI tiktok-scraper7) ───────────────────────────────
 
-async function scrapeTikTok(page, keyword) {
-  const results = [];
+async function fetchTikTok(keyword) {
+  const rapidApiKey = process.env.RAPIDAPI_KEY;
+  stepUpdate('tt_search', 'running', `Buscando "${keyword}" via API`);
 
-  stepUpdate('tt_search', 'running', `Buscando "${keyword}"`);
-  await page.goto('https://www.tiktok.com/search?q=' + encodeURIComponent(keyword), { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await humanDelay(2000, 3500);
-  stepUpdate('tt_search', 'done', `Buscou "${keyword}"`);
-
-  // Clica em Vídeos se houver aba
-  try {
-    const videosTab = page.locator('[data-e2e="search-tab-video"], a:has-text("Vídeos"), a:has-text("Videos")').first();
-    if (await videosTab.count() > 0) {
-      await videosTab.click();
-      await humanDelay(1500, 2500);
-    }
-  } catch (_) {}
-
-  stepUpdate('tt_filter', 'running', 'Aplicando filtros');
-
-  // Abre painel de filtros
-  try {
-    const filterBtn = page.locator('[data-e2e="search-filter"], button:has-text("Filtros"), button:has-text("Filter")').first();
-    if (await filterBtn.count() > 0) {
-      await filterBtn.click();
-      await humanDelay(1000, 1800);
-
-      // Seleciona "Este mês"
-      const thisMonth = page.locator('text="Este mês", text="This month", text="Este mes"').first();
-      if (await thisMonth.count() > 0) { await thisMonth.click(); await humanDelay(400, 800); }
-
-      // Seleciona "Mais curtidas"
-      const mostLiked = page.locator('text="Mais curtidas", text="Most liked", text="Most liked"').first();
-      if (await mostLiked.count() > 0) { await mostLiked.click(); await humanDelay(400, 800); }
-
-      // Confirma filtros
-      const applyBtn = page.locator('button:has-text("Aplicar"), button:has-text("Apply")').first();
-      if (await applyBtn.count() > 0) { await applyBtn.click(); await humanDelay(1500, 2500); }
-    }
-  } catch (_) {}
-
-  stepUpdate('tt_filter', 'done', 'Filtros: esse mês + mais curtidas');
-  stepUpdate('tt_collect', 'running', 'Coletando vídeos...');
-
-  // Coleta cards de vídeo
-  await humanDelay(2000, 3000);
-
-  try {
-    const videoCards = await page.$$('[data-e2e="search_top-item"], [class*="DivItemContainerV2"], article');
-    const limit = Math.min(videoCards.length, 10);
-
-    for (let i = 0; i < limit; i++) {
-      try {
-        const card = videoCards[i];
-        const title = await card.$eval('[data-e2e="search-card-desc"], [class*="SpanText"], .video-meta-caption', el => el.innerText.trim()).catch(() => '');
-        const likes = await card.$eval('[data-e2e="like-count"], [class*="like"]', el => el.innerText.trim()).catch(() => '');
-        const views = await card.$eval('[data-e2e="video-views"], [class*="play-count"]', el => el.innerText.trim()).catch(() => '');
-        const url   = await card.$eval('a', el => el.href).catch(() => '');
-
-        if (url) results.push({ platform: 'tiktok', title, likes, views, url });
-      } catch (_) {}
-    }
-  } catch (_) {}
-
-  // Fallback: pega todos os links /video/ da página
-  if (results.length === 0) {
-    const links = await page.$$eval('a[href*="/video/"]', els =>
-      els.slice(0, 10).map(el => ({
-        platform: 'tiktok',
-        title: el.innerText?.trim() || el.getAttribute('aria-label') || '',
-        likes: '',
-        views: '',
-        url: el.href,
-      }))
-    ).catch(() => []);
-    results.push(...links);
+  if (!rapidApiKey) {
+    stepUpdate('tt_search', 'error', 'RAPIDAPI_KEY não configurada');
+    stepUpdate('tt_filter', 'done', 'Pulado');
+    stepUpdate('tt_collect', 'done', '0 vídeos coletados');
+    return [];
   }
 
-  stepUpdate('tt_collect', 'done', `${results.length} vídeos coletados`);
+  const results = [];
+  try {
+    // Busca em PT-BR e EN para mais resultados
+    const searches = await Promise.allSettled([
+      axios.get('https://tiktok-scraper7.p.rapidapi.com/feed/search', {
+        params: { keywords: keyword, region: 'br', count: 20, cursor: 0, publish_time: '30', sort_type: '1' },
+        headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' },
+        timeout: 20000,
+      }),
+      axios.get('https://tiktok-scraper7.p.rapidapi.com/feed/search', {
+        params: { keywords: keyword, region: 'us', count: 10, cursor: 0, publish_time: '30', sort_type: '1' },
+        headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' },
+        timeout: 20000,
+      }),
+    ]);
+
+    const seen = new Set();
+    searches.forEach(r => {
+      if (r.status !== 'fulfilled') return;
+      const videos = r.value.data?.data?.videos || [];
+      videos.forEach(v => {
+        const authorObj = typeof v.author === 'object' ? v.author : null;
+        const handle = authorObj?.unique_id || String(v.author || '');
+        const id = String(v.video_id || v.aweme_id || '');
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        results.push({
+          platform: 'tiktok',
+          title: String(v.title || v.desc || ''),
+          likes: String(v.digg_count || 0),
+          views: String(v.play_count || 0),
+          url: `https://www.tiktok.com/@${handle}/video/${id}`,
+        });
+      });
+    });
+
+    stepUpdate('tt_search', 'done', `API respondeu`);
+    stepUpdate('tt_filter', 'done', 'Esse mês + mais curtidas (API)');
+    stepUpdate('tt_collect', 'done', `${results.length} vídeos coletados`);
+  } catch (e) {
+    console.error('[Agent TikTok] Erro:', e.message);
+    stepUpdate('tt_search', 'done', `Erro: ${e.message}`);
+    stepUpdate('tt_filter', 'done', 'Pulado');
+    stepUpdate('tt_collect', 'done', '0 vídeos coletados');
+  }
+
   return results;
 }
 
-// ─── Instagram ───────────────────────────────────────────────────────────────
+// ─── Instagram via API (Apify → RapidAPI fallback) ────────────────────────────
 
-async function scrapeInstagram(page, keyword) {
+async function fetchInstagram(keyword) {
+  const apifyKey = process.env.APIFY_API_KEY;
+  const rapidApiKey = process.env.RAPIDAPI_KEY;
+  stepUpdate('ig_search', 'running', `Buscando Reels "${keyword}" via API`);
+
   const results = [];
 
-  stepUpdate('ig_search', 'running', `Buscando Reels "${keyword}"`);
-  await page.goto('https://www.instagram.com/reels/explore/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await humanDelay(2000, 3500);
+  // Tentativa 1: Apify
+  if (apifyKey) {
+    try {
+      const tag = encodeURIComponent(keyword.trim().replace(/\s+/g, ''));
+      const url = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apifyKey}&timeout=90`;
+      const response = await axios.post(url, {
+        directUrls: [`https://www.instagram.com/explore/tags/${tag}/`],
+        resultsType: 'posts',
+        resultsLimit: 20,
+        addParentData: false,
+      }, { timeout: 100000 });
 
-  // Usa a busca do Instagram
-  try {
-    await page.goto(`https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(keyword)}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await humanDelay(2000, 3000);
-  } catch (_) {}
+      const items = Array.isArray(response.data) ? response.data : [];
+      items.filter(i => i.type === 'Video' || i.videoViewCount > 0).forEach(i => {
+        const code = i.shortCode || i.id || '';
+        results.push({
+          platform: 'instagram',
+          title: String(i.caption || '').substring(0, 120),
+          likes: String(i.likesCount || 0),
+          views: String(i.videoViewCount || 0),
+          url: i.url || `https://www.instagram.com/reel/${code}/`,
+        });
+      });
 
-  stepUpdate('ig_search', 'done', `Buscou "${keyword}"`);
-  stepUpdate('ig_collect', 'running', 'Coletando Reels...');
-
-  try {
-    const posts = await page.$$('article a[href*="/reel/"], a[href*="/reel/"]');
-    const seen = new Set();
-    for (const post of posts.slice(0, 10)) {
-      const url = await post.getAttribute('href').catch(() => '');
-      if (!url || seen.has(url)) continue;
-      seen.add(url);
-      const fullUrl = url.startsWith('http') ? url : `https://www.instagram.com${url}`;
-      results.push({ platform: 'instagram', title: '', likes: '', views: '', url: fullUrl });
+      stepUpdate('ig_search', 'done', `Apify: ${results.length} reels`);
+      stepUpdate('ig_collect', 'done', `${results.length} Reels coletados`);
+      return results;
+    } catch (e) {
+      console.error('[Agent IG/Apify] Erro:', e.message);
     }
-  } catch (_) {}
+  }
 
+  // Tentativa 2: RapidAPI stable-api
+  if (rapidApiKey) {
+    try {
+      const IG_HOST = 'instagram-scraper-stable-api.p.rapidapi.com';
+      const searchRes = await axios.post(
+        `https://${IG_HOST}/search_ig.php`,
+        new URLSearchParams({ search_query: keyword }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': IG_HOST }, timeout: 15000 }
+      );
+      const users = searchRes.data?.users || [];
+      const topUsers = users.slice(0, 3).map(item => (item.user || item).username).filter(Boolean);
+
+      if (topUsers.length) {
+        const reelResults = await Promise.allSettled(
+          topUsers.map(u => axios.post(`https://${IG_HOST}/get_ig_user_reels.php`, new URLSearchParams({ username_or_url: u, amount: 10, pagination_token: '' }),
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': IG_HOST }, timeout: 15000 }
+          ))
+        );
+        reelResults.forEach((r, idx) => {
+          if (r.status !== 'fulfilled') return;
+          const list = (r.value.data?.reels || []).map(item => item?.node?.media || item);
+          list.forEach(v => {
+            const code = v.code || v.id || '';
+            if (!code) return;
+            results.push({ platform: 'instagram', title: String(v.caption?.text || '').substring(0, 120), likes: String(v.like_count || 0), views: String(v.play_count || 0), url: `https://www.instagram.com/reel/${code}/` });
+          });
+        });
+      }
+    } catch (e) {
+      console.error('[Agent IG/RapidAPI] Erro:', e.message);
+    }
+  }
+
+  stepUpdate('ig_search', 'done', results.length ? `${results.length} reels` : 'Sem API configurada');
   stepUpdate('ig_collect', 'done', `${results.length} Reels coletados`);
   return results;
 }
@@ -355,82 +379,61 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
 
   let browser;
   try {
-    stepUpdate('init', 'running', 'Abrindo Chrome...');
-
-    // Usa cookies salvos para não precisar logar toda vez
-    const creds = getCredentials();
-    const storageState = creds.storageState || undefined;
-
-    const launchOptions = {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--single-process',
-        '--no-zygote',
-      ],
-    };
-
-    // Usa o Chromium encontrado (Docker container ou cache local)
-    if (CHROMIUM_PATH) {
-      launchOptions.executablePath = CHROMIUM_PATH;
-      console.log('[Agent] Chromium encontrado em:', CHROMIUM_PATH);
-    } else {
-      console.log('[Agent] Usando Chromium padrão do Playwright');
-    }
-
-    browser = await chromium.launch(launchOptions);
-
-    const contextOptions = {
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 800 },
-      locale: 'pt-BR',
-    };
-    if (storageState) contextOptions.storageState = storageState;
-
-    const context = await browser.newContext(contextOptions);
-    const page = await context.newPage();
-
-    // Bloqueia rastreadores pesados para velocidade
-    await page.route('**/*.{png,jpg,gif,webp,woff,woff2}', route => route.abort().catch(() => {}));
-
-    stepUpdate('init', 'done', 'Navegador iniciado');
-
     const allVideos = [];
+    const creds = getCredentials();
 
-    // ── TikTok ──
+    // ── TikTok via API ─────────────────────────────────────────────────────
     if (platforms.includes('tiktok')) {
-      stepUpdate('login_tt', 'running', 'Acessando tiktok.com');
-      await page.goto('https://www.tiktok.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await humanDelay(1500, 2500);
-      stepUpdate('login_tt', 'done', 'TikTok acessado');
-      const ttVideos = await scrapeTikTok(page, keyword);
+      stepUpdate('init', 'running', 'Conectando às APIs...');
+      stepUpdate('login_tt', 'running', 'Acessando API TikTok');
+      stepUpdate('login_tt', 'done', 'API TikTok conectada');
+      stepUpdate('init', 'done', 'APIs conectadas');
+      const ttVideos = await fetchTikTok(keyword);
       allVideos.push(...ttVideos);
+    } else {
+      stepUpdate('init', 'done', 'Iniciado');
+      stepUpdate('login_tt', 'done', 'Pulado');
     }
 
     if (stopRequested) throw new Error('STOP_REQUESTED');
 
-    // ── Instagram ──
+    // ── Instagram via API ──────────────────────────────────────────────────
     if (platforms.includes('instagram')) {
-      const igVideos = await scrapeInstagram(page, keyword);
+      const igVideos = await fetchInstagram(keyword);
       allVideos.push(...igVideos);
     }
 
     if (stopRequested) throw new Error('STOP_REQUESTED');
 
-    // ── YouTube Shorts ──
+    // ── YouTube via Playwright (único que usa browser) ─────────────────────
     if (platforms.includes('youtube')) {
+      stepUpdate('yt_search', 'running', 'Abrindo Chrome para YouTube...');
+
+      const launchOptions = {
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process', '--no-zygote'],
+      };
+      if (CHROMIUM_PATH) launchOptions.executablePath = CHROMIUM_PATH;
+
+      browser = await chromium.launch(launchOptions);
+      const contextOptions = {
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 800 },
+        locale: 'pt-BR',
+      };
+      if (creds.storageState) contextOptions.storageState = creds.storageState;
+
+      const context = await browser.newContext(contextOptions);
+      const page = await context.newPage();
+      await page.route('**/*.{png,jpg,gif,webp,woff,woff2}', route => route.abort().catch(() => {}));
+
       const ytVideos = await scrapeYouTubeShorts(page, keyword);
       allVideos.push(...ytVideos);
+
+      const newStorage = await context.storageState();
+      saveCredentials({ ...creds, storageState: newStorage });
+      await context.close();
     }
-
-    // Salva cookies para próximas execuções
-    const newStorage = await context.storageState();
-    saveCredentials({ ...creds, storageState: newStorage });
-
-    await context.close();
 
     // ── Análise Claude ──
     const analysis = await analyzeWithClaude(keyword, allVideos);
