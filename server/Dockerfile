@@ -13,6 +13,12 @@ RUN npx playwright install chromium
 # Copia o restante do código
 COPY . .
 
+# Garante que o diretório db existe (será sobreposto pelo volume do Railway)
+RUN mkdir -p /app/db
+
+# Volume para persistir banco de dados, sessões e agendamentos entre deploys
+VOLUME ["/app/db"]
+
 # Expõe a porta do servidor
 EXPOSE 3001
 
