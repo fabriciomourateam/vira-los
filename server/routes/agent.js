@@ -21,7 +21,9 @@ const path = require('path');
 const { runAgent, stopAgent, getState, sseClients, getCredentials, saveCredentials } = require('../services/agentService');
 
 const router = express.Router();
-const SCHEDULE_FILE = path.join(__dirname, '../db/agent-schedule.json');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const SCHEDULE_FILE = path.join(DATA_DIR, 'agent-schedule.json');
 
 let scheduledTask = null;
 

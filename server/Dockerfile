@@ -7,8 +7,8 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-# Garante que o diretório db existe
-RUN mkdir -p /app/db
+# Diretório de dados persistentes (monte o volume do Railway aqui: /app/data)
+RUN mkdir -p /app/data
 
 EXPOSE 3001
 

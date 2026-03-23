@@ -9,7 +9,9 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 
-const CREDENTIALS_FILE = path.join(__dirname, '../db/agent-credentials.json');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const CREDENTIALS_FILE = path.join(DATA_DIR, 'agent-credentials.json');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ─── Estado global do agente ────────────────────────────────────────────────
