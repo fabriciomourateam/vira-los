@@ -182,15 +182,29 @@ function parseDossier(text: string) {
     },
     roteiro1: {
       raw: roteiro1,
-      gancho: extractFirstValue(roteiro1, ['Gancho (0-3s)']),
+      aberturaVisual: extractFirstValue(roteiro1, ['Abertura visual']),
+      textoTela: extractFirstValue(roteiro1, ['Texto na tela']),
+      gancho: extractFirstValue(roteiro1, ['Gancho verbal', 'Gancho (0-3s)']),
+      frase1: extractFirstValue(roteiro1, ['Frase 1']),
+      frase2: extractFirstValue(roteiro1, ['Frase 2']),
+      frase3: extractFirstValue(roteiro1, ['Frase 3']),
+      quebraPadrao: extractFirstValue(roteiro1, ['Quebra de padrao', 'Quebra de padrão']),
       desenvolvimento: extractFirstValue(roteiro1, ['Desenvolvimento (10-60s)']),
       cta: extractValue(roteiro1, 'CTA final'),
+      tom: extractFirstValue(roteiro1, ['Tom / emocao', 'Tom / emoção']),
     },
     roteiro2: {
       raw: roteiro2,
-      gancho: extractFirstValue(roteiro2, ['Gancho (0-3s)']),
+      aberturaVisual: extractFirstValue(roteiro2, ['Abertura visual']),
+      textoTela: extractFirstValue(roteiro2, ['Texto na tela']),
+      gancho: extractFirstValue(roteiro2, ['Gancho verbal', 'Gancho (0-3s)']),
+      frase1: extractFirstValue(roteiro2, ['Frase 1']),
+      frase2: extractFirstValue(roteiro2, ['Frase 2']),
+      frase3: extractFirstValue(roteiro2, ['Frase 3']),
+      quebraPadrao: extractFirstValue(roteiro2, ['Quebra de padrao', 'Quebra de padrão']),
       desenvolvimento: extractFirstValue(roteiro2, ['Desenvolvimento (10-60s)']),
       cta: extractValue(roteiro2, 'CTA final'),
+      tom: extractFirstValue(roteiro2, ['Tom / emocao', 'Tom / emoção']),
     },
     gravacao: extractBulletLines(gravacao),
   };
@@ -217,16 +231,61 @@ function buildFormatText(
 
 function buildScriptText(
   label: string,
-  roteiro: { gancho: string; desenvolvimento: string; cta: string; raw: string }
+  roteiro: {
+    aberturaVisual: string;
+    textoTela: string;
+    gancho: string;
+    frase1: string;
+    frase2: string;
+    frase3: string;
+    quebraPadrao: string;
+    cta: string;
+    tom: string;
+    desenvolvimento: string;
+    raw: string;
+  }
 ) {
   const parts = [
     label,
-    roteiro.gancho ? `Gancho: ${roteiro.gancho}` : '',
+    roteiro.aberturaVisual ? `Abertura visual: ${roteiro.aberturaVisual}` : '',
+    roteiro.textoTela ? `Texto na tela: ${roteiro.textoTela}` : '',
+    roteiro.gancho ? `Gancho verbal: ${roteiro.gancho}` : '',
+    roteiro.frase1 ? `Frase 1: ${roteiro.frase1}` : '',
+    roteiro.frase2 ? `Frase 2: ${roteiro.frase2}` : '',
+    roteiro.frase3 ? `Frase 3: ${roteiro.frase3}` : '',
+    roteiro.quebraPadrao ? `Quebra de padrao: ${roteiro.quebraPadrao}` : '',
     roteiro.desenvolvimento ? `Desenvolvimento: ${roteiro.desenvolvimento}` : '',
     roteiro.cta ? `CTA final: ${roteiro.cta}` : '',
+    roteiro.tom ? `Tom / emocao: ${roteiro.tom}` : '',
   ].filter(Boolean);
 
   return parts.join('\n');
+}
+
+function buildScriptStages(roteiro: {
+  aberturaVisual: string;
+  textoTela: string;
+  gancho: string;
+  frase1: string;
+  frase2: string;
+  frase3: string;
+  quebraPadrao: string;
+  cta: string;
+  tom: string;
+  desenvolvimento: string;
+}) {
+  return [
+    { label: 'Abertura visual', value: roteiro.aberturaVisual },
+    { label: 'Texto na tela', value: roteiro.textoTela },
+    { label: 'Gancho verbal', value: roteiro.gancho },
+    { label: 'Frase 1', value: roteiro.frase1 },
+    { label: 'Frase 2', value: roteiro.frase2 },
+    { label: 'Frase 3', value: roteiro.frase3 },
+    { label: 'Quebra de padrao', value: roteiro.quebraPadrao },
+    { label: 'Desenvolvimento', value: roteiro.desenvolvimento },
+    { label: 'CTA final', value: roteiro.cta },
+    { label: 'Tom / emocao', value: roteiro.tom },
+  ].filter((item) => item.value);
 }
 
 // ─── Tipos de props ───────────────────────────────────────────────────────────
@@ -1013,9 +1072,14 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
                           Copiar
                         </button>
                       </div>
-                      {dossier.roteiro1.gancho && <p className="text-sm text-muted-foreground mb-2"><strong>Gancho:</strong> {dossier.roteiro1.gancho}</p>}
-                      {dossier.roteiro1.desenvolvimento && <p className="text-sm text-muted-foreground mb-2"><strong>Desenvolvimento:</strong> {dossier.roteiro1.desenvolvimento}</p>}
-                      {dossier.roteiro1.cta && <p className="text-sm text-muted-foreground"><strong>CTA:</strong> {dossier.roteiro1.cta}</p>}
+                      <div className="space-y-2">
+                        {buildScriptStages(dossier.roteiro1).map((stage) => (
+                          <div key={stage.label} className="rounded-xl bg-secondary/60 p-2.5">
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{stage.label}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{stage.value}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -1031,9 +1095,14 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
                           Copiar
                         </button>
                       </div>
-                      {dossier.roteiro2.gancho && <p className="text-sm text-muted-foreground mb-2"><strong>Gancho:</strong> {dossier.roteiro2.gancho}</p>}
-                      {dossier.roteiro2.desenvolvimento && <p className="text-sm text-muted-foreground mb-2"><strong>Desenvolvimento:</strong> {dossier.roteiro2.desenvolvimento}</p>}
-                      {dossier.roteiro2.cta && <p className="text-sm text-muted-foreground"><strong>CTA:</strong> {dossier.roteiro2.cta}</p>}
+                      <div className="space-y-2">
+                        {buildScriptStages(dossier.roteiro2).map((stage) => (
+                          <div key={stage.label} className="rounded-xl bg-secondary/60 p-2.5">
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{stage.label}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{stage.value}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

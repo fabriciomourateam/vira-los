@@ -294,6 +294,30 @@ const gravacaoChecklist = [
   'Cenário ou enquadramento com contraste visual',
 ];
 
+function extractScriptField(text: string, labels: string[]) {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = text.match(new RegExp(`${escaped}:\\s*(.+)`));
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  return '';
+}
+
+function parseDetailedScript(text: string) {
+  return [
+    { label: 'Abertura visual', value: extractScriptField(text, ['Abertura visual']) },
+    { label: 'Texto na tela', value: extractScriptField(text, ['Texto na tela']) },
+    { label: 'Gancho verbal', value: extractScriptField(text, ['Gancho verbal', 'Gancho']) },
+    { label: 'Frase 1', value: extractScriptField(text, ['Frase 1']) },
+    { label: 'Frase 2', value: extractScriptField(text, ['Frase 2']) },
+    { label: 'Frase 3', value: extractScriptField(text, ['Frase 3']) },
+    { label: 'Quebra de padrão', value: extractScriptField(text, ['Quebra de padrao', 'Quebra de padrão']) },
+    { label: 'Desenvolvimento', value: extractScriptField(text, ['Desenvolvimento']) },
+    { label: 'CTA final', value: extractScriptField(text, ['CTA final']) },
+    { label: 'Tom / emoção', value: extractScriptField(text, ['Tom / emocao', 'Tom / emoção']) },
+  ].filter((item) => item.value);
+}
+
 function TeleprompterOverlay({
   open,
   title,
@@ -948,6 +972,20 @@ export default function ViralOS() {
                                                 <Check size={11} className="text-blue-500" />
                                               </span>
                                               <span>{check}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {roteiroFinalIds.has(item.id) && parseDetailedScript(state.inputs[item.id] || '').length > 0 && (
+                                      <div className="rounded-xl border border-border bg-card p-3">
+                                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Fala por etapa</p>
+                                        <div className="space-y-2">
+                                          {parseDetailedScript(state.inputs[item.id] || '').map((stage) => (
+                                            <div key={stage.label} className="rounded-lg bg-secondary/70 p-2.5">
+                                              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{stage.label}</p>
+                                              <p className="mt-1 text-sm text-foreground">{stage.value}</p>
                                             </div>
                                           ))}
                                         </div>
