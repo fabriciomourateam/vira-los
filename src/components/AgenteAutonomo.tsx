@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import {
   Bot, Play, Square, Clock, CheckCircle2, XCircle,
   Loader2, ChevronDown, ChevronUp, ExternalLink,
-  Calendar, Trash2, TrendingUp, Search, Zap, AlertTriangle, KeyRound, LogIn,
+  Calendar, Trash2, TrendingUp, Search, Zap, AlertTriangle, KeyRound, LogIn, Copy,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -118,10 +119,126 @@ function MarkdownAnalysis({ text }: { text: string }) {
   return <div className="pt-4">{nodes}</div>;
 }
 
+function extractSection(text: string, title: string): string {
+  const normalized = text.replace(/\r\n/g, '\n');
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = normalized.match(new RegExp(`##\\s+${escaped}\\n([\\s\\S]*?)(?=\\n##\\s+|\\n#\\s+|$)`));
+  return match?.[1]?.trim() || '';
+}
+
+function extractFirstSection(text: string, titles: string[]): string {
+  for (const title of titles) {
+    const section = extractSection(text, title);
+    if (section) return section;
+  }
+  return '';
+}
+
+function extractBulletLines(section: string): string[] {
+  return section
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('- '))
+    .map(line => line.slice(2).trim());
+}
+
+function extractValue(section: string, label: string): string {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = section.match(new RegExp(`${escaped}:\\s*(.+)`));
+  return match?.[1]?.trim() || '';
+}
+
+function extractFirstValue(section: string, labels: string[]): string {
+  for (const label of labels) {
+    const value = extractValue(section, label);
+    if (value) return value;
+  }
+  return '';
+}
+
+function parseDossier(text: string) {
+  const formatoA = extractFirstSection(text, ['FORMATO A']);
+  const formatoB = extractFirstSection(text, ['FORMATO B']);
+  const roteiro1 = extractFirstSection(text, ['Roteiro Pronto 1']);
+  const roteiro2 = extractFirstSection(text, ['Roteiro Pronto 2']);
+  const referencias = extractFirstSection(text, ['Referências-Chave', 'Referencias-Chave']);
+  const gravacao = extractFirstSection(text, ['Observações de Gravação', 'Observacoes de Gravacao']);
+
+  return {
+    referencias: extractBulletLines(referencias),
+    formatoA: {
+      raw: formatoA,
+      titulo: extractFirstValue(formatoA, ['Título sugerido', 'Titulo sugerido']),
+      hook: extractFirstValue(formatoA, ['Hook de abertura']),
+      estrutura: extractFirstValue(formatoA, ['Estrutura']),
+      cta: extractValue(formatoA, 'CTA'),
+    },
+    formatoB: {
+      raw: formatoB,
+      titulo: extractFirstValue(formatoB, ['Título sugerido', 'Titulo sugerido']),
+      hook: extractFirstValue(formatoB, ['Hook de abertura']),
+      estrutura: extractFirstValue(formatoB, ['Estrutura']),
+      cta: extractValue(formatoB, 'CTA'),
+    },
+    roteiro1: {
+      raw: roteiro1,
+      gancho: extractFirstValue(roteiro1, ['Gancho (0-3s)']),
+      desenvolvimento: extractFirstValue(roteiro1, ['Desenvolvimento (10-60s)']),
+      cta: extractValue(roteiro1, 'CTA final'),
+    },
+    roteiro2: {
+      raw: roteiro2,
+      gancho: extractFirstValue(roteiro2, ['Gancho (0-3s)']),
+      desenvolvimento: extractFirstValue(roteiro2, ['Desenvolvimento (10-60s)']),
+      cta: extractValue(roteiro2, 'CTA final'),
+    },
+    gravacao: extractBulletLines(gravacao),
+  };
+}
+
+function buildFormatText(
+  label: string,
+  format: { titulo: string; hook: string; estrutura: string; cta: string; raw: string },
+  roteiro?: { gancho: string; desenvolvimento: string; cta: string; raw: string }
+) {
+  const parts = [
+    `${label}`,
+    format.titulo ? `Titulo: ${format.titulo}` : '',
+    format.hook ? `Hook: ${format.hook}` : '',
+    format.estrutura ? `Estrutura: ${format.estrutura}` : '',
+    format.cta ? `CTA: ${format.cta}` : '',
+    roteiro?.gancho ? `Gancho do roteiro: ${roteiro.gancho}` : '',
+    roteiro?.desenvolvimento ? `Desenvolvimento: ${roteiro.desenvolvimento}` : '',
+    roteiro?.cta ? `CTA final: ${roteiro.cta}` : '',
+  ].filter(Boolean);
+
+  return parts.join('\n');
+}
+
+function buildScriptText(
+  label: string,
+  roteiro: { gancho: string; desenvolvimento: string; cta: string; raw: string }
+) {
+  const parts = [
+    label,
+    roteiro.gancho ? `Gancho: ${roteiro.gancho}` : '',
+    roteiro.desenvolvimento ? `Desenvolvimento: ${roteiro.desenvolvimento}` : '',
+    roteiro.cta ? `CTA final: ${roteiro.cta}` : '',
+  ].filter(Boolean);
+
+  return parts.join('\n');
+}
+
 // ─── Tipos de props ───────────────────────────────────────────────────────────
 
 interface AgenteProps {
-  onUseInRoteiro?: (data: { references: string }) => void;
+  onUseInRoteiro?: (data: {
+    references: string;
+    formatA?: string;
+    formatB?: string;
+    script1?: string;
+    script2?: string;
+  }) => void;
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -350,8 +467,28 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
     );
   }
 
+  async function copyText(text: string, label: string) {
+    if (!text?.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} copiado`);
+    } catch (_) {
+      toast.error(`Nao foi possivel copiar ${label.toLowerCase()}`);
+    }
+  }
+
   const completedSteps = steps.filter(s => s.status === 'done').length;
   const progress = steps.length > 0 ? Math.round((completedSteps / steps.length) * 100) : 0;
+  const dossier = results?.analysis ? parseDossier(results.analysis) : null;
+  const refsText = dossier?.referencias?.length
+    ? dossier.referencias.map((item, i) => `${i + 1}. ${item}`).join('\n')
+    : results?.videos?.length
+      ? results.videos.map((v, i) => `${i + 1}. ${v.title || '(sem titulo)'} [${v.platform}] - ${v.url}`).join('\n')
+      : '';
+  const formatAText = dossier?.formatoA.raw ? buildFormatText('Formato A', dossier.formatoA, dossier.roteiro1) : '';
+  const formatBText = dossier?.formatoB.raw ? buildFormatText('Formato B', dossier.formatoB, dossier.roteiro2) : '';
+  const roteiro1Text = dossier?.roteiro1.raw ? buildScriptText('Roteiro Pronto 1', dossier.roteiro1) : '';
+  const roteiro2Text = dossier?.roteiro2.raw ? buildScriptText('Roteiro Pronto 2', dossier.roteiro2) : '';
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -485,6 +622,12 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
                   <p>1. Abra o Instagram/TikTok no Chrome e faça login</p>
                   <p>2. Aperte F12 → aba <strong>Application</strong> → <strong>Cookies</strong></p>
                   <p>3. Copie o valor do cookie <strong>sessionid</strong></p>
+                </div>
+
+                <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs text-orange-700 space-y-1">
+                  <p className="font-semibold">Importante</p>
+                  <p>As buscas atuais do agente usam provedores externos ou Instagram conectado em Plataformas.</p>
+                  <p>Salvar o <strong>sessionid</strong> sozinho nao destrava a coleta do Instagram neste fluxo atual.</p>
                 </div>
 
                 {/* Instagram */}
@@ -781,22 +924,152 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
               {onUseInRoteiro && results.videos.length > 0 && (
                 <div className="p-4 border-t border-border">
                   <button
-                    onClick={() => {
-                      const refsText = results.videos
-                        .map((v, i) => `${i + 1}. ${v.title || '(sem título)'} [${v.platform}] — ${v.url}`)
-                        .join('\n');
-                      onUseInRoteiro({ references: refsText });
-                    }}
+                    onClick={() => onUseInRoteiro({ references: refsText })}
                     className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold transition-colors"
                   >
                     <Zap className="w-4 h-4" />
-                    Usar esses vídeos no Roteiro (passo 1.5)
+                    Aplicar referencias no Roteiro (passo 1.5)
                   </button>
                 </div>
               )}
             </div>
 
             {/* Análise Claude */}
+            {dossier && (
+              <div className="grid gap-4">
+                {dossier.referencias.length > 0 && (
+                  <div className="bg-card border border-border rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Search className="w-4 h-4 text-orange-500" />
+                        <span className="text-sm font-bold">Referencias-Chave</span>
+                      </div>
+                      <button
+                        onClick={() => copyText(refsText, 'Referencias')}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Copiar
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {dossier.referencias.slice(0, 5).map((item, idx) => (
+                        <p key={idx} className="text-sm text-muted-foreground leading-relaxed">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  {dossier.formatoA.raw && (
+                    <div className="bg-card border border-border rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-orange-500">Formato A</p>
+                        <button
+                          onClick={() => copyText(formatAText, 'Formato A')}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Copiar
+                        </button>
+                      </div>
+                      {dossier.formatoA.titulo && <p className="text-sm font-semibold mb-2">{dossier.formatoA.titulo}</p>}
+                      {dossier.formatoA.hook && <p className="text-sm text-muted-foreground mb-2"><strong>Hook:</strong> {dossier.formatoA.hook}</p>}
+                      {dossier.formatoA.estrutura && <p className="text-sm text-muted-foreground mb-2"><strong>Estrutura:</strong> {dossier.formatoA.estrutura}</p>}
+                      {dossier.formatoA.cta && <p className="text-sm text-muted-foreground"><strong>CTA:</strong> {dossier.formatoA.cta}</p>}
+                    </div>
+                  )}
+
+                  {dossier.formatoB.raw && (
+                    <div className="bg-card border border-border rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Formato B</p>
+                        <button
+                          onClick={() => copyText(formatBText, 'Formato B')}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Copiar
+                        </button>
+                      </div>
+                      {dossier.formatoB.titulo && <p className="text-sm font-semibold mb-2">{dossier.formatoB.titulo}</p>}
+                      {dossier.formatoB.hook && <p className="text-sm text-muted-foreground mb-2"><strong>Hook:</strong> {dossier.formatoB.hook}</p>}
+                      {dossier.formatoB.estrutura && <p className="text-sm text-muted-foreground mb-2"><strong>Estrutura:</strong> {dossier.formatoB.estrutura}</p>}
+                      {dossier.formatoB.cta && <p className="text-sm text-muted-foreground"><strong>CTA:</strong> {dossier.formatoB.cta}</p>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  {dossier.roteiro1.raw && (
+                    <div className="bg-card border border-border rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-blue-500">Roteiro Pronto 1</p>
+                        <button
+                          onClick={() => copyText(roteiro1Text, 'Roteiro Pronto 1')}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Copiar
+                        </button>
+                      </div>
+                      {dossier.roteiro1.gancho && <p className="text-sm text-muted-foreground mb-2"><strong>Gancho:</strong> {dossier.roteiro1.gancho}</p>}
+                      {dossier.roteiro1.desenvolvimento && <p className="text-sm text-muted-foreground mb-2"><strong>Desenvolvimento:</strong> {dossier.roteiro1.desenvolvimento}</p>}
+                      {dossier.roteiro1.cta && <p className="text-sm text-muted-foreground"><strong>CTA:</strong> {dossier.roteiro1.cta}</p>}
+                    </div>
+                  )}
+
+                  {dossier.roteiro2.raw && (
+                    <div className="bg-card border border-border rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-violet-500">Roteiro Pronto 2</p>
+                        <button
+                          onClick={() => copyText(roteiro2Text, 'Roteiro Pronto 2')}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Copiar
+                        </button>
+                      </div>
+                      {dossier.roteiro2.gancho && <p className="text-sm text-muted-foreground mb-2"><strong>Gancho:</strong> {dossier.roteiro2.gancho}</p>}
+                      {dossier.roteiro2.desenvolvimento && <p className="text-sm text-muted-foreground mb-2"><strong>Desenvolvimento:</strong> {dossier.roteiro2.desenvolvimento}</p>}
+                      {dossier.roteiro2.cta && <p className="text-sm text-muted-foreground"><strong>CTA:</strong> {dossier.roteiro2.cta}</p>}
+                    </div>
+                  )}
+                </div>
+
+                {dossier.gravacao.length > 0 && (
+                  <div className="bg-card border border-border rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Zap className="w-4 h-4 text-orange-500" />
+                      <span className="text-sm font-bold">Observacoes de Gravacao</span>
+                    </div>
+                    <div className="space-y-2">
+                      {dossier.gravacao.map((item, idx) => (
+                        <p key={idx} className="text-sm text-muted-foreground leading-relaxed">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {onUseInRoteiro && (refsText || formatAText || formatBText || roteiro1Text || roteiro2Text) && (
+                  <button
+                    onClick={() => onUseInRoteiro({
+                      references: refsText,
+                      ...(formatAText ? { formatA: formatAText } : {}),
+                      ...(formatBText ? { formatB: formatBText } : {}),
+                      ...(roteiro1Text ? { script1: roteiro1Text } : {}),
+                      ...(roteiro2Text ? { script2: roteiro2Text } : {}),
+                    })}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-foreground hover:opacity-90 text-background text-sm font-bold transition-opacity"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Aplicar dossie no Roteiro
+                  </button>
+                )}
+              </div>
+            )}
+
             {results.analysis && (
               <div className="bg-card border border-border rounded-2xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
                 <button
@@ -805,7 +1078,7 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
                 >
                   <div className="flex items-center gap-2">
                     <Bot className="w-4 h-4 text-orange-500" />
-                    <span className="text-sm font-bold">Análise Claude — Formatos + Próximos Passos</span>
+                    <span className="text-sm font-bold">Dossie Editorial - formatos e roteiros prontos</span>
                   </div>
                   {showAnalysis
                     ? <ChevronUp className="w-4 h-4 text-muted-foreground" />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Check,
   ChevronRight,
@@ -13,11 +13,14 @@ import {
   Trash2,
   Info,
   Copy,
+  Play,
+  Pause,
   Calculator,
   ShoppingBag,
   Calendar,
   BookOpen,
   Bot,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -64,11 +67,33 @@ interface AppState {
   expandedItems: Record<string, boolean>;
 }
 
+interface TeleprompterState {
+  open: boolean;
+  scriptId: string | null;
+  title: string;
+  speed: number;
+  fontSize: number;
+  countdownDuration: number;
+  mirrored: boolean;
+  playing: boolean;
+}
+
 const initialState: AppState = {
   checkedItems: {},
   inputs: {},
   expandedSections: { passo1: true },
   expandedItems: {},
+};
+
+const initialTeleprompterState: TeleprompterState = {
+  open: false,
+  scriptId: null,
+  title: '',
+  speed: 32,
+  fontSize: 34,
+  countdownDuration: 3,
+  mirrored: false,
+  playing: false,
 };
 
 const roteiro: RoteiroSection[] = [
@@ -155,6 +180,18 @@ const roteiro: RoteiroSection[] = [
           '✅ EMOÇÃO CENTRAL: Curiosidade, surpresa, medo, urgência',
           '✅ ENTRETENIMENTO + TÉCNICA: Distrair + ser útil',
         ],
+      },
+      {
+        id: '3.1.a',
+        titulo: 'ROTEIRO FINAL A (Pronto para gravar)',
+        hasInput: true,
+        placeholder: 'Gancho, desenvolvimento e CTA final do Roteiro Pronto 1...',
+      },
+      {
+        id: '3.1.b',
+        titulo: 'ROTEIRO FINAL B (Pronto para gravar)',
+        hasInput: true,
+        placeholder: 'Gancho, desenvolvimento e CTA final do Roteiro Pronto 2...',
       },
       {
         id: '3.2',
@@ -247,9 +284,260 @@ const keywords = [
   'resistência insulina / insulin resistance',
 ];
 
+const roteiroFinalIds = new Set(['3.1.a', '3.1.b']);
+const gravacaoChecklist = [
+  'Gancho forte nos primeiros 3 segundos',
+  'Desenvolvimento com ritmo e quebras de padrão',
+  'CTA final claro',
+  'Texto de apoio na tela',
+  'Emoção central definida',
+  'Cenário ou enquadramento com contraste visual',
+];
+
+function TeleprompterOverlay({
+  open,
+  title,
+  text,
+  speed,
+  fontSize,
+  countdownDuration,
+  mirrored,
+  playing,
+  onClose,
+  onTogglePlaying,
+  onSpeedChange,
+  onFontSizeChange,
+  onCountdownDurationChange,
+  onToggleMirror,
+}: {
+  open: boolean;
+  title: string;
+  text: string;
+  speed: number;
+  fontSize: number;
+  countdownDuration: number;
+  mirrored: boolean;
+  playing: boolean;
+  onClose: () => void;
+  onTogglePlaying: () => void;
+  onSpeedChange: (value: number) => void;
+  onFontSizeChange: (value: number) => void;
+  onCountdownDurationChange: (value: number) => void;
+  onToggleMirror: () => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const countdownTimerRef = useRef<number | null>(null);
+  const [countdownValue, setCountdownValue] = useState<number | null>(null);
+
+  const clearCountdown = () => {
+    if (countdownTimerRef.current !== null) {
+      window.clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setCountdownValue(null);
+  };
+
+  const handlePlayPause = () => {
+    if (countdownValue !== null) {
+      clearCountdown();
+      return;
+    }
+
+    if (playing) {
+      onTogglePlaying();
+      return;
+    }
+
+    if (countdownDuration <= 0) {
+      onTogglePlaying();
+      return;
+    }
+
+    setCountdownValue(countdownDuration);
+    countdownTimerRef.current = window.setInterval(() => {
+      setCountdownValue((current) => {
+        if (current === null) return null;
+        if (current <= 1) {
+          if (countdownTimerRef.current !== null) {
+            window.clearInterval(countdownTimerRef.current);
+            countdownTimerRef.current = null;
+          }
+          onTogglePlaying();
+          return null;
+        }
+        return current - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.code === 'Space') {
+        event.preventDefault();
+        handlePlayPause();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose, handlePlayPause]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) clearCountdown();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !scrollRef.current) return;
+    clearCountdown();
+    scrollRef.current.scrollTop = 0;
+  }, [open, text]);
+
+  useEffect(() => {
+    if (!open || !playing || !scrollRef.current) return;
+
+    const element = scrollRef.current;
+    const interval = window.setInterval(() => {
+      element.scrollTop += speed / 12;
+    }, 40);
+
+    return () => window.clearInterval(interval);
+  }, [open, playing, speed]);
+
+  useEffect(() => () => clearCountdown(), []);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black text-white">
+      <div className="flex h-full flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/90 px-4 py-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Teleprompter</p>
+            <h2 className="text-sm font-semibold sm:text-base">{title}</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handlePlayPause}
+              className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-black transition-opacity hover:opacity-90"
+            >
+              {playing ? <Pause size={15} /> : <Play size={15} />}
+              {countdownValue !== null ? 'Cancelar contagem' : playing ? 'Pausar' : 'Iniciar'}
+            </button>
+            <button
+              onClick={onToggleMirror}
+              className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                mirrored ? 'border-blue-400 bg-blue-500/20 text-blue-100' : 'border-white/15 text-white/80 hover:border-white/30'
+              }`}
+            >
+              Espelhar
+            </button>
+            <button
+              onClick={() => {
+                if (scrollRef.current) scrollRef.current.scrollTop = 0;
+              }}
+              className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white/80 transition-colors hover:border-white/30"
+            >
+              Reiniciar
+            </button>
+            <button
+              onClick={() => {
+                clearCountdown();
+                onClose();
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white/80 transition-colors hover:border-white/30"
+            >
+              <X size={15} />
+              Fechar
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 border-b border-white/10 bg-zinc-950 px-4 py-3 sm:grid-cols-3">
+          <label className="space-y-2">
+            <span className="block text-xs font-bold uppercase tracking-[0.2em] text-white/50">Velocidade</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="10"
+                max="80"
+                value={speed}
+                onChange={(e) => onSpeedChange(Number(e.target.value))}
+                className="w-full accent-white"
+              />
+              <span className="w-12 text-right text-sm font-semibold">{speed}</span>
+            </div>
+          </label>
+          <label className="space-y-2">
+            <span className="block text-xs font-bold uppercase tracking-[0.2em] text-white/50">Fonte</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="24"
+                max="64"
+                value={fontSize}
+                onChange={(e) => onFontSizeChange(Number(e.target.value))}
+                className="w-full accent-white"
+              />
+              <span className="w-12 text-right text-sm font-semibold">{fontSize}</span>
+            </div>
+          </label>
+          <label className="space-y-2">
+            <span className="block text-xs font-bold uppercase tracking-[0.2em] text-white/50">Contagem</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="5"
+                value={countdownDuration}
+                onChange={(e) => onCountdownDurationChange(Number(e.target.value))}
+                className="w-full accent-white"
+              />
+              <span className="w-12 text-right text-sm font-semibold">{countdownDuration}s</span>
+            </div>
+          </label>
+        </div>
+
+        <div ref={scrollRef} className="relative flex-1 overflow-y-auto bg-black px-4 py-10 sm:px-8">
+          {countdownValue !== null && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/60">
+              <div className="rounded-full border border-white/15 bg-white/10 px-10 py-8 text-center backdrop-blur-sm">
+                <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/60">Preparar</p>
+                <p className="mt-2 text-7xl font-black tabular-nums sm:text-8xl">{countdownValue}</p>
+              </div>
+            </div>
+          )}
+          <div
+            className={`mx-auto max-w-4xl whitespace-pre-wrap text-center font-semibold leading-[1.9] tracking-[0.01em] text-white ${
+              mirrored ? '-scale-x-100 transform' : ''
+            }`}
+            style={{ fontSize: `${fontSize}px` }}
+          >
+            {text || 'Adicione um roteiro final para usar o teleprompter.'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ViralOS() {
   const [activeTab, setActiveTab] = useState<TabId>('roteiro');
   const [state, setState] = useState<AppState>(initialState);
+  const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
 
   useEffect(() => {
     const saved = localStorage.getItem('viral-os-data');
@@ -280,6 +568,41 @@ export default function ViralOS() {
     }));
   };
 
+  const copyInputValue = async (id: string, label: string) => {
+    const value = state.inputs[id] || '';
+    if (!value.trim()) {
+      toast.error(`${label} ainda está vazio.`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado!`, { duration: 1500 });
+    } catch {
+      toast.error(`Nao foi possivel copiar ${label.toLowerCase()}.`);
+    }
+  };
+
+  const openTeleprompter = (id: string, title: string) => {
+    const value = state.inputs[id] || '';
+    if (!value.trim()) {
+      toast.error(`Preencha ${title} antes de abrir o teleprompter.`);
+      return;
+    }
+
+    setTeleprompter((prev) => ({
+      ...prev,
+      open: true,
+      scriptId: id,
+      title,
+      playing: false,
+    }));
+  };
+
+  const closeTeleprompter = () => {
+    setTeleprompter((prev) => ({ ...prev, open: false, playing: false, scriptId: null, title: '' }));
+  };
+
   const toggleSection = (id: string) => {
     setState((prev) => ({
       ...prev,
@@ -300,16 +623,57 @@ export default function ViralOS() {
     }
   };
 
-  const handleAgenteUseInRoteiro = ({ references }: { references: string }) => {
+  const handleAgenteUseInRoteiro = ({
+    references,
+    formatA,
+    formatB,
+    script1,
+    script2,
+  }: {
+    references: string;
+    formatA?: string;
+    formatB?: string;
+    script1?: string;
+    script2?: string;
+  }) => {
+    const hasFormats = Boolean(formatA || formatB);
+    const hasScripts = Boolean(script1 || script2);
     setState((prev) => ({
       ...prev,
-      inputs: { ...prev.inputs, '1.5': references },
-      checkedItems: { ...prev.checkedItems, '1.5': true },
-      expandedSections: { ...prev.expandedSections, passo1: true, passo2: true },
-      expandedItems: { ...prev.expandedItems, '1.5': true },
+      inputs: {
+        ...prev.inputs,
+        '1.5': references,
+        ...(formatA ? { '2.3': formatA } : {}),
+        ...(formatB ? { '2.4': formatB } : {}),
+        ...(script1 ? { '3.1.a': script1 } : {}),
+        ...(script2 ? { '3.1.b': script2 } : {}),
+      },
+      checkedItems: {
+        ...prev.checkedItems,
+        '1.5': true,
+        ...(formatA ? { '2.3': true } : {}),
+        ...(formatB ? { '2.4': true } : {}),
+        ...(script1 ? { '3.1.a': true } : {}),
+        ...(script2 ? { '3.1.b': true } : {}),
+      },
+      expandedSections: { ...prev.expandedSections, passo1: true, passo2: true, ...(hasScripts ? { passo3: true } : {}) },
+      expandedItems: {
+        ...prev.expandedItems,
+        '1.5': true,
+        ...(formatA ? { '2.3': true } : {}),
+        ...(formatB ? { '2.4': true } : {}),
+        ...(script1 ? { '3.1.a': true } : {}),
+        ...(script2 ? { '3.1.b': true } : {}),
+      },
     }));
     setActiveTab('roteiro');
-    toast.success('Referências adicionadas ao Roteiro — passo 1.5!');
+    toast.success(
+      hasScripts
+        ? 'Dossie aplicado no roteiro: referencias, formatos e roteiros finais preenchidos.'
+        : hasFormats
+        ? 'Dossie aplicado no roteiro: referencias em 1.5 e formatos em 2.3/2.4.'
+        : 'Referencias aplicadas no roteiro no passo 1.5.'
+    );
   };
 
   const totalTasks = roteiro.reduce((acc, s) => acc + s.itens.length, 0);
@@ -320,6 +684,8 @@ export default function ViralOS() {
     const done = section.itens.filter((i) => state.checkedItems[i.id]).length;
     return { done, total: section.itens.length, pct: Math.round((done / section.itens.length) * 100) };
   };
+
+  const teleprompterText = teleprompter.scriptId ? state.inputs[teleprompter.scriptId] || '' : '';
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -535,12 +901,59 @@ export default function ViralOS() {
                                 </AnimatePresence>
 
                                 {item.hasInput && (
-                                  <textarea
-                                    value={state.inputs[item.id] || ''}
-                                    onChange={(e) => handleInputChange(item.id, e.target.value)}
-                                    placeholder={item.placeholder}
-                                    className="mt-3 w-full bg-secondary border border-border rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10 transition-all min-h-[80px] resize-none placeholder:text-muted-foreground/50"
-                                  />
+                                  <div className="mt-3 space-y-3">
+                                    {roteiroFinalIds.has(item.id) && (
+                                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+                                        <div>
+                                          <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Area de Gravacao</p>
+                                          <p className="text-xs text-blue-700/80">Script final pronto para copiar, ajustar e gravar.</p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <button
+                                            onClick={() => openTeleprompter(item.id, item.titulo)}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:border-blue-300 transition-colors"
+                                            title={`Abrir ${item.titulo} no teleprompter`}
+                                          >
+                                            <Play size={12} />
+                                            Teleprompter
+                                          </button>
+                                          <button
+                                            onClick={() => copyInputValue(item.id, item.titulo)}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:border-blue-300 transition-colors"
+                                            title={`Copiar ${item.titulo}`}
+                                          >
+                                            <Copy size={12} />
+                                            Copiar roteiro
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    <textarea
+                                      value={state.inputs[item.id] || ''}
+                                      onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                      placeholder={item.placeholder}
+                                      className={`w-full bg-secondary border border-border rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10 transition-all resize-none placeholder:text-muted-foreground/50 ${
+                                        roteiroFinalIds.has(item.id) ? 'min-h-[180px] font-medium leading-relaxed' : 'min-h-[80px]'
+                                      }`}
+                                    />
+
+                                    {roteiroFinalIds.has(item.id) && (
+                                      <div className="rounded-xl bg-secondary/70 p-3">
+                                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Checklist de Gravacao</p>
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                          {gravacaoChecklist.map((check, idx) => (
+                                            <div key={idx} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-background border border-border">
+                                                <Check size={11} className="text-blue-500" />
+                                              </span>
+                                              <span>{check}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -598,6 +1011,22 @@ export default function ViralOS() {
         </footer>
         </>)}
       </main>
+      <TeleprompterOverlay
+        open={teleprompter.open}
+        title={teleprompter.title}
+        text={teleprompterText}
+        speed={teleprompter.speed}
+        fontSize={teleprompter.fontSize}
+        countdownDuration={teleprompter.countdownDuration}
+        mirrored={teleprompter.mirrored}
+        playing={teleprompter.playing}
+        onClose={closeTeleprompter}
+        onTogglePlaying={() => setTeleprompter((prev) => ({ ...prev, playing: !prev.playing }))}
+        onSpeedChange={(value) => setTeleprompter((prev) => ({ ...prev, speed: value }))}
+        onFontSizeChange={(value) => setTeleprompter((prev) => ({ ...prev, fontSize: value }))}
+        onCountdownDurationChange={(value) => setTeleprompter((prev) => ({ ...prev, countdownDuration: value }))}
+        onToggleMirror={() => setTeleprompter((prev) => ({ ...prev, mirrored: !prev.mirrored }))}
+      />
     </div>
   );
 }

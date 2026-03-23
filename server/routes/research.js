@@ -182,6 +182,47 @@ router.get('/instagram-hashtag', async (req, res) => {
 
 // ── Helper: Apify Instagram Scraper ──────────────────────────────────────────
 // Busca posts/reels por hashtag usando o ator apify/instagram-scraper
+async function fetchInstagramGraphSearch(keyword) {
+  const hashtag = keyword.trim().replace(/^#/, '').toLowerCase();
+  if (!hashtag) return [];
+
+  const igToken = db.getPlatformToken('instagram');
+  if (!igToken) return [];
+
+  const { access_token, user_id } = igToken;
+
+  const hashRes = await axios.get('https://graph.facebook.com/v21.0/ig_hashtag_search', {
+    params: { user_id, q: hashtag, access_token },
+    timeout: 15000,
+  });
+  const hashId = hashRes.data?.data?.[0]?.id;
+  if (!hashId) return [];
+
+  const mediaRes = await axios.get(`https://graph.facebook.com/v21.0/${hashId}/top_media`, {
+    params: {
+      user_id,
+      fields: 'id,media_type,like_count,comments_count,thumbnail_url,media_url,permalink,caption',
+      access_token,
+    },
+    timeout: 15000,
+  });
+
+  const items = mediaRes.data?.data || [];
+  return items.map((i) => ({
+    id: i.id,
+    title: i.caption ? i.caption.substring(0, 120) : '',
+    author: '',
+    author_handle: hashtag,
+    views: 0,
+    likes: i.like_count || 0,
+    comments: i.comments_count || 0,
+    shares: 0,
+    cover: i.thumbnail_url || i.media_url || '',
+    url: i.permalink,
+    platform: 'instagram',
+  }));
+}
+
 async function apifyIGSearch(keyword, limit = 30) {
   const apiKey = process.env.APIFY_API_KEY;
   if (!apiKey) throw new Error('APIFY_API_KEY não configurada');
@@ -280,6 +321,17 @@ router.get('/instagram-search', async (req, res) => {
   }
 
   // ── Tentativa 2: RapidAPI (stable-api) ───────────────────────────────────
+  if (db.getPlatformToken('instagram')) {
+    try {
+      const reels = await fetchInstagramGraphSearch(keyword);
+      const sorted = reels.sort((a, b) => (b.likes + b.views * 0.1) - (a.likes + a.views * 0.1));
+      console.log(`[IG search/Graph] "${keyword}" â†’ ${sorted.length} resultados`);
+      return res.json(sorted.slice(0, 40));
+    } catch (e) {
+      console.error('[IG search/Graph] Error:', e.response?.data || e.message);
+    }
+  }
+
   const apiKey = process.env.RAPIDAPI_KEY;
   if (!apiKey) return res.json([]);
 

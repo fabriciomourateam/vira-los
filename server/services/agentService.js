@@ -8,6 +8,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const db = require('../db/database');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -196,6 +197,39 @@ async function fetchTikTok(keyword) {
 
 // ─── Instagram via API (Apify → RapidAPI fallback) ────────────────────────────
 
+async function fetchInstagramViaGraph(keyword) {
+  const igToken = db.getPlatformToken('instagram');
+  if (!igToken) return [];
+
+  const hashtag = keyword.trim().replace(/^#/, '').toLowerCase();
+  if (!hashtag) return [];
+
+  const { access_token, user_id } = igToken;
+  const hashRes = await axios.get('https://graph.facebook.com/v21.0/ig_hashtag_search', {
+    params: { user_id, q: hashtag, access_token },
+    timeout: 15000,
+  });
+  const hashId = hashRes.data?.data?.[0]?.id;
+  if (!hashId) return [];
+
+  const mediaRes = await axios.get(`https://graph.facebook.com/v21.0/${hashId}/top_media`, {
+    params: {
+      user_id,
+      fields: 'id,media_type,like_count,comments_count,thumbnail_url,media_url,permalink,caption',
+      access_token,
+    },
+    timeout: 15000,
+  });
+
+  return (mediaRes.data?.data || []).map((item) => ({
+    platform: 'instagram',
+    title: String(item.caption || '').substring(0, 120),
+    likes: String(item.like_count || 0),
+    views: '0',
+    url: item.permalink || '',
+  }));
+}
+
 async function fetchInstagram(keyword) {
   const apifyKey = process.env.APIFY_API_KEY;
   const rapidApiKey = process.env.RAPIDAPI_KEY;
@@ -268,7 +302,29 @@ async function fetchInstagram(keyword) {
     }
   }
 
-  stepUpdate('ig_search', 'done', results.length ? `${results.length} reels` : 'Sem API configurada');
+  if (!results.length) {
+    try {
+      const graphResults = await fetchInstagramViaGraph(keyword);
+      results.push(...graphResults);
+      if (graphResults.length) {
+        stepUpdate('ig_search', 'done', `Graph API: ${graphResults.length} reels`);
+        stepUpdate('ig_collect', 'done', `${graphResults.length} Reels coletados`);
+        return results;
+      }
+    } catch (e) {
+      console.error('[Agent IG/Graph] Erro:', e.response?.data || e.message);
+    }
+  }
+
+  const igReason = results.length
+    ? `${results.length} reels`
+    : (apifyKey || rapidApiKey)
+      ? 'Busca executada, mas sem resultados'
+      : db.getPlatformToken('instagram')
+        ? 'Instagram conectado, mas a hashtag nÃ£o retornou mÃ­dia'
+        : 'Sem APIFY/RapidAPI e sem Instagram conectado';
+
+  stepUpdate('ig_search', 'done', igReason);
   stepUpdate('ig_collect', 'done', `${results.length} Reels coletados`);
   return results;
 }
@@ -315,8 +371,46 @@ async function fetchYouTube(keyword) {
 
 // ─── Análise Claude ───────────────────────────────────────────────────────────
 
-async function analyzeWithClaude(keyword, allVideos) {
-  stepUpdate('analyze', 'running', 'Enviando para Claude...');
+async function analyzeWithClaude(keyword, allVideos, diagnostics = []) {
+  stepUpdate('analyze', 'running', 'Montando dossiÃª editorial...');
+
+  if (!allVideos.length) {
+    stepUpdate('analyze', 'done', 'Sem referÃªncias suficientes para roteirizar');
+    const notes = diagnostics.length
+      ? diagnostics.map((item) => `- ${item}`).join('\n')
+      : '- Nenhuma plataforma retornou vÃ­deos dentro dos filtros atuais.';
+
+    return [
+      '# DossiÃª Editorial',
+      '',
+      '## Status da Coleta',
+      `Nenhum vÃ­deo foi coletado para a palavra-chave **${keyword}**.`,
+      '',
+      '## DiagnÃ³stico',
+      notes,
+      '',
+      '## O que falta para sair com roteiro pronto',
+      '- Coletar de 5 a 10 referÃªncias reais alinhadas ao passo 1 do roteiro.',
+      '- Priorizar TikTok com ordenaÃ§Ã£o por curtidas e recÃªncia.',
+      '- Usar Instagram como apoio quando houver Apify, RapidAPI ou conta oficial conectada em Plataformas.',
+      '',
+      '## PrÃ³ximo passo recomendado',
+      '- Rode a busca primeiro no TikTok e valide os formatos repetidos.',
+      '- Depois gere o dossiÃª para obter Formato A, Formato B e o roteiro pronto.',
+    ].join('\n');
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    stepUpdate('analyze', 'done', 'Coleta pronta; falta ANTHROPIC_API_KEY para gerar o dossiÃª');
+    return [
+      '# DossiÃª Editorial',
+      '',
+      `Foram coletados **${allVideos.length} vÃ­deos**, mas o backend estÃ¡ sem **ANTHROPIC_API_KEY** para transformar essas referÃªncias em roteiro pronto.`,
+      '',
+      '## PrÃ³ximo passo',
+      '- Configurar a chave da Anthropic para gerar Formato A, Formato B e os roteiros completos automaticamente.',
+    ].join('\n');
+  }
 
   const videoList = allVideos.map((v, i) =>
     `${i + 1}. [${v.platform.toUpperCase()}] ${v.title || '(sem título)'} | Views: ${v.views || '?'} | Likes: ${v.likes || '?'} | URL: ${v.url}`
@@ -350,11 +444,72 @@ Hook de abertura: ...
 ## ✅ Próximos Passos
 (3 ações concretas para gravar essa semana)`;
 
+  const promptV2 = `VocÃª Ã© um estrategista editorial do mÃ©todo Vira-Los.
+
+Sua funÃ§Ã£o Ã© transformar vÃ­deos virais reais em um dossiÃª pronto para gravaÃ§Ã£o, seguindo rigorosamente o roteiro:
+- Passo 1: pesquisar palavra-chave, priorizar TikTok, olhar curtidas + recÃªncia, salvar 5-10 referÃªncias
+- Passo 2: identificar formatos repetidos e escolher FORMATO A e FORMATO B
+- Passo 3: entregar gancho, desenvolvimento, CTA e emoÃ§Ã£o central para gravar
+
+Palavra-chave pesquisada: "${keyword}"
+
+VÃ­deos virais encontrados (${allVideos.length} total):
+${videoList}
+
+Regras:
+- Use SOMENTE os dados acima como base factual.
+- Se inferir algo, deixe claro que Ã© inferÃªncia.
+- Priorize formatos meio de funil, educativos, com curiosidade, medo, revelaÃ§Ã£o, prova social ou lista.
+- Entregue algo que o criador possa abrir e gravar hoje.
+
+Responda EXATAMENTE neste formato:
+
+# DossiÃª Editorial
+
+## ReferÃªncias-Chave
+- liste 5 referÃªncias com tÃ­tulo curto, plataforma, motivo e link
+
+## PadrÃµes Identificados
+- 3 a 5 padrÃµes recorrentes
+
+## FORMATO A
+TÃ­tulo sugerido: ...
+Por que encaixa no roteiro: ...
+Hook de abertura: ...
+Estrutura: ...
+CTA: ...
+
+## FORMATO B
+TÃ­tulo sugerido: ...
+Por que encaixa no roteiro: ...
+Hook de abertura: ...
+Estrutura: ...
+CTA: ...
+
+## Roteiro Pronto 1
+Gancho (0-3s): ...
+Desenvolvimento (10-60s): ...
+CTA final: ...
+
+## Roteiro Pronto 2
+Gancho (0-3s): ...
+Desenvolvimento (10-60s): ...
+CTA final: ...
+
+## ObservaÃ§Ãµes de GravaÃ§Ã£o
+- enquadramento
+- quebra de padrÃ£o
+- texto na tela
+- emoÃ§Ã£o central
+
+## PrÃ³ximos Passos
+- 3 aÃ§Ãµes objetivas para gravar ainda esta semana`;
+
   try {
     const response = await anthropic.messages.create({
       model: 'claude-opus-4-6',
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 2200,
+      messages: [{ role: 'user', content: promptV2 }],
     });
     const analysis = response.content[0].text;
     stepUpdate('analyze', 'done', 'Análise concluída');
@@ -382,6 +537,7 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
   let browser;
   try {
     const allVideos = [];
+    const collectionDiagnostics = [];
     const creds = getCredentials();
 
     // ── TikTok via API ─────────────────────────────────────────────────────
@@ -392,6 +548,9 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
       stepUpdate('init', 'done', 'APIs conectadas');
       const ttVideos = await fetchTikTok(keyword);
       allVideos.push(...ttVideos);
+      if (!ttVideos.length) {
+        collectionDiagnostics.push('TikTok sem resultados suficientes na coleta atual. O roteiro continua melhor servido por TikTok, mas depende de provedor configurado e filtro de recÃªncia.');
+      }
     } else {
       stepUpdate('init', 'done', 'Iniciado');
       stepUpdate('login_tt', 'done', 'Pulado');
@@ -403,6 +562,9 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
     if (platforms.includes('instagram')) {
       const igVideos = await fetchInstagram(keyword);
       allVideos.push(...igVideos);
+      if (!igVideos.length) {
+        collectionDiagnostics.push('Instagram sem resultados. Hoje o backend depende de Apify, RapidAPI ou Instagram oficial conectado em Plataformas; sessionid salvo no agente nÃ£o Ã© usado na busca.');
+      }
     }
 
     if (stopRequested) throw new Error('STOP_REQUESTED');
@@ -411,10 +573,13 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
     if (platforms.includes('youtube')) {
       const ytVideos = await fetchYouTube(keyword);
       allVideos.push(...ytVideos);
+      if (!ytVideos.length) {
+        collectionDiagnostics.push('YouTube sem resultados. A coleta de Shorts no agente ainda depende de APIFY_API_KEY.');
+      }
     }
 
     // ── Análise Claude ──
-    const analysis = await analyzeWithClaude(keyword, allVideos);
+    const analysis = await analyzeWithClaude(keyword, allVideos, collectionDiagnostics);
 
     // ── Relatório final ──
     stepUpdate('report', 'running', 'Compilando relatório...');
