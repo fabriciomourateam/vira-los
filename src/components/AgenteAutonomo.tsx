@@ -410,6 +410,17 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
               : <><Play className="w-4 h-4" /> Iniciar Pesquisa</>
             }
           </button>
+          {running && (
+            <button
+              onClick={async () => {
+                await fetch(`${API}/api/agent/stop`, { method: 'POST' });
+              }}
+              className="px-4 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-bold transition-colors flex items-center gap-1.5"
+              title="Parar agente"
+            >
+              <Square className="w-4 h-4" /> Parar
+            </button>
+          )}
 
           <button
             onClick={() => setShowSessions(s => !s)}

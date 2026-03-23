@@ -37,6 +37,16 @@ let agentState = {
 // Listeners SSE registrados pelo route
 const sseClients = new Set();
 
+// Flag de cancelamento
+let stopRequested = false;
+
+function stopAgent() {
+  if (agentState.running) {
+    stopRequested = true;
+    broadcast({ type: 'stopped', message: 'Agente interrompido pelo usuário' });
+  }
+}
+
 function broadcast(event) {
   const data = `data: ${JSON.stringify(event)}\n\n`;
   for (const res of sseClients) {
@@ -339,6 +349,7 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
   agentState.finishedAt = null;
   agentState.results = null;
   agentState.error = null;
+  stopRequested = false;
 
   initSteps(platforms);
 
@@ -399,11 +410,15 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
       allVideos.push(...ttVideos);
     }
 
+    if (stopRequested) throw new Error('STOP_REQUESTED');
+
     // ── Instagram ──
     if (platforms.includes('instagram')) {
       const igVideos = await scrapeInstagram(page, keyword);
       allVideos.push(...igVideos);
     }
+
+    if (stopRequested) throw new Error('STOP_REQUESTED');
 
     // ── YouTube Shorts ──
     if (platforms.includes('youtube')) {
@@ -429,11 +444,18 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
 
   } catch (err) {
     agentState.error = err.message;
-    broadcast({ type: 'error', message: err.message });
-    console.error('[AgentService] Erro:', err);
+    if (err.message === 'STOP_REQUESTED') {
+      agentState.error = 'Interrompido pelo usuário';
+      broadcast({ type: 'stopped', message: 'Agente interrompido pelo usuário' });
+    } else {
+      agentState.error = err.message;
+      broadcast({ type: 'error', message: err.message });
+      console.error('[AgentService] Erro:', err);
+    }
   } finally {
     if (browser) await browser.close().catch(() => {});
     agentState.running = false;
+    stopRequested = false;
     agentState.finishedAt = new Date().toISOString();
   }
 }
@@ -443,6 +465,7 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
 module.exports = {
   getState: () => agentState,
   runAgent,
+  stopAgent,
   sseClients,
   getCredentials,
   saveCredentials,

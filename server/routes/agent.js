@@ -18,7 +18,7 @@ const express = require('express');
 const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
-const { runAgent, getState, sseClients, getCredentials, saveCredentials } = require('../services/agentService');
+const { runAgent, stopAgent, getState, sseClients, getCredentials, saveCredentials } = require('../services/agentService');
 
 const router = express.Router();
 const SCHEDULE_FILE = path.join(__dirname, '../db/agent-schedule.json');
@@ -72,6 +72,15 @@ router.post('/start', async (req, res) => {
   }).catch(err => console.error('[Agent Route] Erro não capturado:', err));
 
   res.json({ ok: true, message: 'Agente iniciado. Acompanhe pelo stream SSE.' });
+});
+
+// ─── Parar agente ─────────────────────────────────────────────────────────────
+
+router.post('/stop', (req, res) => {
+  const state = getState();
+  if (!state.running) return res.status(409).json({ error: 'Agente não está em execução' });
+  stopAgent();
+  res.json({ ok: true, message: 'Sinal de parada enviado' });
 });
 
 // ─── Status (polling fallback) ────────────────────────────────────────────────
