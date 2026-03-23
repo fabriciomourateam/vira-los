@@ -10,11 +10,15 @@ const Anthropic = require('@anthropic-ai/sdk');
 const path = require('path');
 const fs = require('fs');
 
-// Caminho do Chromium instalado pelo playwright da raiz do projeto
-const CHROMIUM_PATH = path.join(
-  process.env.HOME || '/root',
-  '.cache/ms-playwright/chromium-1194/chrome-linux/chrome'
-);
+// Caminhos possíveis do Chromium (container Docker → cache local → auto-detect)
+const CHROMIUM_PATHS = [
+  '/root/.cache/ms-playwright/chromium-1161/chrome-linux/chrome',  // imagem playwright:jammy
+  '/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome',  // versão anterior
+  '/ms-playwright/chromium-1161/chrome-linux/chrome',              // path alternativo do container
+  path.join(process.env.HOME || '/root', '.cache/ms-playwright/chromium-1161/chrome-linux/chrome'),
+  path.join(process.env.HOME || '/root', '.cache/ms-playwright/chromium-1194/chrome-linux/chrome'),
+];
+const CHROMIUM_PATH = CHROMIUM_PATHS.find(p => fs.existsSync(p)) || null;
 
 const CREDENTIALS_FILE = path.join(__dirname, '../db/agent-credentials.json');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -348,12 +352,22 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
 
     const launchOptions = {
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--single-process',
+        '--no-zygote',
+      ],
     };
 
-    // Usa o chromium do cache do playwright (raiz do projeto)
-    if (fs.existsSync(CHROMIUM_PATH)) {
+    // Usa o Chromium encontrado (Docker container ou cache local)
+    if (CHROMIUM_PATH) {
       launchOptions.executablePath = CHROMIUM_PATH;
+      console.log('[Agent] Chromium encontrado em:', CHROMIUM_PATH);
+    } else {
+      console.log('[Agent] Usando Chromium padrão do Playwright');
     }
 
     browser = await chromium.launch(launchOptions);
