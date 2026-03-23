@@ -154,6 +154,20 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
     fetchStatus();
     fetchSchedule();
     fetchSessionStatus();
+
+    // Polling a cada 5s para manter running sincronizado com backend
+    const poll = setInterval(async () => {
+      try {
+        const r = await fetch(`${API}/api/agent/status`);
+        const data = await r.json();
+        if (data.running && !eventSourceRef.current) {
+          setRunning(true);
+          connectSSE();
+        }
+      } catch (_) {}
+    }, 5000);
+
+    return () => clearInterval(poll);
   }, []);
 
   // ── Scroll automático nos steps ──
@@ -252,6 +266,7 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
         const s = event.state;
         if (s.steps?.length) setSteps(s.steps);
         if (s.results)       setResults(s.results);
+        if (s.running)       { setRunning(true); }
         if (!s.running)      { setRunning(false); es.close(); eventSourceRef.current = null; }
       }
     };
