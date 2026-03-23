@@ -1,217 +1,680 @@
-import React, { useState } from 'react';
-import { Bot, Search, Play, Calendar, AlertTriangle, Check, Loader2, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Bot, Play, Square, Clock, CheckCircle2, XCircle,
+  Loader2, ChevronDown, ChevronUp, ExternalLink,
+  Calendar, Trash2, TrendingUp, Search, Zap, AlertTriangle,
+} from 'lucide-react';
 
-const TikTokIcon = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.26 8.26 0 004.83 1.56V6.8a4.85 4.85 0 01-1.06-.11z"/>
-  </svg>
-);
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-const PLATFORMS = [
-  { id: 'tiktok',    label: 'TikTok',    icon: <TikTokIcon size={15} /> },
-  { id: 'instagram', label: 'Instagram', icon: <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg> },
-  { id: 'youtube',   label: 'YouTube',   icon: <svg width={15} height={15} viewBox="0 0 24 24" fill="currentColor"><path d="M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 001.46 6.42 29 29 0 001 12a29 29 0 00.46 5.58 2.78 2.78 0 001.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.96A29 29 0 0023 12a29 29 0 00-.46-5.58z"/><polygon fill="white" points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg> },
-] as const;
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type PlatformId = 'tiktok' | 'instagram' | 'youtube';
-type Frequency = 'daily' | 'specific';
+interface AgentStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+  detail?: string;
+}
 
-export default function AgenteAutonomo() {
-  const [keyword, setKeyword] = useState('testosterona');
-  const [platforms, setPlatforms] = useState<PlatformId[]>(['tiktok', 'instagram', 'youtube']);
-  const [frequency, setFrequency] = useState<Frequency>('daily');
-  const [hour, setHour] = useState(7);
-  const [minute, setMinute] = useState(0);
-  const [saved, setSaved] = useState(false);
-  const [running, setRunning] = useState(false);
+interface VideoResult {
+  platform: 'tiktok' | 'instagram' | 'youtube';
+  title: string;
+  likes: string;
+  views: string;
+  url: string;
+}
 
-  function togglePlatform(id: PlatformId) {
-    setPlatforms((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+interface AgentResults {
+  keyword: string;
+  platforms: string[];
+  videos: VideoResult[];
+  analysis: string | null;
+  collectedAt: string;
+}
+
+interface ScheduleConfig {
+  active: boolean;
+  mode?: 'daily' | 'weekly';
+  hour?: number;
+  minute?: number;
+  keyword?: string;
+  platforms?: string[];
+  weekdays?: number[];  // 0=Dom 1=Seg 2=Ter 3=Qua 4=Qui 5=Sex 6=Sáb
+}
+
+const WEEK_DAYS = [
+  { value: 1, label: 'Seg' },
+  { value: 2, label: 'Ter' },
+  { value: 3, label: 'Qua' },
+  { value: 4, label: 'Qui' },
+  { value: 5, label: 'Sex' },
+  { value: 6, label: 'Sáb' },
+  { value: 0, label: 'Dom' },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const PLATFORM_LABELS: Record<string, { label: string }> = {
+  tiktok:    { label: 'TikTok' },
+  instagram: { label: 'Instagram' },
+  youtube:   { label: 'YouTube' },
+};
+
+const STEP_ICON = {
+  pending: <div className="w-4 h-4 rounded-full border-2 border-border" />,
+  running: <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />,
+  done:    <CheckCircle2 className="w-4 h-4 text-emerald-500" />,
+  error:   <XCircle className="w-4 h-4 text-red-500" />,
+};
+
+// ─── Markdown renderer simples ────────────────────────────────────────────────
+
+function renderInlineMd(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="text-foreground font-semibold">{part.slice(2, -2)}</strong>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+function MarkdownAnalysis({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+
+  lines.forEach((line, i) => {
+    if (line.startsWith('## ')) {
+      nodes.push(
+        <h3 key={i} className="text-foreground font-bold text-sm mt-4 mb-1.5 first:mt-0">
+          {line.slice(3)}
+        </h3>
+      );
+    } else if (line.startsWith('# ')) {
+      nodes.push(
+        <h2 key={i} className="text-foreground font-bold text-base mt-4 mb-2 first:mt-0">
+          {line.slice(2)}
+        </h2>
+      );
+    } else if (line.match(/^[-•*] /)) {
+      nodes.push(
+        <div key={i} className="flex gap-2 text-sm text-muted-foreground leading-relaxed mb-0.5">
+          <span className="text-orange-500 shrink-0 mt-0.5">•</span>
+          <span>{renderInlineMd(line.slice(2))}</span>
+        </div>
+      );
+    } else if (line.trim() === '') {
+      nodes.push(<div key={i} className="h-1.5" />);
+    } else {
+      nodes.push(
+        <p key={i} className="text-sm text-muted-foreground leading-relaxed mb-0.5">
+          {renderInlineMd(line)}
+        </p>
+      );
+    }
+  });
+
+  return <div className="pt-4">{nodes}</div>;
+}
+
+// ─── Tipos de props ───────────────────────────────────────────────────────────
+
+interface AgenteProps {
+  onUseInRoteiro?: (data: { references: string }) => void;
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+
+export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
+  const [keyword, setKeyword]         = useState('testosterona');
+  const [platforms, setPlatforms]     = useState(['tiktok', 'instagram', 'youtube']);
+  const [steps, setSteps]             = useState<AgentStep[]>([]);
+  const [results, setResults]         = useState<AgentResults | null>(null);
+  const [running, setRunning]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [schedule, setSchedule]       = useState<ScheduleConfig>({ active: false });
+  const [schedHour, setSchedHour]     = useState('07');
+  const [schedMin, setSchedMin]       = useState('00');
+  const [schedMode, setSchedMode]     = useState<'daily' | 'weekly'>('daily');
+  const [schedWeekdays, setSchedWeekdays] = useState<number[]>([1, 2, 3, 4, 5]); // Seg-Sex
+  const [showScheduler, setShowScheduler] = useState(false);
+
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const stepsEndRef    = useRef<HTMLDivElement | null>(null);
+
+  // ── Carrega status atual + agendamento ao montar ──
+  useEffect(() => {
+    fetchStatus();
+    fetchSchedule();
+  }, []);
+
+  // ── Scroll automático nos steps ──
+  useEffect(() => {
+    stepsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [steps]);
+
+  async function fetchStatus() {
+    try {
+      const r = await fetch(`${API}/api/agent/status`);
+      const data = await r.json();
+      if (data.steps?.length) setSteps(data.steps);
+      if (data.results)       setResults(data.results);
+      if (data.running)       { setRunning(true); connectSSE(); }
+    } catch (_) {}
+  }
+
+  async function fetchSchedule() {
+    try {
+      const r = await fetch(`${API}/api/agent/schedule`);
+      const data = await r.json();
+      setSchedule(data);
+      if (data.active) {
+        setSchedHour(String(data.hour).padStart(2, '0'));
+        setSchedMin(String(data.minute).padStart(2, '0'));
+        setSchedMode(data.mode || 'daily');
+        if (data.weekdays?.length) setSchedWeekdays(data.weekdays);
+      }
+    } catch (_) {}
+  }
+
+  function connectSSE() {
+    if (eventSourceRef.current) return;
+
+    const es = new EventSource(`${API}/api/agent/stream`);
+    eventSourceRef.current = es;
+
+    es.onmessage = (e) => {
+      const event = JSON.parse(e.data);
+
+      if (event.type === 'init') {
+        setSteps(event.steps);
+        setRunning(true);
+        setError(null);
+      } else if (event.type === 'step') {
+        setSteps(prev => prev.map(s => s.id === event.step.id ? event.step : s));
+      } else if (event.type === 'complete') {
+        setResults(event.results);
+        setRunning(false);
+        es.close();
+        eventSourceRef.current = null;
+      } else if (event.type === 'error') {
+        setError(event.message);
+        setRunning(false);
+        es.close();
+        eventSourceRef.current = null;
+      } else if (event.type === 'state') {
+        const s = event.state;
+        if (s.steps?.length) setSteps(s.steps);
+        if (s.results)       setResults(s.results);
+        if (!s.running)      { setRunning(false); es.close(); eventSourceRef.current = null; }
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      eventSourceRef.current = null;
+    };
+  }
+
+  async function startAgent() {
+    if (!keyword.trim() || running) return;
+    setError(null);
+    setResults(null);
+    setSteps([]);
+    connectSSE();
+
+    try {
+      const r = await fetch(`${API}/api/agent/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: keyword.trim(), platforms }),
+      });
+      if (!r.ok) {
+        const err = await r.json();
+        setError(err.error || 'Erro ao iniciar agente');
+        setRunning(false);
+        eventSourceRef.current?.close();
+        eventSourceRef.current = null;
+      }
+    } catch (err: any) {
+      setError(err.message);
+      setRunning(false);
+    }
+  }
+
+  async function saveSchedule() {
+    try {
+      const r = await fetch(`${API}/api/agent/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hour: Number(schedHour),
+          minute: Number(schedMin),
+          mode: schedMode,
+          weekdays: schedMode === 'weekly' ? schedWeekdays : [],
+          keyword: keyword.trim(),
+          platforms,
+        }),
+      });
+      const data = await r.json();
+      if (data.ok) setSchedule(data.schedule);
+    } catch (_) {}
+  }
+
+  function toggleWeekday(d: number) {
+    setSchedWeekdays(prev =>
+      prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
     );
   }
 
-  async function handleRun() {
-    if (!keyword.trim() || platforms.length === 0) return;
-    setRunning(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setRunning(false);
+  function scheduleLabel(s: ScheduleConfig) {
+    if (!s.active) return null;
+    const time = `${String(s.hour).padStart(2,'0')}:${String(s.minute).padStart(2,'0')}`;
+    if (s.mode === 'weekly' && s.weekdays?.length) {
+      const DAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+      return s.weekdays.map(d => DAYS[d]).join(', ') + ' ' + time;
+    }
+    return 'Todo dia ' + time;
   }
 
-  function handleSave() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  async function removeSchedule() {
+    await fetch(`${API}/api/agent/schedule`, { method: 'DELETE' });
+    setSchedule({ active: false });
   }
+
+  function togglePlatform(p: string) {
+    setPlatforms(prev =>
+      prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
+    );
+  }
+
+  const completedSteps = steps.filter(s => s.status === 'done').length;
+  const progress = steps.length > 0 ? Math.round((completedSteps / steps.length) * 100) : 0;
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
+
       {/* Header */}
       <section className="flex items-start gap-4">
         <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center shrink-0">
-          <Bot size={24} className="text-orange-500" />
+          <Bot className="w-6 h-6 text-orange-500" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">Agente Autônomo</h2>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
-            Segue o roteiro Vira-Los automaticamente
-          </p>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">Segue o roteiro Vira-Los automaticamente</p>
         </div>
+        {schedule.active && (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full shrink-0">
+            <Clock className="w-3 h-3" />
+            {scheduleLabel(schedule)}
+          </div>
+        )}
       </section>
 
-      {/* Config card */}
+      {/* Configuração */}
       <div className="bg-card border border-border rounded-2xl p-5 space-y-5" style={{ boxShadow: 'var(--shadow-layered)' }}>
         <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Configuração da Pesquisa</h3>
 
-        {/* Keyword */}
+        {/* Palavra-chave */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-muted-foreground">Palavra-chave</label>
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
-              type="text"
               value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Ex: testosterona, treino, emagrecimento"
-              className="w-full bg-secondary border border-border rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10 transition-all"
+              onChange={e => setKeyword(e.target.value)}
+              disabled={running}
+              placeholder="testosterona, TRT, GLP-1..."
+              className="w-full bg-secondary border border-border rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/10 disabled:opacity-50 transition-all"
             />
           </div>
         </div>
 
-        {/* Platforms */}
+        {/* Plataformas */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-muted-foreground">Plataformas</label>
           <div className="grid grid-cols-3 gap-2">
-            {PLATFORMS.map((p) => {
-              const active = platforms.includes(p.id);
+            {(['tiktok', 'instagram', 'youtube'] as const).map(p => {
+              const { label } = PLATFORM_LABELS[p];
+              const active = platforms.includes(p);
               return (
                 <button
-                  key={p.id}
-                  onClick={() => togglePlatform(p.id)}
-                  className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${
+                  key={p}
+                  onClick={() => togglePlatform(p)}
+                  disabled={running}
+                  className={`py-2.5 px-3 rounded-xl border text-sm font-bold transition-all disabled:opacity-50 ${
                     active
                       ? 'bg-foreground text-background border-transparent'
                       : 'bg-secondary text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground'
                   }`}
                 >
-                  {p.icon}
-                  <span className="hidden sm:inline">{p.label}</span>
+                  {label}
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Run button */}
+        {/* Ações */}
         <div className="flex gap-2">
           <button
-            onClick={handleRun}
+            onClick={startAgent}
             disabled={running || !keyword.trim() || platforms.length === 0}
-            className="flex-1 flex items-center justify-center gap-2 py-3 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 disabled:opacity-50 transition-all"
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors"
           >
-            {running ? (
-              <><Loader2 size={16} className="animate-spin" /> Pesquisando...</>
-            ) : (
-              <><Play size={16} /> Iniciar Pesquisa</>
-            )}
+            {running
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Pesquisando...</>
+              : <><Play className="w-4 h-4" /> Iniciar Pesquisa</>
+            }
           </button>
+
           <button
-            className="p-3 bg-secondary border border-border rounded-xl text-muted-foreground hover:text-foreground transition-colors"
-            title="Ver histórico"
+            onClick={() => setShowScheduler(s => !s)}
+            className="px-3 py-2.5 rounded-xl bg-secondary border border-border text-muted-foreground hover:text-foreground transition-colors"
+            title="Agendar"
           >
-            <Calendar size={18} />
+            <Calendar className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Agendador */}
+        <AnimatePresence>
+          {showScheduler && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="border-t border-border pt-5 space-y-4">
+
+                {/* Frequência */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Frequência</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['daily', 'weekly'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setSchedMode(m)}
+                        className={`py-2.5 px-3 rounded-xl border text-sm font-bold transition-all ${
+                          schedMode === m
+                            ? 'bg-foreground text-background border-transparent'
+                            : 'bg-secondary text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground'
+                        }`}
+                      >
+                        {m === 'daily' ? 'Todo dia' : 'Dias específicos'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dias da semana */}
+                <AnimatePresence>
+                  {schedMode === 'weekly' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-muted-foreground">Dias da semana</label>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {WEEK_DAYS.map(({ value, label }) => {
+                            const active = schedWeekdays.includes(value);
+                            return (
+                              <button
+                                key={value}
+                                onClick={() => toggleWeekday(value)}
+                                className={`w-10 h-9 rounded-lg border text-xs font-bold transition-all ${
+                                  active
+                                    ? 'bg-foreground text-background border-transparent'
+                                    : 'bg-secondary text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Horário */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Horário (Brasília)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" min="0" max="23"
+                      value={schedHour}
+                      onChange={e => setSchedHour(String(e.target.value).padStart(2,'0'))}
+                      className="w-20 bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-foreground/10"
+                    />
+                    <span className="font-bold text-muted-foreground">:</span>
+                    <input
+                      type="number" min="0" max="59"
+                      value={schedMin}
+                      onChange={e => setSchedMin(String(e.target.value).padStart(2,'0'))}
+                      className="w-20 bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-foreground/10"
+                    />
+                    <button
+                      onClick={saveSchedule}
+                      className="ml-auto px-4 py-2.5 rounded-xl bg-foreground text-background text-sm font-bold hover:opacity-90 transition-opacity"
+                    >
+                      Salvar
+                    </button>
+                    {schedule.active && (
+                      <button
+                        onClick={removeSchedule}
+                        className="p-2.5 rounded-xl border border-border text-muted-foreground hover:text-red-500 hover:border-red-200 transition-colors"
+                        title="Remover agendamento"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Aviso */}
+                <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-100 rounded-xl">
+                  <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-orange-700">O PC (ou servidor) precisa estar ligado no horário agendado.</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Schedule card */}
-      <div className="bg-card border border-border rounded-2xl p-5 space-y-4" style={{ boxShadow: 'var(--shadow-card)' }}>
-        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Agendamento Automático</h3>
-
-        {/* Frequency */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground">Frequência</label>
-          <div className="grid grid-cols-2 gap-2">
-            {([['daily', 'Todo dia'], ['specific', 'Dias específicos']] as [Frequency, string][]).map(([val, label]) => (
-              <button
-                key={val}
-                onClick={() => setFrequency(val)}
-                className={`py-2.5 rounded-xl text-sm font-bold border transition-all ${
-                  frequency === val
-                    ? 'bg-foreground text-background border-transparent'
-                    : 'bg-secondary text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+      {/* Erro */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-red-700 text-sm font-semibold">Erro no agente</p>
+            <p className="text-red-600 text-xs mt-0.5">{error}</p>
           </div>
         </div>
+      )}
 
-        {/* Time */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground">Horário (Brasília)</label>
-          <div className="flex items-center gap-2">
-            <select
-              value={hour}
-              onChange={(e) => setHour(Number(e.target.value))}
-              className="w-20 bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-foreground/10"
-            >
-              {Array.from({ length: 24 }, (_, i) => (
-                <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+      {/* Checklist em tempo real */}
+      <AnimatePresence>
+        {steps.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-card border border-border rounded-2xl overflow-hidden"
+            style={{ boxShadow: 'var(--shadow-card)' }}
+          >
+            {/* Header com progresso */}
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-orange-500" />
+                <span className="text-sm font-bold">Progresso do Roteiro</span>
+              </div>
+              <span className="text-orange-500 text-sm font-mono font-bold">{progress}%</span>
+            </div>
+
+            {/* Barra de progresso */}
+            <div className="h-1 bg-secondary">
+              <motion.div
+                className="h-full bg-orange-500"
+                animate={{ width: `${progress}%` }}
+                transition={{ type: 'spring', stiffness: 80 }}
+              />
+            </div>
+
+            {/* Steps */}
+            <div className="p-4 space-y-1.5">
+              {steps.map((step, idx) => (
+                <motion.div
+                  key={step.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className={`flex items-start gap-3 p-2.5 rounded-xl transition-colors ${
+                    step.status === 'running' ? 'bg-orange-50 border border-orange-100' :
+                    step.status === 'error'   ? 'bg-red-50 border border-red-100' : ''
+                  }`}
+                >
+                  <div className="mt-0.5 shrink-0">{STEP_ICON[step.status]}</div>
+                  <div className="min-w-0">
+                    <p className={`text-sm ${
+                      step.status === 'running' ? 'text-orange-600 font-semibold' :
+                      step.status === 'done'    ? 'text-muted-foreground' :
+                      step.status === 'error'   ? 'text-red-600' :
+                      'text-muted-foreground'
+                    }`}>
+                      {step.label}
+                    </p>
+                    {step.detail && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{step.detail}</p>
+                    )}
+                  </div>
+                </motion.div>
               ))}
-            </select>
-            <span className="font-bold text-muted-foreground">:</span>
-            <select
-              value={minute}
-              onChange={(e) => setMinute(Number(e.target.value))}
-              className="w-20 bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-foreground/10"
-            >
-              {[0, 15, 30, 45].map((m) => (
-                <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
-              ))}
-            </select>
+              <div ref={stepsEndRef} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-            <button
-              onClick={handleSave}
-              className={`ml-auto flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                saved
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-foreground text-background hover:opacity-90'
-              }`}
-            >
-              {saved ? <><Check size={15} /> Salvo</> : 'Salvar'}
-            </button>
-          </div>
-        </div>
+      {/* Resultados */}
+      <AnimatePresence>
+        {results && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
 
-        {/* Warning */}
-        <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-100 rounded-xl">
-          <AlertTriangle size={14} className="text-orange-500 shrink-0 mt-0.5" />
-          <p className="text-xs text-orange-700">O PC (ou servidor) precisa estar ligado no horário agendado.</p>
-        </div>
-      </div>
+            {/* Vídeos coletados */}
+            <div className="bg-card border border-border rounded-2xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <span className="text-sm font-bold">
+                    {results.videos.length} vídeos coletados — "{results.keyword}"
+                  </span>
+                </div>
+                <span className="text-muted-foreground text-xs">
+                  {new Date(results.collectedAt).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+                </span>
+              </div>
 
-      {/* How it works */}
-      <div className="p-5 bg-foreground text-background rounded-2xl space-y-3" style={{ boxShadow: 'var(--shadow-layered)' }}>
-        <div className="flex items-center gap-2">
-          <Zap size={16} className="text-orange-400" />
-          <span className="text-xs font-bold uppercase tracking-widest">Como funciona</span>
-        </div>
-        <div className="grid sm:grid-cols-3 gap-3 text-xs text-background/70">
-          <div className="space-y-1">
-            <p className="font-semibold text-background">① Pesquisa</p>
-            <p>Busca vídeos virais da palavra-chave nas plataformas selecionadas com filtros do Roteiro</p>
-          </div>
-          <div className="space-y-1">
-            <p className="font-semibold text-background">② Análise</p>
-            <p>Identifica formatos virais (lista, revelação, medo, antes/depois) e pontua alinhamento ao nicho</p>
-          </div>
-          <div className="space-y-1">
-            <p className="font-semibold text-background">③ Entrega</p>
-            <p>Salva os melhores na aba Pesquisa → IA Viral para você adaptar e gravar</p>
-          </div>
-        </div>
-      </div>
+              <div className="divide-y divide-border">
+                {results.videos.map((v, i) => {
+                  const { label } = PLATFORM_LABELS[v.platform] || PLATFORM_LABELS.tiktok;
+                  return (
+                    <div key={i} className="p-3 flex items-start gap-3 hover:bg-secondary/50 transition-colors">
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-secondary text-muted-foreground font-medium shrink-0 mt-0.5">
+                        {label}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{v.title || '(título não capturado)'}</p>
+                        <div className="flex gap-3 mt-0.5 text-xs text-muted-foreground">
+                          {v.views && <span>👁 {v.views}</span>}
+                          {v.likes && <span>❤️ {v.likes}</span>}
+                        </div>
+                      </div>
+                      {v.url && (
+                        <a
+                          href={v.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Botão: usar no Roteiro */}
+              {onUseInRoteiro && results.videos.length > 0 && (
+                <div className="p-4 border-t border-border">
+                  <button
+                    onClick={() => {
+                      const refsText = results.videos
+                        .map((v, i) => `${i + 1}. ${v.title || '(sem título)'} [${v.platform}] — ${v.url}`)
+                        .join('\n');
+                      onUseInRoteiro({ references: refsText });
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold transition-colors"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Usar esses vídeos no Roteiro (passo 1.5)
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Análise Claude */}
+            {results.analysis && (
+              <div className="bg-card border border-border rounded-2xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+                <button
+                  onClick={() => setShowAnalysis(s => !s)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-secondary/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-orange-500" />
+                    <span className="text-sm font-bold">Análise Claude — Formatos + Próximos Passos</span>
+                  </div>
+                  {showAnalysis
+                    ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                    : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  }
+                </button>
+
+                <AnimatePresence>
+                  {showAnalysis && (
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: 'auto' }}
+                      exit={{ height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 pb-4 border-t border-border">
+                        <MarkdownAnalysis text={results.analysis} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
