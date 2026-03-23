@@ -238,10 +238,19 @@ router.get('/instagram-search', async (req, res) => {
   try {
     // Passo 1: Search → pega top usuários do nicho
     const searchRes = await igPost('search_ig.php', { search_query: keyword });
-    const users = searchRes.data?.users || [];
-    const topUsers = users.slice(0, 4).map((item) => (item.user || item).username).filter(Boolean);
+    const rawSearch = searchRes.data;
+    console.log('[IG search] keys:', Object.keys(rawSearch || {}));
+    console.log('[IG search] users count:', rawSearch?.users?.length, '| hashtags count:', rawSearch?.hashtags?.length);
+    console.log('[IG search] sample:', JSON.stringify(rawSearch).slice(0, 400));
 
-    if (!topUsers.length) return res.json([]);
+    const users = rawSearch?.users || [];
+    const topUsers = users.slice(0, 4).map((item) => (item.user || item).username).filter(Boolean);
+    console.log('[IG search] topUsers:', topUsers);
+
+    if (!topUsers.length) {
+      console.log('[IG search] No users found — returning []');
+      return res.json([]);
+    }
 
     // Passo 2: User Reels de cada usuário em paralelo
     const reelsResults = await Promise.allSettled(
