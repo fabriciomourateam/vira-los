@@ -180,6 +180,42 @@ router.get('/instagram-hashtag', async (req, res) => {
   }
 });
 
+// ── Helper: Apify Instagram Scraper ──────────────────────────────────────────
+// Busca posts/reels por hashtag usando o ator apify/instagram-scraper
+async function apifyIGSearch(keyword, limit = 30) {
+  const apiKey = process.env.APIFY_API_KEY;
+  if (!apiKey) throw new Error('APIFY_API_KEY não configurada');
+
+  const tag = encodeURIComponent(keyword.trim().replace(/\s+/g, ''));
+  const url = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apiKey}&timeout=120`;
+
+  const response = await axios.post(url, {
+    directUrls: [`https://www.instagram.com/explore/tags/${tag}/`],
+    resultsType: 'posts',
+    resultsLimit: limit,
+    addParentData: false,
+  }, { timeout: 130000 });
+
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+function normalizeApifyIgPost(item) {
+  const code = item.shortCode || item.id || '';
+  return {
+    id: String(code),
+    title: String(item.caption || '').substring(0, 150),
+    author: String(item.ownerFullName || item.ownerUsername || ''),
+    author_handle: String(item.ownerUsername || ''),
+    views: Number(item.videoViewCount || item.videoPlayCount || 0),
+    likes: Number(item.likesCount || 0),
+    comments: Number(item.commentsCount || 0),
+    shares: 0,
+    cover: String(item.displayUrl || ''),
+    url: item.url || `https://www.instagram.com/reel/${code}/`,
+    platform: 'instagram',
+  };
+}
+
 // ── Helper: parse "2.9M followers" → número ──────────────────────────────────
 function parseSocialCtx(str) {
   if (!str) return 0;
@@ -217,16 +253,35 @@ function normalizeIgReel(v, username) {
   };
 }
 
-// ── Busca Reels por palavra-chave (instagram-scraper-stable-api) ─────────────
-// Estratégia: Search → top users → User Reels de cada um em paralelo
+// ── Busca Reels por palavra-chave — Apify (primário) + RapidAPI (fallback) ────
 
 router.get('/instagram-search', async (req, res) => {
   const { q = '' } = req.query;
   const keyword = q.trim();
   if (!keyword) return res.json([]);
 
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.removeHeader('ETag');
+
+  // ── Tentativa 1: Apify ────────────────────────────────────────────────────
+  if (process.env.APIFY_API_KEY) {
+    try {
+      const items = await apifyIGSearch(keyword, 40);
+      const reels = items
+        .filter(i => i.type === 'Video' || i.videoViewCount > 0)
+        .map(normalizeApifyIgPost)
+        .filter(v => v.id)
+        .sort((a, b) => (b.likes + b.views * 0.1) - (a.likes + a.views * 0.1));
+      console.log(`[IG search/Apify] "${keyword}" → ${reels.length} reels`);
+      return res.json(reels.slice(0, 40));
+    } catch (e) {
+      console.error('[IG search/Apify] Error:', e.message);
+    }
+  }
+
+  // ── Tentativa 2: RapidAPI (stable-api) ───────────────────────────────────
   const apiKey = process.env.RAPIDAPI_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
+  if (!apiKey) return res.json([]);
 
   const IG_HOST = 'instagram-scraper-stable-api.p.rapidapi.com';
   const igPost = (path, body) =>
@@ -235,99 +290,93 @@ router.get('/instagram-search', async (req, res) => {
       timeout: 15000,
     });
 
-  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.removeHeader('ETag');
-
   try {
-    // Passo 1: Search → pega top usuários do nicho
     const searchRes = await igPost('search_ig.php', { search_query: keyword });
-    const rawSearch = searchRes.data;
-    console.log('[IG search] status:', searchRes.status, '| users:', rawSearch?.users?.length, '| hashtags:', rawSearch?.hashtags?.length);
-    const users = rawSearch?.users || [];
+    const users = searchRes.data?.users || [];
     const topUsers = users.slice(0, 4).map((item) => (item.user || item).username).filter(Boolean);
-    console.log('[IG search] topUsers:', topUsers);
-
     if (!topUsers.length) return res.json([]);
 
-    // Passo 2: User Reels de cada usuário em paralelo
     const reelsResults = await Promise.allSettled(
       topUsers.map((username) => igPost('get_ig_user_reels.php', { username_or_url: username, amount: 20, pagination_token: '' }))
     );
 
     const allReels = [];
     const seenIds = new Set();
-
     reelsResults.forEach((result, idx) => {
-      const username = topUsers[idx];
       if (result.status !== 'fulfilled') return;
       const raw = result.value.data;
-      // Estrutura: { reels: [ { node: { media: {...} } } ], pagination_token }
       const list = (raw?.reels || raw?.data?.reels || []).map((item) => item?.node?.media || item?.node || item);
       list.forEach((v) => {
-        const normalized = normalizeIgReel(v, username);
+        const normalized = normalizeIgReel(v, topUsers[idx]);
         if (!normalized.id || seenIds.has(normalized.id)) return;
         seenIds.add(normalized.id);
         allReels.push(normalized);
       });
     });
 
-    // Ordena por likes + views
     allReels.sort((a, b) => (b.likes + b.views * 0.1) - (a.likes + a.views * 0.1));
-
-    res.set('Cache-Control', 'no-store');
-    res.json(allReels.slice(0, 40));
+    return res.json(allReels.slice(0, 40));
   } catch (e) {
-    console.error('[Instagram search] Error:', e.response?.data || e.message);
-    res.json([]);
+    console.error('[IG search/RapidAPI] Error:', e.response?.data || e.message);
+    return res.json([]);
   }
 });
 
-// ── Busca Criadores Instagram por palavra-chave (instagram-scraper-stable-api) ─
+// ── Busca Criadores Instagram — Apify (primário) + RapidAPI (fallback) ────────
 
 router.get('/instagram-creators', async (req, res) => {
   const { q = '' } = req.query;
   const keyword = q.trim();
   if (!keyword) return res.json([]);
 
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.removeHeader('ETag');
+
+  // ── Tentativa 1: Apify — agrega criadores únicos dos posts da hashtag ────
+  if (process.env.APIFY_API_KEY) {
+    try {
+      const items = await apifyIGSearch(keyword, 50);
+      const map = {};
+      items.forEach((item) => {
+        const u = item.ownerUsername;
+        if (!u) return;
+        if (!map[u]) map[u] = { username: u, nickname: item.ownerFullName || u, followers: 0, avatar: '', is_verified: false, postCount: 0, totalLikes: 0 };
+        map[u].postCount++;
+        map[u].totalLikes += item.likesCount || 0;
+      });
+      const creators = Object.values(map)
+        .sort((a, b) => b.totalLikes - a.totalLikes)
+        .slice(0, 20);
+      console.log(`[IG creators/Apify] "${keyword}" → ${creators.length} criadores`);
+      return res.json(creators);
+    } catch (e) {
+      console.error('[IG creators/Apify] Error:', e.message);
+    }
+  }
+
+  // ── Tentativa 2: RapidAPI ────────────────────────────────────────────────
   const apiKey = process.env.RAPIDAPI_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
+  if (!apiKey) return res.json([]);
 
   const IG_HOST = 'instagram-scraper-stable-api.p.rapidapi.com';
-
   try {
     const response = await axios.post(
       `https://${IG_HOST}/search_ig.php`,
       new URLSearchParams({ search_query: keyword }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': apiKey, 'x-rapidapi-host': IG_HOST }, timeout: 15000 }
     );
-
-    const raw = response.data;
-    console.log('[IG creators] status:', response.status, '| keys:', Object.keys(raw || {}), '| users:', raw?.users?.length);
-
-    const list = raw?.users || [];
+    const list = response.data?.users || [];
     const creators = list
       .map((item) => {
         const u = item.user || item;
-        return {
-          username: String(u.username || ''),
-          nickname: String(u.full_name || u.username || ''),
-          followers: parseSocialCtx(u.search_social_context) || Number(u.follower_count || 0),
-          avatar: String(u.profile_pic_url || ''),
-          is_verified: Boolean(u.is_verified || false),
-        };
+        return { username: String(u.username || ''), nickname: String(u.full_name || u.username || ''), followers: parseSocialCtx(u.search_social_context) || Number(u.follower_count || 0), avatar: String(u.profile_pic_url || ''), is_verified: Boolean(u.is_verified || false) };
       })
       .filter((u) => u.username)
       .sort((a, b) => b.followers - a.followers);
-
-    console.log('[IG creators] returning:', creators.length);
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.removeHeader('ETag');
-    res.json(creators);
+    return res.json(creators);
   } catch (e) {
-    console.error('[IG creators] Error:', e.response?.status, e.response?.data || e.message);
-    res.set('Cache-Control', 'no-cache, no-store');
-    res.removeHeader('ETag');
-    res.json([]);
+    console.error('[IG creators/RapidAPI] Error:', e.response?.status, e.message);
+    return res.json([]);
   }
 });
 
@@ -598,6 +647,16 @@ Responda APENAS com JSON: { "pt": [...], "en": [...], "es": [...] }`,
       ...keywords.es.map((kw) => ({ kw, region: 'mx', lang: 'es' })),
     ];
 
+    // ── Instagram via Apify (primário) ou RapidAPI (fallback) ────────────────
+    const apifyKey = process.env.APIFY_API_KEY;
+    const igSearchFn = apifyKey
+      ? (kw) => apifyIGSearch(kw, 30)
+      : (kw) => axios.post(
+          'https://instagram-scraper-stable-api.p.rapidapi.com/search_ig.php',
+          new URLSearchParams({ search_query: kw }),
+          { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'instagram-scraper-stable-api.p.rapidapi.com' }, timeout: 15000 }
+        ).then(r => r.data?.users || []);
+
     const [ttResults, igResults] = await Promise.all([
       Promise.allSettled(
         ttSearchPlan.map(({ kw, region }) =>
@@ -608,22 +667,7 @@ Responda APENAS com JSON: { "pt": [...], "en": [...], "es": [...] }`,
           })
         )
       ),
-      Promise.allSettled(
-        keywords.pt.slice(0, 3).map((kw) =>
-          axios.post(
-            'https://instagram-scraper-stable-api.p.rapidapi.com/search_ig.php',
-            new URLSearchParams({ search_query: kw }),
-            {
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'x-rapidapi-key': rapidApiKey,
-                'x-rapidapi-host': 'instagram-scraper-stable-api.p.rapidapi.com',
-              },
-              timeout: 15000,
-            }
-          )
-        )
-      ),
+      Promise.allSettled(keywords.pt.slice(0, 2).map(igSearchFn)),
     ]);
 
     // ── Status das plataformas ────────────────────────────────────────────────
@@ -668,26 +712,33 @@ Responda APENAS com JSON: { "pt": [...], "en": [...], "es": [...] }`,
       });
     });
 
-    // ── Consolidar criadores Instagram ────────────────────────────────────────
+    // ── Consolidar criadores Instagram (Apify ou RapidAPI) ───────────────────
     const igCreators = [];
+    const igCreatorsSeen = new Set();
     igResults.forEach((result, idx) => {
       if (result.status !== 'fulfilled') return;
       const kw = keywords.pt[idx];
-      const raw = result.value.data;
-      // novo formato: { users: [{ user: { username, full_name, search_social_context, ... } }] }
-      const rawList = raw?.users || raw?.data?.users || raw?.data || (Array.isArray(raw) ? raw : []);
-      rawList.slice(0, 4).forEach((item) => {
-        const u = item.user || item;
-        if (!u.username) return;
-        igCreators.push({
-          username: String(u.username || ''),
-          nickname: String(u.full_name || u.name || u.username || ''),
-          followers: parseSocialCtx(u.search_social_context) || Number(u.follower_count || u.edge_followed_by?.count || 0),
-          avatar: String(u.profile_pic_url || ''),
-          is_verified: Boolean(u.is_verified || false),
-          keyword: kw,
+      const raw = result.value;
+      const isApify = process.env.APIFY_API_KEY;
+
+      if (isApify) {
+        // raw = array de posts Apify
+        const posts = Array.isArray(raw) ? raw : [];
+        posts.slice(0, 8).forEach((item) => {
+          const u = item.ownerUsername;
+          if (!u || igCreatorsSeen.has(u)) return;
+          igCreatorsSeen.add(u);
+          igCreators.push({ username: u, nickname: item.ownerFullName || u, followers: 0, avatar: '', is_verified: false, keyword: kw });
         });
-      });
+      } else {
+        const rawList = raw?.users || raw?.data?.users || (Array.isArray(raw) ? raw : []);
+        rawList.slice(0, 4).forEach((item) => {
+          const u = item.user || item;
+          if (!u.username || igCreatorsSeen.has(u.username)) return;
+          igCreatorsSeen.add(u.username);
+          igCreators.push({ username: String(u.username), nickname: String(u.full_name || u.username), followers: parseSocialCtx(u.search_social_context) || Number(u.follower_count || 0), avatar: String(u.profile_pic_url || ''), is_verified: Boolean(u.is_verified), keyword: kw });
+        });
+      }
     });
 
     const platformStatus = {
