@@ -17,6 +17,7 @@ import {
   ShoppingBag,
   Calendar,
   BookOpen,
+  Bot,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -25,7 +26,6 @@ import ProdutosEscalaveis from './ProdutosEscalaveis';
 import Agendador from './Agendador';
 import PesquisaConteudo from './PesquisaConteudo';
 import AgenteAutonomo from './AgenteAutonomo';
-import { Bot } from 'lucide-react';
 
 type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa' | 'agente';
 
