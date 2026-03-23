@@ -245,7 +245,7 @@ router.get('/instagram-search', async (req, res) => {
 
     // Passo 2: User Reels de cada usuário em paralelo
     const reelsResults = await Promise.allSettled(
-      topUsers.map((username) => igPost('get_user_reels.php', { username }))
+      topUsers.map((username) => igPost('get_ig_user_reels.php', { username_or_url: username, amount: 20, pagination_token: '' }))
     );
 
     const allReels = [];
