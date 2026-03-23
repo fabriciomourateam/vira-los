@@ -190,7 +190,35 @@ function parseSocialCtx(str) {
   return Math.round(n * mult);
 }
 
+// ── Helper: normaliza reel da stable-api para o formato interno ──────────────
+function normalizeIgReel(v, username) {
+  const code = v.code || v.shortcode || v.id || v.pk || '';
+  const user = v.user || v.owner || {};
+  const handle = user.username || username || '';
+  const caption = v.caption?.text || v.caption || v.edge_media_to_caption?.edges?.[0]?.node?.text || '';
+  const cover =
+    v.thumbnail_url ||
+    v.image_versions2?.candidates?.[0]?.url ||
+    v.display_url ||
+    v.thumbnail_src ||
+    '';
+  return {
+    id: String(code),
+    title: String(caption).substring(0, 150),
+    author: String(user.full_name || handle),
+    author_handle: String(handle),
+    views: Number(v.play_count || v.view_count || v.video_view_count || 0),
+    likes: Number(v.like_count || v.edge_media_preview_like?.count || 0),
+    comments: Number(v.comment_count || v.edge_media_to_comment?.count || 0),
+    shares: 0,
+    cover,
+    url: `https://www.instagram.com/reel/${code}/`,
+    platform: 'instagram',
+  };
+}
+
 // ── Busca Reels por palavra-chave (instagram-scraper-stable-api) ─────────────
+// Estratégia: Search → top users → User Reels de cada um em paralelo
 
 router.get('/instagram-search', async (req, res) => {
   const { q = '' } = req.query;
@@ -201,52 +229,54 @@ router.get('/instagram-search', async (req, res) => {
   if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
 
   const IG_HOST = 'instagram-scraper-stable-api.p.rapidapi.com';
-
-  try {
-    // Passo 1: busca hashtags relacionadas à keyword
-    const searchRes = await axios.post(
-      `https://${IG_HOST}/search_ig.php`,
-      new URLSearchParams({ search_query: keyword }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': apiKey, 'x-rapidapi-host': IG_HOST }, timeout: 15000 }
-    );
-
-    const hashtags = searchRes.data?.hashtags || [];
-    if (!hashtags.length) return res.json([]);
-
-    // Passo 2: busca mídia da hashtag com mais posts
-    const topTag = hashtags[0]?.hashtag?.name || hashtags[0]?.name;
-    if (!topTag) return res.json([]);
-
-    const mediaRes = await axios.get(`https://${IG_HOST}/get_hashtag_media.php`, {
-      params: { hashtag: topTag },
-      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': IG_HOST },
+  const igPost = (path, body) =>
+    axios.post(`https://${IG_HOST}/${path}`, new URLSearchParams(body), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': apiKey, 'x-rapidapi-host': IG_HOST },
       timeout: 15000,
     });
 
-    const raw = mediaRes.data;
-    const list = raw?.data?.edges?.map((e) => e.node) || raw?.edges?.map((e) => e.node) || (Array.isArray(raw?.data) ? raw.data : []);
+  try {
+    // Passo 1: Search → pega top usuários do nicho
+    const searchRes = await igPost('search_ig.php', { search_query: keyword });
+    const users = searchRes.data?.users || [];
+    const topUsers = users.slice(0, 4).map((item) => (item.user || item).username).filter(Boolean);
 
-    const videos = list
-      .map((v) => ({
-        id: String(v.shortcode || v.id || v.pk || ''),
-        title: v.edge_media_to_caption?.edges?.[0]?.node?.text?.substring(0, 150) || v.caption || '',
-        author: String(v.owner?.username || ''),
-        author_handle: String(v.owner?.username || ''),
-        views: Number(v.video_view_count || v.play_count || 0),
-        likes: Number(v.edge_media_preview_like?.count || v.like_count || 0),
-        comments: Number(v.edge_media_to_comment?.count || v.comment_count || 0),
-        shares: 0,
-        cover: String(v.display_url || v.thumbnail_src || ''),
-        url: `https://www.instagram.com/reel/${v.shortcode || v.id}/`,
-        platform: 'instagram',
-      }))
-      .filter((v) => v.id && v.author_handle);
+    if (!topUsers.length) return res.json([]);
+
+    // Passo 2: User Reels de cada usuário em paralelo
+    const reelsResults = await Promise.allSettled(
+      topUsers.map((username) => igPost('get_user_reels.php', { username }))
+    );
+
+    const allReels = [];
+    const seenIds = new Set();
+
+    reelsResults.forEach((result, idx) => {
+      if (result.status !== 'fulfilled') return;
+      const raw = result.value.data;
+      const list =
+        raw?.data?.items ||
+        raw?.items ||
+        raw?.reels ||
+        raw?.data ||
+        (Array.isArray(raw) ? raw : []);
+      const username = topUsers[idx];
+      list.forEach((v) => {
+        const normalized = normalizeIgReel(v, username);
+        if (!normalized.id || seenIds.has(normalized.id)) return;
+        seenIds.add(normalized.id);
+        allReels.push(normalized);
+      });
+    });
+
+    // Ordena por likes + views
+    allReels.sort((a, b) => (b.likes + b.views * 0.1) - (a.likes + a.views * 0.1));
 
     res.set('Cache-Control', 'no-store');
-    res.json(videos);
+    res.json(allReels.slice(0, 40));
   } catch (e) {
     console.error('[Instagram search] Error:', e.response?.data || e.message);
-    res.json([]); // retorna vazio em vez de 500
+    res.json([]);
   }
 });
 
