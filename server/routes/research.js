@@ -235,12 +235,17 @@ router.get('/instagram-search', async (req, res) => {
       timeout: 15000,
     });
 
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.removeHeader('ETag');
+
   try {
     // Passo 1: Search → pega top usuários do nicho
     const searchRes = await igPost('search_ig.php', { search_query: keyword });
     const rawSearch = searchRes.data;
+    console.log('[IG search] status:', searchRes.status, '| users:', rawSearch?.users?.length, '| hashtags:', rawSearch?.hashtags?.length);
     const users = rawSearch?.users || [];
     const topUsers = users.slice(0, 4).map((item) => (item.user || item).username).filter(Boolean);
+    console.log('[IG search] topUsers:', topUsers);
 
     if (!topUsers.length) return res.json([]);
 
@@ -296,7 +301,10 @@ router.get('/instagram-creators', async (req, res) => {
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': apiKey, 'x-rapidapi-host': IG_HOST }, timeout: 15000 }
     );
 
-    const list = response.data?.users || [];
+    const raw = response.data;
+    console.log('[IG creators] status:', response.status, '| keys:', Object.keys(raw || {}), '| users:', raw?.users?.length);
+
+    const list = raw?.users || [];
     const creators = list
       .map((item) => {
         const u = item.user || item;
@@ -311,11 +319,15 @@ router.get('/instagram-creators', async (req, res) => {
       .filter((u) => u.username)
       .sort((a, b) => b.followers - a.followers);
 
-    res.set('Cache-Control', 'no-store');
+    console.log('[IG creators] returning:', creators.length);
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.removeHeader('ETag');
     res.json(creators);
   } catch (e) {
-    console.error('[Instagram creators] Error:', e.response?.data || e.message);
-    res.json([]); // retorna vazio em vez de 500
+    console.error('[IG creators] Error:', e.response?.status, e.response?.data || e.message);
+    res.set('Cache-Control', 'no-cache, no-store');
+    res.removeHeader('ETag');
+    res.json([]);
   }
 });
 
