@@ -243,6 +243,11 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
         setRunning(false);
         es.close();
         eventSourceRef.current = null;
+      } else if (event.type === 'stopped') {
+        setError(null);
+        setRunning(false);
+        es.close();
+        eventSourceRef.current = null;
       } else if (event.type === 'state') {
         const s = event.state;
         if (s.steps?.length) setSteps(s.steps);
@@ -262,6 +267,7 @@ export default function AgenteAutonomo({ onUseInRoteiro }: AgenteProps) {
     setError(null);
     setResults(null);
     setSteps([]);
+    setRunning(true);
     connectSSE();
 
     try {
