@@ -161,7 +161,17 @@ router.get('/instagram-hashtag', async (req, res) => {
   }
 });
 
-// ── Busca Reels por palavra-chave (instagram-scraper-20251) ─────────────────
+// ── Helper: parse "2.9M followers" → número ──────────────────────────────────
+function parseSocialCtx(str) {
+  if (!str) return 0;
+  const m = String(str).match(/([\d.]+)\s*([KMB]?)/i);
+  if (!m) return 0;
+  const n = parseFloat(m[1]);
+  const mult = { k: 1e3, m: 1e6, b: 1e9 }[m[2].toLowerCase()] || 1;
+  return Math.round(n * mult);
+}
+
+// ── Busca Reels por palavra-chave (instagram-scraper-stable-api) ─────────────
 
 router.get('/instagram-search', async (req, res) => {
   const { q = '' } = req.query;
@@ -171,46 +181,57 @@ router.get('/instagram-search', async (req, res) => {
   const apiKey = process.env.RAPIDAPI_KEY;
   if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
 
+  const IG_HOST = 'instagram-scraper-stable-api.p.rapidapi.com';
+
   try {
-    const response = await axios.get('https://instagram-scraper-20251.p.rapidapi.com/searchreels/', {
-      params: { keyword },
-      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com' },
+    // Passo 1: busca hashtags relacionadas à keyword
+    const searchRes = await axios.post(
+      `https://${IG_HOST}/search_ig.php`,
+      new URLSearchParams({ search_query: keyword }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': apiKey, 'x-rapidapi-host': IG_HOST }, timeout: 15000 }
+    );
+
+    const hashtags = searchRes.data?.hashtags || [];
+    if (!hashtags.length) return res.json([]);
+
+    // Passo 2: busca mídia da hashtag com mais posts
+    const topTag = hashtags[0]?.hashtag?.name || hashtags[0]?.name;
+    if (!topTag) return res.json([]);
+
+    const mediaRes = await axios.get(`https://${IG_HOST}/get_hashtag_media.php`, {
+      params: { hashtag: topTag },
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': IG_HOST },
       timeout: 15000,
     });
 
-    const raw = response.data;
-    const list = raw?.data?.reels_list || raw?.reels_list || raw?.data || (Array.isArray(raw) ? raw : []);
-    const videos = list.map((v) => {
-      const user = v.user || v.owner || {};
-      const cover =
-        v.image_versions2?.candidates?.[0]?.url ||
-        v.thumbnail_url ||
-        v.display_url ||
-        '';
-      return {
-        id: String(v.pk || v.id || v.code || Math.random()),
-        title: v.caption?.text ? String(v.caption.text).substring(0, 150) : '',
-        author: String(user.full_name || user.username || ''),
-        author_handle: String(user.username || ''),
-        views: Number(v.view_count || v.play_count || 0),
-        likes: Number(v.like_count || 0),
-        comments: Number(v.comment_count || 0),
-        shares: Number(v.reshare_count || 0),
-        cover,
-        url: `https://www.instagram.com/reel/${v.code || v.shortcode || v.pk}/`,
+    const raw = mediaRes.data;
+    const list = raw?.data?.edges?.map((e) => e.node) || raw?.edges?.map((e) => e.node) || (Array.isArray(raw?.data) ? raw.data : []);
+
+    const videos = list
+      .map((v) => ({
+        id: String(v.shortcode || v.id || v.pk || ''),
+        title: v.edge_media_to_caption?.edges?.[0]?.node?.text?.substring(0, 150) || v.caption || '',
+        author: String(v.owner?.username || ''),
+        author_handle: String(v.owner?.username || ''),
+        views: Number(v.video_view_count || v.play_count || 0),
+        likes: Number(v.edge_media_preview_like?.count || v.like_count || 0),
+        comments: Number(v.edge_media_to_comment?.count || v.comment_count || 0),
+        shares: 0,
+        cover: String(v.display_url || v.thumbnail_src || ''),
+        url: `https://www.instagram.com/reel/${v.shortcode || v.id}/`,
         platform: 'instagram',
-      };
-    }).filter((v) => v.id);
+      }))
+      .filter((v) => v.id && v.author_handle);
 
     res.set('Cache-Control', 'no-store');
     res.json(videos);
   } catch (e) {
     console.error('[Instagram search] Error:', e.response?.data || e.message);
-    res.status(500).json({ error: e.response?.data?.message || e.message });
+    res.json([]); // retorna vazio em vez de 500
   }
 });
 
-// ── Busca Criadores Instagram por palavra-chave (instagram-scraper-20251) ────
+// ── Busca Criadores Instagram por palavra-chave (instagram-scraper-stable-api) ─
 
 router.get('/instagram-creators', async (req, res) => {
   const { q = '' } = req.query;
@@ -220,23 +241,27 @@ router.get('/instagram-creators', async (req, res) => {
   const apiKey = process.env.RAPIDAPI_KEY;
   if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
 
-  try {
-    const response = await axios.get('https://instagram-scraper-20251.p.rapidapi.com/searchusers/', {
-      params: { keyword },
-      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com' },
-      timeout: 15000,
-    });
+  const IG_HOST = 'instagram-scraper-stable-api.p.rapidapi.com';
 
-    const raw = response.data;
-    const list = raw?.data?.users || raw?.users || raw?.data || (Array.isArray(raw) ? raw : []);
+  try {
+    const response = await axios.post(
+      `https://${IG_HOST}/search_ig.php`,
+      new URLSearchParams({ search_query: keyword }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-rapidapi-key': apiKey, 'x-rapidapi-host': IG_HOST }, timeout: 15000 }
+    );
+
+    const list = response.data?.users || [];
     const creators = list
-      .map((u) => ({
-        username: String(u.username || ''),
-        nickname: String(u.full_name || u.name || u.username || ''),
-        followers: Number(u.follower_count || u.edge_followed_by?.count || u.followers || 0),
-        avatar: String(u.profile_pic_url || u.profile_pic_url_hd || ''),
-        is_verified: Boolean(u.is_verified || false),
-      }))
+      .map((item) => {
+        const u = item.user || item;
+        return {
+          username: String(u.username || ''),
+          nickname: String(u.full_name || u.username || ''),
+          followers: parseSocialCtx(u.search_social_context) || Number(u.follower_count || 0),
+          avatar: String(u.profile_pic_url || ''),
+          is_verified: Boolean(u.is_verified || false),
+        };
+      })
       .filter((u) => u.username)
       .sort((a, b) => b.followers - a.followers);
 
@@ -244,7 +269,7 @@ router.get('/instagram-creators', async (req, res) => {
     res.json(creators);
   } catch (e) {
     console.error('[Instagram creators] Error:', e.response?.data || e.message);
-    res.status(500).json({ error: e.response?.data?.message || e.message });
+    res.json([]); // retorna vazio em vez de 500
   }
 });
 
@@ -527,11 +552,18 @@ Responda APENAS com JSON: { "pt": [...], "en": [...], "es": [...] }`,
       ),
       Promise.allSettled(
         keywords.pt.slice(0, 3).map((kw) =>
-          axios.get('https://instagram-scraper-20251.p.rapidapi.com/searchusers/', {
-            params: { q: kw },
-            headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com' },
-            timeout: 15000,
-          })
+          axios.post(
+            'https://instagram-scraper-stable-api.p.rapidapi.com/search_ig.php',
+            new URLSearchParams({ search_query: kw }),
+            {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'x-rapidapi-key': rapidApiKey,
+                'x-rapidapi-host': 'instagram-scraper-stable-api.p.rapidapi.com',
+              },
+              timeout: 15000,
+            }
+          )
         )
       ),
     ]);
@@ -584,13 +616,15 @@ Responda APENAS com JSON: { "pt": [...], "en": [...], "es": [...] }`,
       if (result.status !== 'fulfilled') return;
       const kw = keywords.pt[idx];
       const raw = result.value.data;
-      const list = raw?.users || raw?.data?.users || raw?.data || (Array.isArray(raw) ? raw : []);
-      list.slice(0, 4).forEach((u) => {
+      // novo formato: { users: [{ user: { username, full_name, search_social_context, ... } }] }
+      const rawList = raw?.users || raw?.data?.users || raw?.data || (Array.isArray(raw) ? raw : []);
+      rawList.slice(0, 4).forEach((item) => {
+        const u = item.user || item;
         if (!u.username) return;
         igCreators.push({
           username: String(u.username || ''),
           nickname: String(u.full_name || u.name || u.username || ''),
-          followers: Number(u.follower_count || u.edge_followed_by?.count || 0),
+          followers: parseSocialCtx(u.search_social_context) || Number(u.follower_count || u.edge_followed_by?.count || 0),
           avatar: String(u.profile_pic_url || ''),
           is_verified: Boolean(u.is_verified || false),
           keyword: kw,
