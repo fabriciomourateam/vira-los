@@ -252,16 +252,21 @@ router.get('/instagram-search', async (req, res) => {
     const seenIds = new Set();
 
     reelsResults.forEach((result, idx) => {
-      if (result.status !== 'fulfilled') return;
+      const username = topUsers[idx];
+      if (result.status !== 'fulfilled') {
+        console.error(`[IG reels] ${username} FAILED:`, result.reason?.response?.data || result.reason?.message);
+        return;
+      }
       const raw = result.value.data;
+      console.log(`[IG reels] ${username} keys:`, Object.keys(raw || {}), '| sample:', JSON.stringify(raw).slice(0, 300));
       const list =
         raw?.data?.items ||
         raw?.items ||
         raw?.reels ||
         raw?.data ||
         (Array.isArray(raw) ? raw : []);
-      const username = topUsers[idx];
-      list.forEach((v) => {
+      console.log(`[IG reels] ${username} list.length:`, Array.isArray(list) ? list.length : typeof list);
+      (Array.isArray(list) ? list : []).forEach((v) => {
         const normalized = normalizeIgReel(v, username);
         if (!normalized.id || seenIds.has(normalized.id)) return;
         seenIds.add(normalized.id);
