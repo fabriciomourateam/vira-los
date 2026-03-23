@@ -284,13 +284,9 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
     setAiPlatformStatus(null);
     setAiPlatformErrors([]);
     try {
-      const res = await fetch('/api/research/ai-discover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ niche: aiNiche.trim() || 'testosterona hormônios shape perda de gordura' }),
+      const data = await api.post<any>('/api/research/ai-discover', {
+        niche: aiNiche.trim() || 'testosterona hormônios shape perda de gordura',
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro na descoberta');
       setAiResults(data.videos || []);
       setAiCreators(data.creators || []);
       setAiKeywords(data.keywords || { pt: [], en: [], es: [] });
