@@ -1,24 +1,13 @@
 /**
  * agentService.js
- * Agente autônomo que segue o Passo 1 do roteiro Vira-Los:
- * abre um navegador real, pesquisa no TikTok / Instagram / YouTube Shorts,
- * coleta os vídeos mais virais e gera análise com Claude.
+ * Agente autônomo — usa Apify para coletar vídeos virais do TikTok, Instagram e YouTube
+ * sem necessidade de browser. 100% cloud.
  */
 
-const { chromium } = require('playwright');
 const Anthropic = require('@anthropic-ai/sdk');
+const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
-
-// Caminhos possíveis do Chromium (container Docker → cache local → auto-detect)
-const CHROMIUM_PATHS = [
-  '/root/.cache/ms-playwright/chromium-1161/chrome-linux/chrome',  // imagem playwright:jammy
-  '/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome',  // versão anterior
-  '/ms-playwright/chromium-1161/chrome-linux/chrome',              // path alternativo do container
-  path.join(process.env.HOME || '/root', '.cache/ms-playwright/chromium-1161/chrome-linux/chrome'),
-  path.join(process.env.HOME || '/root', '.cache/ms-playwright/chromium-1194/chrome-linux/chrome'),
-];
-const CHROMIUM_PATH = CHROMIUM_PATHS.find(p => fs.existsSync(p)) || null;
 
 const CREDENTIALS_FILE = path.join(__dirname, '../db/agent-credentials.json');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -124,65 +113,82 @@ function saveCredentials(data) {
   fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(data, null, 2));
 }
 
-// ─── TikTok via API (RapidAPI tiktok-scraper7) ───────────────────────────────
+// ─── Helper Apify: roda ator e retorna dataset ────────────────────────────────
+async function runApifyActor(actorId, input, timeoutSecs = 120) {
+  const apiKey = process.env.APIFY_API_KEY;
+  if (!apiKey) throw new Error('APIFY_API_KEY não configurada');
+  const id = actorId.replace('/', '~');
+  const url = `https://api.apify.com/v2/acts/${id}/run-sync-get-dataset-items?token=${apiKey}&timeout=${timeoutSecs}`;
+  const response = await axios.post(url, input, { timeout: (timeoutSecs + 15) * 1000 });
+  return Array.isArray(response.data) ? response.data : [];
+}
 
+// ─── TikTok via Apify (clockworks/tiktok-scraper) ────────────────────────────
 async function fetchTikTok(keyword) {
-  const rapidApiKey = process.env.RAPIDAPI_KEY;
-  stepUpdate('tt_search', 'running', `Buscando "${keyword}" via API`);
+  stepUpdate('tt_search', 'running', `Buscando "${keyword}" via Apify`);
 
-  if (!rapidApiKey) {
-    stepUpdate('tt_search', 'error', 'RAPIDAPI_KEY não configurada');
+  if (!process.env.APIFY_API_KEY && !process.env.RAPIDAPI_KEY) {
+    stepUpdate('tt_search', 'error', 'Nenhuma API configurada');
     stepUpdate('tt_filter', 'done', 'Pulado');
     stepUpdate('tt_collect', 'done', '0 vídeos coletados');
     return [];
   }
 
   const results = [];
-  try {
-    // Busca em PT-BR e EN para mais resultados
-    const searches = await Promise.allSettled([
-      axios.get('https://tiktok-scraper7.p.rapidapi.com/feed/search', {
-        params: { keywords: keyword, region: 'br', count: 20, cursor: 0, publish_time: '30', sort_type: '1' },
-        headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' },
-        timeout: 20000,
-      }),
-      axios.get('https://tiktok-scraper7.p.rapidapi.com/feed/search', {
-        params: { keywords: keyword, region: 'us', count: 10, cursor: 0, publish_time: '30', sort_type: '1' },
-        headers: { 'x-rapidapi-key': rapidApiKey, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' },
-        timeout: 20000,
-      }),
-    ]);
 
-    const seen = new Set();
-    searches.forEach(r => {
-      if (r.status !== 'fulfilled') return;
-      const videos = r.value.data?.data?.videos || [];
-      videos.forEach(v => {
+  // Tentativa 1: Apify (clockworks/tiktok-scraper)
+  if (process.env.APIFY_API_KEY) {
+    try {
+      const items = await runApifyActor('clockworks/tiktok-scraper', {
+        searchQueries: [keyword],
+        searchSection: '/video',
+        resultsPerPage: 25,
+      }, 90);
+
+      items.forEach(v => {
+        const handle = v.authorMeta?.name || v.author?.uniqueId || '';
+        const id = v.id || v.webVideoUrl?.split('/video/')?.[1] || '';
+        results.push({
+          platform: 'tiktok',
+          title: String(v.text || v.desc || '').substring(0, 150),
+          likes: String(v.diggCount || v.stats?.diggCount || 0),
+          views: String(v.playCount || v.stats?.playCount || 0),
+          url: v.webVideoUrl || `https://www.tiktok.com/@${handle}/video/${id}`,
+        });
+      });
+
+      stepUpdate('tt_search', 'done', `Apify: ${results.length} vídeos`);
+      stepUpdate('tt_filter', 'done', 'Ordenado por relevância');
+      stepUpdate('tt_collect', 'done', `${results.length} vídeos coletados`);
+      return results;
+    } catch (e) {
+      console.error('[Agent TikTok/Apify]', e.message);
+    }
+  }
+
+  // Fallback: RapidAPI tiktok-scraper7
+  if (process.env.RAPIDAPI_KEY) {
+    try {
+      const r = await axios.get('https://tiktok-scraper7.p.rapidapi.com/feed/search', {
+        params: { keywords: keyword, region: 'br', count: 20, cursor: 0, publish_time: '30', sort_type: '1' },
+        headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' },
+        timeout: 20000,
+      });
+      (r.data?.data?.videos || []).forEach(v => {
         const authorObj = typeof v.author === 'object' ? v.author : null;
         const handle = authorObj?.unique_id || String(v.author || '');
         const id = String(v.video_id || v.aweme_id || '');
-        if (!id || seen.has(id)) return;
-        seen.add(id);
-        results.push({
-          platform: 'tiktok',
-          title: String(v.title || v.desc || ''),
-          likes: String(v.digg_count || 0),
-          views: String(v.play_count || 0),
-          url: `https://www.tiktok.com/@${handle}/video/${id}`,
-        });
+        if (!id) return;
+        results.push({ platform: 'tiktok', title: String(v.title || v.desc || ''), likes: String(v.digg_count || 0), views: String(v.play_count || 0), url: `https://www.tiktok.com/@${handle}/video/${id}` });
       });
-    });
-
-    stepUpdate('tt_search', 'done', `API respondeu`);
-    stepUpdate('tt_filter', 'done', 'Esse mês + mais curtidas (API)');
-    stepUpdate('tt_collect', 'done', `${results.length} vídeos coletados`);
-  } catch (e) {
-    console.error('[Agent TikTok] Erro:', e.message);
-    stepUpdate('tt_search', 'done', `Erro: ${e.message}`);
-    stepUpdate('tt_filter', 'done', 'Pulado');
-    stepUpdate('tt_collect', 'done', '0 vídeos coletados');
+    } catch (e) {
+      console.error('[Agent TikTok/RapidAPI]', e.message);
+    }
   }
 
+  stepUpdate('tt_search', 'done', `${results.length} vídeos`);
+  stepUpdate('tt_filter', 'done', 'Filtros aplicados');
+  stepUpdate('tt_collect', 'done', `${results.length} vídeos coletados`);
   return results;
 }
 
@@ -265,49 +271,43 @@ async function fetchInstagram(keyword) {
   return results;
 }
 
-// ─── YouTube Shorts ───────────────────────────────────────────────────────────
+// ─── YouTube Shorts via Apify (aimscrape/youtube-search-video-scraper) FREE ──
+async function fetchYouTube(keyword) {
+  stepUpdate('yt_search', 'running', `Buscando Shorts "${keyword}" via Apify`);
 
-async function scrapeYouTubeShorts(page, keyword) {
   const results = [];
 
-  stepUpdate('yt_search', 'running', `Buscando Shorts "${keyword}"`);
+  if (process.env.APIFY_API_KEY) {
+    try {
+      const items = await runApifyActor('aimscrape/youtube-search-video-scraper', {
+        searchQueries: [keyword],
+        type: 'Short',
+        sortBy: 'Popularity',
+        uploadDate: 'ThisMonth',
+        country: 'BR',
+        maxPage: 1,
+      }, 90);
 
-  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(keyword + ' shorts')}&sp=EgIYAQ%253D%253D`;
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await humanDelay(2000, 3500);
-
-  stepUpdate('yt_search', 'done', `Buscou "${keyword}"`);
-  stepUpdate('yt_collect', 'running', 'Coletando Shorts...');
-
-  try {
-    // Extrai títulos + URLs dos Shorts
-    const shorts = await page.$$eval('ytd-video-renderer, ytd-short-shelf-cell-renderer a, a#thumbnail[href*="/shorts/"]', els =>
-      els
-        .filter(el => el.href && el.href.includes('/shorts/'))
-        .slice(0, 10)
-        .map(el => ({
+      items.forEach(v => {
+        results.push({
           platform: 'youtube',
-          title: el.getAttribute('title') || el.innerText?.trim() || '',
-          likes: '',
-          views: '',
-          url: el.href,
-        }))
-    ).catch(() => []);
+          title: String(v.title || '').substring(0, 150),
+          likes: String(v.likes || 0),
+          views: String(v.viewCount || v.views || 0),
+          url: v.url || v.videoUrl || '',
+        });
+      });
 
-    // Fallback: qualquer link de shorts
-    if (shorts.length === 0) {
-      const allLinks = await page.$$eval('a[href*="/shorts/"]', els =>
-        [...new Set(els.map(el => el.href))]
-          .slice(0, 10)
-          .map(href => ({ platform: 'youtube', title: '', likes: '', views: '', url: href }))
-      ).catch(() => []);
-      results.push(...allLinks);
-    } else {
-      results.push(...shorts);
+      stepUpdate('yt_search', 'done', `Apify: ${results.length} Shorts`);
+      stepUpdate('yt_collect', 'done', `${results.length} Shorts coletados`);
+      return results;
+    } catch (e) {
+      console.error('[Agent YouTube/Apify]', e.message);
     }
-  } catch (_) {}
+  }
 
-  stepUpdate('yt_collect', 'done', `${results.length} Shorts coletados`);
+  stepUpdate('yt_search', 'done', 'APIFY_API_KEY não configurada');
+  stepUpdate('yt_collect', 'done', '0 Shorts coletados');
   return results;
 }
 
@@ -405,34 +405,10 @@ async function runAgent({ keyword, platforms = ['tiktok', 'instagram', 'youtube'
 
     if (stopRequested) throw new Error('STOP_REQUESTED');
 
-    // ── YouTube via Playwright (único que usa browser) ─────────────────────
+    // ── YouTube via Apify (sem browser) ───────────────────────────────────
     if (platforms.includes('youtube')) {
-      stepUpdate('yt_search', 'running', 'Abrindo Chrome para YouTube...');
-
-      const launchOptions = {
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process', '--no-zygote'],
-      };
-      if (CHROMIUM_PATH) launchOptions.executablePath = CHROMIUM_PATH;
-
-      browser = await chromium.launch(launchOptions);
-      const contextOptions = {
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        viewport: { width: 1280, height: 800 },
-        locale: 'pt-BR',
-      };
-      if (creds.storageState) contextOptions.storageState = creds.storageState;
-
-      const context = await browser.newContext(contextOptions);
-      const page = await context.newPage();
-      await page.route('**/*.{png,jpg,gif,webp,woff,woff2}', route => route.abort().catch(() => {}));
-
-      const ytVideos = await scrapeYouTubeShorts(page, keyword);
+      const ytVideos = await fetchYouTube(keyword);
       allVideos.push(...ytVideos);
-
-      const newStorage = await context.storageState();
-      saveCredentials({ ...creds, storageState: newStorage });
-      await context.close();
     }
 
     // ── Análise Claude ──
