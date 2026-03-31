@@ -21,6 +21,7 @@ import {
   BookOpen,
   Bot,
   X,
+  Layers,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -29,8 +30,9 @@ import ProdutosEscalaveis from './ProdutosEscalaveis';
 import Agendador from './Agendador';
 import PesquisaConteudo from './PesquisaConteudo';
 import AgenteAutonomo from './AgenteAutonomo';
+import CarrosselInstagram from './CarrosselInstagram';
 
-type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa' | 'agente';
+type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa' | 'agente' | 'carrossel';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'roteiro',   label: 'Roteiro',   icon: Zap },
@@ -39,6 +41,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'agendador', label: 'Agendar',   icon: Calendar },
   { id: 'pesquisa',  label: 'Pesquisa',  icon: BookOpen },
   { id: 'agente',    label: 'Agente',    icon: Bot },
+  { id: 'carrossel', label: 'Carrossel', icon: Layers },
 ];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
@@ -778,6 +781,7 @@ export default function ViralOS() {
         {activeTab === 'agendador' && <Agendador />}
         {activeTab === 'pesquisa'  && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
         {activeTab === 'agente'    && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
+        {activeTab === 'carrossel' && <CarrosselInstagram />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 text-balance">
