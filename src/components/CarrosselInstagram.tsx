@@ -30,6 +30,96 @@ interface CarouselResult {
   unsplashImagesUsed: number;
 }
 
+// ─── Cores do projeto (tokens do index.css) + neutros escuros para fundo ─────
+
+const PROJECT_SWATCHES = [
+  { hex: '#F97316', label: 'Laranja' },
+  { hex: '#34D399', label: 'Esmeralda' },
+  { hex: '#FDE047', label: 'Amarelo' },
+  { hex: '#3B82F6', label: 'Azul' },
+  { hex: '#7C3AED', label: 'Roxo' },
+  { hex: '#F87171', label: 'Rosa' },
+  { hex: '#B078FF', label: 'Lilás' },
+  { hex: '#5197b5', label: 'Ciano' },
+  { hex: '#292A25', label: 'Escuro' },
+  { hex: '#0f172a', label: 'Noite' },
+  { hex: '#1e293b', label: 'Ardósia' },
+  { hex: '#18181b', label: 'Zinc' },
+];
+
+// ─── Sub-componente: seletor de cor com presets e input hex ───────────────────
+
+function ColorPicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Valida e normaliza hex ao digitar manualmente
+  function handleHexInput(raw: string) {
+    const cleaned = raw.startsWith('#') ? raw : `#${raw}`;
+    onChange(cleaned);
+  }
+
+  function isValidHex(s: string) {
+    return /^#[0-9A-Fa-f]{6}$/.test(s);
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-background p-3 space-y-2.5">
+      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">{label}</span>
+
+      {/* Barra: preview + botão picker + input hex */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          title="Abrir seletor de cor"
+          className="w-9 h-9 rounded-lg border-2 border-border shadow-sm shrink-0 relative overflow-hidden"
+          style={{ backgroundColor: isValidHex(value) ? value : '#888' }}
+        >
+          <input
+            ref={inputRef}
+            type="color"
+            value={isValidHex(value) ? value : '#888888'}
+            onChange={e => onChange(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+            tabIndex={-1}
+          />
+        </button>
+        <input
+          type="text"
+          value={value}
+          maxLength={7}
+          onChange={e => handleHexInput(e.target.value)}
+          spellCheck={false}
+          className="flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+          placeholder="#000000"
+        />
+      </div>
+
+      {/* Presets do projeto */}
+      <div className="flex flex-wrap gap-1.5">
+        {PROJECT_SWATCHES.map(s => (
+          <button
+            key={s.hex}
+            type="button"
+            title={s.label}
+            onClick={() => onChange(s.hex)}
+            className={`w-6 h-6 rounded-md border-2 transition-transform hover:scale-110 ${value === s.hex ? 'border-foreground scale-110' : 'border-transparent'}`}
+            style={{ backgroundColor: s.hex }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Opções ───────────────────────────────────────────────────────────────────
 
 const TONE_OPTIONS = [
@@ -186,30 +276,10 @@ export default function CarrosselInstagram() {
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
             <Palette className="w-3.5 h-3.5" /> Paleta de Cores
           </label>
-          <div className="grid grid-cols-3 gap-3">
-            {(
-              [
-                { key: 'primaryColor', label: 'Cor Principal' },
-                { key: 'accentColor',  label: 'Cor de Destaque' },
-                { key: 'bgColor',      label: 'Fundo Slides' },
-              ] as { key: keyof CarouselConfig; label: string }[]
-            ).map(({ key, label }) => (
-              <div key={key} className="flex flex-col items-center gap-1.5">
-                <div
-                  className="w-10 h-10 rounded-full border-2 border-border shadow cursor-pointer overflow-hidden relative"
-                  style={{ backgroundColor: config[key] as string }}
-                >
-                  <input
-                    type="color"
-                    value={config[key] as string}
-                    onChange={e => set(key, e.target.value)}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground text-center leading-tight">{label}</span>
-                <span className="text-xs font-mono text-foreground/60">{config[key] as string}</span>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <ColorPicker label="Cor Principal"  value={config.primaryColor} onChange={v => set('primaryColor', v)} />
+            <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
+            <ColorPicker label="Fundo Slides"   value={config.bgColor}      onChange={v => set('bgColor', v)} />
           </div>
         </div>
 
