@@ -19,6 +19,10 @@ app.use(express.json({ limit: '10mb' }));
 // Serve arquivos de upload estaticamente (para Instagram consumir a URL pública)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Serve slides PNG e HTML dos carrosseis gerados
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+app.use('/output', express.static(path.join(DATA_DIR, 'output')));
+
 // ── Rotas API ─────────────────────────────────────────────────────────────────
 app.use('/api/content',    require('./routes/posts'));
 app.use('/api/schedule',   require('./routes/schedule'));

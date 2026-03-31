@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight,
-  Image, Palette, Type, Hash, Layers, Mic2,
+  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -24,8 +24,11 @@ interface CarouselConfig {
 
 interface CarouselResult {
   html: string;
+  legenda: string;
   topic: string;
+  folderName: string;
   numSlides: number;
+  screenshots: string[];
   redditTrendsUsed: number;
   unsplashImagesUsed: number;
 }
@@ -58,9 +61,8 @@ function ColorPicker({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Valida e normaliza hex ao digitar manualmente
   function handleHexInput(raw: string) {
     const cleaned = raw.startsWith('#') ? raw : `#${raw}`;
     onChange(cleaned);
@@ -74,7 +76,6 @@ function ColorPicker({
     <div className="rounded-xl border border-border bg-background p-3 space-y-2.5">
       <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">{label}</span>
 
-      {/* Barra: preview + botão picker + input hex */}
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -103,7 +104,6 @@ function ColorPicker({
         />
       </div>
 
-      {/* Presets do projeto */}
       <div className="flex flex-wrap gap-1.5">
         {PROJECT_SWATCHES.map(s => (
           <button
@@ -146,14 +146,14 @@ const DEFAULT_CONFIG: CarouselConfig = {
   contentTone: 'investigativo',
 };
 
-// ─── Componente ───────────────────────────────────────────────────────────────
+// ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function CarrosselInstagram() {
   const [config, setConfig] = useState<CarouselConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CarouselResult | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const iframeRefs = useRef<(HTMLIFrameElement | null)[]>([]);
+  const [copied, setCopied] = useState(false);
 
   function set<K extends keyof CarouselConfig>(key: K, value: CarouselConfig[K]) {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -176,7 +176,11 @@ export default function CarrosselInstagram() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
       setResult(data);
-      toast.success(`Carrossel gerado com ${data.numSlides} slides!`);
+      const pngCount = data.screenshots?.length || 0;
+      toast.success(pngCount > 0
+        ? `${data.numSlides} slides gerados com ${pngCount} PNGs!`
+        : `Carrossel gerado (HTML). Screenshots indisponíveis no servidor.`
+      );
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -184,7 +188,7 @@ export default function CarrosselInstagram() {
     }
   }
 
-  function handleDownload() {
+  function handleDownloadHTML() {
     if (!result) return;
     const blob = new Blob([result.html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -195,22 +199,40 @@ export default function CarrosselInstagram() {
     URL.revokeObjectURL(url);
   }
 
-  // Extrai os N slides do HTML gerado separando por id="slide-N"
+  function handleDownloadPNG(filename: string) {
+    const url = `${API}/output/${result!.folderName}/${filename}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    a.click();
+  }
+
+  async function handleCopyLegenda() {
+    if (!result?.legenda) return;
+    await navigator.clipboard.writeText(result.legenda);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  // Slides para preview: PNGs se disponíveis, senão extrai do HTML
+  const hasPNGs = (result?.screenshots?.length ?? 0) > 0;
+
   function extractSlides(html: string): string[] {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
-    const slides = Array.from(doc.querySelectorAll('.slide'));
+    const slides = Array.from(doc.querySelectorAll('.slide, .slide-editorial'));
     if (!slides.length) return [html];
-
-    // Extrai estilos globais (head) para incluir em cada iframe
     const head = doc.head.innerHTML;
-    return slides.map(slide => {
-      return `<!DOCTYPE html><html><head>${head}</head><body style="margin:0;padding:0;">${slide.outerHTML}</body></html>`;
-    });
+    return slides.map(slide =>
+      `<!DOCTYPE html><html><head>${head}</head><body style="margin:0;padding:0;overflow:hidden;">${slide.outerHTML}</body></html>`
+    );
   }
 
-  const slides = result ? extractSlides(result.html) : [];
-  const totalSlides = slides.length;
+  const htmlSlides = result && !hasPNGs ? extractSlides(result.html) : [];
+  const totalSlides = hasPNGs
+    ? result!.screenshots.length
+    : htmlSlides.length;
 
   return (
     <div className="space-y-6">
@@ -222,14 +244,14 @@ export default function CarrosselInstagram() {
           Gerador de Carrossel para Instagram
         </h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Crie carrosseis profissionais com IA personalizando cor, fonte e estilo.
+          Crie carrosseis profissionais com IA. Personaliza cor, fonte e estilo.
         </p>
       </div>
 
       {/* Formulário */}
       <div className="rounded-xl border border-border bg-card p-5 space-y-5">
 
-        {/* Tema — obrigatório */}
+        {/* Tema */}
         <div>
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
             <Hash className="w-3.5 h-3.5" /> Tema / Assunto *
@@ -277,13 +299,13 @@ export default function CarrosselInstagram() {
             <Palette className="w-3.5 h-3.5" /> Paleta de Cores
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <ColorPicker label="Cor Principal"  value={config.primaryColor} onChange={v => set('primaryColor', v)} />
+            <ColorPicker label="Cor Principal"   value={config.primaryColor} onChange={v => set('primaryColor', v)} />
             <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
-            <ColorPicker label="Fundo Slides"   value={config.bgColor}      onChange={v => set('bgColor', v)} />
+            <ColorPicker label="Fundo Slides"    value={config.bgColor}      onChange={v => set('bgColor', v)} />
           </div>
         </div>
 
-        {/* Fonte + Tom + Nº de Slides */}
+        {/* Fonte + Tom + Slides */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
@@ -294,9 +316,7 @@ export default function CarrosselInstagram() {
               onChange={e => set('fontFamily', e.target.value)}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             >
-              {FONT_OPTIONS.map(f => (
-                <option key={f} value={f}>{f}</option>
-              ))}
+              {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
 
@@ -309,9 +329,7 @@ export default function CarrosselInstagram() {
               onChange={e => set('contentTone', e.target.value)}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             >
-              {TONE_OPTIONS.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
+              {TONE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
 
@@ -319,11 +337,9 @@ export default function CarrosselInstagram() {
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
               <Layers className="w-3.5 h-3.5" /> Nº de Slides
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mt-1">
               <input
-                type="range"
-                min={5}
-                max={10}
+                type="range" min={5} max={10}
                 value={config.numSlides}
                 onChange={e => set('numSlides', Number(e.target.value))}
                 className="flex-1 accent-purple-500"
@@ -347,109 +363,159 @@ export default function CarrosselInstagram() {
         </button>
       </div>
 
-      {/* Preview */}
+      {/* Resultado */}
       <AnimatePresence>
         {result && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 16 }}
-            className="rounded-xl border border-border bg-card overflow-hidden"
+            className="space-y-4"
           >
-            {/* Barra de preview */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <div>
-                <span className="text-sm font-semibold text-foreground">{result.topic}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {totalSlides} slide{totalSlides !== 1 ? 's' : ''}
-                  {result.unsplashImagesUsed > 0 && ` · ${result.unsplashImagesUsed} imagens Unsplash`}
-                  {result.redditTrendsUsed > 0 && ` · ${result.redditTrendsUsed} tendências Reddit`}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleGenerate}
-                  disabled={loading}
-                  title="Regenerar"
-                  className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleDownload}
-                  title="Baixar HTML"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" /> Baixar HTML
-                </button>
-              </div>
-            </div>
+            {/* ── Preview de slides ── */}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
 
-            {/* Slide viewer */}
-            <div className="p-4">
-              {/* Navegação */}
-              {totalSlides > 1 && (
-                <div className="flex items-center justify-center gap-3 mb-4">
-                  <button
-                    onClick={() => setCurrentSlide(s => Math.max(0, s - 1))}
-                    disabled={currentSlide === 0}
-                    className="p-1 rounded-lg hover:bg-secondary disabled:opacity-30 transition-colors"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                  <span className="text-sm text-muted-foreground">
-                    Slide {currentSlide + 1} / {totalSlides}
+              {/* Barra */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-wrap gap-2">
+                <div>
+                  <span className="text-sm font-semibold text-foreground">{result.topic}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {totalSlides} slide{totalSlides !== 1 ? 's' : ''}
+                    {hasPNGs && ` · ${result.screenshots.length} PNGs`}
+                    {result.unsplashImagesUsed > 0 && ` · ${result.unsplashImagesUsed} imgs Unsplash`}
+                    {result.redditTrendsUsed > 0 && ` · ${result.redditTrendsUsed} trends Reddit`}
                   </span>
+                </div>
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setCurrentSlide(s => Math.min(totalSlides - 1, s + 1))}
-                    disabled={currentSlide === totalSlides - 1}
-                    className="p-1 rounded-lg hover:bg-secondary disabled:opacity-30 transition-colors"
+                    onClick={handleGenerate}
+                    disabled={loading}
+                    title="Regenerar"
+                    className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
                   >
-                    <ChevronRight className="w-5 h-5" />
+                    <RefreshCw className="w-4 h-4" />
                   </button>
-                </div>
-              )}
-
-              {/* Dots */}
-              {totalSlides > 1 && (
-                <div className="flex justify-center gap-1.5 mb-4">
-                  {Array.from({ length: totalSlides }).map((_, i) => (
+                  <button
+                    onClick={handleDownloadHTML}
+                    title="Baixar HTML"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> HTML
+                  </button>
+                  {hasPNGs && (
                     <button
-                      key={i}
-                      onClick={() => setCurrentSlide(i)}
-                      className={`w-2 h-2 rounded-full transition-colors ${i === currentSlide ? 'bg-purple-500' : 'bg-border hover:bg-purple-300'}`}
-                    />
-                  ))}
+                      onClick={() => result.screenshots.forEach(f => handleDownloadPNG(f))}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Baixar PNGs
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* iframe do slide atual */}
-              <div className="flex justify-center">
-                <div
-                  className="rounded-xl overflow-hidden border border-border shadow-lg"
-                  style={{ width: '100%', maxWidth: 360 }}
-                >
-                  <div style={{ position: 'relative', paddingBottom: '125%' /* 1080/1350 = 80% → 125% */ }}>
-                    <iframe
-                      ref={el => { iframeRefs.current[currentSlide] = el; }}
-                      key={currentSlide}
-                      srcDoc={slides[currentSlide]}
-                      sandbox="allow-scripts allow-same-origin"
-                      style={{
-                        position: 'absolute',
-                        top: 0, left: 0,
-                        width: '1080px',
-                        height: '1350px',
-                        border: 'none',
-                        transform: `scale(${360 / 1080})`,
-                        transformOrigin: 'top left',
-                      }}
-                      title={`Slide ${currentSlide + 1}`}
-                    />
+              {/* Navegação */}
+              <div className="p-4">
+                {totalSlides > 1 && (
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <button
+                      onClick={() => setCurrentSlide(s => Math.max(0, s - 1))}
+                      disabled={currentSlide === 0}
+                      className="p-1 rounded-lg hover:bg-secondary disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      Slide {currentSlide + 1} / {totalSlides}
+                    </span>
+                    <button
+                      onClick={() => setCurrentSlide(s => Math.min(totalSlides - 1, s + 1))}
+                      disabled={currentSlide === totalSlides - 1}
+                      className="p-1 rounded-lg hover:bg-secondary disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Dots */}
+                {totalSlides > 1 && (
+                  <div className="flex justify-center gap-1.5 mb-4 flex-wrap">
+                    {Array.from({ length: totalSlides }).map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentSlide(i)}
+                        className={`w-2 h-2 rounded-full transition-colors ${i === currentSlide ? 'bg-purple-500' : 'bg-border hover:bg-purple-300'}`}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Preview: PNG ou iframe */}
+                <div className="flex justify-center">
+                  <div className="rounded-xl overflow-hidden border border-border shadow-lg" style={{ width: '100%', maxWidth: 360 }}>
+                    {hasPNGs ? (
+                      /* PNG real do servidor */
+                      <div style={{ position: 'relative', paddingBottom: '125%' }}>
+                        <img
+                          key={currentSlide}
+                          src={`${API}/output/${result.folderName}/${result.screenshots[currentSlide]}`}
+                          alt={`Slide ${currentSlide + 1}`}
+                          style={{
+                            position: 'absolute', top: 0, left: 0,
+                            width: '100%', height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                        {/* Botão download individual */}
+                        <button
+                          onClick={() => handleDownloadPNG(result.screenshots[currentSlide])}
+                          className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
+                          title="Baixar este slide"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      /* Fallback: iframe HTML */
+                      <div style={{ position: 'relative', paddingBottom: '125%' }}>
+                        <iframe
+                          key={currentSlide}
+                          srcDoc={htmlSlides[currentSlide]}
+                          sandbox="allow-scripts allow-same-origin"
+                          style={{
+                            position: 'absolute', top: 0, left: 0,
+                            width: '1080px', height: '1350px', border: 'none',
+                            transform: `scale(${360 / 1080})`,
+                            transformOrigin: 'top left',
+                          }}
+                          title={`Slide ${currentSlide + 1}`}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* ── Legenda ── */}
+            {result.legenda && (
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-purple-500" /> Legenda
+                  </span>
+                  <button
+                    onClick={handleCopyLegenda}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors"
+                  >
+                    {copied ? <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copiado!</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
+                  </button>
+                </div>
+                <pre className="p-4 text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
+                  {result.legenda}
+                </pre>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
