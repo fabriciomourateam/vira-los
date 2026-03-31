@@ -393,7 +393,7 @@ Siga @${handle} para mais conteúdo sobre ${niche}.
 
 // ─── Passo 5: Screenshots com Playwright (lógica DPR do gist) ────────────────
 
-async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor) {
+async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, folderName) {
   let chromium;
   try {
     ({ chromium } = require('playwright'));
@@ -417,8 +417,18 @@ async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor) {
   const page = await context.newPage();
 
   try {
-    await page.goto(`file://${htmlFilePath}`, { waitUntil: 'networkidle', timeout: 30000 });
-    await page.waitForTimeout(2000);
+    // Usa HTTP em vez de file:// para que o Chromium carregue imagens externas (Unsplash)
+    const port = process.env.PORT || 3001;
+    const httpUrl = `http://localhost:${port}/output/${folderName}/carrossel.html`;
+    await page.goto(httpUrl, { waitUntil: 'networkidle', timeout: 30000 });
+
+    // Aguarda todas as imagens do DOM carregarem antes de capturar
+    await page.evaluate(() => Promise.all(
+      Array.from(document.images).map(img =>
+        img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+      )
+    ));
+    await page.waitForTimeout(1000);
 
     // Verificar DPR e viewport CSS real (conforme gist)
     const cssW = await page.evaluate(() => window.innerWidth);
@@ -579,7 +589,7 @@ async function generateCarousel(config) {
   // Passo 5: Screenshots com Playwright (graceful fallback se não disponível)
   let screenshots = [];
   try {
-    screenshots = await takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor);
+    screenshots = await takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, folderName);
   } catch (err) {
     console.warn('[CarouselService] Screenshots falhou:', err.message);
   }
