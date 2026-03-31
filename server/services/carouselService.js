@@ -38,40 +38,75 @@ function currentMonthYear() {
 
 const IG_SVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>`;
 
-// ─── Passo 1: Reddit via Apify (trudax/reddit-scraper) ────────────────────────
+// ─── Passo 1: Reddit — API pública direta (sem Apify) + fallback Apify ───────
 
-async function fetchRedditTrends(topic) {
+const REDDIT_SUBREDDITS = [
+  'artificial', 'ChatGPT', 'OpenAI', 'MachineLearning',
+  'singularity', 'ArtificialIntelligence', 'ClaudeAI', 'LocalLLaMA',
+];
+
+async function fetchRedditDirect() {
+  const results = [];
+  // Busca os 3 primeiros subreddits em paralelo (API pública do Reddit, sem auth)
+  const requests = REDDIT_SUBREDDITS.slice(0, 3).map(sub =>
+    axios.get(`https://www.reddit.com/r/${sub}/top.json`, {
+      params: { t: 'week', limit: 5 },
+      headers: { 'User-Agent': 'ViralOS/1.0 (carousel-agent)' },
+      timeout: 10000,
+    }).catch(() => null)
+  );
+  const responses = await Promise.all(requests);
+  for (const res of responses) {
+    if (!res) continue;
+    const posts = res.data?.data?.children || [];
+    for (const p of posts) {
+      const d = p.data;
+      if (!d?.title) continue;
+      results.push({
+        title: String(d.title).substring(0, 200),
+        score: d.score || 0,
+        subreddit: d.subreddit || '',
+        url: d.url || '',
+      });
+    }
+  }
+  return results.slice(0, 8);
+}
+
+async function fetchRedditApify() {
   const apiKey = process.env.APIFY_API_KEY;
   if (!apiKey) return [];
+  const id = 'trudax~reddit-scraper';
+  const url = `https://api.apify.com/v2/acts/${id}/run-sync-get-dataset-items?token=${apiKey}&timeout=90`;
+  const response = await axios.post(url, {
+    startUrls: REDDIT_SUBREDDITS.map(s => ({ url: `https://www.reddit.com/r/${s}/top/?t=week` })),
+    maxItems: 30,
+    sort: 'top',
+    time: 'week',
+  }, { timeout: 105000 });
+  const items = Array.isArray(response.data) ? response.data : [];
+  return items.slice(0, 8).map(p => ({
+    title: String(p.title || '').substring(0, 200),
+    score: p.score || 0,
+    subreddit: p.community || p.subreddit || '',
+    url: p.url || '',
+  }));
+}
 
+async function fetchRedditTrends() {
+  // Tenta Apify primeiro; se falhar (403/erro) usa API pública direta do Reddit
   try {
-    const id = 'trudax~reddit-scraper';
-    const url = `https://api.apify.com/v2/acts/${id}/run-sync-get-dataset-items?token=${apiKey}&timeout=90`;
-    const response = await axios.post(url, {
-      startUrls: [
-        { url: 'https://www.reddit.com/r/artificial/top/?t=week' },
-        { url: 'https://www.reddit.com/r/ChatGPT/top/?t=week' },
-        { url: 'https://www.reddit.com/r/OpenAI/top/?t=week' },
-        { url: 'https://www.reddit.com/r/MachineLearning/top/?t=week' },
-        { url: 'https://www.reddit.com/r/singularity/top/?t=week' },
-        { url: 'https://www.reddit.com/r/ArtificialIntelligence/top/?t=week' },
-        { url: 'https://www.reddit.com/r/ClaudeAI/top/?t=week' },
-        { url: 'https://www.reddit.com/r/LocalLLaMA/top/?t=week' },
-      ],
-      maxItems: 30,
-      sort: 'top',
-      time: 'week',
-    }, { timeout: 105000 });
-
-    const items = Array.isArray(response.data) ? response.data : [];
-    return items.slice(0, 8).map(p => ({
-      title: String(p.title || '').substring(0, 200),
-      score: p.score || 0,
-      subreddit: p.community || p.subreddit || '',
-      url: p.url || '',
-    }));
+    if (process.env.APIFY_API_KEY) {
+      const results = await fetchRedditApify();
+      if (results.length) return results;
+    }
   } catch (err) {
-    console.error('[CarouselService/Reddit]', err.message);
+    console.warn('[CarouselService/Reddit/Apify]', err.message, '— usando API direta');
+  }
+  try {
+    return await fetchRedditDirect();
+  } catch (err) {
+    console.error('[CarouselService/Reddit/Direct]', err.message);
     return [];
   }
 }

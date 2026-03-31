@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { HexColorPicker } from 'react-colorful';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -50,7 +51,7 @@ const PROJECT_SWATCHES = [
   { hex: '#18181b', label: 'Zinc' },
 ];
 
-// ─── Sub-componente: seletor de cor com presets e input hex ───────────────────
+// ─── Sub-componente: seletor de cor drag + presets + hex ─────────────────────
 
 function ColorPicker({
   label,
@@ -61,38 +62,45 @@ function ColorPicker({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fecha ao clicar fora
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  function isValidHex(s: string) {
+    return /^#[0-9A-Fa-f]{6}$/.test(s);
+  }
 
   function handleHexInput(raw: string) {
     const cleaned = raw.startsWith('#') ? raw : `#${raw}`;
     onChange(cleaned);
   }
 
-  function isValidHex(s: string) {
-    return /^#[0-9A-Fa-f]{6}$/.test(s);
-  }
+  const safeValue = isValidHex(value) ? value : '#888888';
 
   return (
-    <div className="rounded-xl border border-border bg-background p-3 space-y-2.5">
+    <div ref={containerRef} className="rounded-xl border border-border bg-background p-3 space-y-2.5 relative">
       <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">{label}</span>
 
+      {/* Botão de preview + input hex */}
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => inputRef.current?.click()}
-          title="Abrir seletor de cor"
-          className="w-9 h-9 rounded-lg border-2 border-border shadow-sm shrink-0 relative overflow-hidden"
-          style={{ backgroundColor: isValidHex(value) ? value : '#888' }}
-        >
-          <input
-            ref={inputRef}
-            type="color"
-            value={isValidHex(value) ? value : '#888888'}
-            onChange={e => onChange(e.target.value)}
-            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-            tabIndex={-1}
-          />
-        </button>
+          onClick={() => setOpen(o => !o)}
+          title="Abrir seletor"
+          className="w-9 h-9 rounded-lg border-2 border-border shadow-sm shrink-0 transition-transform hover:scale-105"
+          style={{ backgroundColor: safeValue }}
+        />
         <input
           type="text"
           value={value}
@@ -104,18 +112,35 @@ function ColorPicker({
         />
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {PROJECT_SWATCHES.map(s => (
-          <button
-            key={s.hex}
-            type="button"
-            title={s.label}
-            onClick={() => onChange(s.hex)}
-            className={`w-6 h-6 rounded-md border-2 transition-transform hover:scale-110 ${value === s.hex ? 'border-foreground scale-110' : 'border-transparent'}`}
-            style={{ backgroundColor: s.hex }}
-          />
-        ))}
-      </div>
+      {/* Picker de arrastar (react-colorful) */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-border bg-card shadow-xl p-3 space-y-3"
+          >
+            {/* Gradiente de arrastar */}
+            <HexColorPicker color={safeValue} onChange={onChange} style={{ width: '100%', height: 180 }} />
+
+            {/* Presets do projeto */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {PROJECT_SWATCHES.map(s => (
+                <button
+                  key={s.hex}
+                  type="button"
+                  title={s.label}
+                  onClick={() => { onChange(s.hex); setOpen(false); }}
+                  className={`w-6 h-6 rounded-md border-2 transition-transform hover:scale-110 ${value === s.hex ? 'border-foreground scale-110' : 'border-transparent'}`}
+                  style={{ backgroundColor: s.hex }}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
