@@ -9,11 +9,7 @@ const PORT = process.env.PORT || 3001;
 // ── Middleware ────────────────────────────────────────────────────────────────
 // Em produção aceita qualquer origem (Vercel gera URLs dinâmicas)
 // Em dev restringe ao localhost
-const allowedOrigin = process.env.NODE_ENV === 'production'
-  ? '*'
-  : [process.env.FRONTEND_URL || 'http://localhost:8080', 'http://localhost:5173'];
-
-app.use(cors({ origin: allowedOrigin }));
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // Serve arquivos de upload estaticamente (para Instagram consumir a URL pública)
