@@ -115,7 +115,10 @@ async function fetchRedditTrends() {
 
 async function fetchUnsplashImages(query, count = 12) {
   const key = process.env.UNSPLASH_ACCESS_KEY;
-  if (!key) return [];
+  if (!key) {
+    console.warn('[CarouselService/Unsplash] UNSPLASH_ACCESS_KEY não definida — sem imagens');
+    return [];
+  }
 
   try {
     const r = await axios.get('https://api.unsplash.com/search/photos', {
@@ -123,12 +126,16 @@ async function fetchUnsplashImages(query, count = 12) {
       headers: { Authorization: `Client-ID ${key}` },
       timeout: 10000,
     });
-    return (r.data?.results || []).map(img => ({
+    const results = r.data?.results || [];
+    console.log(`[CarouselService/Unsplash] ${results.length} imagens para "${query}"`);
+    return results.map(img => ({
       url: img.urls?.regular || '',
       alt: img.alt_description || query,
-    }));
+    })).filter(img => img.url);
   } catch (err) {
-    console.error('[CarouselService/Unsplash]', err.message);
+    const status = err.response?.status;
+    const detail = err.response?.data?.errors?.[0] || err.message;
+    console.error(`[CarouselService/Unsplash] Erro ${status || ''}: ${detail}`);
     return [];
   }
 }

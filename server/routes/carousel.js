@@ -8,6 +8,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 const { generateCarousel } = require('../services/carouselService');
 
 const router = express.Router();
@@ -36,6 +37,33 @@ router.post('/generate', async (req, res) => {
     console.error('[Carousel Route]', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── Diagnóstico de variáveis e conectividade ────────────────────────────────
+
+router.get('/check', async (req, res) => {
+  const vars = {
+    ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+    UNSPLASH_ACCESS_KEY: !!process.env.UNSPLASH_ACCESS_KEY,
+    APIFY_API_KEY: !!process.env.APIFY_API_KEY,
+  };
+
+  let unsplashOk = false;
+  let unsplashError = null;
+  if (process.env.UNSPLASH_ACCESS_KEY) {
+    try {
+      const r = await axios.get('https://api.unsplash.com/search/photos', {
+        params: { query: 'technology', per_page: 1, orientation: 'portrait' },
+        headers: { Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}` },
+        timeout: 8000,
+      });
+      unsplashOk = (r.data?.results?.length ?? 0) > 0;
+    } catch (err) {
+      unsplashError = `${err.response?.status || ''} ${err.response?.data?.errors?.[0] || err.message}`.trim();
+    }
+  }
+
+  res.json({ vars, unsplash: { ok: unsplashOk, error: unsplashError } });
 });
 
 // ─── Listar arquivos de um carrossel ──────────────────────────────────────────
