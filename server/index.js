@@ -20,12 +20,13 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 app.use('/output', express.static(path.join(DATA_DIR, 'output')));
 
 // ── Rotas API ─────────────────────────────────────────────────────────────────
-app.use('/api/content',    require('./routes/posts'));
-app.use('/api/schedule',   require('./routes/schedule'));
-app.use('/api/platforms',  require('./routes/platforms'));
-app.use('/api/research',   require('./routes/research'));
-app.use('/api/agent',      require('./routes/agent'));
-app.use('/api/carousel',   require('./routes/carousel'));
+app.use('/api/content',         require('./routes/posts'));
+app.use('/api/schedule',        require('./routes/schedule'));
+app.use('/api/platforms',       require('./routes/platforms'));
+app.use('/api/research',        require('./routes/research'));
+app.use('/api/agent',           require('./routes/agent'));
+app.use('/api/carousel',        require('./routes/carousel'));
+app.use('/api/reels-analyzer',  require('./routes/reelsAnalyzer'));
 
 // Health check
 app.get('/api/health', (_req, res) =>
