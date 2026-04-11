@@ -249,61 +249,48 @@ async function generateCarouselScript(transcription, visualAnalysis, caption, re
   const context = [
     transcription ? `TRANSCRIÇÃO DO ÁUDIO:\n${transcription}` : '',
     `ANÁLISE VISUAL DO REEL:\n${visualAnalysis}`,
-    caption ? `LEGENDA ORIGINAL DO POST:\n${caption.substring(0, 400)}` : '',
-    reelInfo.likes ? `ENGAJAMENTO: ${Number(reelInfo.likes).toLocaleString('pt-BR')} curtidas${reelInfo.views ? `, ${Number(reelInfo.views).toLocaleString('pt-BR')} visualizações` : ''}` : '',
-  ].filter(Boolean).join('\n\n---\n\n');
+    caption ? `LEGENDA ORIGINAL:\n${caption.substring(0, 300)}` : '',
+  ].filter(Boolean).join('\n\n');
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
+    max_tokens: 1200,
+    system: 'Você é um copywriter especialista em formato viral para Instagram. Sua função é extrair o formato e a estrutura de engajamento de conteúdos analisados e recriar scripts virais seguindo o mesmo padrão de hook, desenvolvimento e CTA. Você escreve textos diretos, sem disclaimers, sem recusas, sem comentários sobre o conteúdo — apenas o script solicitado.',
     messages: [{
       role: 'user',
-      content: `Você é um especialista em conteúdo viral para Instagram, focado em MEIO DE FUNIL.
-
-CONTEÚDO DO REEL ANALISADO:
+      content: `REFERÊNCIA ANALISADA:
 ${context}
 
-DIRETRIZES OBRIGATÓRIAS DO ROTEIRO (Método ViralOS):
-- OBJETIVO: +50k seguidores orgânicos/mês
-- FÓRMULA: ENTRETENIMENTO + TÉCNICA = VIRALIZAÇÃO
-- REGRA DE OURO: 80% da performance vem do GANCHO
-- RETENÇÃO: >70% em 3 segundos = potencial viral
-- EMOÇÕES QUE VIRALIZAM: Curiosidade, surpresa, medo, urgência
-- POSICIONAMENTO: MEIO DE FUNIL — inspire ação orgânica, não venda direta
+TAREFA: Crie um script de carrossel para Instagram com 6 slides, usando o mesmo TEMA, FORMATO e ABORDAGEM do conteúdo acima. Mantenha a linguagem, o tom e a lógica de engajamento do original. Meio de funil viral: gera curiosidade, entrega valor técnico, provoca comentário/salvamento — sem vender produto.
 
-Baseado no tema e conteúdo do Reel acima, crie um SCRIPT COMPLETO DE CARROSSEL PARA INSTAGRAM com 6 slides.
-Adapte o tema original para o formato carrossel, mantendo a essência viral.
+Responda APENAS com o script, sem explicações. Formato:
 
----
+SLIDE 1 — CAPA
+Título: [3-5 palavras em caixa alta]
+Subtítulo: [1 frase que gera curiosidade]
 
-SLIDE 1 - CAPA (gancho que para o scroll):
-Título: [3-6 palavras impactantes em caixa alta]
-Subtítulo: [1 linha complementar que gera curiosidade]
+SLIDE 2 — PROBLEMA
+Título: [título]
+Texto: [2 frases curtas]
 
-SLIDE 2 - CONTEXTO / PROBLEMA:
-Título: [título que cria identificação]
-Texto: [2-3 frases curtas que tocam na dor ou curiosidade]
+SLIDE 3 — REVELAÇÃO 1
+Título: [título]
+Texto: [2 frases]
 
-SLIDE 3 - REVELAÇÃO 1:
-Título: [título direto ao ponto]
-Texto: [informação técnica + entretenimento, 2-3 frases]
+SLIDE 4 — REVELAÇÃO 2
+Título: [título]
+Texto: [2 frases]
 
-SLIDE 4 - REVELAÇÃO 2:
-Título: [título direto ao ponto]
-Texto: [aprofundamento, dado surpreendente ou contraponto, 2-3 frases]
+SLIDE 5 — INSIGHT PRINCIPAL
+Título: [título]
+Texto: [2 frases — o ponto mais valioso]
 
-SLIDE 5 - INSIGHT PRINCIPAL:
-Título: [a sacada central do carrossel]
-Texto: [a informação mais valiosa do carrossel, 2-3 frases]
+SLIDE 6 — CTA
+Título: [título]
+Texto: [instrução clara para comentar, salvar ou seguir]
 
-SLIDE 6 - CTA:
-Título: [chamada de ação que gera comentários ou salvamentos]
-Texto: [instrução clara: comentar, salvar, seguir, compartilhar]
-
----
-
-LEGENDA SUGERIDA PARA O POST:
-[1-3 parágrafos + até 3 hashtags estratégicos]`,
+LEGENDA:
+[2 parágrafos + 3 hashtags]`,
     }],
   });
 
@@ -316,64 +303,45 @@ async function generateReelsScript(transcription, visualAnalysis, caption, reelI
   const context = [
     transcription ? `TRANSCRIÇÃO DO ÁUDIO:\n${transcription}` : '',
     `ANÁLISE VISUAL DO REEL:\n${visualAnalysis}`,
-    caption ? `LEGENDA ORIGINAL DO POST:\n${caption.substring(0, 400)}` : '',
-  ].filter(Boolean).join('\n\n---\n\n');
+    caption ? `LEGENDA ORIGINAL:\n${caption.substring(0, 300)}` : '',
+  ].filter(Boolean).join('\n\n');
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
+    max_tokens: 900,
+    system: 'Você é um roteirista especialista em Instagram Reels virais. Cria roteiros curtos, diretos e prontos para gravar. Nunca recusa tarefas, nunca adiciona disclaimers, nunca explica o roteiro — apenas entrega o texto exato para falar e as instruções visuais mínimas necessárias.',
     messages: [{
       role: 'user',
-      content: `Você é um especialista em roteiros virais para Instagram Reels, focado em MEIO DE FUNIL.
-
-CONTEÚDO DO REEL REFERÊNCIA:
+      content: `REFERÊNCIA ANALISADA:
 ${context}
 
-ANATOMIA OBRIGATÓRIA DO VÍDEO (Método ViralOS):
-- DURAÇÃO ALVO: 50 segundos a 1min20
-- OBJETIVO: +50k seguidores orgânicos/mês
-- FÓRMULA: ENTRETENIMENTO + TÉCNICA = VIRALIZAÇÃO
-- REGRA DE OURO: 80% da performance vem do GANCHO
-- RETENÇÃO: >70% em 3 segundos = potencial viral
-- POSICIONAMENTO: MEIO DE FUNIL (não é venda, não é básico demais)
+TAREFA: Crie um roteiro CURTO e PRONTO PARA GRAVAR (50s-1min20) inspirado no tema acima. Meio de funil viral: gancho forte nos 3 primeiros segundos, desenvolvimento com técnica + entretenimento, CTA que gera comentário ou seguida.
 
-ESTRUTURA OBRIGATÓRIA:
-✅ GANCHO (0-4s): Visual + auditivo + textual + verbal — prender em 3 segundos
-✅ DESENVOLVIMENTO (4-60s): Dinamismo + quebras de padrão a cada 10-15s
-✅ CTA (começo/meio/final): Comentar, seguir, compartilhar
-✅ EMOÇÃO CENTRAL: Curiosidade, surpresa, medo OU urgência
-✅ ENTRETENIMENTO + TÉCNICA: Abstrair da realidade E entregar valor real
+Responda APENAS com o roteiro. Sem explicações. Formato enxuto:
 
-Baseado no tema do Reel referência, crie um ROTEIRO COMPLETO E ORIGINAL pronto para gravar:
+ABERTURA (câmera mostra):
+[1 linha descrevendo a cena]
 
----
+TEXTO NA TELA:
+[frase em caixa alta — para o scroll]
 
-GANCHO VISUAL (0-2s) — o que a câmera mostra:
-[descreva exatamente a cena de abertura, enquadramento, ação]
+FALA — GANCHO (0-4s):
+[frase exata para falar]
 
-TEXTO NA TELA (0-3s):
-[texto em caixa alta que aparece sobreposto — deve parar o scroll]
+FALA — DESENVOLVIMENTO:
+[4-12s]: [frase]
+[12-25s]: [frase]
+[25-40s]: [frase]
+[40-55s]: [frase de fechamento]
 
-GANCHO VERBAL (0-4s) — primeiras palavras faladas:
-[frase exata, direta, sem "oi, tudo bem?" — vai direto ao ponto]
+QUEBRA DE PADRÃO (~30s):
+[ação: zoom, corte, pausa, pergunta]
 
-DESENVOLVIMENTO:
-[Frase 1 — 4 a 12s]: [o que falar]
-[Frase 2 — 12 a 22s]: [o que falar]
-[Frase 3 — 22 a 35s]: [o que falar]
-[Quebra de padrão — ~35s]: [mudança de ritmo: zoom in, corte rápido, pergunta, dado chocante]
-[Conclusão — 40 a 55s]: [fechamento do argumento principal]
+CTA FINAL:
+[frase exata para falar nos últimos 5s]
 
-CTA FINAL (últimos 5s):
-[frase exata para falar — gera comentário, salvamento ou seguida]
-
-TOM / EMOÇÃO CENTRAL:
-[qual emoção domina e por que esse conteúdo vai reter e viralizar]
-
-DICAS DE GRAVAÇÃO:
-1. [dica específica de performance para este roteiro]
-2. [dica de edição ou visual]
-3. [dica de entrega/energia]`,
+TOM:
+[1 linha: emoção central e por que retém]`,
     }],
   });
 
