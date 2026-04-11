@@ -3,6 +3,7 @@ FROM node:20-slim
 # Dependências do sistema para Playwright/Chromium
 RUN apt-get update && apt-get install -y \
     chromium \
+    ffmpeg \
     libnss3 \
     libatk-bridge2.0-0 \
     libdrm2 \
