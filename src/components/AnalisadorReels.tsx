@@ -4,12 +4,32 @@ import { toast } from 'sonner';
 import {
   Link2, Play, CheckCircle2, XCircle, Loader2, Copy, Check,
   Mic, Eye, Layers, Video, ChevronDown, ChevronUp, AlertTriangle,
-  Zap, FileText, Tv2, Sparkles,
+  Zap, FileText, Tv2, Sparkles, BookMarked, Gauge,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
+
+interface StoryItem {
+  numero: number;
+  tipo: string;
+  duracao_seg: number;
+  fundo: string;
+  texto_principal: string;
+  texto_secundario: string;
+  sticker: { tipo: string; pergunta_ou_label: string; opcoes: string[] };
+  emoji_sugerido: string;
+  dica_visual: string;
+  copy_legenda: string;
+}
+
+interface StoryResult {
+  stories: StoryItem[];
+  sequencia_resumo: string;
+  hashtags: string[];
+  melhor_horario_postar: string;
+}
 
 interface AnalyzerStep {
   id: string;
@@ -168,15 +188,20 @@ function StepItem({ step }: { step: AnalyzerStep }) {
 
 interface AnalisadorReelsProps {
   onUseInCarrossel?: (script: string, topic: string) => void;
+  onEvaluate?: (script: string, type: 'carousel' | 'reels') => void;
 }
 
-export default function AnalisadorReels({ onUseInCarrossel }: AnalisadorReelsProps = {}) {
+export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: AnalisadorReelsProps = {}) {
   const [url, setUrl]         = useState('');
   const [running, setRunning] = useState(false);
   const [steps, setSteps]     = useState<AnalyzerStep[]>([]);
   const [result, setResult]   = useState<AnalyzerResult | null>(null);
   const [error, setError]     = useState<string | null>(null);
-  const [activeResultTab, setActiveResultTab] = useState<'transcricao' | 'visual' | 'carrossel' | 'reels'>('carrossel');
+  const [activeResultTab, setActiveResultTab] = useState<'transcricao' | 'visual' | 'carrossel' | 'reels' | 'stories'>('carrossel');
+  const [storyResult, setStoryResult]     = useState<StoryResult | null>(null);
+  const [storyLoading, setStoryLoading]   = useState(false);
+  const [storyError, setStoryError]       = useState<string | null>(null);
+  const [instagramHandle, setInstagramHandle] = useState('');
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const stepsEndRef    = useRef<HTMLDivElement | null>(null);
@@ -268,6 +293,8 @@ export default function AnalisadorReels({ onUseInCarrossel }: AnalisadorReelsPro
     setError(null);
     setResult(null);
     setSteps([]);
+    setStoryResult(null);
+    setStoryError(null);
 
     try {
       const response = await fetch(`${API}/api/reels-analyzer/start`, {
@@ -302,13 +329,38 @@ export default function AnalisadorReels({ onUseInCarrossel }: AnalisadorReelsPro
     setSteps([]);
     setResult(null);
     setError(null);
+    setStoryResult(null);
+    setStoryError(null);
+  }
+
+  async function handleGenerateStories() {
+    if (!result?.carouselScript) return;
+    setStoryLoading(true);
+    setStoryError(null);
+    try {
+      const res = await fetch(`${API}/api/story-sequence`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carouselScript: result.carouselScript, instagramHandle }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao gerar stories.');
+      setStoryResult(data);
+      toast.success('Sequência de stories gerada!');
+    } catch (e: any) {
+      setStoryError(e.message);
+      toast.error(e.message);
+    } finally {
+      setStoryLoading(false);
+    }
   }
 
   const resultTabs: { id: typeof activeResultTab; label: string; icon: React.ComponentType<any> }[] = [
-    { id: 'carrossel',   label: 'Script Carrossel',   icon: Layers },
-    { id: 'reels',       label: 'Roteiro Reels',      icon: Video },
-    { id: 'visual',      label: 'Análise Visual',     icon: Eye },
-    { id: 'transcricao', label: 'Transcrição',        icon: Mic },
+    { id: 'carrossel',   label: 'Carrossel',   icon: Layers },
+    { id: 'reels',       label: 'Reels',       icon: Video },
+    { id: 'stories',     label: 'Stories',     icon: BookMarked },
+    { id: 'visual',      label: 'Visual',      icon: Eye },
+    { id: 'transcricao', label: 'Transcrição', icon: Mic },
   ];
 
   return (
@@ -538,7 +590,7 @@ export default function AnalisadorReels({ onUseInCarrossel }: AnalisadorReelsPro
                       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         Script de Carrossel — Meio de Funil Viral
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
                         {onUseInCarrossel && (
                           <button
                             onClick={() => onUseInCarrossel(
@@ -548,7 +600,16 @@ export default function AnalisadorReels({ onUseInCarrossel }: AnalisadorReelsPro
                             className="flex items-center gap-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
                           >
                             <Sparkles size={12} />
-                            Gerar Carrossel Visual
+                            Carrossel Visual
+                          </button>
+                        )}
+                        {onEvaluate && (
+                          <button
+                            onClick={() => onEvaluate(result.carouselScript, 'carousel')}
+                            className="flex items-center gap-1.5 text-xs bg-yellow-600 hover:bg-yellow-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            <Gauge size={12} />
+                            Avaliar Score
                           </button>
                         )}
                         <CopyButton text={result.carouselScript} />
@@ -566,11 +627,123 @@ export default function AnalisadorReels({ onUseInCarrossel }: AnalisadorReelsPro
                       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         Roteiro de Reels — Meio de Funil Viral
                       </p>
-                      <CopyButton text={result.reelsScript} />
+                      <div className="flex items-center gap-2">
+                        {onEvaluate && (
+                          <button
+                            onClick={() => onEvaluate(result.reelsScript, 'reels')}
+                            className="flex items-center gap-1.5 text-xs bg-yellow-600 hover:bg-yellow-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            <Gauge size={12} />
+                            Avaliar Score
+                          </button>
+                        )}
+                        <CopyButton text={result.reelsScript} />
+                      </div>
                     </div>
                     <pre className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-foreground/90 bg-secondary/50 rounded-xl p-3 max-h-[600px] overflow-y-auto">
                       {result.reelsScript}
                     </pre>
+                  </div>
+                )}
+
+                {activeResultTab === 'stories' && (
+                  <div className="space-y-4">
+                    {!storyResult && !storyLoading && (
+                      <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Gera 5 stories sequenciais para divulgar o carrossel — cada um com texto, sticker interativo e instrução visual.
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={instagramHandle}
+                            onChange={e => setInstagramHandle(e.target.value)}
+                            placeholder="@seucanal (opcional)"
+                            className="flex-1 bg-secondary border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 placeholder:text-muted-foreground"
+                          />
+                          <button
+                            onClick={handleGenerateStories}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background text-sm font-bold hover:opacity-90 transition-opacity shrink-0"
+                          >
+                            <BookMarked size={14} /> Gerar Stories
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {storyLoading && (
+                      <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+                        <Loader2 size={18} className="animate-spin" />
+                        <span className="text-sm">Gerando sequência de stories...</span>
+                      </div>
+                    )}
+
+                    {storyError && (
+                      <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-xl p-3">
+                        {storyError}
+                      </div>
+                    )}
+
+                    {storyResult && (
+                      <div className="space-y-4">
+                        {/* Resumo e metadados */}
+                        <div className="bg-secondary/50 rounded-xl p-3 space-y-1">
+                          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Narrativa da sequência</p>
+                          <p className="text-sm leading-relaxed">{storyResult.sequencia_resumo}</p>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+                            <span>⏰ {storyResult.melhor_horario_postar}</span>
+                            <span>{storyResult.hashtags?.join(' ')}</span>
+                          </div>
+                        </div>
+
+                        {/* Cards dos 5 stories — scroll horizontal no mobile */}
+                        <div className="space-y-3">
+                          {storyResult.stories?.map(story => (
+                            <div key={story.numero} className="rounded-xl border border-border bg-card overflow-hidden">
+                              <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-secondary/30">
+                                <span className="w-6 h-6 rounded-full bg-foreground text-background text-xs font-black flex items-center justify-center shrink-0">
+                                  {story.numero}
+                                </span>
+                                <span className="text-xs font-bold uppercase tracking-wider capitalize">{story.tipo}</span>
+                                <span className="text-xs text-muted-foreground ml-auto">{story.duracao_seg}s</span>
+                              </div>
+                              <div className="p-4 space-y-3">
+                                {/* Preview visual */}
+                                <div className="rounded-xl bg-secondary/60 p-4 text-center space-y-1 border border-border/50">
+                                  <p className="text-xs text-muted-foreground">{story.fundo}</p>
+                                  <p className="text-lg font-black tracking-tight leading-tight">{story.texto_principal}</p>
+                                  {story.emoji_sugerido && <p className="text-2xl">{story.emoji_sugerido}</p>}
+                                  <p className="text-sm text-muted-foreground">{story.texto_secundario}</p>
+                                  {story.sticker?.tipo !== 'nenhum' && (
+                                    <div className="inline-block mt-2 bg-foreground/10 border border-border rounded-full px-3 py-1 text-xs font-medium">
+                                      {story.sticker.tipo === 'enquete'
+                                        ? `${story.sticker.pergunta_ou_label} · ${story.sticker.opcoes?.join(' / ')}`
+                                        : story.sticker.pergunta_ou_label
+                                      }
+                                    </div>
+                                  )}
+                                </div>
+                                {/* Legenda + dica */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs text-muted-foreground italic flex-1 truncate">"{story.copy_legenda}"</p>
+                                  <CopyButton text={story.copy_legenda} />
+                                </div>
+                                {story.dica_visual && (
+                                  <p className="text-xs text-muted-foreground border-l-2 border-orange-500/50 pl-2">{story.dica_visual}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button
+                          onClick={() => { setStoryResult(null); setStoryError(null); }}
+                          className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                        >
+                          Gerar nova sequência
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -594,14 +767,17 @@ export default function AnalisadorReels({ onUseInCarrossel }: AnalisadorReelsPro
               />
             </div>
 
-            {/* Use in Roteiro hint */}
+            {/* Próximos passos */}
             <div className="rounded-2xl bg-foreground text-background p-4 flex items-start gap-3">
               <FileText size={16} className="shrink-0 mt-0.5" />
               <div className="text-sm">
                 <p className="font-bold mb-1">Próximos passos</p>
-                <p className="opacity-75 text-xs leading-relaxed">
-                  Clique em <strong>"Gerar Carrossel Visual"</strong> na aba Script Carrossel para criar o carrossel na aba Carrossel com um clique. Copie o roteiro de Reels e cole na aba <strong>Roteiro</strong> em "Roteiro Final A" ou "B" para gravar.
-                </p>
+                <ul className="opacity-75 text-xs leading-relaxed space-y-1">
+                  <li>→ <strong>Carrossel Visual</strong>: gera o carrossel na aba Carrossel com o script pronto</li>
+                  <li>→ <strong>Avaliar Score</strong>: pontua o script em 5 critérios e sugere melhorias</li>
+                  <li>→ <strong>Stories</strong>: cria 5 stories sequenciais para divulgar o carrossel</li>
+                  <li>→ Cole o roteiro de Reels na aba <strong>Roteiro</strong> em "Roteiro Final A" para gravar</li>
+                </ul>
               </div>
             </div>
           </motion.div>

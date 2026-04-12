@@ -23,6 +23,8 @@ import {
   X,
   Layers,
   ScanSearch,
+  Radio,
+  Gauge,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -33,8 +35,10 @@ import PesquisaConteudo from './PesquisaConteudo';
 import AgenteAutonomo from './AgenteAutonomo';
 import CarrosselInstagram from './CarrosselInstagram';
 import AnalisadorReels from './AnalisadorReels';
+import TrendRadar from './TrendRadar';
+import ViralScore from './ViralScore';
 
-type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa' | 'agente' | 'carrossel' | 'analisador';
+type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa' | 'agente' | 'carrossel' | 'analisador' | 'radar' | 'score';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'roteiro',   label: 'Roteiro',   icon: Zap },
@@ -45,6 +49,8 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'agente',    label: 'Agente',    icon: Bot },
   { id: 'carrossel', label: 'Carrossel', icon: Layers },
   { id: 'analisador',label: 'Analisar',  icon: ScanSearch },
+  { id: 'radar',     label: 'Radar',     icon: Radio },
+  { id: 'score',     label: 'Score',     icon: Gauge },
 ];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
@@ -567,6 +573,7 @@ function TeleprompterOverlay({
 export default function ViralOS() {
   const [activeTab, setActiveTab] = useState<TabId>('roteiro');
   const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
+  const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
   const [state, setState] = useState<AppState>(initialState);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
 
@@ -711,7 +718,32 @@ export default function ViralOS() {
     setCarouselPrefill({ script, topic });
     setActiveTab('carrossel');
     toast.success('Script carregado na aba Carrossel!');
-    // Clear prefill after component mounts and consumes it
+    setTimeout(() => setCarouselPrefill(null), 500);
+  };
+
+  const handleEvaluateScript = (script: string, type: 'carousel' | 'reels') => {
+    setScorePrefill({ script, type });
+    setActiveTab('score');
+    toast.success('Script carregado no Avaliador Viral!');
+    setTimeout(() => setScorePrefill(null), 500);
+  };
+
+  const handleUseHookInRoteiro = (hook: string) => {
+    setState(prev => ({
+      ...prev,
+      inputs: { ...prev.inputs, '3.1.a': hook },
+      checkedItems: { ...prev.checkedItems, '3.1.a': true },
+      expandedSections: { ...prev.expandedSections, passo3: true },
+      expandedItems: { ...prev.expandedItems, '3.1.a': true },
+    }));
+    setActiveTab('roteiro');
+    toast.success('Hook do Radar aplicado no Roteiro Final A!');
+  };
+
+  const handleRadarCarrossel = (topic: string) => {
+    setCarouselPrefill({ script: '', topic });
+    setActiveTab('carrossel');
+    toast.success('Tema carregado na aba Carrossel!');
     setTimeout(() => setCarouselPrefill(null), 500);
   };
 
@@ -794,7 +826,9 @@ export default function ViralOS() {
         {activeTab === 'pesquisa'  && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
         {activeTab === 'agente'    && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
         {activeTab === 'carrossel'  && <CarrosselInstagram prefillScript={carouselPrefill?.script} prefillTopic={carouselPrefill?.topic} />}
-        {activeTab === 'analisador' && <AnalisadorReels onUseInCarrossel={handleUseInCarrossel} />}
+        {activeTab === 'analisador' && <AnalisadorReels onUseInCarrossel={handleUseInCarrossel} onEvaluate={handleEvaluateScript} />}
+        {activeTab === 'radar'      && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} />}
+        {activeTab === 'score'      && <ViralScore prefillScript={scorePrefill?.script} prefillType={scorePrefill?.type} />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 text-balance">

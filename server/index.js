@@ -27,6 +27,9 @@ app.use('/api/research',        require('./routes/research'));
 app.use('/api/agent',           require('./routes/agent'));
 app.use('/api/carousel',        require('./routes/carousel'));
 app.use('/api/reels-analyzer',  require('./routes/reelsAnalyzer'));
+app.use('/api/viral-score',     require('./routes/viralScore'));
+app.use('/api/trend-radar',     require('./routes/trendRadar'));
+app.use('/api/story-sequence',  require('./routes/storySequence'));
 
 // Health check
 app.get('/api/health', (_req, res) =>
