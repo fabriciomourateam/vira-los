@@ -1,8 +1,8 @@
 /**
  * reelsAnalyzerService.js
- * Analisa um Reel do Instagram: scraping via Apify, extração de frames com ffmpeg,
- * transcrição de áudio com OpenAI Whisper (opcional), análise visual via Claude Vision,
- * e geração de script de carrossel + roteiro de Reels com Claude.
+ * Analisa vídeos do Instagram (Reels) e TikTok: scraping via Apify,
+ * extração de frames com ffmpeg, transcrição de áudio com OpenAI Whisper (opcional),
+ * análise visual via Claude Vision, e geração de script de carrossel + roteiro com Claude.
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
@@ -45,6 +45,21 @@ function stepUpdate(id, status, detail = '') {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
+function detectPlatform(url) {
+  if (/tiktok\.com/i.test(url) || /vm\.tiktok\.com/i.test(url)) return 'tiktok';
+  if (/instagram\.com/i.test(url)) return 'instagram';
+  return null;
+}
+
+async function runApifyActor(actorId, input, timeoutSecs = 120) {
+  const apiKey = process.env.APIFY_API_KEY;
+  if (!apiKey) throw new Error('APIFY_API_KEY não configurada.');
+  const id = actorId.replace('/', '~');
+  const url = `https://api.apify.com/v2/acts/${id}/run-sync-get-dataset-items?token=${apiKey}&timeout=${timeoutSecs}`;
+  const response = await axios.post(url, input, { timeout: (timeoutSecs + 15) * 1000 });
+  return Array.isArray(response.data) ? response.data : [];
+}
+
 function ffmpegAvailable() {
   try {
     execSync('ffmpeg -version', { stdio: 'ignore', timeout: 5000 });
@@ -61,30 +76,60 @@ async function downloadBuffer(url, timeoutMs = 30000) {
   return Buffer.from(response.data);
 }
 
-// ─── Passo 1: Scraping do Reel via Apify ──────────────────────────────────────
+// ─── Passo 1: Scraping via Apify (Instagram ou TikTok) ────────────────────────
 
-async function fetchReelData(url) {
-  const apiKey = process.env.APIFY_API_KEY;
-  if (!apiKey) {
-    throw new Error('APIFY_API_KEY não configurada. Adicione no .env do servidor para usar o Analisador de Reels.');
-  }
-
-  const actorId = 'apify~instagram-scraper';
-  const runUrl = `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apiKey}&timeout=120`;
-
-  const response = await axios.post(runUrl, {
+async function fetchInstagramData(url) {
+  const items = await runApifyActor('apify/instagram-scraper', {
     directUrls: [url],
     resultsType: 'posts',
     resultsLimit: 1,
     addParentData: false,
-  }, { timeout: 135000 });
+  }, 120);
 
-  const items = Array.isArray(response.data) ? response.data : [];
-  if (!items.length) {
-    throw new Error('Nenhum dado encontrado. Verifique se o Reel é público e a URL está correta.');
-  }
+  if (!items.length) throw new Error('Nenhum dado encontrado. Verifique se o Reel é público e a URL está correta.');
+  const d = items[0];
 
-  return items[0];
+  return {
+    platform: 'instagram',
+    caption:      d.caption || d.text || '',
+    ownerUsername: d.ownerUsername || d.ownerId || '',
+    likesCount:   d.likesCount || 0,
+    videoViewCount: d.videoViewCount || 0,
+    thumbnailUrl: d.thumbnailUrl || d.displayUrl || d.coverUrl || d.imageUrl || null,
+    videoUrl:     d.videoUrl || d.videoVersions?.[0]?.url || d.video_url || null,
+    shortCode:    d.shortCode || d.id || '',
+    url:          d.url || url,
+  };
+}
+
+async function fetchTikTokData(url) {
+  const items = await runApifyActor('clockworks/tiktok-scraper', {
+    postURLs: [url],
+    resultsPerPage: 1,
+    shouldDownloadVideos: false,
+  }, 90);
+
+  if (!items.length) throw new Error('Nenhum dado encontrado. Verifique se o vídeo é público e a URL está correta.');
+  const d = items[0];
+
+  return {
+    platform: 'tiktok',
+    caption:      d.text || d.desc || '',
+    ownerUsername: d.authorMeta?.name || d.author?.uniqueId || '',
+    likesCount:   d.diggCount || d.stats?.diggCount || 0,
+    videoViewCount: d.playCount || d.stats?.playCount || 0,
+    thumbnailUrl: d.videoMeta?.coverUrl || d.covers?.default || d.dynamicCover || null,
+    videoUrl:     d.videoUrl || d.downloadAddr || null,
+    shortCode:    d.id || '',
+    url:          d.webVideoUrl || url,
+  };
+}
+
+async function fetchMediaData(url) {
+  const platform = detectPlatform(url);
+  if (platform === 'tiktok')    return fetchTikTokData(url);
+  if (platform === 'instagram') return fetchInstagramData(url);
+  throw new Error('URL inválida. Use um link do Instagram (Reel) ou TikTok.');
 }
 
 // ─── Passo 2: Download de thumbnail ───────────────────────────────────────────
@@ -377,15 +422,17 @@ async function analyzeReel(url) {
   try {
     // ── Passo 1: Scraping ─────────────────────────────────────────────────────
     stepUpdate('fetch', 'running');
-    const reelData = await fetchReelData(url);
+    const platform = detectPlatform(url) || 'instagram';
+    stepUpdate('fetch', 'running', `Buscando via Apify (${platform === 'tiktok' ? 'TikTok' : 'Instagram'})...`);
+    const mediaData = await fetchMediaData(url);
 
-    const caption   = reelData.caption || reelData.text || '';
-    const videoUrl  = reelData.videoUrl || reelData.videoVersions?.[0]?.url || reelData.video_url || null;
-    const owner     = reelData.ownerUsername || reelData.ownerId || '';
-    const likes     = reelData.likesCount   || reelData.diggCount || 0;
-    const views     = reelData.videoViewCount || reelData.playCount || 0;
-    const shortCode = reelData.shortCode || reelData.id || '';
-    const thumbnailUrlRaw = reelData.thumbnailUrl || reelData.displayUrl || reelData.coverUrl || reelData.imageUrl || null;
+    const caption        = mediaData.caption || '';
+    const videoUrl       = mediaData.videoUrl || null;
+    const owner          = mediaData.ownerUsername || '';
+    const likes          = mediaData.likesCount || 0;
+    const views          = mediaData.videoViewCount || 0;
+    const shortCode      = mediaData.shortCode || '';
+    const thumbnailUrlRaw = mediaData.thumbnailUrl || null;
 
     stepUpdate('fetch', 'done', `@${owner || 'desconhecido'} · ${Number(likes).toLocaleString('pt-BR')} curtidas · ${Number(views).toLocaleString('pt-BR')} views`);
 
@@ -396,7 +443,7 @@ async function analyzeReel(url) {
     let frames = [];
     let videoPath = null;
 
-    thumbnailBase64 = await downloadThumbnail(reelData);
+    thumbnailBase64 = await downloadThumbnail(mediaData);
 
     if (hasFfmpeg && videoUrl) {
       try {
@@ -461,7 +508,8 @@ async function analyzeReel(url) {
         likes,
         views,
         thumbnailUrl: thumbnailUrlRaw,
-        url: reelData.url || `https://www.instagram.com/reel/${shortCode}/`,
+        platform,
+        url: mediaData.url || url,
       },
       transcription,
       visualAnalysis,

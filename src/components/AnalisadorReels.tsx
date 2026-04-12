@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import {
   Link2, Play, CheckCircle2, XCircle, Loader2, Copy, Check,
   Mic, Eye, Layers, Video, ChevronDown, ChevronUp, AlertTriangle,
-  Instagram, Zap, FileText,
+  Zap, FileText, Tv2,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -257,7 +257,7 @@ export default function AnalisadorReels() {
 
   async function handleStart() {
     if (!url.trim()) {
-      toast.error('Cole a URL do Reel antes de analisar.');
+      toast.error('Cole a URL do vídeo antes de analisar.');
       return;
     }
 
@@ -312,10 +312,10 @@ export default function AnalisadorReels() {
       {/* Header */}
       <section>
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">
-          Analisador de Reels
+          Analisador de Vídeos
         </h1>
         <p className="text-muted-foreground text-xs sm:text-sm">
-          Cole o link de um Reel viral → transcrição + análise visual + script de carrossel + roteiro de Reels
+          Cole o link de um Reel do Instagram ou vídeo do TikTok → transcrição + análise visual + script de carrossel + roteiro pronto para gravar
         </p>
       </section>
 
@@ -323,7 +323,7 @@ export default function AnalisadorReels() {
       <div className="rounded-2xl bg-card border border-border p-5 space-y-4" style={{ boxShadow: 'var(--shadow-card)' }}>
         <div className="flex items-center gap-2 mb-1">
           <Link2 size={16} className="text-orange-500" />
-          <span className="font-bold text-sm uppercase tracking-wider">URL do Reel</span>
+          <span className="font-bold text-sm uppercase tracking-wider">URL do vídeo</span>
         </div>
 
         <div className="flex gap-2">
@@ -332,7 +332,7 @@ export default function AnalisadorReels() {
             value={url}
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !running) handleStart(); }}
-            placeholder="https://www.instagram.com/reel/ABC123xyz/"
+            placeholder="Instagram Reel ou TikTok — cole a URL aqui"
             disabled={running}
             className="flex-1 bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50 placeholder:text-muted-foreground"
           />
@@ -429,9 +429,12 @@ export default function AnalisadorReels() {
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <Instagram size={14} className="text-pink-500" />
+                    {result.reelInfo.platform === 'tiktok'
+                      ? <Tv2 size={14} className="text-foreground" />
+                      : <Zap size={14} className="text-pink-500" />
+                    }
                     <span className="font-bold text-sm">
-                      {result.reelInfo.owner ? `@${result.reelInfo.owner}` : 'Reel analisado'}
+                      {result.reelInfo.owner ? `@${result.reelInfo.owner}` : 'Vídeo analisado'}
                     </span>
                     <div className="flex items-center gap-1 ml-auto">
                       {result.hasAudio && (

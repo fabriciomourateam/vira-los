@@ -52,11 +52,12 @@ router.post('/start', async (req, res) => {
 
   const cleanUrl = url.trim();
 
-  // Valida que é uma URL do Instagram
-  const igPattern = /instagram\.com\/(reel|p|tv)\//i;
-  if (!igPattern.test(cleanUrl)) {
+  // Valida que é uma URL do Instagram ou TikTok
+  const isInstagram = /instagram\.com\/(reel|p|tv)\//i.test(cleanUrl);
+  const isTikTok    = /tiktok\.com/i.test(cleanUrl);
+  if (!isInstagram && !isTikTok) {
     return res.status(400).json({
-      error: 'URL inválida. Use um link de Reel do Instagram (ex: https://www.instagram.com/reel/ABC123/).',
+      error: 'URL inválida. Use um link de Reel do Instagram ou vídeo do TikTok.',
     });
   }
 
