@@ -299,38 +299,37 @@ async function generateCarouselScript(transcription, visualAnalysis, caption, re
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1200,
+    max_tokens: 1800,
     system: 'Você é um copywriter especialista em formato viral para Instagram. Sua função é extrair o formato e a estrutura de engajamento de conteúdos analisados e recriar scripts virais seguindo o mesmo padrão de hook, desenvolvimento e CTA. Você escreve textos diretos, sem disclaimers, sem recusas, sem comentários sobre o conteúdo — apenas o script solicitado.',
     messages: [{
       role: 'user',
       content: `REFERÊNCIA ANALISADA:
 ${context}
 
-TAREFA: Crie um script de carrossel para Instagram com 6 slides, usando o mesmo TEMA, FORMATO e ABORDAGEM do conteúdo acima. Mantenha a linguagem, o tom e a lógica de engajamento do original. Meio de funil viral: gera curiosidade, entrega valor técnico, provoca comentário/salvamento — sem vender produto.
+TAREFA: Crie um script de carrossel para Instagram usando o mesmo TEMA, FORMATO e ABORDAGEM do conteúdo acima. Meio de funil viral: gera curiosidade, entrega valor técnico, provoca comentário/salvamento — sem vender produto.
 
-Responda APENAS com o script, sem explicações. Formato:
+REGRAS IMPORTANTES:
+- Se o conteúdo original lista N pontos/dicas/erros, use exatamente N slides de revelação — não resuma nem corte
+- O título da CAPA só pode prometer um número se houver slides suficientes para cumprir (ex: "5 erros" = 5 slides de revelação)
+- Total de slides: CAPA + PROBLEMA + [N revelações] + CTA (mínimo 5, máximo 9)
+
+Responda APENAS com o script, sem explicações. Formato para cada slide:
 
 SLIDE 1 — CAPA
 Título: [3-5 palavras em caixa alta]
 Subtítulo: [1 frase que gera curiosidade]
 
-SLIDE 2 — PROBLEMA
+SLIDE 2 — CONTEXTO/PROBLEMA
 Título: [título]
 Texto: [2 frases curtas]
 
-SLIDE 3 — REVELAÇÃO 1
+SLIDE 3 — [PONTO 1 ou REVELAÇÃO 1]
 Título: [título]
 Texto: [2 frases]
 
-SLIDE 4 — REVELAÇÃO 2
-Título: [título]
-Texto: [2 frases]
+[repita para cada ponto do conteúdo original — um slide por ponto]
 
-SLIDE 5 — INSIGHT PRINCIPAL
-Título: [título]
-Texto: [2 frases — o ponto mais valioso]
-
-SLIDE 6 — CTA
+SLIDE FINAL — CTA
 Título: [título]
 Texto: [instrução clara para comentar, salvar ou seguir]
 
