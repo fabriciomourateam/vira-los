@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import {
   Link2, Play, CheckCircle2, XCircle, Loader2, Copy, Check,
   Mic, Eye, Layers, Video, ChevronDown, ChevronUp, AlertTriangle,
-  Zap, FileText, Tv2,
+  Zap, FileText, Tv2, Sparkles,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -166,7 +166,11 @@ function StepItem({ step }: { step: AnalyzerStep }) {
 
 // ─── Componente principal ──────────────────────────────────────────────────────
 
-export default function AnalisadorReels() {
+interface AnalisadorReelsProps {
+  onUseInCarrossel?: (script: string, topic: string) => void;
+}
+
+export default function AnalisadorReels({ onUseInCarrossel }: AnalisadorReelsProps = {}) {
   const [url, setUrl]         = useState('');
   const [running, setRunning] = useState(false);
   const [steps, setSteps]     = useState<AnalyzerStep[]>([]);
@@ -534,7 +538,21 @@ export default function AnalisadorReels() {
                       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         Script de Carrossel — Meio de Funil Viral
                       </p>
-                      <CopyButton text={result.carouselScript} />
+                      <div className="flex items-center gap-2">
+                        {onUseInCarrossel && (
+                          <button
+                            onClick={() => onUseInCarrossel(
+                              result.carouselScript,
+                              result.reelInfo.owner || result.reelInfo.caption?.slice(0, 40) || 'viral'
+                            )}
+                            className="flex items-center gap-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            <Sparkles size={12} />
+                            Gerar Carrossel Visual
+                          </button>
+                        )}
+                        <CopyButton text={result.carouselScript} />
+                      </div>
                     </div>
                     <pre className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-foreground/90 bg-secondary/50 rounded-xl p-3 max-h-[600px] overflow-y-auto">
                       {result.carouselScript}
@@ -580,9 +598,9 @@ export default function AnalisadorReels() {
             <div className="rounded-2xl bg-foreground text-background p-4 flex items-start gap-3">
               <FileText size={16} className="shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-bold mb-1">Use no seu Roteiro</p>
+                <p className="font-bold mb-1">Próximos passos</p>
                 <p className="opacity-75 text-xs leading-relaxed">
-                  Copie o roteiro de Reels e cole na aba <strong>Roteiro</strong> em "Roteiro Final A" ou "B" para usar o teleprompter e gravar. O script de carrossel vai direto para a aba <strong>Carrossel</strong>.
+                  Clique em <strong>"Gerar Carrossel Visual"</strong> na aba Script Carrossel para criar o carrossel na aba Carrossel com um clique. Copie o roteiro de Reels e cole na aba <strong>Roteiro</strong> em "Roteiro Final A" ou "B" para gravar.
                 </p>
               </div>
             </div>

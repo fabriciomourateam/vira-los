@@ -293,7 +293,7 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
 // ─── Passo 3: Prompt Claude para gerar o HTML ─────────────────────────────────
 
 function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fontFamily,
-  instagramHandle, numSlides, contentTone, redditTrends, unsplashImages }) {
+  instagramHandle, numSlides, contentTone, redditTrends, unsplashImages, customScript }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
@@ -301,7 +301,7 @@ function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fon
   const totalContent = numSlides - 2;
   const cssTemplate = buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily });
 
-  const trendsSection = redditTrends.length
+  const trendsSection = (!customScript && redditTrends.length)
     ? `\nTendências do Reddit sobre "${niche}" esta semana:\n${redditTrends.map((t, i) =>
         `${i + 1}. [r/${t.subreddit}] ${t.title} (${t.score} upvotes)`).join('\n')}`
     : '';
@@ -310,6 +310,10 @@ function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fon
     ? `\nImagens Unsplash disponíveis — use estas URLs exatas no HTML (uma por slide):\n${unsplashImages.map((img, i) =>
         `${i + 1}. ${img.url}`).join('\n')}`
     : '\n(Sem imagens Unsplash — use gradientes CSS criativos no fundo dos slides de foto)';
+
+  const scriptSection = customScript
+    ? `\n━━━ SCRIPT OBRIGATÓRIO (USE ESTE CONTEÚDO EXATO) ━━━\nO script abaixo foi pré-aprovado. Use o texto de cada SLIDE exatamente como está — não invente, não resuma, não adicione conteúdo.\n\n${customScript}\n`
+    : '';
 
   return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo editorial/investigativo.
 
@@ -320,6 +324,7 @@ Instagram: ${handleAt}
 Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
 ${trendsSection}
 ${imagesSection}
+${scriptSection}
 
 ━━━ REGRAS ABSOLUTAS ━━━
 - Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
@@ -361,7 +366,9 @@ SLIDES 2 a ${numSlides - 1} — CONTEÚDO (.slide-editorial):
 - Palavras-chave: <span class="highlight"> (${primaryColor}) ou <span class="highlight-green"> (verde)
 - Frases importantes: <strong>
 - Preencher TODO o espaço — sem áreas vazias grandes
-- Máximo 30 palavras por slide. Capitalize natural, SEM CAIXA ALTA nos internos
+${customScript
+  ? '- Use o texto EXATO do SCRIPT OBRIGATÓRIO acima — cada "SLIDE N" do script vira um slide de conteúdo. Não invente nem altere o texto.'
+  : '- Máximo 30 palavras por slide. Capitalize natural, SEM CAIXA ALTA nos internos'}
 - .footer com número de página N/${totalContent} (começando em 1/${totalContent} no slide 2)
 
 SLIDE ${numSlides} — CTA (.slide):
@@ -539,16 +546,22 @@ async function generateCarousel(config) {
     instagramHandle = '',
     numSlides = 7,
     contentTone = 'investigativo',
+    customScript = null,
   } = config;
 
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
 
-  const slidesCount = Math.min(10, Math.max(5, Number(numSlides)));
+  // Conta slides reais do script se fornecido
+  let slidesCount = Math.min(10, Math.max(5, Number(numSlides)));
+  if (customScript) {
+    const count = (customScript.match(/^SLIDE\s+\d+/gim) || []).length;
+    if (count >= 3) slidesCount = Math.min(10, count);
+  }
 
-  // Passo 1 + 2: Reddit e Unsplash em paralelo
+  // Passo 1 + 2: Reddit (só para imagens) e Unsplash em paralelo
   const [redditTrends, unsplashImages] = await Promise.all([
-    fetchRedditTrends(topic),
+    customScript ? Promise.resolve([]) : fetchRedditTrends(topic),
     fetchUnsplashImages(topic, slidesCount + 2),
   ]);
 
@@ -556,7 +569,7 @@ async function generateCarousel(config) {
   const htmlPrompt = buildHTMLPrompt({
     topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
     fontFamily, instagramHandle, numSlides: slidesCount, contentTone,
-    redditTrends, unsplashImages,
+    redditTrends, unsplashImages, customScript,
   });
 
   const [htmlRes, legendaRes] = await Promise.all([

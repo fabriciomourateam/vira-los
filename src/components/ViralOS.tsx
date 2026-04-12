@@ -566,6 +566,7 @@ function TeleprompterOverlay({
 
 export default function ViralOS() {
   const [activeTab, setActiveTab] = useState<TabId>('roteiro');
+  const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
   const [state, setState] = useState<AppState>(initialState);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
 
@@ -706,6 +707,14 @@ export default function ViralOS() {
     );
   };
 
+  const handleUseInCarrossel = (script: string, topic: string) => {
+    setCarouselPrefill({ script, topic });
+    setActiveTab('carrossel');
+    toast.success('Script carregado na aba Carrossel!');
+    // Clear prefill after component mounts and consumes it
+    setTimeout(() => setCarouselPrefill(null), 500);
+  };
+
   const totalTasks = roteiro.reduce((acc, s) => acc + s.itens.length, 0);
   const completedTasks = Object.values(state.checkedItems).filter(Boolean).length;
   const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -784,8 +793,8 @@ export default function ViralOS() {
         {activeTab === 'agendador' && <Agendador />}
         {activeTab === 'pesquisa'  && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
         {activeTab === 'agente'    && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
-        {activeTab === 'carrossel'  && <CarrosselInstagram />}
-        {activeTab === 'analisador' && <AnalisadorReels />}
+        {activeTab === 'carrossel'  && <CarrosselInstagram prefillScript={carouselPrefill?.script} prefillTopic={carouselPrefill?.topic} />}
+        {activeTab === 'analisador' && <AnalisadorReels onUseInCarrossel={handleUseInCarrossel} />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 text-balance">

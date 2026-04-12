@@ -173,12 +173,28 @@ const DEFAULT_CONFIG: CarouselConfig = {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function CarrosselInstagram() {
+interface CarrosselInstagramProps {
+  prefillScript?: string;
+  prefillTopic?: string;
+}
+
+export default function CarrosselInstagram({ prefillScript, prefillTopic }: CarrosselInstagramProps = {}) {
   const [config, setConfig] = useState<CarouselConfig>(DEFAULT_CONFIG);
+  const [customScript, setCustomScript] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CarouselResult | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [copied, setCopied] = useState(false);
+
+  // Auto-fill when prefill props change
+  useEffect(() => {
+    if (prefillTopic) {
+      setConfig(prev => ({ ...prev, topic: prefillTopic }));
+    }
+    if (prefillScript) {
+      setCustomScript(prefillScript);
+    }
+  }, [prefillScript, prefillTopic]);
 
   function set<K extends keyof CarouselConfig>(key: K, value: CarouselConfig[K]) {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -196,7 +212,7 @@ export default function CarrosselInstagram() {
       const res = await fetch(`${API}/api/carousel/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ ...config, ...(customScript ? { customScript } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
@@ -272,6 +288,22 @@ export default function CarrosselInstagram() {
           Crie carrosseis profissionais com IA. Personaliza cor, fonte e estilo.
         </p>
       </div>
+
+      {/* Banner: script prefilled */}
+      {customScript && (
+        <div className="rounded-xl border border-purple-500/40 bg-purple-500/10 p-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-purple-300">
+            <FileText className="w-4 h-4 shrink-0" />
+            <span>Script do Analisador carregado — o carrossel usará este conteúdo.</span>
+          </div>
+          <button
+            onClick={() => setCustomScript(undefined)}
+            className="text-xs text-muted-foreground hover:text-foreground underline shrink-0"
+          >
+            Remover
+          </button>
+        </div>
+      )}
 
       {/* Formulário */}
       <div className="rounded-xl border border-border bg-card p-5 space-y-5">
