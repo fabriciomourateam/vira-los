@@ -132,6 +132,19 @@ async function fetchMediaData(url) {
   throw new Error('URL inválida. Use um link do Instagram (Reel) ou TikTok.');
 }
 
+// ─── Fallback: obtém URL do vídeo via yt-dlp ──────────────────────────────────
+
+function getVideoUrlViaYtDlp(postUrl) {
+  try {
+    const result = execSync(
+      `yt-dlp --get-url --no-warnings "${postUrl}" 2>/dev/null`,
+      { timeout: 30000, encoding: 'utf8' }
+    );
+    const firstLine = result.trim().split('\n')[0];
+    return firstLine || null;
+  } catch { return null; }
+}
+
 // ─── Passo 2: Download de thumbnail ───────────────────────────────────────────
 
 async function downloadThumbnail(reelData) {
@@ -444,9 +457,19 @@ async function analyzeReel(url) {
 
     thumbnailBase64 = await downloadThumbnail(mediaData);
 
-    if (hasFfmpeg && videoUrl) {
+    // Se Apify não retornou URL do vídeo, tenta via yt-dlp
+    let resolvedVideoUrl = videoUrl;
+    if (!resolvedVideoUrl && hasFfmpeg) {
+      stepUpdate('download', 'running', 'URL do vídeo não encontrada — tentando yt-dlp...');
+      resolvedVideoUrl = getVideoUrlViaYtDlp(url);
+      if (resolvedVideoUrl) {
+        stepUpdate('download', 'running', 'URL obtida via yt-dlp, extraindo frames...');
+      }
+    }
+
+    if (hasFfmpeg && resolvedVideoUrl) {
       try {
-        const extracted = await extractFrames(videoUrl, tempDir);
+        const extracted = await extractFrames(resolvedVideoUrl, tempDir);
         frames    = extracted.frames;
         videoPath = extracted.videoPath;
         stepUpdate('download', 'done', `${frames.length} frame(s) extraído(s)${thumbnailBase64 ? ' + thumbnail' : ''}`);
@@ -455,13 +478,13 @@ async function analyzeReel(url) {
         stepUpdate('download', 'done', thumbnailBase64 ? 'Thumbnail obtida (frames falharam)' : 'Sem imagens obtidas');
       }
     } else {
-      const reason = !videoUrl ? 'sem URL de vídeo' : 'ffmpeg não disponível';
+      const reason = !resolvedVideoUrl ? 'sem URL de vídeo' : 'ffmpeg não disponível';
       stepUpdate('download', 'done', thumbnailBase64 ? `Thumbnail obtida (${reason})` : `Sem imagens (${reason})`);
     }
 
     // ── Passo 3: Transcrição ──────────────────────────────────────────────────
     let transcription = null;
-    if (hasFfmpeg && videoPath && process.env.OPENAI_API_KEY) {
+    if (hasFfmpeg && videoPath && resolvedVideoUrl && process.env.OPENAI_API_KEY) {
       stepUpdate('transcribe', 'running', 'Enviando áudio para OpenAI Whisper...');
       try {
         transcription = await transcribeAudio(videoPath);

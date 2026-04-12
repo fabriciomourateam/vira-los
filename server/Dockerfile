@@ -4,6 +4,8 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y \
     chromium \
     ffmpeg \
+    python3 \
+    python3-pip \
     libnss3 \
     libatk-bridge2.0-0 \
     libdrm2 \
@@ -16,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     libpangocairo-1.0-0 \
     libgtk-3-0 \
     --no-install-recommends \
+    && pip3 install --break-system-packages yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
 # Playwright usa o Chromium do sistema (sem download extra de ~200MB)
