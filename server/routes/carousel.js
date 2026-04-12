@@ -21,6 +21,7 @@ router.post('/generate', async (req, res) => {
   const {
     topic, niche, primaryColor, accentColor, bgColor,
     fontFamily, instagramHandle, numSlides, contentTone,
+    customScript,
   } = req.body;
 
   if (!topic || !String(topic).trim()) {
@@ -31,6 +32,7 @@ router.post('/generate', async (req, res) => {
     const result = await generateCarousel({
       topic, niche, primaryColor, accentColor, bgColor,
       fontFamily, instagramHandle, numSlides, contentTone,
+      customScript,
     });
     res.json(result);
   } catch (err) {
