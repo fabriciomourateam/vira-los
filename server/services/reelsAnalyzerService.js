@@ -132,17 +132,26 @@ async function fetchMediaData(url) {
   throw new Error('URL inválida. Use um link do Instagram (Reel) ou TikTok.');
 }
 
-// ─── Fallback: obtém URL do vídeo via yt-dlp ──────────────────────────────────
+// ─── Download direto via yt-dlp (principal método para vídeo) ─────────────────
 
-function getVideoUrlViaYtDlp(postUrl) {
+function ytDlpAvailable() {
   try {
-    const result = execSync(
-      `yt-dlp --get-url --no-warnings "${postUrl}" 2>/dev/null`,
-      { timeout: 30000, encoding: 'utf8' }
+    execSync('yt-dlp --version', { stdio: 'ignore', timeout: 5000 });
+    return true;
+  } catch { return false; }
+}
+
+function downloadVideoViaYtDlp(postUrl, outputPath) {
+  try {
+    execSync(
+      `yt-dlp -o "${outputPath}" --format "best[ext=mp4]/best" --no-playlist --no-warnings "${postUrl}"`,
+      { timeout: 120000, stdio: ['ignore', 'ignore', 'ignore'] }
     );
-    const firstLine = result.trim().split('\n')[0];
-    return firstLine || null;
-  } catch { return null; }
+    return fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0;
+  } catch (e) {
+    console.warn('[ReelsAnalyzer] yt-dlp download falhou:', e.message);
+    return false;
+  }
 }
 
 // ─── Passo 2: Download de thumbnail ───────────────────────────────────────────
@@ -450,41 +459,66 @@ async function analyzeReel(url) {
 
     // ── Passo 2: Download de mídia ────────────────────────────────────────────
     stepUpdate('download', 'running');
-    const hasFfmpeg = ffmpegAvailable();
+    const hasFfmpeg  = ffmpegAvailable();
+    const hasYtDlp   = hasFfmpeg && ytDlpAvailable();
     let thumbnailBase64 = null;
     let frames = [];
     let videoPath = null;
 
     thumbnailBase64 = await downloadThumbnail(mediaData);
 
-    // Se Apify não retornou URL do vídeo, tenta via yt-dlp
-    let resolvedVideoUrl = videoUrl;
-    if (!resolvedVideoUrl && hasFfmpeg) {
-      stepUpdate('download', 'running', 'URL do vídeo não encontrada — tentando yt-dlp...');
-      resolvedVideoUrl = getVideoUrlViaYtDlp(url);
-      if (resolvedVideoUrl) {
-        stepUpdate('download', 'running', 'URL obtida via yt-dlp, extraindo frames...');
-      }
-    }
+    if (hasFfmpeg) {
+      const dlPath = path.join(tempDir, 'reel.mp4');
 
-    if (hasFfmpeg && resolvedVideoUrl) {
-      try {
-        const extracted = await extractFrames(resolvedVideoUrl, tempDir);
-        frames    = extracted.frames;
-        videoPath = extracted.videoPath;
-        stepUpdate('download', 'done', `${frames.length} frame(s) extraído(s)${thumbnailBase64 ? ' + thumbnail' : ''}`);
-      } catch (e) {
-        console.warn('[ReelsAnalyzer] Extração de frames falhou:', e.message);
-        stepUpdate('download', 'done', thumbnailBase64 ? 'Thumbnail obtida (frames falharam)' : 'Sem imagens obtidas');
+      if (hasYtDlp) {
+        // Método principal: yt-dlp baixa o vídeo completo diretamente
+        stepUpdate('download', 'running', 'Baixando vídeo via yt-dlp...');
+        const ok = downloadVideoViaYtDlp(url, dlPath);
+        if (ok) {
+          videoPath = dlPath;
+          // Extrair frames do vídeo baixado
+          const framesPattern = path.join(tempDir, 'frame%03d.jpg');
+          try {
+            execSync(
+              `ffmpeg -i "${videoPath}" -vf "select=eq(n\\,0)+eq(n\\,25)+eq(n\\,55)" -vsync vfr "${framesPattern}" -y 2>/dev/null`,
+              { timeout: 30000 }
+            );
+          } catch {
+            try {
+              execSync(
+                `ffmpeg -i "${videoPath}" -r 0.3 -frames:v 3 "${framesPattern}" -y 2>/dev/null`,
+                { timeout: 30000 }
+              );
+            } catch { /* segue sem frames extras */ }
+          }
+          for (let i = 1; i <= 5; i++) {
+            const fp = path.join(tempDir, `frame${String(i).padStart(3, '0')}.jpg`);
+            if (fs.existsSync(fp)) frames.push(fs.readFileSync(fp).toString('base64'));
+          }
+          stepUpdate('download', 'done', `Vídeo baixado · ${frames.length} frame(s)${thumbnailBase64 ? ' + thumbnail' : ''}`);
+        } else {
+          stepUpdate('download', 'done', thumbnailBase64 ? 'yt-dlp falhou — usando thumbnail' : 'Falha no download do vídeo');
+        }
+      } else if (videoUrl) {
+        // Fallback: URL direta do Apify
+        try {
+          const extracted = await extractFrames(videoUrl, tempDir);
+          frames    = extracted.frames;
+          videoPath = extracted.videoPath;
+          stepUpdate('download', 'done', `${frames.length} frame(s) via URL direta${thumbnailBase64 ? ' + thumbnail' : ''}`);
+        } catch (e) {
+          stepUpdate('download', 'done', thumbnailBase64 ? 'Thumbnail obtida (frames falharam)' : 'Sem imagens');
+        }
+      } else {
+        stepUpdate('download', 'done', thumbnailBase64 ? 'Thumbnail obtida (yt-dlp não instalado)' : 'Sem imagens');
       }
     } else {
-      const reason = !resolvedVideoUrl ? 'sem URL de vídeo' : 'ffmpeg não disponível';
-      stepUpdate('download', 'done', thumbnailBase64 ? `Thumbnail obtida (${reason})` : `Sem imagens (${reason})`);
+      stepUpdate('download', 'done', thumbnailBase64 ? 'Thumbnail obtida (ffmpeg não disponível)' : 'Sem imagens');
     }
 
     // ── Passo 3: Transcrição ──────────────────────────────────────────────────
     let transcription = null;
-    if (hasFfmpeg && videoPath && resolvedVideoUrl && process.env.OPENAI_API_KEY) {
+    if (hasFfmpeg && videoPath && process.env.OPENAI_API_KEY) {
       stepUpdate('transcribe', 'running', 'Enviando áudio para OpenAI Whisper...');
       try {
         transcription = await transcribeAudio(videoPath);
