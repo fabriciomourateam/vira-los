@@ -55,7 +55,7 @@ function fmtNumber(n: number | string): string {
 }
 
 const STEP_ICONS: Record<string, React.ComponentType<any>> = {
-  fetch:     Instagram,
+  fetch:     Link2,
   download:  Eye,
   transcribe: Mic,
   vision:    Eye,
