@@ -4,8 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight,
-  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
+  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image, Edit3,
 } from 'lucide-react';
+import CarouselEditor from './CarouselEditor';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -185,6 +186,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [result, setResult] = useState<CarouselResult | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   // Auto-fill when prefill props change
   useEffect(() => {
@@ -208,6 +210,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     setLoading(true);
     setResult(null);
     setCurrentSlide(0);
+    setEditorOpen(false);
     try {
       const res = await fetch(`${API}/api/carousel/generate`, {
         method: 'POST',
@@ -453,6 +456,16 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                     <RefreshCw className="w-4 h-4" />
                   </button>
                   <button
+                    onClick={() => setEditorOpen(o => !o)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      editorOpen
+                        ? 'bg-purple-600 text-white hover:bg-purple-500'
+                        : 'bg-secondary hover:bg-border text-foreground'
+                    }`}
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Editar
+                  </button>
+                  <button
                     onClick={handleDownloadHTML}
                     title="Baixar HTML"
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors"
@@ -553,6 +566,19 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                 </div>
               </div>
             </div>
+
+            {/* ── Editor de Slides ── */}
+            {editorOpen && (
+              <CarouselEditor
+                html={result.html}
+                folderName={result.folderName}
+                topic={result.topic}
+                onScreenshotsUpdated={(screenshots) => {
+                  setResult(prev => prev ? { ...prev, screenshots } : prev);
+                  setCurrentSlide(0);
+                }}
+              />
+            )}
 
             {/* ── Legenda ── */}
             {result.legenda && (

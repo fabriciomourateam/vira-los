@@ -25,6 +25,9 @@ import {
   ScanSearch,
   Radio,
   Gauge,
+  User,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -37,6 +40,10 @@ import CarrosselInstagram from './CarrosselInstagram';
 import AnalisadorReels from './AnalisadorReels';
 import TrendRadar from './TrendRadar';
 import ViralScore from './ViralScore';
+import ProfileSettings from './ProfileSettings';
+import { useCreatorProfile } from '@/hooks/useCreatorProfile';
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa' | 'agente' | 'carrossel' | 'analisador' | 'radar' | 'score';
 
@@ -576,6 +583,13 @@ export default function ViralOS() {
   const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
   const [state, setState] = useState<AppState>(initialState);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [aiRoteiro, setAiRoteiro] = useState<{
+    targetId: string | null;
+    tema: string;
+    loading: boolean;
+  }>({ targetId: null, tema: '', loading: false });
+  const [profile, , isConfigured] = useCreatorProfile();
 
   useEffect(() => {
     const saved = localStorage.getItem('viral-os-data');
@@ -747,6 +761,36 @@ export default function ViralOS() {
     setTimeout(() => setCarouselPrefill(null), 500);
   };
 
+  async function handleAIRoteiro(targetId: string) {
+    if (!aiRoteiro.tema.trim()) {
+      toast.error('Informe o tema do roteiro');
+      return;
+    }
+    setAiRoteiro(prev => ({ ...prev, loading: true }));
+    try {
+      const res = await fetch(`${API}/api/ai-roteiro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tema: aiRoteiro.tema,
+          creatorProfile: isConfigured ? profile : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao gerar roteiro');
+      handleInputChange(targetId, data.roteiro);
+      setState(prev => ({
+        ...prev,
+        checkedItems: { ...prev.checkedItems, [targetId]: true },
+      }));
+      setAiRoteiro(prev => ({ ...prev, targetId: null, loading: false }));
+      toast.success('Roteiro gerado com IA!');
+    } catch (err: unknown) {
+      toast.error((err as Error).message);
+      setAiRoteiro(prev => ({ ...prev, loading: false }));
+    }
+  }
+
   const totalTasks = roteiro.reduce((acc, s) => acc + s.itens.length, 0);
   const completedTasks = Object.values(state.checkedItems).filter(Boolean).length;
   const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -786,6 +830,16 @@ export default function ViralOS() {
                 <span className="text-xs font-mono font-bold tabular-nums">{progress}%</span>
               </div>
             )}
+            <button
+              onClick={() => setProfileOpen(true)}
+              className="p-2 text-muted-foreground hover:text-foreground transition-colors relative"
+              title="Perfil do Criador"
+            >
+              <User size={16} />
+              {isConfigured && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 border border-card" />
+              )}
+            </button>
             <button
               onClick={resetProgress}
               className="p-2 text-muted-foreground hover:text-destructive transition-colors"
@@ -985,6 +1039,21 @@ export default function ViralOS() {
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2">
                                           <button
+                                            onClick={() => setAiRoteiro(prev => ({
+                                              ...prev,
+                                              targetId: prev.targetId === item.id ? null : item.id,
+                                              tema: state.inputs['2.3'] || state.inputs['1.5'] || '',
+                                            }))}
+                                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                                              aiRoteiro.targetId === item.id
+                                                ? 'border-purple-400 bg-purple-100 text-purple-700'
+                                                : 'border-blue-200 bg-white text-blue-700 hover:border-blue-300'
+                                            }`}
+                                          >
+                                            <Sparkles size={12} />
+                                            Gerar com IA
+                                          </button>
+                                          <button
                                             onClick={() => openTeleprompter(item.id, item.titulo)}
                                             className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:border-blue-300 transition-colors"
                                             title={`Abrir ${item.titulo} no teleprompter`}
@@ -1001,6 +1070,38 @@ export default function ViralOS() {
                                             Copiar roteiro
                                           </button>
                                         </div>
+                                      </div>
+                                    )}
+
+                                    {aiRoteiro.targetId === item.id && (
+                                      <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-3">
+                                        <p className="text-xs font-bold uppercase tracking-wider text-purple-700">Gerar Roteiro com IA</p>
+                                        {isConfigured && (
+                                          <p className="text-xs text-purple-600">
+                                            Perfil ativo — tom de voz e estilo de {profile.handle} aplicados automaticamente.
+                                          </p>
+                                        )}
+                                        <div>
+                                          <label className="text-xs font-semibold text-purple-700/80 mb-1 block">Tema do Roteiro</label>
+                                          <input
+                                            type="text"
+                                            value={aiRoteiro.tema}
+                                            onChange={e => setAiRoteiro(prev => ({ ...prev, tema: e.target.value }))}
+                                            onKeyDown={e => e.key === 'Enter' && handleAIRoteiro(item.id)}
+                                            placeholder="Ex: 3 sinais de testosterona baixa que poucos conhecem"
+                                            className="w-full rounded-lg border border-purple-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+                                          />
+                                        </div>
+                                        <button
+                                          onClick={() => handleAIRoteiro(item.id)}
+                                          disabled={aiRoteiro.loading}
+                                          className="w-full flex items-center justify-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold py-2 transition-colors"
+                                        >
+                                          {aiRoteiro.loading
+                                            ? <><Loader2 size={12} className="animate-spin" /> Gerando roteiro…</>
+                                            : <><Sparkles size={12} /> Gerar Roteiro</>
+                                          }
+                                        </button>
                                       </div>
                                     )}
 
@@ -1100,6 +1201,7 @@ export default function ViralOS() {
         </footer>
         </>)}
       </main>
+      <ProfileSettings open={profileOpen} onClose={() => setProfileOpen(false)} />
       <TeleprompterOverlay
         open={teleprompter.open}
         title={teleprompter.title}
