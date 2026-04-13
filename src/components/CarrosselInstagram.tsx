@@ -16,10 +16,11 @@ interface CarouselConfig {
   topic: string;
   niche: string;
   primaryColor: string;
-  accentColor: string;
   bgColor: string;
   fontFamily: string;
   instagramHandle: string;
+  brandName: string;
+  brandAvatarUrl: string;
   numSlides: number;
   contentTone: string;
 }
@@ -160,14 +161,33 @@ const FONT_OPTIONS = [
   'Raleway', 'Montserrat', 'Poppins', 'Inter', 'Oswald', 'Playfair Display',
 ];
 
+const BRAND_STORAGE_KEY = 'carousel_brand';
+
+function loadBrand(): Partial<CarouselConfig> {
+  try {
+    const raw = localStorage.getItem(BRAND_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveBrand(config: CarouselConfig) {
+  try {
+    const { instagramHandle, brandName, brandAvatarUrl, primaryColor, bgColor, fontFamily, niche, contentTone, numSlides } = config;
+    localStorage.setItem(BRAND_STORAGE_KEY, JSON.stringify({
+      instagramHandle, brandName, brandAvatarUrl, primaryColor, bgColor, fontFamily, niche, contentTone, numSlides,
+    }));
+  } catch { /* ignore */ }
+}
+
 const DEFAULT_CONFIG: CarouselConfig = {
   topic: '',
   niche: 'Inteligência Artificial',
   primaryColor: '#B078FF',
-  accentColor: '#5197b5',
-  bgColor: '#292A25',
-  fontFamily: 'Raleway',
+  bgColor: '#111111',
+  fontFamily: 'Inter',
   instagramHandle: '',
+  brandName: '',
+  brandAvatarUrl: '',
   numSlides: 7,
   contentTone: 'investigativo',
 };
@@ -180,7 +200,10 @@ interface CarrosselInstagramProps {
 }
 
 export default function CarrosselInstagram({ prefillScript, prefillTopic }: CarrosselInstagramProps = {}) {
-  const [config, setConfig] = useState<CarouselConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<CarouselConfig>(() => ({
+    ...DEFAULT_CONFIG,
+    ...loadBrand(),
+  }));
   const [customScript, setCustomScript] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CarouselResult | null>(null);
@@ -190,16 +213,16 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
 
   // Auto-fill when prefill props change
   useEffect(() => {
-    if (prefillTopic) {
-      setConfig(prev => ({ ...prev, topic: prefillTopic }));
-    }
-    if (prefillScript) {
-      setCustomScript(prefillScript);
-    }
+    if (prefillTopic) setConfig(prev => ({ ...prev, topic: prefillTopic }));
+    if (prefillScript) setCustomScript(prefillScript);
   }, [prefillScript, prefillTopic]);
 
   function set<K extends keyof CarouselConfig>(key: K, value: CarouselConfig[K]) {
-    setConfig(prev => ({ ...prev, [key]: value }));
+    setConfig(prev => {
+      const next = { ...prev, [key]: value };
+      saveBrand(next);
+      return next;
+    });
   }
 
   async function handleGenerate() {
@@ -325,32 +348,55 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           />
         </div>
 
-        {/* Nicho + Handle */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Marca (salvo automaticamente) */}
+        <div className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+            <Mic2 className="w-3.5 h-3.5" /> Sua Marca <span className="text-muted-foreground font-normal normal-case">(salvo automaticamente)</span>
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Nome de Exibição</label>
+              <input
+                type="text"
+                value={config.brandName}
+                onChange={e => set('brandName', e.target.value)}
+                placeholder="Ex: Fabricio Moura"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Handle do Instagram</label>
+              <input
+                type="text"
+                value={config.instagramHandle}
+                onChange={e => set('instagramHandle', e.target.value)}
+                placeholder="@seucanal"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              />
+            </div>
+          </div>
           <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-              Nicho / Área
-            </label>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">URL da Foto de Perfil <span className="text-muted-foreground font-normal">(opcional)</span></label>
             <input
-              type="text"
-              value={config.niche}
-              onChange={e => set('niche', e.target.value)}
-              placeholder="Inteligência Artificial"
+              type="url"
+              value={config.brandAvatarUrl}
+              onChange={e => set('brandAvatarUrl', e.target.value)}
+              placeholder="https://... (link direto para imagem)"
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             />
           </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-              <Mic2 className="w-3.5 h-3.5" /> Handle do Instagram
-            </label>
-            <input
-              type="text"
-              value={config.instagramHandle}
-              onChange={e => set('instagramHandle', e.target.value)}
-              placeholder="@seucanal"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-            />
-          </div>
+        </div>
+
+        {/* Nicho */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Nicho / Área</label>
+          <input
+            type="text"
+            value={config.niche}
+            onChange={e => set('niche', e.target.value)}
+            placeholder="Inteligência Artificial"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+          />
         </div>
 
         {/* Cores */}
@@ -358,10 +404,9 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
             <Palette className="w-3.5 h-3.5" /> Paleta de Cores
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <ColorPicker label="Cor Principal"   value={config.primaryColor} onChange={v => set('primaryColor', v)} />
-            <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
-            <ColorPicker label="Fundo Slides"    value={config.bgColor}      onChange={v => set('bgColor', v)} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ColorPicker label="Cor do Degradê (rodapé)" value={config.primaryColor} onChange={v => set('primaryColor', v)} />
+            <ColorPicker label="Fundo dos Slides"        value={config.bgColor}      onChange={v => set('bgColor', v)} />
           </div>
         </div>
 

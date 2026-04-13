@@ -140,252 +140,221 @@ async function fetchUnsplashImages(query, count = 12) {
   }
 }
 
-// ─── Passo 3: CSS template completo (baseado no gist) ────────────────────────
+// ─── Passo 3: CSS template — design dark editorial ───────────────────────────
 
-function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
+function buildCSSTemplate({ primaryColor, bgColor, fontFamily }) {
   const font = fontFamily.replace(/ /g, '+');
   return `
-  <link href="https://fonts.googleapis.com/css2?family=${font}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=${font}:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: ${bgColor}; }
 
-    /* ── SLIDE CAPA / CTA (foto de fundo) ── */
-    .slide {
+    /* ══ CAPA (.slide-cover) ══════════════════════════════════════════════════ */
+    .slide-cover {
       width: 1080px; height: 1350px;
       position: relative; overflow: hidden;
       font-family: '${fontFamily}', sans-serif;
-      color: #ffffff;
-      display: flex; flex-direction: column; justify-content: flex-end;
-      padding: 60px 56px 90px;
+      display: flex; flex-direction: column;
       page-break-after: always;
     }
-    .slide-bg {
-      position: absolute; top: 0; left: 0;
-      width: 100%; height: 100%;
+    .cv-bg {
+      position: absolute; inset: 0; z-index: 0;
       background-size: cover; background-position: center;
-      filter: brightness(0.5); z-index: 0;
+      filter: brightness(0.42);
     }
-    .slide-overlay {
-      position: absolute; top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%);
-      z-index: 1;
+    .cv-overlay {
+      position: absolute; inset: 0; z-index: 1;
+      background: linear-gradient(to bottom,
+        rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.25) 45%, rgba(0,0,0,0.92) 100%);
     }
-    .slide-content {
+    .cv-top {
       position: relative; z-index: 2;
-      width: 100%; display: flex; flex-direction: column; gap: 24px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 36px 44px 0;
     }
-
-    /* ── BRANDING CENTRALIZADO (só capa) ── */
-    .cover-branding {
+    .cv-top span {
+      font-size: 13px; line-height: 1.55; color: rgba(255,255,255,0.6); font-weight: 400;
+    }
+    .cv-author {
+      position: relative; z-index: 2;
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 8px; padding: 0 48px;
+    }
+    .cv-avatar {
+      width: 80px; height: 80px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.9); object-fit: cover;
+      display: block; margin-bottom: 6px;
+    }
+    .cv-avatar-initials {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: linear-gradient(135deg, #f97316, ${primaryColor});
+      border: 3px solid rgba(255,255,255,0.9);
       display: flex; align-items: center; justify-content: center;
-      gap: 12px; margin-bottom: 16px;
+      font-size: 26px; font-weight: 800; color: white; margin-bottom: 6px;
     }
-    .cover-branding svg { width: 32px; height: 32px; fill: #ffffff; }
-    .cover-branding span {
-      font-size: 24px; font-weight: 700; color: #ffffff;
-      text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+    .cv-name {
+      font-size: 22px; font-weight: 700; color: white;
+      display: flex; align-items: center; gap: 7px;
     }
+    .cv-badge {
+      width: 21px; height: 21px; border-radius: 50%; background: #1d9bf0;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; color: white; font-weight: 900; flex-shrink: 0;
+    }
+    .cv-handle { font-size: 15px; color: rgba(255,255,255,0.7); }
+    .cv-body {
+      position: relative; z-index: 2; padding: 0 52px 60px;
+    }
+    .cv-title {
+      font-size: 58px; font-weight: 900; line-height: 1.09;
+      letter-spacing: -1.5px; color: white; margin-bottom: 20px;
+    }
+    .cv-arrow { font-size: 17px; color: rgba(255,255,255,0.55); font-weight: 400; }
 
-    /* ── HEADER TOPO (todos os slides) ── */
-    .top-header {
-      position: absolute; top: 0; left: 0; right: 0;
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 22px 40px; z-index: 10;
-      font-family: 'Space Grotesk', sans-serif;
-    }
-    .top-header span {
-      font-size: 14px; font-weight: 400;
-      color: rgba(255,255,255,0.55);
-      letter-spacing: 0.8px; text-transform: uppercase;
-    }
-
-    /* ── RODAPÉ (todos os slides) ── */
-    .footer {
-      position: absolute; bottom: 0; left: 0; right: 0;
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 18px 40px; background: rgba(0,0,0,0.5); z-index: 10;
-    }
-    .footer-left { display: flex; align-items: center; gap: 10px; }
-    .footer-left svg { width: 22px; height: 22px; fill: #ffffff; }
-    .footer-left span { font-size: 18px; font-weight: 600; color: #ffffff; }
-    .footer-right { font-size: 18px; font-weight: 500; color: rgba(255,255,255,0.6); }
-
-    /* ── TIPOGRAFIA CAPA/CTA ── */
-    .title {
-      font-size: 56px; font-weight: 900; line-height: 1.1;
-      letter-spacing: -1px; text-transform: uppercase;
-      text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
-    }
-    .title .highlight { color: ${primaryColor}; }
-    .title .highlight-yellow { color: #D9D353; }
-    .subtitle {
-      font-size: 24px; font-weight: 500;
-      color: rgba(255,255,255,0.85); line-height: 1.5;
-      text-shadow: 1px 1px 4px rgba(0,0,0,0.8); max-width: 900px;
-    }
-    .subtitle-accent {
-      font-size: 22px; font-weight: 600; color: ${accentColor};
-      line-height: 1.5; text-shadow: 1px 1px 4px rgba(0,0,0,0.8);
-      text-transform: uppercase; letter-spacing: 0.5px;
-    }
-
-    /* ── SLIDES INTERNOS (estilo editorial/narrativo) ── */
-    .slide-editorial {
+    /* ══ SLIDES DE CONTEÚDO (.slide-content) ══════════════════════════════════ */
+    .slide-content {
       width: 1080px; height: 1350px;
-      position: relative; overflow: hidden;
+      background: ${bgColor};
       font-family: '${fontFamily}', sans-serif;
-      color: #ffffff; background: ${bgColor};
-      display: flex; flex-direction: column; justify-content: center;
-      padding: 80px 56px 90px;
+      color: white; position: relative; overflow: hidden;
+      display: flex; flex-direction: column;
+      padding: 72px 56px 0;
       page-break-after: always;
     }
+    .ct-title {
+      font-size: 58px; font-weight: 800; line-height: 1.1;
+      letter-spacing: -1.5px; color: #ffffff;
+      margin-bottom: 24px; flex-shrink: 0;
+    }
+    .ct-body {
+      font-size: 22px; font-weight: 400; line-height: 1.65;
+      color: rgba(255,255,255,0.80);
+      margin-bottom: 28px; flex-shrink: 0;
+    }
+    .ct-photo {
+      flex: 1; min-height: 0; border-radius: 20px; overflow: hidden;
+    }
+    .ct-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* Espaçador para não sobrepor o rodapé */
+    .ct-spacer { height: 104px; flex-shrink: 0; }
 
-    /* Variante D: fundo cor sólida (roxo/primary) */
-    .slide-editorial.accent-bg { background: ${primaryColor}; }
-
-    .slide-editorial .editorial-content {
-      display: flex; flex-direction: column; gap: 28px;
-      z-index: 2; flex: 1; justify-content: center;
+    /* ══ RODAPÉ UNIVERSAL (.slide-footer) ════════════════════════════════════ */
+    .slide-footer {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 52px 26px; background: ${bgColor}; z-index: 10;
     }
-
-    /* Texto principal — GRANDE, 36-42px */
-    .slide-editorial .narrative-text {
-      font-family: '${fontFamily}', sans-serif;
-      font-size: 38px; font-weight: 400; line-height: 1.45; color: #ffffff;
+    .fp-name {
+      background: linear-gradient(135deg, #f97316, ${primaryColor});
+      border-radius: 100px; padding: 11px 26px;
+      font-size: 19px; font-weight: 700; color: white; white-space: nowrap;
     }
-
-    /* Texto secundário — menor, 26-30px */
-    .slide-editorial .narrative-text.secondary {
-      font-size: 28px; font-weight: 400; line-height: 1.5;
+    .fp-handle {
+      border: 1.5px solid rgba(255,255,255,0.3); border-radius: 100px;
+      padding: 11px 26px; font-size: 17px; color: rgba(255,255,255,0.85);
+      white-space: nowrap;
     }
-
-    /* Destaques inline */
-    .slide-editorial .narrative-text .highlight {
-      color: ${primaryColor}; font-weight: 700; font-style: italic;
-    }
-    .slide-editorial .narrative-text .highlight-green {
-      color: #3CD3A4; font-weight: 700; font-style: italic;
-    }
-    .slide-editorial .narrative-text .highlight-yellow {
-      color: #D9D353; font-weight: 700; font-style: italic;
-    }
-    .slide-editorial .narrative-text strong { font-weight: 700; }
-
-    /* No fundo de cor sólida, destaques em branco/amarelo */
-    .slide-editorial.accent-bg .narrative-text .highlight {
-      color: #ffffff; text-decoration: underline; text-decoration-thickness: 3px;
-    }
-    .slide-editorial.accent-bg .narrative-text .highlight-green {
-      color: #D9D353; font-weight: 700; font-style: italic;
-    }
-
-    /* Foto contextual contida no slide (~90% largura) */
-    .slide-editorial .editorial-photo-container {
-      width: 100%; border-radius: 8px; overflow: hidden;
-    }
-    .slide-editorial .editorial-photo-container img {
-      width: 100%; height: 380px; object-fit: cover; display: block;
-    }
+    .fp-arrow { font-size: 14px; color: rgba(255,255,255,0.45); white-space: nowrap; }
   </style>`;
 }
 
 // ─── Passo 3: Prompt Claude para gerar o HTML ─────────────────────────────────
 
-function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fontFamily,
-  instagramHandle, numSlides, contentTone, redditTrends, unsplashImages, customScript }) {
+function buildHTMLPrompt({ topic, niche, primaryColor, bgColor, fontFamily,
+  instagramHandle, brandName, brandAvatarUrl, numSlides, contentTone,
+  redditTrends, unsplashImages, customScript }) {
 
-  const handle = (instagramHandle || 'seucanal').replace('@', '');
-  const handleAt = `@${handle}`;
-  const monthYear = currentMonthYear();
-  const totalContent = numSlides - 2;
-  const cssTemplate = buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily });
+  const handle    = (instagramHandle || 'seucanal').replace('@', '');
+  const handleAt  = `@${handle}`;
+  const name      = (brandName || handle).trim();
+  const year      = new Date().getFullYear();
+  const cssTemplate = buildCSSTemplate({ primaryColor, bgColor, fontFamily });
 
-  const trendsSection = (!customScript && redditTrends.length)
-    ? `\nTendências do Reddit sobre "${niche}" esta semana:\n${redditTrends.map((t, i) =>
-        `${i + 1}. [r/${t.subreddit}] ${t.title} (${t.score} upvotes)`).join('\n')}`
-    : '';
+  // Initials for avatar placeholder (max 2 chars)
+  const initials = name.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+  const avatarHtml = brandAvatarUrl
+    ? `<img src="${brandAvatarUrl}" class="cv-avatar" alt="${name}" />`
+    : `<div class="cv-avatar-initials">${initials}</div>`;
 
+  // Images: number each one so Claude can reference them
   const imagesSection = unsplashImages.length
-    ? `\nImagens Unsplash disponíveis — use estas URLs exatas no HTML (uma por slide):\n${unsplashImages.map((img, i) =>
-        `${i + 1}. ${img.url}`).join('\n')}`
-    : '\n(Sem imagens Unsplash — use gradientes CSS criativos no fundo dos slides de foto)';
+    ? `Imagens Unsplash disponíveis (atribua uma diferente a cada slide com foto, em ordem):\n${unsplashImages.map((img, i) => `IMG${i + 1}: ${img.url}`).join('\n')}`
+    : '(Sem imagens — omita o .ct-photo nos slides de conteúdo)';
 
-  const scriptSection = customScript
-    ? `\n━━━ SCRIPT OBRIGATÓRIO (USE ESTE CONTEÚDO EXATO) ━━━\nO script abaixo foi pré-aprovado. Use o texto de cada SLIDE exatamente como está — não invente, não resuma, não adicione conteúdo.\n\n${customScript}\n`
+  const contentSection = customScript
+    ? `━━ SCRIPT FORNECIDO — use este conteúdo exato ━━\n${customScript}`
+    : `Tema: "${topic}"\nNicho: ${niche}\nTom: ${contentTone}\nTotal de slides: ${numSlides} (1 capa + ${numSlides - 2} conteúdo + 1 último)`;
+
+  const trendsNote = (!customScript && redditTrends.length)
+    ? `\nReferência de tendências (use para enriquecer o conteúdo):\n${redditTrends.map((t, i) => `${i + 1}. ${t.title}`).join('\n')}`
     : '';
 
-  return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo editorial/investigativo.
+  return `Você é um gerador de HTML de carrosseis para Instagram. Retorne APENAS o HTML completo — sem markdown, sem explicações, sem code fences.
 
-Tema: "${topic}"
-Nicho: ${niche}
-Tom: ${contentTone}
-Instagram: ${handleAt}
-Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
-${trendsSection}
+${contentSection}${trendsNote}
+
 ${imagesSection}
-${scriptSection}
 
-━━━ REGRAS ABSOLUTAS ━━━
-- Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
-- NÃO use markdown, code fences, comentários explicativos ou qualquer texto fora do HTML
-- Use EXATAMENTE as classes CSS do template abaixo — não invente outras
-- Substitua TODOS os [SEU_INSTAGRAM] e [handle] por "${handleAt}"
-
-━━━ HEADER TOPO (obrigatório em TODOS os slides) ━━━
-<div class="top-header">
-  <span>Powered by Postlab</span>
-  <span>${handleAt}</span>
-  <span>${monthYear}</span>
-</div>
-
-━━━ RODAPÉ (obrigatório em TODOS os slides) ━━━
-Footer esquerdo: SVG do Instagram + "${handleAt}"
-Footer direito: número N/${totalContent} — APENAS slides 2 a ${numSlides - 1}
-A CAPA (slide 1) e o CTA (slide ${numSlides}) NÃO têm número no rodapé direito
-
-━━━ ESTRUTURA DOS SLIDES ━━━
-
-SLIDE 1 — CAPA (.slide):
-- <div class="slide-bg"> com foto Unsplash ou gradiente como fundo
-- <div class="slide-overlay">
-- .top-header com os 3 elementos acima
-- .cover-branding: SVG IG + "${handleAt}" centralizados
-- .slide-content com .title (CAIXA ALTA, 1-2 palavras em <span class="highlight">)
-- .subtitle explicando o tema
-- .footer SEM número de página
-
-SLIDES 2 a ${numSlides - 1} — CONTEÚDO (.slide-editorial):
-- Use as 4 variantes distribuídas (NÃO coloque todas as fotos na mesma posição):
-  • Variante A (foto no meio): texto grande → foto → texto menor
-  • Variante B (foto na base): texto grande → texto médio → foto
-  • Variante C (foto no topo): foto → texto grande → texto menor
-  • Variante D (sem foto, .slide-editorial.accent-bg): use em 1-2 slides para impacto máximo
-- .top-header em todos
-- .editorial-content com .narrative-text (principal 38px) e .narrative-text.secondary (28px)
-- Palavras-chave: <span class="highlight"> (${primaryColor}) ou <span class="highlight-green"> (verde)
-- Frases importantes: <strong>
-- Preencher TODO o espaço — sem áreas vazias grandes
-${customScript
-  ? '- Use o texto EXATO do SCRIPT OBRIGATÓRIO acima — cada "SLIDE N" do script vira um slide de conteúdo. Não invente nem altere o texto.'
-  : '- Máximo 30 palavras por slide. Capitalize natural, SEM CAIXA ALTA nos internos'}
-- .footer com número de página N/${totalContent} (começando em 1/${totalContent} no slide 2)
-
-SLIDE ${numSlides} — CTA (.slide):
-- Foto de fundo + overlay
-- .top-header
-- .title com "SALVE ESTE POST", "COMPARTILHE" etc., palavras em .highlight
-- Ícones SVG inline de salvar (bookmark), enviar (paper plane) e curtir (heart)
-- Box destacado com "SIGA ${handleAt}" em #D9D353
-- .footer com número ${numSlides - 1}/${totalContent}
-
-━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
+━━ CSS TEMPLATE (inclua no <head> sem modificações) ━━
 ${cssTemplate}
 
-━━━ SVG DO INSTAGRAM (copie exatamente em todos os footer-left e cover-branding) ━━━
-${IG_SVG}
+━━ ESTRUTURA OBRIGATÓRIA DOS SLIDES ━━
 
-Gere o HTML completo agora (apenas HTML, nada mais):`;
+SLIDE 1 — CAPA (.slide-cover) — use IMG1 no cv-bg:
+<div class="slide-cover">
+  <div class="cv-bg" style="background-image:url('IMG1_URL_AQUI')"></div>
+  <div class="cv-overlay"></div>
+  <div class="cv-top">
+    <span>Powered by<br>ViralOS</span>
+    <span>Copyright ©<br>${year}</span>
+  </div>
+  <div class="cv-author">
+    ${avatarHtml}
+    <div class="cv-name">${name} <span class="cv-badge">✓</span></div>
+    <div class="cv-handle">${handleAt}</div>
+  </div>
+  <div class="cv-body">
+    <div class="cv-title">[TÍTULO IMPACTANTE — 2 a 3 linhas, NÃO em caixa alta]</div>
+    <div class="cv-arrow">Arrasta para o lado &gt;</div>
+  </div>
+</div>
+
+SLIDES 2 a ${numSlides - 1} — CONTEÚDO (.slide-content) — use IMG2, IMG3... em ordem:
+<div class="slide-content">
+  <div class="ct-title">[Título direto do slide — 1 a 2 linhas]</div>
+  <div class="ct-body">[Texto explicativo — 2 a 4 linhas, ~40-70 palavras]</div>
+  <div class="ct-photo"><img src="IMGN_URL_AQUI" alt="foto" /></div>
+  <div class="ct-spacer"></div>
+  <div class="slide-footer">
+    <div class="fp-name">${name}</div>
+    <div class="fp-handle">${handleAt}</div>
+    <div class="fp-arrow">Arrasta para o lado &gt;</div>
+  </div>
+</div>
+
+SLIDE ${numSlides} — ÚLTIMO (.slide-content) — mesma estrutura, mas fp-arrow diz "Salva este post ★":
+<div class="slide-content">
+  <div class="ct-title">[Título conclusivo ou CTA]</div>
+  <div class="ct-body">[Mensagem final — incentiva salvar, comentar ou seguir]</div>
+  <div class="ct-photo"><img src="IMGN_URL_AQUI" alt="foto" /></div>
+  <div class="ct-spacer"></div>
+  <div class="slide-footer">
+    <div class="fp-name">${name}</div>
+    <div class="fp-handle">${handleAt}</div>
+    <div class="fp-arrow">Salva este post ★</div>
+  </div>
+</div>
+
+━━ REGRAS ━━
+1. Retorne SOMENTE <!DOCTYPE html>...</html> — nada antes, nada depois
+2. Use as classes CSS EXATAMENTE como definidas acima — não invente novas
+3. Preencha [TÍTULO...] e [Texto...] com conteúdo real sobre o tema
+4. Use as URLs Unsplash exatamente como fornecidas — não troque nem modifique
+5. Cada slide de conteúdo usa uma imagem diferente (IMG2, IMG3, IMG4...)
+${customScript ? '6. Use o texto EXATO do script fornecido — cada "SLIDE N" vira um .slide-content' : ''}
+
+Gere o HTML completo agora:`;
 }
 
 // ─── Passo 4: Legenda via Claude ──────────────────────────────────────────────
@@ -463,11 +432,11 @@ async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, f
       const num = String(i + 1).padStart(2, '0');
       const filePath = path.join(outputDir, `slide_${num}.png`);
 
-      // Detectar cor de fundo do slide
+      // Detectar cor de fundo do slide (suporta classes antigas e novas)
       const classes = await slides[i].evaluate(el => el.className);
+      const isContent  = classes.includes('slide-content') || classes.includes('slide-editorial');
       const isAccentBg = classes.includes('accent-bg');
-      const isEditorial = classes.includes('slide-editorial');
-      const slideBg = isAccentBg ? primaryColor : isEditorial ? bgColor : '#1a1a1a';
+      const slideBg    = isAccentBg ? primaryColor : isContent ? bgColor : '#0c0c0c';
 
       // Setar background html+body para a cor do slide (conforme gist)
       await page.evaluate(c => {
@@ -538,15 +507,16 @@ async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, f
 async function generateCarousel(config) {
   const {
     topic,
-    niche = 'Inteligência Artificial',
-    primaryColor = '#B078FF',
-    accentColor = '#5197b5',
-    bgColor = '#292A25',
-    fontFamily = 'Raleway',
+    niche          = 'Inteligência Artificial',
+    primaryColor   = '#B078FF',
+    bgColor        = '#111111',
+    fontFamily     = 'Inter',
     instagramHandle = '',
-    numSlides = 7,
-    contentTone = 'investigativo',
-    customScript = null,
+    brandName      = '',
+    brandAvatarUrl = '',
+    numSlides      = 7,
+    contentTone    = 'investigativo',
+    customScript   = null,
   } = config;
 
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
@@ -559,27 +529,29 @@ async function generateCarousel(config) {
     if (count >= 3) slidesCount = Math.min(10, count);
   }
 
-  // Passo 1 + 2: Reddit (só para imagens) e Unsplash em paralelo
+  // Passo 1 + 2: Reddit e Unsplash em paralelo
+  // Busca slidesCount + 2 imagens para ter variedade suficiente (1 por slide)
   const [redditTrends, unsplashImages] = await Promise.all([
     customScript ? Promise.resolve([]) : fetchRedditTrends(topic),
-    fetchUnsplashImages(topic, slidesCount + 2),
+    fetchUnsplashImages(topic, slidesCount + 3),
   ]);
 
   // Passo 3 + 4: HTML e legenda em paralelo
   const htmlPrompt = buildHTMLPrompt({
-    topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
-    fontFamily, instagramHandle, numSlides: slidesCount, contentTone,
+    topic: topic.trim(), niche, primaryColor, bgColor,
+    fontFamily, instagramHandle, brandName, brandAvatarUrl,
+    numSlides: slidesCount, contentTone,
     redditTrends, unsplashImages, customScript,
   });
 
   const [htmlRes, legendaRes] = await Promise.all([
     anthropic.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 10000,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8000,
       messages: [{ role: 'user', content: htmlPrompt }],
     }),
     anthropic.messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 500,
       messages: [{ role: 'user', content: buildLegendaPrompt({ topic: topic.trim(), instagramHandle, niche }) }],
     }),
@@ -588,8 +560,11 @@ async function generateCarousel(config) {
   // Limpa possíveis code fences que Claude retorne
   let html = (htmlRes.content[0]?.text || '').trim()
     .replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-  if (!html.startsWith('<!DOCTYPE') && !html.startsWith('<html')) {
-    throw new Error('Claude não retornou HTML válido');
+  const htmlLower = html.toLowerCase();
+  if (!htmlLower.startsWith('<!doctype') && !htmlLower.startsWith('<html')) {
+    const idx = html.search(/<!doctype\s+html|<html[\s>]/i);
+    if (idx > 0) html = html.substring(idx);
+    else throw new Error('Claude não retornou HTML válido. Tente novamente.');
   }
 
   const legenda = (legendaRes.content[0]?.text || '').trim();
@@ -626,4 +601,4 @@ async function generateCarousel(config) {
   };
 }
 
-module.exports = { generateCarousel };
+module.exports = { generateCarousel, takeScreenshots, OUTPUT_DIR };
