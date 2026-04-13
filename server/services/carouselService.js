@@ -168,14 +168,6 @@ function buildCSSTemplate({ primaryColor, bgColor, fontFamily }) {
       background: linear-gradient(to bottom,
         rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.25) 45%, rgba(0,0,0,0.92) 100%);
     }
-    .cv-top {
-      position: relative; z-index: 2;
-      display: flex; justify-content: space-between; align-items: flex-start;
-      padding: 36px 44px 0;
-    }
-    .cv-top span {
-      font-size: 13px; line-height: 1.55; color: rgba(255,255,255,0.6); font-weight: 400;
-    }
     .cv-author {
       position: relative; z-index: 2;
       flex: 1; display: flex; flex-direction: column; align-items: center;
@@ -305,10 +297,6 @@ SLIDE 1 — CAPA (.slide-cover) — use IMG1 no cv-bg:
 <div class="slide-cover">
   <div class="cv-bg" style="background-image:url('IMG1_URL_AQUI')"></div>
   <div class="cv-overlay"></div>
-  <div class="cv-top">
-    <span>Powered by<br>ViralOS</span>
-    <span>Copyright ©<br>${year}</span>
-  </div>
   <div class="cv-author">
     ${avatarHtml}
     <div class="cv-name">${name} <span class="cv-badge">✓</span></div>
