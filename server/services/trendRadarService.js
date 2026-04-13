@@ -101,7 +101,6 @@ async function analyzeOpportunities(trends, niche) {
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2000,
-    timeout: 25000,
     system: 'Você é um estrategista de conteúdo viral para Instagram e TikTok. Identifica padrões de engajamento em tendências online e transforma em oportunidades concretas de conteúdo meio de funil — conteúdo que gera curiosidade, entrega valor técnico e provoca comentário ou salvamento. Sua resposta é APENAS JSON válido.',
     messages: [{
       role: 'user',
