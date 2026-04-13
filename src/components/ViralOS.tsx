@@ -882,7 +882,11 @@ export default function ViralOS() {
         {activeTab === 'carrossel'  && <CarrosselInstagram prefillScript={carouselPrefill?.script} prefillTopic={carouselPrefill?.topic} />}
         {activeTab === 'analisador' && <AnalisadorReels onUseInCarrossel={handleUseInCarrossel} onEvaluate={handleEvaluateScript} />}
         {activeTab === 'radar'      && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} />}
-        {activeTab === 'score'      && <ViralScore prefillScript={scorePrefill?.script} prefillType={scorePrefill?.type} />}
+        {activeTab === 'score'      && <ViralScore
+          prefillScript={scorePrefill?.script}
+          prefillType={scorePrefill?.type}
+          onUseInCarrossel={(script) => handleUseInCarrossel(script, 'Script Melhorado do Score')}
+        />}
         {activeTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 text-balance">

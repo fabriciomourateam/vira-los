@@ -574,12 +574,12 @@ async function generateCarousel(config) {
 
   const [htmlRes, legendaRes] = await Promise.all([
     anthropic.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 10000,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8000,
       messages: [{ role: 'user', content: htmlPrompt }],
     }),
     anthropic.messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 500,
       messages: [{ role: 'user', content: buildLegendaPrompt({ topic: topic.trim(), instagramHandle, niche }) }],
     }),
@@ -588,8 +588,14 @@ async function generateCarousel(config) {
   // Limpa possíveis code fences que Claude retorne
   let html = (htmlRes.content[0]?.text || '').trim()
     .replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-  if (!html.startsWith('<!DOCTYPE') && !html.startsWith('<html')) {
-    throw new Error('Claude não retornou HTML válido');
+  // Extrai HTML se Claude adicionou preâmbulo
+  if (!/^<!doctype/i.test(html) && !/^<html/i.test(html)) {
+    const idx = html.search(/<!doctype\s+html|<html[\s>]/i);
+    if (idx > 0) {
+      html = html.substring(idx);
+    } else {
+      throw new Error('Claude não retornou HTML válido. Tente novamente.');
+    }
   }
 
   const legenda = (legendaRes.content[0]?.text || '').trim();
@@ -626,4 +632,4 @@ async function generateCarousel(config) {
   };
 }
 
-module.exports = { generateCarousel };
+module.exports = { generateCarousel, takeScreenshots, OUTPUT_DIR };

@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Gauge, Loader2, ChevronDown, ChevronUp, Copy, Check,
   Zap, Layers, Video, AlertTriangle, Lightbulb, ArrowRight,
-  Target, Flame, Brain, Star,
+  Target, Flame, Brain, Star, Sparkles, Plus,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -37,6 +37,7 @@ interface ScoreResult {
 interface ViralScoreProps {
   prefillScript?: string;
   prefillType?: 'carousel' | 'reels';
+  onUseInCarrossel?: (script: string) => void;
 }
 
 // ─── Helpers visuais ──────────────────────────────────────────────────────────
@@ -93,7 +94,14 @@ function ScoreGauge({ score }: { score: number }) {
 
 // ─── Card de critério ──────────────────────────────────────────────────────────
 
-function CriterionCard({ name, data }: { name: keyof typeof CRITERION_META; data: CriterionScore }) {
+function CriterionCard({
+  name, data, applied, onApply,
+}: {
+  name: keyof typeof CRITERION_META;
+  data: CriterionScore;
+  applied?: boolean;
+  onApply?: (rewrite: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const meta  = CRITERION_META[name];
@@ -156,10 +164,25 @@ function CriterionCard({ name, data }: { name: keyof typeof CRITERION_META; data
                 <div className="bg-background/30 rounded-lg p-2.5">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold uppercase tracking-wide opacity-70">Versão melhorada</span>
-                    <button onClick={copyRewrite} className="flex items-center gap-1 text-xs opacity-70 hover:opacity-100 transition-opacity">
-                      {copied ? <Check size={11} /> : <Copy size={11} />}
-                      {copied ? 'Copiado' : 'Copiar'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {onApply && (
+                        <button
+                          onClick={() => onApply(data.reescrita)}
+                          className={`flex items-center gap-1 text-xs transition-colors ${
+                            applied
+                              ? 'text-emerald-500'
+                              : 'opacity-70 hover:opacity-100 hover:text-purple-400'
+                          }`}
+                        >
+                          {applied ? <Check size={11} /> : <Plus size={11} />}
+                          {applied ? 'Aplicado' : 'Aplicar'}
+                        </button>
+                      )}
+                      <button onClick={copyRewrite} className="flex items-center gap-1 text-xs opacity-70 hover:opacity-100 transition-opacity">
+                        {copied ? <Check size={11} /> : <Copy size={11} />}
+                        {copied ? 'Copiado' : 'Copiar'}
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs italic leading-relaxed">"{data.reescrita}"</p>
                 </div>
@@ -174,18 +197,38 @@ function CriterionCard({ name, data }: { name: keyof typeof CRITERION_META; data
 
 // ─── Componente principal ──────────────────────────────────────────────────────
 
-export default function ViralScore({ prefillScript = '', prefillType = 'carousel' }: ViralScoreProps) {
+export default function ViralScore({ prefillScript = '', prefillType = 'carousel', onUseInCarrossel }: ViralScoreProps) {
   const [script, setScript] = useState(prefillScript);
   const [type, setType]     = useState<'carousel' | 'reels'>(prefillType);
   const [loading, setLoading] = useState(false);
   const [result, setResult]   = useState<ScoreResult | null>(null);
   const [error, setError]     = useState<string | null>(null);
+  const [appliedRewrites, setAppliedRewrites] = useState<Partial<Record<keyof typeof CRITERION_META, string>>>({});
+  const [improvedScript, setImprovedScript]   = useState('');
+
+  function applyRewrite(name: keyof typeof CRITERION_META, rewrite: string) {
+    const isNew = !(name in appliedRewrites);
+    setAppliedRewrites(prev => ({ ...prev, [name]: rewrite }));
+    setImprovedScript(prev => {
+      const base = prev || script;
+      const label = CRITERION_META[name].label.toUpperCase();
+      if (!isNew) {
+        // Replace existing entry for this criterion
+        const regex = new RegExp(`✅ \\[${label}\\]:.*`, 's');
+        return base.replace(regex, `✅ [${label}]: ${rewrite}`);
+      }
+      return base + `\n\n✅ [${label}]: ${rewrite}`;
+    });
+    toast.success(`"${CRITERION_META[name].label}" aplicado ao script`);
+  }
 
   async function handleEvaluate() {
     if (!script.trim()) { toast.error('Cole um script para avaliar.'); return; }
     setLoading(true);
     setError(null);
     setResult(null);
+    setAppliedRewrites({});
+    setImprovedScript(script);
     try {
       const res  = await fetch(`${API}/api/viral-score`, {
         method:  'POST',
@@ -325,10 +368,46 @@ export default function ViralScore({ prefillScript = '', prefillType = 'carousel
               </h2>
               <div className="space-y-2">
                 {(Object.keys(CRITERION_META) as Array<keyof typeof CRITERION_META>).map(k => (
-                  <CriterionCard key={k} name={k} data={result.scores[k]} />
+                  <CriterionCard
+                    key={k}
+                    name={k}
+                    data={result.scores[k]}
+                    applied={k in appliedRewrites}
+                    onApply={(rewrite) => applyRewrite(k, rewrite)}
+                  />
                 ))}
               </div>
             </div>
+
+            {/* Script Melhorado */}
+            {Object.keys(appliedRewrites).length > 0 && (
+              <div className="rounded-2xl border border-purple-500/30 bg-card p-5 space-y-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-2">
+                    <Sparkles size={12} />
+                    Script com {Object.keys(appliedRewrites).length} melhoria{Object.keys(appliedRewrites).length > 1 ? 's' : ''} aplicada{Object.keys(appliedRewrites).length > 1 ? 's' : ''}
+                  </h2>
+                  <span className="text-xs text-muted-foreground">Edite livremente antes de gerar</span>
+                </div>
+                <textarea
+                  value={improvedScript}
+                  onChange={e => setImprovedScript(e.target.value)}
+                  rows={12}
+                  className="w-full bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 font-mono resize-none leading-relaxed"
+                />
+                {onUseInCarrossel && (
+                  <button
+                    onClick={() => {
+                      onUseInCarrossel(improvedScript);
+                      toast.success('Script melhorado enviado para o Carrossel!');
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold transition-colors"
+                  >
+                    <Layers size={16} /> Gerar Carrossel com Script Melhorado
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Dica */}
             <div className="rounded-2xl bg-foreground text-background p-4 flex items-start gap-3">
@@ -336,7 +415,7 @@ export default function ViralScore({ prefillScript = '', prefillType = 'carousel
               <div className="text-sm">
                 <p className="font-bold mb-1">Como usar as melhorias</p>
                 <p className="opacity-75 text-xs leading-relaxed">
-                  Clique em cada critério para ver a versão reescrita. Copie o texto e substitua no seu script original. Reavalie após aplicar as top 3 melhorias para ver o novo score.
+                  Clique em cada critério → expand → botão <strong>Aplicar</strong> para incluir a versão melhorada no script. Edite o script montado e clique em Gerar Carrossel.
                 </p>
               </div>
             </div>

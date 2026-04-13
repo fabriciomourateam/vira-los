@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight,
-  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image, Edit3,
+  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image, Edit3, Eye,
 } from 'lucide-react';
 import CarouselEditor from './CarouselEditor';
 
@@ -171,6 +171,57 @@ const DEFAULT_CONFIG: CarouselConfig = {
   numSlides: 7,
   contentTone: 'investigativo',
 };
+
+// ─── Prévia de cores ──────────────────────────────────────────────────────────
+
+function SlidePreview({
+  bgColor, primaryColor, accentColor, fontFamily,
+}: {
+  bgColor: string; primaryColor: string; accentColor: string; fontFamily: string;
+}) {
+  return (
+    <div
+      className="relative rounded-xl overflow-hidden shadow-lg select-none"
+      style={{ background: bgColor, aspectRatio: '4/5', fontFamily: `'${fontFamily}', sans-serif` }}
+    >
+      {/* Gradient overlay */}
+      <div
+        className="absolute inset-0"
+        style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.85) 100%)' }}
+      />
+      {/* Top header */}
+      <div className="absolute top-0 left-0 right-0 flex justify-between items-center px-3 py-2 z-10">
+        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          {fontFamily}
+        </span>
+        <div className="w-3 h-3 rounded-full" style={{ background: primaryColor }} />
+      </div>
+      {/* Content */}
+      <div className="absolute bottom-0 left-0 right-0 p-3 z-10 space-y-1.5">
+        <div className="text-[11px] font-black uppercase leading-tight" style={{ color: '#ffffff', textShadow: '1px 1px 6px rgba(0,0,0,0.8)' }}>
+          TÍTULO DO <span style={{ color: primaryColor }}>SLIDE</span>
+        </div>
+        <div className="text-[9px] leading-snug" style={{ color: 'rgba(255,255,255,0.7)' }}>
+          Subtítulo com informações de apoio sobre o conteúdo
+        </div>
+        <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: accentColor }}>
+          • Destaque do conteúdo
+        </div>
+        {/* Footer */}
+        <div
+          className="flex items-center justify-between pt-1 mt-1 border-t"
+          style={{ borderColor: 'rgba(255,255,255,0.15)' }}
+        >
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full" style={{ background: primaryColor }} />
+            <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.5)' }}>@seucanal</span>
+          </div>
+          <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>1/7</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -362,6 +413,44 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
             <ColorPicker label="Cor Principal"   value={config.primaryColor} onChange={v => set('primaryColor', v)} />
             <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
             <ColorPicker label="Fundo Slides"    value={config.bgColor}      onChange={v => set('bgColor', v)} />
+          </div>
+        </div>
+
+        {/* Prévia Visual das Cores */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+            <Eye className="w-3.5 h-3.5" /> Prévia das Cores
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <SlidePreview
+              bgColor={config.bgColor}
+              primaryColor={config.primaryColor}
+              accentColor={config.accentColor}
+              fontFamily={config.fontFamily}
+            />
+            {/* Variante: slide editorial (sem foto de fundo) */}
+            <div
+              className="relative rounded-xl overflow-hidden shadow-lg select-none"
+              style={{ background: config.bgColor, aspectRatio: '4/5', fontFamily: `'${config.fontFamily}', sans-serif` }}
+            >
+              <div className="absolute inset-0 p-3 flex flex-col justify-center gap-1.5">
+                <div className="w-1/3 h-0.5 rounded-full" style={{ background: config.primaryColor }} />
+                <div className="text-[10px] font-black uppercase leading-tight" style={{ color: config.primaryColor }}>
+                  Slide Editorial
+                </div>
+                <div className="space-y-1 mt-1">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex items-start gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full mt-0.5 shrink-0" style={{ background: config.accentColor }} />
+                      <div className="h-1.5 rounded-full flex-1" style={{ background: 'rgba(255,255,255,0.15)' }} />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-[8px] font-bold uppercase tracking-widest" style={{ color: config.accentColor }}>
+                  {config.fontFamily}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
