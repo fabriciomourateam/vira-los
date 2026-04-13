@@ -230,33 +230,56 @@ function OportunidadeCard({
 export default function TrendRadar({ onUseAsCarrossel, onUseAsScript }: TrendRadarProps) {
   const [niche, setNiche]         = useState('');
   const [loading, setLoading]     = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
   const [result, setResult]       = useState<RadarResult | null>(null);
   const [error, setError]         = useState<string | null>(null);
 
-  async function handleFetch(forceRefresh = false) {
+  function handleFetch(forceRefresh = false) {
     const q = niche.trim();
     if (!q) { toast.error('Informe o nicho antes de buscar.'); return; }
 
     setLoading(true);
     setError(null);
-    try {
-      const params = new URLSearchParams({ niche: q });
-      if (forceRefresh) params.set('refresh', '');
-      const res  = await fetch(`${API}/api/trend-radar?${params}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao buscar tendências.');
-      setResult(data);
-      toast.success(
-        data.fromCache
-          ? `Tendências do cache (${timeSince(data.cachedAt || data.updatedAt)})`
-          : `${data.totalPostsAnalisados} posts analisados — ${data.oportunidades?.length || 0} oportunidades`
-      );
-    } catch (e: any) {
-      setError(e.message);
-      toast.error(e.message);
-    } finally {
+    setStatusMsg('Conectando...');
+
+    const params = new URLSearchParams({ niche: q });
+    if (forceRefresh) params.set('refresh', '');
+
+    const evtSource = new EventSource(`${API}/api/trend-radar?${params}`);
+
+    evtSource.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'progress') {
+          setStatusMsg(msg.message);
+        } else if (msg.type === 'result') {
+          evtSource.close();
+          setResult(msg.data);
+          setLoading(false);
+          setStatusMsg('');
+          toast.success(
+            msg.data.fromCache
+              ? `Tendências do cache (${timeSince(msg.data.cachedAt || msg.data.updatedAt)})`
+              : `${msg.data.totalPostsAnalisados} posts analisados — ${msg.data.oportunidades?.length || 0} oportunidades`
+          );
+        } else if (msg.type === 'error') {
+          evtSource.close();
+          setError(msg.message);
+          setLoading(false);
+          setStatusMsg('');
+          toast.error(msg.message);
+        }
+      } catch { /* ignore parse errors */ }
+    };
+
+    evtSource.onerror = () => {
+      evtSource.close();
+      const msg = 'Erro de conexão. Tente novamente.';
+      setError(msg);
       setLoading(false);
-    }
+      setStatusMsg('');
+      toast.error(msg);
+    };
   }
 
   return (
@@ -296,7 +319,7 @@ export default function TrendRadar({ onUseAsCarrossel, onUseAsScript }: TrendRad
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-foreground text-background text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity shrink-0"
           >
             {loading
-              ? <><Loader2 size={14} className="animate-spin" /> Buscando...</>
+              ? <><Loader2 size={14} className="animate-spin" /> {statusMsg || 'Buscando...'}</>
               : <><TrendingUp size={14} /> Analisar</>
             }
           </button>

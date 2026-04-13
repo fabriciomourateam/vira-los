@@ -48,20 +48,21 @@ function resolveSubreddits(niche) {
 // ─── Busca Reddit (API pública, sem auth) ─────────────────────────────────────
 
 async function fetchRedditTrends(subreddits) {
-  const targets = subreddits.slice(0, 6);
+  const targets = subreddits.slice(0, 4);
   const requests = targets.map(sub =>
     axios.get(`https://www.reddit.com/r/${sub}/top.json`, {
-      params: { t: 'week', limit: 10 },
-      headers: { 'User-Agent': 'ViralOS/1.0 (trend-radar)' },
-      timeout: 10000,
-    }).catch(() => null)
+      params: { t: 'week', limit: 8 },
+      headers: { 'User-Agent': 'ViralOS/1.0 (trend-radar)', 'Accept': 'application/json' },
+      timeout: 6000,
+    }).then(res => ({ res, sub })).catch(() => null)
   );
 
   const responses = await Promise.all(requests);
   const results = [];
 
-  for (const res of responses) {
-    if (!res) continue;
+  for (const item of responses) {
+    if (!item) continue;
+    const { res, sub } = item;
     const posts = res.data?.data?.children || [];
     for (const p of posts) {
       const d = p.data;
@@ -85,11 +86,14 @@ async function fetchRedditTrends(subreddits) {
 // ─── Análise Claude ───────────────────────────────────────────────────────────
 
 async function analyzeOpportunities(trends, niche) {
-  const trendsText = trends.map((t, i) =>
-    `${i + 1}. [r/${t.subreddit} · ↑${t.score} · 💬${t.comments}]\n   "${t.title}"${
-      t.selftext ? `\n   Contexto: ${t.selftext.substring(0, 200)}` : ''
-    }`
-  ).join('\n\n');
+  const hasTrends = trends.length > 0;
+  const trendsText = hasTrends
+    ? trends.map((t, i) =>
+        `${i + 1}. [r/${t.subreddit} · ↑${t.score} · 💬${t.comments}]\n   "${t.title}"${
+          t.selftext ? `\n   Contexto: ${t.selftext.substring(0, 200)}` : ''
+        }`
+      ).join('\n\n')
+    : `[Reddit indisponível no momento — use seu conhecimento atualizado sobre tendências no nicho "${niche}" para gerar oportunidades reais e relevantes desta semana]`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
@@ -147,19 +151,15 @@ async function getTrendRadar(niche) {
 
   const subreddits = resolveSubreddits(niche.trim());
   const trends = await fetchRedditTrends(subreddits);
-
-  if (!trends.length) {
-    throw new Error('Sem tendências encontradas para este nicho. Tente reformular ou aguarde alguns minutos.');
-  }
-
   const result = await analyzeOpportunities(trends, niche.trim());
 
   return {
     ...result,
     subredditsConsultados: subreddits.slice(0, 6),
     totalPostsAnalisados:  trends.length,
+    redditDisponivel:      trends.length > 0,
     updatedAt:             new Date().toISOString(),
   };
 }
 
-module.exports = { getTrendRadar, NICHE_MAP };
+module.exports = { getTrendRadar, NICHE_MAP, resolveSubreddits, fetchRedditTrends, analyzeOpportunities };
