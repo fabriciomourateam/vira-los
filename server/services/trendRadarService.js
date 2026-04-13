@@ -48,15 +48,15 @@ function resolveSubreddits(niche) {
 // ─── Busca Reddit (API pública, sem auth) ─────────────────────────────────────
 
 async function fetchRedditTrends(subreddits) {
-  const targets = subreddits.slice(0, 6);
+  const targets = subreddits.slice(0, 4); // reduzido de 6 para 4
   const requests = targets.map(sub =>
     axios.get(`https://www.reddit.com/r/${sub}/top.json`, {
-      params: { t: 'week', limit: 10 },
+      params: { t: 'week', limit: 8 },
       headers: {
         'User-Agent': 'ViralOS/1.0 content-research bot',
         'Accept': 'application/json',
       },
-      timeout: 12000,
+      timeout: 6000, // reduzido de 12s para 6s
     }).then(res => ({ res, sub })).catch(() => null)
   );
 
@@ -100,7 +100,8 @@ async function analyzeOpportunities(trends, niche) {
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2200,
+    max_tokens: 2000,
+    timeout: 25000,
     system: 'Você é um estrategista de conteúdo viral para Instagram e TikTok. Identifica padrões de engajamento em tendências online e transforma em oportunidades concretas de conteúdo meio de funil — conteúdo que gera curiosidade, entrega valor técnico e provoca comentário ou salvamento. Sua resposta é APENAS JSON válido.',
     messages: [{
       role: 'user',

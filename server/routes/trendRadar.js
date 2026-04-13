@@ -34,13 +34,25 @@ router.get('/', async (req, res) => {
     return res.json({ ...cached.data, fromCache: true, cachedAt: new Date(cached.ts).toISOString() });
   }
 
+  // Timeout de segurança — responde com erro se demorar mais de 50s
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({ error: 'Tempo limite excedido. Tente novamente.' });
+    }
+  }, 50000);
+
   try {
     const data = await getTrendRadar(niche);
+    clearTimeout(timer);
+    if (res.headersSent) return;
     cache.set(cacheKey, { data, ts: Date.now() });
     res.json({ ...data, fromCache: false });
   } catch (err) {
+    clearTimeout(timer);
     console.error('[TrendRadar]', err.message);
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 
