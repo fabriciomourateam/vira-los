@@ -10,12 +10,18 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
+interface WordHighlight {
+  word: string;
+  color: string;
+}
+
 interface TextBlock {
   className: string;
   text: string;
   isMain: boolean;
   fontSize?: number;
-  color?: string;       // override de cor (user-set)
+  color?: string;                   // cor de todo o bloco
+  highlights?: WordHighlight[];     // palavras específicas com cor própria
 }
 
 interface ElementOverride {
@@ -23,6 +29,7 @@ interface ElementOverride {
   left?: string;
   right?: string;
   bottom?: string;
+  transform?: string;  // para elementos em flow (translate)
 }
 
 interface OverlayConfig {
@@ -60,6 +67,7 @@ interface EditableSlide {
   type: 'cover' | 'editorial' | 'cta';
   bgImageUrl: string | null;
   texts: TextBlock[];
+  hasBadge: boolean;
 }
 
 export interface CarouselEditorProps {
@@ -118,6 +126,48 @@ const TEXT_SELECTORS = [
   { selector: '.swipe-hint', isMain: false },
 ];
 
+// Converte <br> → \n para exibir corretamente no textarea
+function getTextWithLineBreaks(node: Element): string {
+  let result = '';
+  for (const child of Array.from(node.childNodes)) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      result += child.textContent ?? '';
+    } else if ((child as Element).tagName === 'BR') {
+      result += '\n';
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      result += getTextWithLineBreaks(child as Element);
+    }
+  }
+  return result.trim();
+}
+
+// Escapa HTML e converte \n → <br>; aplica destaques por palavra
+function textToHtml(text: string, highlights?: WordHighlight[]): string {
+  const activeHl = (highlights ?? []).filter(h => h.word.trim());
+
+  if (!activeHl.length) {
+    return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  }
+
+  // Substitui palavras por marcadores únicos, depois escapa e restaura como <span>
+  const markers: Record<string, string> = {};
+  let processed = text;
+  for (const { word, color } of activeHl) {
+    const re = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    processed = processed.replace(re, match => {
+      const key = `\xAB${Object.keys(markers).length}\xBB`;
+      markers[key] = `<span style="color:${color}">${match.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
+      return key;
+    });
+  }
+
+  let result = processed.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  for (const [key, html] of Object.entries(markers)) {
+    result = result.replaceAll(key, html);
+  }
+  return result;
+}
+
 function extractTextBlocks(el: Element): TextBlock[] {
   const blocks: TextBlock[] = [];
   const seen = new Set<Element>();
@@ -130,7 +180,7 @@ function extractTextBlocks(el: Element): TextBlock[] {
       const className = node.className || selector.slice(1);
       blocks.push({
         className: typeof className === 'string' ? className : selector.slice(1),
-        text: node.textContent?.trim() ?? '',
+        text: getTextWithLineBreaks(node),
         isMain,
         fontSize: extractFontSize(node),
       });
@@ -153,9 +203,12 @@ function parseSlides(html: string): { slides: EditableSlide[]; head: string } {
     type: detectSlideType(el),
     bgImageUrl: extractBgImageUrl(el),
     texts: extractTextBlocks(el),
+    hasBadge: !!el.querySelector('.verified-badge'),
   }));
   return { slides, head };
 }
+
+const VERIFIED_BADGE_HTML = `<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
 
 function rebuildSlideOuterHtml(
   slide: EditableSlide,
@@ -163,6 +216,7 @@ function rebuildSlideOuterHtml(
   newBgUrl: string | null,
   overrides?: Record<string, ElementOverride>,
   overlayConfig?: OverlayConfig,
+  showBadge?: boolean,
 ): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
@@ -182,7 +236,7 @@ function rebuildSlideOuterHtml(
     if (!nodes) continue;
     const idx = groupCounters[baseClass] ?? 0;
     if (nodes[idx]) {
-      nodes[idx].textContent = tb.text;
+      nodes[idx].innerHTML = textToHtml(tb.text, tb.highlights);
       const existingStyle = nodes[idx].getAttribute('style') || '';
       let newStyle = existingStyle;
       // Apply font size
@@ -229,6 +283,20 @@ function rebuildSlideOuterHtml(
         if (styles.left !== undefined) node.style.left = styles.left;
         if (styles.right !== undefined) node.style.right = styles.right;
         if (styles.bottom !== undefined) node.style.bottom = styles.bottom;
+        if (styles.transform !== undefined) node.style.transform = styles.transform;
+      }
+    }
+  }
+
+  // Verified badge toggle
+  if (showBadge !== undefined) {
+    const profileName = el.querySelector('.profile-name');
+    if (profileName) {
+      const existing = profileName.querySelector('.verified-badge');
+      if (showBadge && !existing) {
+        profileName.insertAdjacentHTML('beforeend', VERIFIED_BADGE_HTML);
+      } else if (!showBadge && existing) {
+        existing.remove();
       }
     }
   }
@@ -314,13 +382,18 @@ function SlidePreview({ slideHtml, head }: { slideHtml: string; head: string }) 
 
 // ─── Preview interativo (modo visual/drag) ────────────────────────────────────
 
-// Selectors dos elementos arrastáveis (tipicamente position:absolute nas slides)
+// Todos os elementos arrastáveis — tanto absolutos quanto em flow (via transform)
 const DRAGGABLE_SELECTORS = [
-  '.profile-badge', '.cover-title', '.swipe-hint',
-  '.photo-card', '.top-photo-wrap',
-  '.cta-title', '.follow-pill', '.cta-footer',
+  // Absolutos (clean layout)
+  '.profile-badge', '.cover-title', '.swipe-hint', '.cta-footer',
+  // Imagens
+  '.photo-card', '.top-photo-wrap', '.bg',
+  // Footer / header
   '.slide-footer', '.top-header',
-  '.title', '.subtitle', '.narrative-text',
+  // Texto (editorial + clean)
+  '.title', '.subtitle', '.subtitle-accent', '.narrative-text',
+  '.content-title', '.content-body', '.cta-title',
+  '.follow-pill', '.profile-name', '.profile-handle',
 ];
 
 function buildDragScript(displayScale: number): string {
@@ -344,21 +417,37 @@ function buildDragScript(displayScale: number): string {
     el.style.cursor = on ? 'grab' : '';
   }
 
+  // Lê translate atual do elemento (se existir)
+  function getTranslate(el){
+    var t = el.style.transform || '';
+    var m = t.match(/translate\\(([\\d.-]+)px,\\s*([\\d.-]+)px\\)/);
+    return m ? {x:parseFloat(m[1]),y:parseFloat(m[2])} : {x:0,y:0};
+  }
+
   document.addEventListener('mousedown',function(e){
     var found=findEl(e.target);
     if(!found) return;
     var el=found.el;
     var cs=window.getComputedStyle(el);
-    // Only drag absolutely positioned elements
-    if(cs.position!=='absolute'&&cs.position!=='fixed') return;
     if(selected) highlight(selected,false);
     selected=el; highlight(el,true);
-    dragging={
-      el:el, sel:found.sel,
-      startX:e.clientX, startY:e.clientY,
-      origLeft:parseFloat(el.style.left||cs.left)||0,
-      origTop:parseFloat(el.style.top||cs.top)||0,
-    };
+    var isAbs = cs.position==='absolute'||cs.position==='fixed';
+    if(isAbs){
+      dragging={
+        el:el, sel:found.sel, mode:'abs',
+        startX:e.clientX, startY:e.clientY,
+        origLeft:parseFloat(el.style.left||cs.left)||0,
+        origTop:parseFloat(el.style.top||cs.top)||0,
+      };
+    } else {
+      // Elementos em flow: usa transform translate
+      var tr=getTranslate(el);
+      dragging={
+        el:el, sel:found.sel, mode:'translate',
+        startX:e.clientX, startY:e.clientY,
+        origTx:tr.x, origTy:tr.y,
+      };
+    }
     window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
     e.preventDefault();
   });
@@ -367,19 +456,28 @@ function buildDragScript(displayScale: number): string {
     if(!dragging) return;
     var dx=(e.clientX-dragging.startX)*SCALE;
     var dy=(e.clientY-dragging.startY)*SCALE;
-    dragging.el.style.left=(dragging.origLeft+dx)+'px';
-    dragging.el.style.top=(dragging.origTop+dy)+'px';
+    if(dragging.mode==='abs'){
+      dragging.el.style.left=(dragging.origLeft+dx)+'px';
+      dragging.el.style.top=(dragging.origTop+dy)+'px';
+    } else {
+      var nx=dragging.origTx+dx, ny=dragging.origTy+dy;
+      // Preserva outros transforms (scale, rotate)
+      var existing=(dragging.el.style.transform||'').replace(/translate\\([^)]+\\)/g,'').trim();
+      dragging.el.style.transform=(existing+' translate('+nx+'px,'+ny+'px)').trim();
+    }
     e.preventDefault();
   });
 
   document.addEventListener('mouseup',function(e){
     if(!dragging) return;
-    window.parent.postMessage({
-      type:'elementMoved',
-      selector:dragging.sel,
-      left:dragging.el.style.left,
-      top:dragging.el.style.top,
-    },'*');
+    var payload={type:'elementMoved',selector:dragging.sel,mode:dragging.mode};
+    if(dragging.mode==='abs'){
+      payload.left=dragging.el.style.left;
+      payload.top=dragging.el.style.top;
+    } else {
+      payload.transform=dragging.el.style.transform;
+    }
+    window.parent.postMessage(payload,'*');
     dragging=null;
   });
 
@@ -397,7 +495,7 @@ function buildDragScript(displayScale: number): string {
 function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedIndex }: {
   slideHtml: string;
   head: string;
-  onElementMoved: (selector: string, left: string, top: string) => void;
+  onElementMoved: (data: { selector: string; mode: string; left?: string; top?: string; transform?: string }) => void;
   selectedIndex: number;
 }) {
   const DISPLAY_W = 460;
@@ -410,7 +508,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
     function handleMsg(e: MessageEvent) {
       if (!e.data) return;
       if (e.data.type === 'elementMoved') {
-        onElementMoved(e.data.selector, e.data.left, e.data.top);
+        onElementMoved(e.data);
       }
     }
     window.addEventListener('message', handleMsg);
@@ -450,6 +548,7 @@ export default function CarouselEditor({
   const [editedBgUrls, setEditedBgUrls] = useState<Record<number, string>>({});
   const [elementOverrides, setElementOverrides] = useState<Record<number, Record<string, ElementOverride>>>({});
   const [overlayConfigs, setOverlayConfigs] = useState<Record<number, OverlayConfig>>({});
+  const [badgeVisible, setBadgeVisible] = useState<Record<number, boolean>>({});
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editMode, setEditMode] = useState<'text' | 'visual'>('text');
   const [screenshotLoading, setScreenshotLoading] = useState(false);
@@ -458,6 +557,8 @@ export default function CarouselEditor({
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
+  // Campos temporários para novo destaque de palavra (por bloco)
+  const [newHl, setNewHl] = useState<Record<string, {word: string, color: string}>>({});
 
   // ── Parse inicial ────────────────────────────────────────────────────────────
 
@@ -472,6 +573,11 @@ export default function CarouselEditor({
       textsInit[s.index] = s.texts.map(t => ({ ...t }));
       if (s.bgImageUrl) bgInit[s.index] = s.bgImageUrl;
     }
+    // Init badge visibility from parsed HTML
+    const badgeInit: Record<number, boolean> = {};
+    for (const s of parsed) badgeInit[s.index] = s.hasBadge;
+    setBadgeVisible(badgeInit);
+
     setEditedTexts(textsInit);
     setEditedBgUrls(bgInit);
     setSelectedIndex(parsed.length > 0 ? 0 : null);
@@ -540,18 +646,37 @@ export default function CarouselEditor({
     });
   }
 
+  function addWordHighlight(si: number, bi: number, word: string, color: string) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      b[bi] = { ...b[bi], highlights: [...(b[bi].highlights ?? []), { word, color }] };
+      return { ...prev, [si]: b };
+    });
+  }
+
+  function removeWordHighlight(si: number, bi: number, hi: number) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      b[bi] = { ...b[bi], highlights: (b[bi].highlights ?? []).filter((_, i) => i !== hi) };
+      return { ...prev, [si]: b };
+    });
+  }
+
   function updateBgUrl(si: number, url: string) {
     setEditedBgUrls(prev => ({ ...prev, [si]: url }));
   }
 
   // ── Element position overrides (drag no visual editor) ───────────────────────
 
-  const handleElementMoved = useCallback((selector: string, left: string, top: string) => {
+  const handleElementMoved = useCallback((data: { selector: string; mode: string; left?: string; top?: string; transform?: string }) => {
     setElementOverrides(prev => {
       if (selectedIndex === null) return prev;
+      const override: ElementOverride = data.mode === 'abs'
+        ? { left: data.left, top: data.top }
+        : { transform: data.transform };
       return {
         ...prev,
-        [selectedIndex]: { ...(prev[selectedIndex] ?? {}), [selector]: { left, top } },
+        [selectedIndex]: { ...(prev[selectedIndex] ?? {}), [data.selector]: override },
       };
     });
   }, [selectedIndex]);
@@ -565,9 +690,10 @@ export default function CarouselEditor({
       editedBgUrls[s.index] !== '' ? (editedBgUrls[s.index] ?? null) : null,
       elementOverrides[s.index],
       overlayConfigs[s.index],
+      badgeVisible[s.index],
     ));
     return `<!DOCTYPE html><html><head>${head}</head><body>\n${built.join('\n')}\n</body></html>`;
-  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs]);
+  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible]);
 
   function liveSlideHtml(idx: number): string {
     const s = slides[idx]; if (!s) return '';
@@ -577,6 +703,7 @@ export default function CarouselEditor({
       editedBgUrls[idx] !== '' ? (editedBgUrls[idx] ?? null) : null,
       elementOverrides[idx],
       overlayConfigs[idx],
+      badgeVisible[idx],
     );
   }
 
@@ -804,6 +931,35 @@ export default function CarouselEditor({
 
                     {/* Campos */}
                     <div className="px-5 py-4 space-y-4 flex-1">
+
+                      {/* ── Selo Verificado (só aparece em slides com .profile-name) ── */}
+                      {sel.outerHtml.includes('profile-name') && (
+                        <div className="flex items-center justify-between rounded-lg border border-border bg-secondary/40 px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-foreground">Selo verificado</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
+                                <circle cx="12" cy="12" r="12" fill="#0095f6"/>
+                                <path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setBadgeVisible(prev => ({ ...prev, [selectedIndex]: !(prev[selectedIndex] ?? sel.hasBadge) }))}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                              (badgeVisible[selectedIndex] ?? sel.hasBadge) ? 'bg-blue-500' : 'bg-border'
+                            }`}
+                            role="switch"
+                            aria-checked={badgeVisible[selectedIndex] ?? sel.hasBadge}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                              (badgeVisible[selectedIndex] ?? sel.hasBadge) ? 'translate-x-4' : 'translate-x-1'
+                            }`} />
+                          </button>
+                        </div>
+                      )}
+
                       {selTexts.length > 0 ? (
                         <>
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
@@ -850,6 +1006,53 @@ export default function CarouselEditor({
                                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y"
                                   style={{ color: block.color }}
                                 />
+
+                                {/* Palavras em destaque */}
+                                {(() => {
+                                  const hlKey = `${selectedIndex}-${bi}`;
+                                  const hl = newHl[hlKey] ?? { word: '', color: '#f97316' };
+                                  return (
+                                    <div className="space-y-1 pl-1">
+                                      {(block.highlights ?? []).map((h, hi) => (
+                                        <div key={hi} className="flex items-center gap-1 text-[11px]">
+                                          <span className="px-1.5 py-0.5 rounded font-semibold" style={{ color: h.color, background: `${h.color}20` }}>
+                                            "{h.word}"
+                                          </span>
+                                          <button onClick={() => removeWordHighlight(selectedIndex, bi, hi)}
+                                            className="text-muted-foreground hover:text-red-400 transition-colors ml-auto">✕</button>
+                                        </div>
+                                      ))}
+                                      <div className="flex items-center gap-1 pt-0.5">
+                                        <input
+                                          type="text"
+                                          value={hl.word}
+                                          onChange={e => setNewHl(p => ({ ...p, [hlKey]: { ...hl, word: e.target.value } }))}
+                                          placeholder="palavra de destaque…"
+                                          className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                                          onKeyDown={e => {
+                                            if (e.key === 'Enter' && hl.word.trim()) {
+                                              addWordHighlight(selectedIndex, bi, hl.word.trim(), hl.color);
+                                              setNewHl(p => ({ ...p, [hlKey]: { word: '', color: hl.color } }));
+                                            }
+                                          }}
+                                        />
+                                        <input type="color" value={hl.color}
+                                          onChange={e => setNewHl(p => ({ ...p, [hlKey]: { ...hl, color: e.target.value } }))}
+                                          className="w-6 h-6 rounded cursor-pointer border border-border shrink-0"
+                                          title="Cor da palavra"
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            if (!hl.word.trim()) return;
+                                            addWordHighlight(selectedIndex, bi, hl.word.trim(), hl.color);
+                                            setNewHl(p => ({ ...p, [hlKey]: { word: '', color: hl.color } }));
+                                          }}
+                                          className="px-1.5 py-1 rounded bg-orange-600 hover:bg-orange-500 text-white text-[10px] font-semibold shrink-0 transition-colors"
+                                        >+</button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             );
                           })}
@@ -1012,6 +1215,7 @@ export default function CarouselEditor({
                             <div className="flex items-center gap-2 text-muted-foreground/70">
                               {pos.left && <span>L: {pos.left}</span>}
                               {pos.top && <span>T: {pos.top}</span>}
+                              {pos.transform && <span className="truncate max-w-[120px]">{pos.transform}</span>}
                               <button
                                 onClick={() => setElementOverrides(prev => {
                                   const next = { ...prev[selectedIndex] };
