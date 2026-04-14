@@ -240,6 +240,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [currentSlide, setCurrentSlide] = useState(0);
   const [copied, setCopied] = useState(false);
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
   const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Carrega config e histórico do servidor na montagem
@@ -399,15 +400,15 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
         </p>
       </div>
 
-      {/* Banner: script prefilled */}
-      {customScript && (
+      {/* Banner: roteiro prefilled via props */}
+      {config.roteiro && prefillScript && (
         <div className="rounded-xl border border-purple-500/40 bg-purple-500/10 p-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm text-purple-300">
             <FileText className="w-4 h-4 shrink-0" />
             <span>Script do Analisador carregado — o carrossel usará este conteúdo.</span>
           </div>
           <button
-            onClick={() => setCustomScript(undefined)}
+            onClick={() => set('roteiro', '')}
             className="text-xs text-muted-foreground hover:text-foreground underline shrink-0"
           >
             Remover
