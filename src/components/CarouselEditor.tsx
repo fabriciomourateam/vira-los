@@ -360,10 +360,10 @@ export async function downloadAsJpeg(imageUrl: string, filename: string): Promis
 
 // ─── Miniatura de slide ───────────────────────────────────────────────────────
 
-function SlideThumbnail({ slideHtml, head, index, selected, onClick }: {
-  slideHtml: string; head: string; index: number; selected: boolean; onClick: () => void;
+function SlideThumbnail({ slideHtml, head, index, selected, onClick, horizontal }: {
+  slideHtml: string; head: string; index: number; selected: boolean; onClick: () => void; horizontal?: boolean;
 }) {
-  const THUMB_W = 120;
+  const THUMB_W = horizontal ? 80 : 120;
   const scale = THUMB_W / 1080;
   const thumbH = Math.round(1350 * scale);
   const srcDoc = `<!DOCTYPE html><html><head>${head}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
@@ -389,11 +389,28 @@ function SlideThumbnail({ slideHtml, head, index, selected, onClick }: {
 // ─── Preview estático ─────────────────────────────────────────────────────────
 
 function SlidePreview({ slideHtml, head }: { slideHtml: string; head: string }) {
-  const PREVIEW_W = 280;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerW, setContainerW] = useState(280);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = Math.floor(entry.contentRect.width);
+        setContainerW(Math.min(w, 320));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const PREVIEW_W = containerW;
   const scale = PREVIEW_W / 1080;
   const previewH = Math.round(1350 * scale);
   const srcDoc = `<!DOCTYPE html><html><head>${head}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
   return (
+    <div ref={containerRef} className="w-full">
     <div className="rounded-xl overflow-hidden border border-border shadow-lg mx-auto"
       style={{ width: PREVIEW_W, height: previewH }}>
       <iframe srcDoc={srcDoc} sandbox="allow-scripts allow-same-origin"
@@ -401,6 +418,7 @@ function SlidePreview({ slideHtml, head }: { slideHtml: string; head: string }) 
           transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }}
         title="Preview"
       />
+    </div>
     </div>
   );
 }
@@ -442,15 +460,14 @@ function buildDragScript(displayScale: number): string {
     el.style.cursor = on ? 'grab' : '';
   }
 
-  // Lê translate atual do elemento (se existir)
   function getTranslate(el){
     var t = el.style.transform || '';
     var m = t.match(/translate\\(([\\d.-]+)px,\\s*([\\d.-]+)px\\)/);
     return m ? {x:parseFloat(m[1]),y:parseFloat(m[2])} : {x:0,y:0};
   }
 
-  document.addEventListener('mousedown',function(e){
-    var found=findEl(e.target);
+  function startDrag(cx,cy,target){
+    var found=findEl(target);
     if(!found) return;
     var el=found.el;
     var cs=window.getComputedStyle(el);
@@ -458,53 +475,53 @@ function buildDragScript(displayScale: number): string {
     selected=el; highlight(el,true);
     var isAbs = cs.position==='absolute'||cs.position==='fixed';
     if(isAbs){
-      dragging={
-        el:el, sel:found.sel, mode:'abs',
-        startX:e.clientX, startY:e.clientY,
+      dragging={el:el,sel:found.sel,mode:'abs',startX:cx,startY:cy,
         origLeft:parseFloat(el.style.left||cs.left)||0,
-        origTop:parseFloat(el.style.top||cs.top)||0,
-      };
+        origTop:parseFloat(el.style.top||cs.top)||0};
     } else {
-      // Elementos em flow: usa transform translate
       var tr=getTranslate(el);
-      dragging={
-        el:el, sel:found.sel, mode:'translate',
-        startX:e.clientX, startY:e.clientY,
-        origTx:tr.x, origTy:tr.y,
-      };
+      dragging={el:el,sel:found.sel,mode:'translate',startX:cx,startY:cy,
+        origTx:tr.x,origTy:tr.y};
     }
     window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
-    e.preventDefault();
-  });
+  }
 
-  document.addEventListener('mousemove',function(e){
+  function moveDrag(cx,cy){
     if(!dragging) return;
-    var dx=(e.clientX-dragging.startX)*SCALE;
-    var dy=(e.clientY-dragging.startY)*SCALE;
+    var dx=(cx-dragging.startX)*SCALE;
+    var dy=(cy-dragging.startY)*SCALE;
     if(dragging.mode==='abs'){
       dragging.el.style.left=(dragging.origLeft+dx)+'px';
       dragging.el.style.top=(dragging.origTop+dy)+'px';
     } else {
       var nx=dragging.origTx+dx, ny=dragging.origTy+dy;
-      // Preserva outros transforms (scale, rotate)
       var existing=(dragging.el.style.transform||'').replace(/translate\\([^)]+\\)/g,'').trim();
       dragging.el.style.transform=(existing+' translate('+nx+'px,'+ny+'px)').trim();
     }
-    e.preventDefault();
-  });
+  }
 
-  document.addEventListener('mouseup',function(e){
+  function endDrag(){
     if(!dragging) return;
     var payload={type:'elementMoved',selector:dragging.sel,mode:dragging.mode};
-    if(dragging.mode==='abs'){
-      payload.left=dragging.el.style.left;
-      payload.top=dragging.el.style.top;
-    } else {
-      payload.transform=dragging.el.style.transform;
-    }
+    if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
+    else{payload.transform=dragging.el.style.transform;}
     window.parent.postMessage(payload,'*');
     dragging=null;
-  });
+  }
+
+  // Mouse events
+  document.addEventListener('mousedown',function(e){startDrag(e.clientX,e.clientY,e.target);e.preventDefault();});
+  document.addEventListener('mousemove',function(e){moveDrag(e.clientX,e.clientY);e.preventDefault();});
+  document.addEventListener('mouseup',function(e){endDrag();});
+
+  // Touch events (mobile)
+  document.addEventListener('touchstart',function(e){
+    var t=e.touches[0];startDrag(t.clientX,t.clientY,e.target);
+  },{passive:false});
+  document.addEventListener('touchmove',function(e){
+    if(dragging){e.preventDefault();var t=e.touches[0];moveDrag(t.clientX,t.clientY);}
+  },{passive:false});
+  document.addEventListener('touchend',function(e){endDrag();});
 
   document.addEventListener('click',function(e){
     var found=findEl(e.target);
@@ -523,9 +540,24 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
   onElementMoved: (data: { selector: string; mode: string; left?: string; top?: string; transform?: string }) => void;
   selectedIndex: number;
 }) {
-  const DISPLAY_W = 460;
-  const scale = DISPLAY_W / 1080;
-  const DISPLAY_H = Math.round(1350 * scale);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [displayW, setDisplayW] = useState(460);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = Math.floor(entry.contentRect.width);
+        setDisplayW(Math.min(w, 460));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const scale = displayW / 1080;
+  const displayH = Math.round(1350 * scale);
   const dragScript = buildDragScript(scale);
   const srcDoc = `<!DOCTYPE html><html><head>${head}${dragScript}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
 
@@ -541,9 +573,9 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
   }, [onElementMoved, selectedIndex]);
 
   return (
-    <div>
+    <div ref={containerRef} className="w-full">
       <div className="rounded-xl overflow-hidden border-2 border-purple-500/40 shadow-xl mx-auto relative"
-        style={{ width: DISPLAY_W, height: DISPLAY_H }}>
+        style={{ width: displayW, height: displayH }}>
         <iframe
           key={`${selectedIndex}-${slideHtml.length}`}
           srcDoc={srcDoc}
@@ -555,7 +587,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
         />
       </div>
       <p className="text-center text-[11px] text-muted-foreground/70 mt-2">
-        Clique e arraste elementos com <strong className="text-purple-400">position: absolute</strong> para mover
+        Toque e arraste elementos para mover
       </p>
     </div>
   );
@@ -871,43 +903,66 @@ export default function CarouselEditor({
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
       {/* ── Cabeçalho ── */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-border flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <Edit3 className="w-4 h-4 text-purple-500" />
-          <span className="text-sm font-bold">Editor de Carrossel</span>
-          <span className="text-xs text-muted-foreground">{slides.length} slides</span>
+      <div className="px-3 sm:px-5 py-3 border-b border-border space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Edit3 className="w-4 h-4 text-purple-500" />
+            <span className="text-sm font-bold">Editor de Carrossel</span>
+            <span className="text-xs text-muted-foreground">{slides.length} slides</span>
+          </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button onClick={handleDownloadHtml}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors">
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border active:bg-border text-foreground text-xs font-semibold transition-colors">
             <Download className="w-3 h-3" /> HTML
           </button>
           <button onClick={handleRegenerateScreenshots} disabled={screenshotLoading}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors">
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 active:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors">
             {screenshotLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
             PNGs
           </button>
           <button onClick={handleDownloadJpegs} disabled={screenshotLoading}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors"
             title="Gera screenshots e baixa como JPEG">
             <Download className="w-3 h-3" /> JPEGs
           </button>
-          <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)}
-            placeholder="Nome do modelo…"
-            className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/50 w-32" />
-          <button onClick={handleSaveTemplate} disabled={templateLoading}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors">
-            {templateLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <BookmarkPlus className="w-3 h-3" />}
-            Salvar Modelo
-          </button>
+          <div className="flex items-center gap-1.5 w-full sm:w-auto mt-1 sm:mt-0">
+            <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)}
+              placeholder="Nome do modelo…"
+              className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/50 flex-1 sm:w-32 sm:flex-none" />
+            <button onClick={handleSaveTemplate} disabled={templateLoading}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors shrink-0">
+              {templateLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <BookmarkPlus className="w-3 h-3" />}
+              Salvar Modelo
+            </button>
+          </div>
         </div>
       </div>
 
       {/* ── Corpo ── */}
-      <div className="flex min-h-[480px]">
+      <div className="flex flex-col md:flex-row md:min-h-[480px]">
 
-        {/* ── Esquerda: miniaturas ── */}
-        <div className="w-[148px] shrink-0 border-r border-border flex flex-col">
+        {/* ── Mobile: miniaturas horizontais / Desktop: coluna lateral ── */}
+        {/* Mobile: horizontal scroll */}
+        <div className="md:hidden border-b border-border">
+          <div className="px-3 py-2 border-b border-border">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Slides</p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto p-2 scrollbar-hide">
+            {slides.map((slide, listIdx) => (
+              <SlideThumbnail
+                key={`mob-${slide.index}-${listIdx}`}
+                slideHtml={liveSlideHtml(listIdx)} head={head}
+                index={listIdx} selected={selectedIndex === listIdx}
+                onClick={() => setSelectedIndex(listIdx)}
+                horizontal
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Desktop: coluna lateral */}
+        <div className="hidden md:flex w-[148px] shrink-0 border-r border-border flex-col">
           <div className="px-3 py-2 border-b border-border">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Slides</p>
           </div>
@@ -936,7 +991,7 @@ export default function CarouselEditor({
           </div>
         </div>
 
-        {/* ── Direita: editor ── */}
+        {/* ── Editor panel ── */}
         <div className="flex-1 flex flex-col min-w-0">
 
           {/* Sub-tabs: Texto | Visual */}
@@ -972,7 +1027,7 @@ export default function CarouselEditor({
                 {editMode === 'text' && (
                   <>
                     {/* Preview estático */}
-                    <div className="px-5 pt-4 pb-3 border-b border-border bg-secondary/20">
+                    <div className="px-3 sm:px-5 pt-4 pb-3 border-b border-border bg-secondary/20">
                       <div className="flex items-center gap-2 mb-2">
                         <Eye className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -984,7 +1039,7 @@ export default function CarouselEditor({
                     </div>
 
                     {/* Campos */}
-                    <div className="px-5 py-4 space-y-4 flex-1">
+                    <div className="px-3 sm:px-5 py-4 space-y-4 flex-1">
 
                       {/* ── Selo Verificado (só aparece em slides com .profile-name) ── */}
                       {sel.outerHtml.includes('profile-name') && (
@@ -1252,7 +1307,7 @@ export default function CarouselEditor({
 
                 {/* ── MODO VISUAL ── */}
                 {editMode === 'visual' && (
-                  <div className="px-4 py-5 space-y-4 flex-1">
+                  <div className="px-3 sm:px-4 py-4 sm:py-5 space-y-4 flex-1">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <MousePointer2 className="w-3.5 h-3.5 text-purple-400" />
                       <span>Arraste logos, fotos e textos com <strong>position: absolute</strong> para reposicionar</span>

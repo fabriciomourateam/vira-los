@@ -126,7 +126,7 @@ function ColorPicker({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-border bg-card shadow-xl p-3 space-y-3"
+            className="fixed sm:absolute left-2 right-2 bottom-2 sm:left-0 sm:right-0 sm:bottom-auto sm:top-full sm:mt-1 z-50 rounded-xl border border-border bg-card shadow-xl p-3 space-y-3"
           >
             {/* Gradiente de arrastar */}
             <HexColorPicker color={safeValue} onChange={onChange} style={{ width: '100%', height: 180 }} />
@@ -252,6 +252,45 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Responsive preview: mede largura do container ──
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [previewWidth, setPreviewWidth] = useState(360);
+
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = Math.floor(entry.contentRect.width);
+        setPreviewWidth(Math.min(w, 400));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [result]);
+
+  // ── Touch swipe para navegar slides ──
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }
+
+  function handleTouchEnd(e: React.TouchEvent, total: number) {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    // Só swipe horizontal (dx > dy para não interferir com scroll vertical)
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0 && currentSlide < total - 1) setCurrentSlide(s => s + 1);
+      if (dx > 0 && currentSlide > 0) setCurrentSlide(s => s - 1);
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  }
 
   // Carrega config e histórico do servidor na montagem
   useEffect(() => {
@@ -885,25 +924,27 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
             <div className="rounded-xl border border-border bg-card overflow-hidden">
 
               {/* Barra */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-wrap gap-2">
-                <div>
-                  <span className="text-sm font-semibold text-foreground">{result.topic}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {totalSlides} slide{totalSlides !== 1 ? 's' : ''}
-                    {hasPNGs && ` · ${result.screenshots.length} PNGs`}
-                    {result.unsplashImagesUsed > 0 && ` · ${result.unsplashImagesUsed} imgs Unsplash`}
-                    {result.redditTrendsUsed > 0 && ` · ${result.redditTrendsUsed} trends Reddit`}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
+              <div className="px-4 py-3 border-b border-border space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <span className="text-sm font-semibold text-foreground block truncate">{result.topic}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {totalSlides} slide{totalSlides !== 1 ? 's' : ''}
+                      {hasPNGs && ` · ${result.screenshots.length} PNGs`}
+                      {result.unsplashImagesUsed > 0 && ` · ${result.unsplashImagesUsed} imgs`}
+                      {result.redditTrendsUsed > 0 && ` · ${result.redditTrendsUsed} trends`}
+                    </span>
+                  </div>
                   <button
                     onClick={handleGenerate}
                     disabled={loading}
                     title="Regenerar"
-                    className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors shrink-0"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     onClick={() => setEditorOpen(o => !o)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -948,13 +989,13 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
               </div>
 
               {/* Navegação */}
-              <div className="p-4">
+              <div className="p-3 sm:p-4">
                 {totalSlides > 1 && (
                   <div className="flex items-center justify-center gap-3 mb-3">
                     <button
                       onClick={() => setCurrentSlide(s => Math.max(0, s - 1))}
                       disabled={currentSlide === 0}
-                      className="p-1 rounded-lg hover:bg-secondary disabled:opacity-30 transition-colors"
+                      className="p-1.5 rounded-lg hover:bg-secondary active:bg-secondary disabled:opacity-30 transition-colors"
                     >
                       <ChevronLeft className="w-5 h-5" />
                     </button>
@@ -964,7 +1005,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                     <button
                       onClick={() => setCurrentSlide(s => Math.min(totalSlides - 1, s + 1))}
                       disabled={currentSlide === totalSlides - 1}
-                      className="p-1 rounded-lg hover:bg-secondary disabled:opacity-30 transition-colors"
+                      className="p-1.5 rounded-lg hover:bg-secondary active:bg-secondary disabled:opacity-30 transition-colors"
                     >
                       <ChevronRight className="w-5 h-5" />
                     </button>
@@ -978,15 +1019,23 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                       <button
                         key={i}
                         onClick={() => setCurrentSlide(i)}
-                        className={`w-2 h-2 rounded-full transition-colors ${i === currentSlide ? 'bg-purple-500' : 'bg-border hover:bg-purple-300'}`}
+                        className={`w-2.5 h-2.5 sm:w-2 sm:h-2 rounded-full transition-colors ${i === currentSlide ? 'bg-purple-500' : 'bg-border hover:bg-purple-300'}`}
                       />
                     ))}
                   </div>
                 )}
 
-                {/* Preview: PNG ou iframe */}
-                <div className="flex justify-center">
-                  <div className="rounded-xl overflow-hidden border border-border shadow-lg" style={{ width: '100%', maxWidth: 360 }}>
+                {/* Preview: PNG ou iframe — responsivo */}
+                <div
+                  ref={previewContainerRef}
+                  className="flex justify-center"
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={e => handleTouchEnd(e, totalSlides)}
+                >
+                  <div
+                    className="rounded-xl overflow-hidden border border-border shadow-lg w-full"
+                    style={{ maxWidth: previewWidth }}
+                  >
                     {hasPNGs ? (
                       /* PNG real do servidor */
                       <div style={{ position: 'relative', paddingBottom: '125%' }}>
@@ -994,6 +1043,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                           key={currentSlide}
                           src={`${API}/output/${result.folderName}/${result.screenshots[currentSlide]}`}
                           alt={`Slide ${currentSlide + 1}`}
+                          className="select-none"
+                          draggable={false}
                           style={{
                             position: 'absolute', top: 0, left: 0,
                             width: '100%', height: '100%',
@@ -1003,14 +1054,14 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                         {/* Botão download individual */}
                         <button
                           onClick={() => handleDownloadPNG(result.screenshots[currentSlide])}
-                          className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
+                          className="absolute bottom-2 right-2 p-2 rounded-lg bg-black/60 hover:bg-black/80 active:bg-black/90 text-white transition-colors"
                           title="Baixar este slide"
                         >
-                          <Download className="w-3.5 h-3.5" />
+                          <Download className="w-4 h-4" />
                         </button>
                       </div>
                     ) : (
-                      /* Fallback: iframe HTML */
+                      /* Fallback: iframe HTML — escala responsiva */
                       <div style={{ position: 'relative', paddingBottom: '125%' }}>
                         <iframe
                           key={currentSlide}
@@ -1019,8 +1070,9 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                           style={{
                             position: 'absolute', top: 0, left: 0,
                             width: '1080px', height: '1350px', border: 'none',
-                            transform: `scale(${360 / 1080})`,
+                            transform: `scale(${previewWidth / 1080})`,
                             transformOrigin: 'top left',
+                            pointerEvents: 'none',
                           }}
                           title={`Slide ${currentSlide + 1}`}
                         />
@@ -1028,6 +1080,13 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                     )}
                   </div>
                 </div>
+
+                {/* Dica de swipe no mobile */}
+                {totalSlides > 1 && (
+                  <p className="text-center text-[10px] text-muted-foreground/60 mt-2 sm:hidden">
+                    ← Deslize para navegar entre slides →
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1115,7 +1174,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                         <LayoutTemplate className="w-2.5 h-2.5" /> Modelo
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                    {/* Desktop: overlay on hover */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all items-center justify-center gap-2 opacity-0 group-hover:opacity-100 hidden sm:flex">
                       {saved.isTemplate ? (
                         <button
                           onClick={() => handleUseAsBase(saved)}
@@ -1127,6 +1187,24 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                         <button
                           onClick={() => handleLoadConfig(saved)}
                           className="px-3 py-1.5 bg-white text-black rounded-lg text-xs font-bold hover:bg-gray-100 transition-colors"
+                        >
+                          Carregar config
+                        </button>
+                      )}
+                    </div>
+                    {/* Mobile: always-visible bottom gradient + button */}
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-6 pb-2 px-2 flex justify-center sm:hidden">
+                      {saved.isTemplate ? (
+                        <button
+                          onClick={() => handleUseAsBase(saved)}
+                          className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold active:bg-emerald-400 transition-colors"
+                        >
+                          Usar como base
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleLoadConfig(saved)}
+                          className="px-3 py-1.5 bg-white text-black rounded-lg text-xs font-bold active:bg-gray-200 transition-colors"
                         >
                           Carregar config
                         </button>
