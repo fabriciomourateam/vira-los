@@ -285,24 +285,43 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     setConfig(prev => ({ ...prev, [key]: value }));
   }
 
-  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setPhotoUploading(true);
-    try {
-      const form = new FormData();
-      form.append('photo', file);
-      const res = await fetch(`${API}/api/carousel/upload-photo`, { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao fazer upload');
-      set('profilePhotoUrl', data.url);
-      toast.success('Foto enviada!');
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Redimensiona para 300x300 via canvas para não inflar o JSON
+      const img = new window.Image();
+      img.onload = () => {
+        const SIZE = 300;
+        const canvas = document.createElement('canvas');
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        const ctx = canvas.getContext('2d')!;
+        // Crop centralizado
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, SIZE, SIZE);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        set('profilePhotoUrl', dataUrl);
+        setPhotoUploading(false);
+        toast.success('Foto carregada!');
+        if (photoInputRef.current) photoInputRef.current.value = '';
+      };
+      img.onerror = () => {
+        toast.error('Não foi possível ler a imagem');
+        setPhotoUploading(false);
+      };
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => {
+      toast.error('Erro ao ler o arquivo');
       setPhotoUploading(false);
-      if (photoInputRef.current) photoInputRef.current.value = '';
-    }
+    };
+    reader.readAsDataURL(file);
   }
 
   async function handleGenerate() {
