@@ -329,7 +329,7 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
 // ─── Passo 3: Prompt Claude para gerar o HTML ─────────────────────────────────
 
 function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fontFamily,
-  instagramHandle, numSlides, contentTone, redditTrends, unsplashImages, roteiro }) {
+  instagramHandle, profilePhotoUrl, numSlides, contentTone, redditTrends, unsplashImages, roteiro }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
@@ -588,7 +588,7 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
 // ─── Prompt HTML layout "Clean" ───────────────────────────────────────────────
 
 function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
-  instagramHandle, numSlides, contentTone, unsplashImages, roteiro }) {
+  instagramHandle, profilePhotoUrl, numSlides, contentTone, unsplashImages, roteiro }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
@@ -604,8 +604,10 @@ function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
     ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim()}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
-  // Iniciais para o avatar
-  const initials = handle.slice(0, 2).toUpperCase();
+  // Avatar: foto de perfil ou iniciais
+  const avatarContent = profilePhotoUrl
+    ? `<img src="${profilePhotoUrl}" alt="${handle}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`
+    : handle.slice(0, 2).toUpperCase();
 
   return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo limpo/minimalista.
 
@@ -630,7 +632,7 @@ SLIDE 1 — CAPA (.clean-cover):
   <div class="bg" style="background-image: url('FOTO_1')"></div>
   <div class="overlay"></div>
   <div class="profile-badge">
-    <div class="avatar-circle">${initials}</div>
+    <div class="avatar-circle">${avatarContent}</div>
     <div class="profile-name">[nome do criador sem @] <span class="verified">✓</span></div>
     <div class="profile-handle">${handleAt}</div>
   </div>
@@ -839,6 +841,7 @@ async function generateCarousel(config) {
     bgColor = '#292A25',
     fontFamily = 'Raleway',
     instagramHandle = '',
+    profilePhotoUrl = '',
     numSlides = 7,
     contentTone = 'investigativo',
     roteiro = '',
@@ -865,12 +868,12 @@ async function generateCarousel(config) {
   const htmlPrompt = layoutStyle === 'clean'
     ? buildCleanHTMLPrompt({
         topic: topic.trim(), niche, primaryColor, fontFamily,
-        instagramHandle, numSlides: slidesCount, contentTone, roteiro,
+        instagramHandle, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
         unsplashImages,
       })
     : buildHTMLPrompt({
         topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
-        fontFamily, instagramHandle, numSlides: slidesCount, contentTone, roteiro,
+        fontFamily, instagramHandle, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
         redditTrends, unsplashImages,
       });
 

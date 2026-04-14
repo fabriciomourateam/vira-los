@@ -21,6 +21,7 @@ interface CarouselConfig {
   bgColor: string;
   fontFamily: string;
   instagramHandle: string;
+  profilePhotoUrl: string;
   numSlides: number;
   contentTone: string;
   roteiro: string;
@@ -171,6 +172,7 @@ const DEFAULT_CONFIG: CarouselConfig = {
   bgColor: '#292A25',
   fontFamily: 'Raleway',
   instagramHandle: '',
+  profilePhotoUrl: '',
   numSlides: 7,
   contentTone: 'investigativo',
   roteiro: '',
@@ -493,6 +495,39 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
               placeholder="@seucanal"
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             />
+          </div>
+
+          {/* Foto de perfil */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+              <Mic2 className="w-3.5 h-3.5" /> Foto de Perfil (URL)
+            </label>
+            <div className="flex items-center gap-3">
+              <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-border bg-secondary flex items-center justify-center">
+                {config.profilePhotoUrl ? (
+                  <img
+                    src={config.profilePhotoUrl}
+                    alt="Foto de perfil"
+                    className="w-full h-full object-cover"
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  <span className="text-xs font-bold text-muted-foreground">
+                    {config.instagramHandle ? config.instagramHandle.replace('@', '').slice(0, 2).toUpperCase() : 'FM'}
+                  </span>
+                )}
+              </div>
+              <input
+                type="url"
+                value={config.profilePhotoUrl}
+                onChange={e => set('profilePhotoUrl', e.target.value)}
+                placeholder="https://…/sua-foto.jpg"
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Cole a URL da sua foto de perfil — ela aparecerá no badge do 1º slide.
+            </p>
           </div>
         </div>
 
