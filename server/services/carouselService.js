@@ -530,7 +530,7 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       padding: 28px 56px;
     }
     .clean-content .footer-name-pill {
-      background: ${primaryColor};
+      background: linear-gradient(90deg, #f58529 0%, #dd2a7b 50%, #8134af 100%);
       border-radius: 60px;
       padding: 16px 40px;
       font-size: 26px; font-weight: 700; color: white;

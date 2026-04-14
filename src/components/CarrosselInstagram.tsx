@@ -529,15 +529,29 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-              <Mic2 className="w-3.5 h-3.5" /> Seu Nome (exibido no badge e rodapé)
+              <Mic2 className="w-3.5 h-3.5" /> Seu Nome
+              {!config.creatorName && (
+                <span className="ml-1 text-[10px] font-bold text-orange-400 bg-orange-400/15 px-1.5 py-0.5 rounded-full">
+                  obrigatório
+                </span>
+              )}
             </label>
             <input
               type="text"
               value={config.creatorName}
               onChange={e => set('creatorName', e.target.value)}
-              placeholder="Fabricio Moura"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              placeholder="Ex: Fabricio Moura"
+              className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${
+                !config.creatorName
+                  ? 'border-orange-400/60 focus:ring-orange-400/40'
+                  : 'border-border'
+              }`}
             />
+            {!config.creatorName && (
+              <p className="text-[11px] text-orange-400/80 mt-1">
+                Aparece no badge da capa e no rodapé de cada slide.
+              </p>
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
