@@ -25,6 +25,34 @@ interface ElementOverride {
   bottom?: string;
 }
 
+interface OverlayConfig {
+  opacity: number;       // 0–1
+  direction: 'to bottom' | 'to top' | 'to right' | 'radial' | 'none';
+  color: string;         // ex: '0,0,0' ou '80,0,120'
+}
+
+const OVERLAY_PRESETS: { label: string; value: OverlayConfig['direction'] }[] = [
+  { label: 'Escurecer baixo ↓', value: 'to bottom' },
+  { label: 'Escurecer cima ↑', value: 'to top' },
+  { label: 'Escurecer lateral →', value: 'to right' },
+  { label: 'Escurecer centro', value: 'radial' },
+  { label: 'Sem gradiente', value: 'none' },
+];
+
+function buildOverlayStyle(cfg: OverlayConfig): string {
+  const { opacity, direction, color } = cfg;
+  const c = color || '0,0,0';
+  const hi = opacity.toFixed(2);
+  const lo = (opacity * 0.15).toFixed(2);
+  switch (direction) {
+    case 'to top':    return `linear-gradient(to top, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 60%, rgba(${c},0) 100%)`;
+    case 'to right':  return `linear-gradient(to right, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 60%, rgba(${c},0) 100%)`;
+    case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
+    case 'none':      return 'rgba(0,0,0,0)';
+    default:          return `linear-gradient(to bottom, rgba(${c},${lo}) 0%, rgba(${c},${hi}) 55%, rgba(${c},${Math.min(1,opacity*1.1).toFixed(2)}) 100%)`;
+  }
+}
+
 interface EditableSlide {
   index: number;
   html: string;
@@ -134,6 +162,7 @@ function rebuildSlideOuterHtml(
   editedTexts: TextBlock[],
   newBgUrl: string | null,
   overrides?: Record<string, ElementOverride>,
+  overlayConfig?: OverlayConfig,
 ): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
@@ -180,6 +209,16 @@ function rebuildSlideOuterHtml(
       ? s.replace(BG_IMAGE_REGEX, `background-image: url('${newBgUrl}')`)
       : `${s} background-image: url('${newBgUrl}');`
     );
+  }
+
+  // Overlay gradient
+  if (overlayConfig) {
+    const overlayEl = el.querySelector('.overlay') as HTMLElement | null;
+    if (overlayEl) {
+      overlayEl.setAttribute('style',
+        `position:absolute;inset:0;z-index:1;background:${buildOverlayStyle(overlayConfig)};`
+      );
+    }
   }
 
   // Element position overrides from drag
@@ -410,6 +449,7 @@ export default function CarouselEditor({
   const [editedTexts, setEditedTexts] = useState<Record<number, TextBlock[]>>({});
   const [editedBgUrls, setEditedBgUrls] = useState<Record<number, string>>({});
   const [elementOverrides, setElementOverrides] = useState<Record<number, Record<string, ElementOverride>>>({});
+  const [overlayConfigs, setOverlayConfigs] = useState<Record<number, OverlayConfig>>({});
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editMode, setEditMode] = useState<'text' | 'visual'>('text');
   const [screenshotLoading, setScreenshotLoading] = useState(false);
@@ -524,9 +564,10 @@ export default function CarouselEditor({
       editedTexts[s.index] ?? s.texts,
       editedBgUrls[s.index] !== '' ? (editedBgUrls[s.index] ?? null) : null,
       elementOverrides[s.index],
+      overlayConfigs[s.index],
     ));
     return `<!DOCTYPE html><html><head>${head}</head><body>\n${built.join('\n')}\n</body></html>`;
-  }, [slides, head, editedTexts, editedBgUrls, elementOverrides]);
+  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs]);
 
   function liveSlideHtml(idx: number): string {
     const s = slides[idx]; if (!s) return '';
@@ -535,6 +576,7 @@ export default function CarouselEditor({
       editedTexts[idx] ?? s.texts,
       editedBgUrls[idx] !== '' ? (editedBgUrls[idx] ?? null) : null,
       elementOverrides[idx],
+      overlayConfigs[idx],
     );
   }
 
@@ -849,6 +891,95 @@ export default function CarouselEditor({
                           </button>
                         )}
                       </div>
+
+                      {/* ── Gradiente / Overlay ── */}
+                      {sel.outerHtml.includes('class="overlay"') && (() => {
+                        const ov: OverlayConfig = overlayConfigs[selectedIndex] ?? {
+                          opacity: 0.75, direction: 'to bottom', color: '0,0,0'
+                        };
+                        function setOv(patch: Partial<OverlayConfig>) {
+                          setOverlayConfigs(prev => ({ ...prev, [selectedIndex]: { ...ov, ...patch } }));
+                        }
+                        // Parse current RGB from overlay color
+                        const rgbToHex = (rgb: string) => {
+                          const parts = rgb.split(',').map(n => parseInt(n.trim()));
+                          if (parts.length < 3 || parts.some(isNaN)) return '#000000';
+                          return '#' + parts.map(n => n.toString(16).padStart(2, '0')).join('');
+                        };
+                        const hexToRgb = (hex: string) => {
+                          const r = parseInt(hex.slice(1,3),16);
+                          const g = parseInt(hex.slice(3,5),16);
+                          const b = parseInt(hex.slice(5,7),16);
+                          return `${r},${g},${b}`;
+                        };
+                        return (
+                          <div className="space-y-3 pt-3 border-t border-border">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Gradiente da capa
+                            </p>
+
+                            {/* Direção */}
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-muted-foreground">Direção</label>
+                              <div className="grid grid-cols-2 gap-1">
+                                {OVERLAY_PRESETS.map(p => (
+                                  <button key={p.value}
+                                    onClick={() => setOv({ direction: p.value })}
+                                    className={`px-2 py-1 rounded text-[11px] font-medium transition-colors text-left ${
+                                      ov.direction === p.value
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-secondary hover:bg-border text-muted-foreground'
+                                    }`}
+                                  >
+                                    {p.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Intensidade */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[11px] text-muted-foreground">Intensidade</label>
+                                <span className="text-[11px] font-mono text-muted-foreground">{Math.round(ov.opacity * 100)}%</span>
+                              </div>
+                              <input type="range" min={0} max={100} value={Math.round(ov.opacity * 100)}
+                                onChange={e => setOv({ opacity: Number(e.target.value) / 100 })}
+                                className="w-full accent-purple-500"
+                              />
+                            </div>
+
+                            {/* Cor */}
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] text-muted-foreground">Cor</label>
+                              <input type="color"
+                                value={rgbToHex(ov.color)}
+                                onChange={e => setOv({ color: hexToRgb(e.target.value) })}
+                                className="w-7 h-7 rounded cursor-pointer border border-border"
+                                title="Cor do gradiente"
+                              />
+                              <span className="text-[11px] text-muted-foreground">
+                                {ov.color === '0,0,0' ? 'Preto' : ov.color}
+                              </span>
+                            </div>
+
+                            {/* Preview mini do gradiente */}
+                            {ov.direction !== 'none' && (
+                              <div className="rounded-lg overflow-hidden border border-border h-8"
+                                style={{ background: buildOverlayStyle(ov) }} />
+                            )}
+
+                            {overlayConfigs[selectedIndex] && (
+                              <button
+                                onClick={() => setOverlayConfigs(prev => { const n = {...prev}; delete n[selectedIndex]; return n; })}
+                                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                Restaurar padrão
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </>
                 )}
