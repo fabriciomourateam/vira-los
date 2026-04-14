@@ -691,6 +691,16 @@ export default function CarouselEditor({
     });
   }
 
+  function updateWordHighlightColor(si: number, bi: number, hi: number, color: string) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      const hls = [...(b[bi].highlights ?? [])];
+      hls[hi] = { ...hls[hi], color };
+      b[bi] = { ...b[bi], highlights: hls };
+      return { ...prev, [si]: b };
+    });
+  }
+
   function updateBgUrl(si: number, url: string) {
     setEditedBgUrls(prev => ({ ...prev, [si]: url }));
   }
@@ -1062,6 +1072,15 @@ export default function CarouselEditor({
                                           <span className="px-1.5 py-0.5 rounded font-semibold" style={{ color: h.color, background: `${h.color}20` }}>
                                             "{h.word}"
                                           </span>
+                                          <label className="relative cursor-pointer shrink-0" title="Editar cor">
+                                            <div className="w-4 h-4 rounded border border-border" style={{ background: h.color }} />
+                                            <input
+                                              type="color"
+                                              value={h.color}
+                                              onChange={e => updateWordHighlightColor(selectedIndex, bi, hi, e.target.value)}
+                                              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                                            />
+                                          </label>
                                           <button onClick={() => removeWordHighlight(selectedIndex, bi, hi)}
                                             className="text-muted-foreground hover:text-red-400 transition-colors ml-auto">✕</button>
                                         </div>
