@@ -658,6 +658,56 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
   </style>`;
 }
 
+// ─── Prompt baseado em template HTML salvo ────────────────────────────────────
+
+function buildTemplateHTMLPrompt({ templateHtml, topic, niche, instagramHandle, creatorName, contentTone, unsplashImages, roteiro, numSlides }) {
+  const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const handleAt = `@${handle}`;
+  const displayName = creatorName
+    || handle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+         .replace(/\b\w/g, c => c.toUpperCase())
+    || handle;
+
+  // Remove data:... base64 URIs (muito grandes para o contexto)
+  const cleanedHtml = templateHtml
+    .replace(/src="data:[^"]{10,}"/g, 'src=""')
+    .replace(/url\('data:[^']{10,}'\)/g, "url('')")
+    .replace(/url\("data:[^"]{10,}"\)/g, 'url("")');
+
+  const validImages = (unsplashImages || []).filter(img => img.url);
+  const imagesSection = validImages.length
+    ? `Novas imagens — substitua as URLs de imagem existentes por essas, na ordem dos slides:\n${validImages.map((img, i) => `Slide ${i + 1}: ${img.url}`).join('\n')}`
+    : '(Sem novas imagens — mantenha as URLs existentes no template)';
+
+  const roteiroSection = roteiro && roteiro.trim()
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo nos textos ━━━\n${roteiro.trim()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  return `Você é um especialista em carrosseis para Instagram.
+
+Você tem um carrossel HTML existente como TEMPLATE. Crie um NOVO carrossel sobre o tema abaixo, mantendo EXATAMENTE o mesmo layout visual: CSS, tamanhos de fonte, posicionamento dos elementos, classes, número de slides e estrutura HTML.
+
+Tema: "${topic}"
+Nicho: ${niche}
+Tom: ${contentTone}
+Instagram: ${handleAt} | Nome: ${displayName}
+${roteiroSection}
+
+━━━ REGRAS OBRIGATÓRIAS ━━━
+- Retorne APENAS o HTML completo. Comece com <!DOCTYPE html> e termine com </html>
+- NÃO use markdown, code fences ou texto fora do HTML
+- Mantenha TODO o bloco <style>...</style> EXATAMENTE como está no template
+- Mantenha as mesmas classes CSS e estrutura de cada slide
+- Substitua APENAS: textos de conteúdo (títulos, body, CTA), handle → ${handleAt}, nome → ${displayName}
+- Mantenha o número de slides igual ao template
+- Máximo 35 palavras por slide de conteúdo
+
+${imagesSection}
+
+━━━ TEMPLATE HTML BASE ━━━
+${cleanedHtml}`;
+}
+
 // ─── Prompt HTML layout "Clean" ───────────────────────────────────────────────
 
 function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
@@ -932,6 +982,7 @@ async function generateCarousel(config) {
     contentTone = 'investigativo',
     roteiro = '',
     layoutStyle = 'editorial',
+    templateHtml = '',   // HTML de modelo salvo para usar como base de layout
   } = config;
 
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
@@ -965,17 +1016,26 @@ async function generateCarousel(config) {
   }
 
   // Passo 3 + 4: HTML e legenda em paralelo
-  const htmlPrompt = layoutStyle === 'clean'
-    ? buildCleanHTMLPrompt({
-        topic: topic.trim(), niche, primaryColor, fontFamily,
-        instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
-        unsplashImages,
-      })
-    : buildHTMLPrompt({
-        topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
-        fontFamily, instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
-        redditTrends, unsplashImages,
-      });
+  let htmlPrompt;
+  if (templateHtml && templateHtml.trim()) {
+    htmlPrompt = buildTemplateHTMLPrompt({
+      templateHtml: templateHtml.trim(),
+      topic: topic.trim(), niche, instagramHandle, creatorName,
+      contentTone, roteiro, unsplashImages, numSlides: slidesCount,
+    });
+  } else if (layoutStyle === 'clean') {
+    htmlPrompt = buildCleanHTMLPrompt({
+      topic: topic.trim(), niche, primaryColor, fontFamily,
+      instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
+      unsplashImages,
+    });
+  } else {
+    htmlPrompt = buildHTMLPrompt({
+      topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
+      fontFamily, instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
+      redditTrends, unsplashImages,
+    });
+  }
 
   const [htmlRes, legendaRes] = await Promise.all([
     anthropic.messages.create({

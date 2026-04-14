@@ -59,6 +59,7 @@ router.post('/generate', async (req, res) => {
     topic, niche, primaryColor, accentColor, bgColor,
     fontFamily, instagramHandle, creatorName, profilePhotoUrl,
     numSlides, contentTone, roteiro, layoutStyle,
+    templateHtml,
   } = req.body;
 
   if (!topic || !String(topic).trim()) {
@@ -70,6 +71,7 @@ router.post('/generate', async (req, res) => {
       topic, niche, primaryColor, accentColor, bgColor,
       fontFamily, instagramHandle, creatorName, profilePhotoUrl,
       numSlides, contentTone, roteiro, layoutStyle,
+      templateHtml,
     });
     res.json(result);
   } catch (err) {

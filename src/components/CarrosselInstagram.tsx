@@ -248,6 +248,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSaved, setEditingSaved] = useState<SavedCarousel | null>(null);
   const [editingSavedHtml, setEditingSavedHtml] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -338,10 +339,22 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     setResult(null);
     setCurrentSlide(0);
     try {
+      // Se um template foi selecionado, busca o HTML dele para enviar ao backend
+      let templateHtml = '';
+      if (selectedTemplateId) {
+        const tpl = savedCarousels.find(c => c.id === selectedTemplateId);
+        if (tpl) {
+          try {
+            const tplRes = await fetch(`${API}/output/${tpl.folderName}/carrossel.html`);
+            if (tplRes.ok) templateHtml = await tplRes.text();
+          } catch { /* ignora — gera sem template */ }
+        }
+      }
+
       const res = await fetch(`${API}/api/carousel/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ ...config, templateHtml }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
@@ -808,6 +821,31 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           )}
         </div>
 
+        {/* Modelo base (opcional) */}
+        {savedCarousels.some(c => c.isTemplate) && (
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+              <LayoutTemplate className="w-3.5 h-3.5" /> Modelo base
+              <span className="normal-case font-normal text-[10px] ml-1">(opcional — preserva layout, fontes e posicionamento)</span>
+            </label>
+            <select
+              value={selectedTemplateId}
+              onChange={e => setSelectedTemplateId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-foreground"
+            >
+              <option value="">— Sem modelo (gerar do zero) —</option>
+              {savedCarousels.filter(c => c.isTemplate).map(tpl => (
+                <option key={tpl.id} value={tpl.id}>{tpl.topic}</option>
+              ))}
+            </select>
+            {selectedTemplateId && (
+              <p className="text-[10px] text-emerald-500 mt-1 flex items-center gap-1">
+                <LayoutTemplate className="w-3 h-3" /> O Claude vai usar o layout deste modelo — só o conteúdo muda
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Botões gerar + restaurar */}
         <div className="flex gap-2">
           <button
@@ -817,6 +855,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           >
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Gerando carrossel…</>
+            ) : selectedTemplateId ? (
+              <><LayoutTemplate className="w-4 h-4" /> Gerar com Modelo</>
             ) : (
               <><Sparkles className="w-4 h-4" /> Gerar Carrossel</>
             )}
