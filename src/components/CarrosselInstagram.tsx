@@ -245,6 +245,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [copied, setCopied] = useState(false);
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editingSaved, setEditingSaved] = useState<SavedCarousel | null>(null);
+  const [editingSavedHtml, setEditingSavedHtml] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -377,6 +379,38 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   async function handleDeleteSaved(id: string) {
     await fetch(`${API}/api/carousel/saved/${id}`, { method: 'DELETE' });
     setSavedCarousels(prev => prev.filter(c => c.id !== id));
+    if (editingSaved?.id === id) {
+      setEditingSaved(null);
+      setEditingSavedHtml(null);
+    }
+  }
+
+  async function handleEditSaved(saved: SavedCarousel) {
+    if (editingSaved?.id === saved.id) {
+      setEditingSaved(null);
+      setEditingSavedHtml(null);
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/output/${saved.folderName}/carrossel.html`);
+      if (!res.ok) throw new Error('HTML não encontrado');
+      const html = await res.text();
+      setEditingSaved(saved);
+      setEditingSavedHtml(html);
+      // Scroll to editor
+      setTimeout(() => {
+        document.getElementById('saved-carousel-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    } catch {
+      toast.error('Não foi possível carregar o HTML deste carrossel');
+    }
+  }
+
+  function refreshSavedCarousels() {
+    fetch(`${API}/api/carousel/saved`)
+      .then(r => r.json())
+      .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
+      .catch(() => {});
   }
 
   function handleLoadConfig(saved: SavedCarousel) {
@@ -907,12 +941,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                   setResult(prev => prev ? { ...prev, screenshots } : prev);
                   setCurrentSlide(0);
                 }}
-                onTemplateSaved={() => {
-                  fetch(`${API}/api/carousel/saved`)
-                    .then(r => r.json())
-                    .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
-                    .catch(() => {});
-                }}
+                onTemplateSaved={refreshSavedCarousels}
               />
             )}
 
@@ -947,7 +976,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
             <span className="text-sm font-semibold text-foreground">Carrosseis Salvos</span>
             <span className="text-xs text-muted-foreground">({savedCarousels.length})</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="saved-carousels-grid">
             {savedCarousels.map(saved => {
               const thumb = saved.screenshots?.[0]
                 ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}`
@@ -980,6 +1009,17 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-muted-foreground">{saved.numSlides} slides · {date}</span>
                       <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleEditSaved(saved)}
+                          className={`p-1 rounded transition-colors ${
+                            editingSaved?.id === saved.id
+                              ? 'text-purple-400 bg-purple-500/10'
+                              : 'text-muted-foreground hover:text-purple-400'
+                          }`}
+                          title="Editar carrossel"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
                         <a
                           href={`${API}/output/${saved.folderName}/carrossel.html`}
                           target="_blank"
@@ -1003,6 +1043,47 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
               );
             })}
           </div>
+
+          {/* ── Editor de carrossel salvo ── */}
+          <AnimatePresence>
+            {editingSaved && editingSavedHtml && (
+              <motion.div
+                id="saved-carousel-editor"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.2 }}
+                className="mt-2"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-purple-400 flex items-center gap-1.5">
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Editando: <span className="text-foreground">{editingSaved.topic}</span>
+                  </span>
+                  <button
+                    onClick={() => { setEditingSaved(null); setEditingSavedHtml(null); }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Fechar editor
+                  </button>
+                </div>
+                <CarouselEditor
+                  html={editingSavedHtml}
+                  folderName={editingSaved.folderName}
+                  topic={editingSaved.topic}
+                  numSlides={editingSaved.numSlides}
+                  legenda={editingSaved.legenda}
+                  config={editingSaved.config as Record<string, unknown>}
+                  onScreenshotsUpdated={(screenshots) => {
+                    setSavedCarousels(prev =>
+                      prev.map(c => c.id === editingSaved.id ? { ...c, screenshots } : c)
+                    );
+                  }}
+                  onTemplateSaved={refreshSavedCarousels}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
     </div>
