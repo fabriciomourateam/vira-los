@@ -169,6 +169,27 @@ function textToHtml(text: string, highlights?: WordHighlight[]): string {
   return result;
 }
 
+// Extrai destaques de palavras a partir de <span style="color:..."> já presentes no HTML
+function extractWordHighlights(el: Element): WordHighlight[] {
+  const seen = new Map<string, string>(); // word → color
+  for (const span of Array.from(el.querySelectorAll('span[style]'))) {
+    const style = span.getAttribute('style') || '';
+    const m = /(?:^|;)\s*color\s*:\s*([^;]+)/i.exec(style);
+    if (!m) continue;
+    const color = m[1].trim();
+    const word = span.textContent?.trim() || '';
+    if (word && !seen.has(word)) seen.set(word, color);
+  }
+  return Array.from(seen.entries()).map(([word, color]) => ({ word, color }));
+}
+
+// Extrai cor inline do próprio elemento (não de filhos)
+function extractBlockColor(el: Element): string | undefined {
+  const style = el.getAttribute('style') || '';
+  const m = /(?:^|;)\s*color\s*:\s*([^;]+)/i.exec(style);
+  return m ? m[1].trim() : undefined;
+}
+
 function extractTextBlocks(el: Element): TextBlock[] {
   const blocks: TextBlock[] = [];
   const seen = new Set<Element>();
@@ -179,11 +200,14 @@ function extractTextBlocks(el: Element): TextBlock[] {
           seen.has(node)) continue;
       seen.add(node);
       const className = node.className || selector.slice(1);
+      const highlights = extractWordHighlights(node);
       blocks.push({
         className: typeof className === 'string' ? className : selector.slice(1),
         text: getTextWithLineBreaks(node),
         isMain,
         fontSize: extractFontSize(node),
+        color: extractBlockColor(node),
+        highlights: highlights.length > 0 ? highlights : undefined,
       });
     }
   }
