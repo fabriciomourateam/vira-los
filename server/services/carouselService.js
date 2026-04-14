@@ -168,12 +168,58 @@ async function fetchPexelsImages(query, count = 12) {
   }
 }
 
-// Cascata: tenta Unsplash → Pexels
+// Cascata: tenta Unsplash → Pexels (1 imagem por query)
 async function fetchImages(query, count = 12) {
   const images = await fetchUnsplashImages(query, count);
   if (images.length) return images;
   console.log('[CarouselService] Unsplash vazio, tentando Pexels...');
   return fetchPexelsImages(query, count);
+}
+
+// Busca uma imagem por slide com query específica (fallback para o tema geral)
+async function fetchOneImage(query, fallbackQuery) {
+  try {
+    let imgs = await fetchUnsplashImages(query, 1);
+    if (!imgs.length) imgs = await fetchPexelsImages(query, 1);
+    if (!imgs.length && fallbackQuery) {
+      imgs = await fetchUnsplashImages(fallbackQuery, 1);
+      if (!imgs.length) imgs = await fetchPexelsImages(fallbackQuery, 1);
+    }
+    return imgs[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+// Gera queries de imagem específicas por slide via Claude (chamada leve)
+async function generateSlideImageQueries(topic, roteiro, slidesCount, niche) {
+  const roteiroContext = roteiro
+    ? `Roteiro:\n${roteiro.slice(0, 1200)}`
+    : `Tema: "${topic}" — nicho: ${niche}`;
+
+  const prompt = `${roteiroContext}
+
+Gere exatamente ${slidesCount} queries de busca de imagens no Unsplash/Pexels, uma por slide.
+Cada query deve ser em INGLÊS, 2-4 palavras, descrevendo a imagem ideal para aquele slide.
+Slide 1 = capa (foto impactante do tema), slides 2 a ${slidesCount - 1} = conteúdo específico de cada ponto, slide ${slidesCount} = CTA/motivação.
+
+Responda APENAS com um JSON array de strings, sem markdown:
+["query slide 1", "query slide 2", ...]`;
+
+  try {
+    const res = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = (res.content[0]?.text || '').trim();
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return null;
+    const queries = JSON.parse(match[0]);
+    return Array.isArray(queries) ? queries : null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Passo 3: CSS template completo (baseado no gist) ────────────────────────
@@ -343,8 +389,8 @@ function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fon
     : '';
 
   const imagesSection = unsplashImages.length
-    ? `\nImagens disponíveis — use estas URLs exatas no HTML (uma por slide):\n${unsplashImages.map((img, i) =>
-        `${i + 1}. ${img.url}`).join('\n')}`
+    ? `\nImagens — cada uma foi buscada para aquele slide específico. Use a URL exata na ordem:\n${unsplashImages.map((img, i) =>
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem — use gradiente CSS)`).join('\n')}`
     : '\n(Sem imagens — use gradientes CSS criativos no fundo dos slides de foto)';
 
   const roteiroSection = roteiro && roteiro.trim()
@@ -626,9 +672,10 @@ function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
   const totalContent = numSlides - 2;
   const cssTemplate = buildCleanCSSTemplate({ primaryColor, fontFamily });
 
-  const imagesSection = unsplashImages.length
-    ? `\nImagens disponíveis — use estas URLs exatas (uma por slide de conteúdo):\n${unsplashImages.map((img, i) =>
-        `${i + 1}. ${img.url}`).join('\n')}`
+  const validImages = unsplashImages.filter(img => img.url);
+  const imagesSection = validImages.length
+    ? `\nImagens — cada uma foi buscada especificamente para aquele slide. Use a URL exata na ordem indicada:\n${unsplashImages.map((img, i) =>
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem — use fundo escuro)`).join('\n')}`
     : '\n(Sem imagens — omita os .photo-card e .top-photo-wrap; use apenas texto nos slides de conteúdo)';
 
   const roteiroSection = roteiro && roteiro.trim()
@@ -897,11 +944,25 @@ async function generateCarousel(config) {
     if (count >= 3) slidesCount = Math.min(10, count);
   }
 
-  // Passo 1 + 2: Reddit (skip se tiver roteiro) e imagens (Unsplash → Pexels) em paralelo
-  const [redditTrends, unsplashImages] = await Promise.all([
+  // Passo 1: Reddit (skip se tiver roteiro) + queries por slide, em paralelo
+  const [redditTrends, slideQueries] = await Promise.all([
     roteiro ? Promise.resolve([]) : fetchRedditTrends(topic),
-    fetchImages(topic, slidesCount + 2),
+    generateSlideImageQueries(topic, roteiro, slidesCount, niche),
   ]);
+
+  // Passo 2: busca imagem específica para cada slide em paralelo
+  let unsplashImages;
+  if (slideQueries && slideQueries.length >= slidesCount) {
+    const perSlide = await Promise.all(
+      slideQueries.map(q => fetchOneImage(q, topic))
+    );
+    unsplashImages = perSlide.map((img, i) => img || { url: '', query: slideQueries[i] });
+    // Filtra slots sem imagem mas mantém a ordem
+    console.log(`[CarouselService] Imagens por slide: ${perSlide.filter(Boolean).length}/${slidesCount} encontradas`);
+  } else {
+    // Fallback: busca genérica pelo tema
+    unsplashImages = await fetchImages(topic, slidesCount + 2);
+  }
 
   // Passo 3 + 4: HTML e legenda em paralelo
   const htmlPrompt = layoutStyle === 'clean'
