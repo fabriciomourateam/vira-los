@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight,
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
-  Trash2, Clock, FolderOpen, Edit3, Eye,
+  Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud,
 } from 'lucide-react';
 import CarouselEditor from './CarouselEditor';
 
@@ -243,6 +243,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [copied, setCopied] = useState(false);
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Carrega config e histórico do servidor na montagem
@@ -281,6 +283,26 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
 
   function set<K extends keyof CarouselConfig>(key: K, value: CarouselConfig[K]) {
     setConfig(prev => ({ ...prev, [key]: value }));
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoUploading(true);
+    try {
+      const form = new FormData();
+      form.append('photo', file);
+      const res = await fetch(`${API}/api/carousel/upload-photo`, { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao fazer upload');
+      set('profilePhotoUrl', data.url);
+      toast.success('Foto enviada!');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
   }
 
   async function handleGenerate() {
@@ -500,10 +522,11 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           {/* Foto de perfil */}
           <div>
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
-              <Mic2 className="w-3.5 h-3.5" /> Foto de Perfil (URL)
+              <Mic2 className="w-3.5 h-3.5" /> Foto de Perfil
             </label>
             <div className="flex items-center gap-3">
-              <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-border bg-secondary flex items-center justify-center">
+              {/* Preview circular */}
+              <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 border-border bg-secondary flex items-center justify-center">
                 {config.profilePhotoUrl ? (
                   <img
                     src={config.profilePhotoUrl}
@@ -517,16 +540,27 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                   </span>
                 )}
               </div>
+              {/* Botão de upload */}
               <input
-                type="url"
-                value={config.profilePhotoUrl}
-                onChange={e => set('profilePhotoUrl', e.target.value)}
-                placeholder="https://…/sua-foto.jpg"
-                className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoUpload}
               />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={photoUploading}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border hover:border-purple-500 hover:bg-purple-500/10 text-sm text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-60"
+              >
+                {photoUploading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando…</>
+                  : <><UploadCloud className="w-4 h-4" /> Fazer upload</>}
+              </button>
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
-              Cole a URL da sua foto de perfil — ela aparecerá no badge do 1º slide.
+              Envie sua foto de perfil (JPG/PNG, até 5 MB) — ela aparece no badge do 1º slide.
             </p>
           </div>
         </div>
