@@ -450,15 +450,16 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       background: linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.72) 55%, rgba(0,0,0,0.85) 100%);
       z-index: 1;
     }
+    /* Badge horizontal: foto à esquerda, nome+handle à direita — igual header do Instagram */
     .clean-cover .profile-badge {
       position: absolute;
       top: 44%; left: 50%; transform: translate(-50%, -50%);
       z-index: 2;
-      display: flex; flex-direction: column; align-items: center; gap: 20px;
+      display: flex; flex-direction: row; align-items: center; gap: 28px;
     }
     /* Anel degradê estilo Instagram Stories */
     .clean-cover .avatar-ring {
-      width: 120px; height: 120px; border-radius: 50%;
+      width: 110px; height: 110px; border-radius: 50%; flex-shrink: 0;
       background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
       padding: 4px;
       display: flex; align-items: center; justify-content: center;
@@ -468,18 +469,21 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       background: #111;
       overflow: hidden;
       display: flex; align-items: center; justify-content: center;
-      font-size: 34px; font-weight: 800; color: white;
+      font-size: 30px; font-weight: 800; color: white;
     }
     .clean-cover .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+    /* Bloco de texto à direita da foto */
+    .clean-cover .profile-text {
+      display: flex; flex-direction: column; gap: 8px;
+    }
     .clean-cover .profile-name {
-      font-size: 36px; font-weight: 700; color: white; text-align: center;
-      display: flex; align-items: center; gap: 10px;
+      font-size: 38px; font-weight: 700; color: white;
+      display: flex; align-items: center; gap: 10px; white-space: nowrap;
     }
     /* Badge verificado azul (estilo Instagram) */
-    .clean-cover .verified-badge svg { width: 32px; height: 32px; display: block; }
+    .clean-cover .verified-badge svg { width: 32px; height: 32px; display: block; flex-shrink: 0; }
     .clean-cover .profile-handle {
-      font-size: 24px; font-weight: 400; color: rgba(255,255,255,0.65); text-align: center;
-      margin-top: -10px;
+      font-size: 26px; font-weight: 400; color: rgba(255,255,255,0.65);
     }
     .clean-cover .cover-title {
       position: absolute; bottom: 148px; left: 64px; right: 64px; z-index: 2;
@@ -659,11 +663,13 @@ SLIDE 1 — CAPA (.clean-cover):
     <div class="avatar-ring">
       <div class="avatar-circle">${avatarContent}</div>
     </div>
-    <div class="profile-name">
-      ${displayName}
-      <span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <div class="profile-text">
+      <div class="profile-name">
+        ${displayName}
+        <span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </div>
+      <div class="profile-handle">${handleAt}</div>
     </div>
-    <div class="profile-handle">${handleAt}</div>
   </div>
   <div class="cover-title">[título impactante — até 12 palavras — 1-2 palavras em <span class="hl">destaque</span>]</div>
   <div class="swipe-hint">Arrasta para o lado ›</div>
