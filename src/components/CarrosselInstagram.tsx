@@ -7,7 +7,7 @@ import {
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate,
 } from 'lucide-react';
-import CarouselEditor from './CarouselEditor';
+import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -922,12 +922,27 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                     <FileText className="w-3.5 h-3.5" /> HTML
                   </button>
                   {hasPNGs && (
-                    <button
-                      onClick={() => result.screenshots.forEach(f => handleDownloadPNG(f))}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Baixar PNGs
-                    </button>
+                    <>
+                      <button
+                        onClick={() => result.screenshots.forEach(f => handleDownloadPNG(f))}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" /> PNGs
+                      </button>
+                      <button
+                        onClick={async () => {
+                          for (let i = 0; i < result.screenshots.length; i++) {
+                            const url = `${API}/output/${result.folderName}/${result.screenshots[i]}`;
+                            await downloadAsJpeg(url, `slide_${String(i + 1).padStart(2, '0')}.jpg`);
+                            await new Promise(r => setTimeout(r, 150));
+                          }
+                          toast.success(`${result.screenshots.length} JPEGs baixados!`);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" /> JPEGs
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
