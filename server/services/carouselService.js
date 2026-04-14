@@ -1008,10 +1008,24 @@ async function generateCarousel(config) {
   // Pós-processamento: injeta foto de perfil no avatar-circle (evita passar base64 enorme pro Claude)
   if (profilePhotoUrl && profilePhotoUrl.trim()) {
     const imgTag = `<img src="${profilePhotoUrl}" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`;
-    // Substitui o conteúdo do avatar-circle (iniciais) pela foto
     html = html.replace(
       /(<div[^>]*class="avatar-circle"[^>]*>)([\s\S]*?)(<\/div>)/,
       `$1${imgTag}$3`
+    );
+  }
+
+  // Pós-processamento: garante que o selo verificado aparece no .profile-name
+  // (Claude às vezes omite ou corrompe o SVG inline)
+  const VERIFIED_SVG = `<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+  // Se já tem o badge, não faz nada; caso contrário injeta antes do </div> do profile-name
+  if (!html.includes('verified-badge')) {
+    html = html.replace(
+      /(<div[^>]*class="profile-name"[^>]*>)([\s\S]*?)(<\/div>)/,
+      (_, open, inner, close) => {
+        // Remove qualquer ✓ ou ✔ textual que Claude possa ter colocado
+        const cleaned = inner.replace(/[✓✔☑✅]/g, '').trimEnd();
+        return `${open}${cleaned}${VERIFIED_SVG}${close}`;
+      }
     );
   }
 
