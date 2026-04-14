@@ -45,19 +45,14 @@ import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'roteiro' | 'metricas' | 'produtos' | 'agendador' | 'pesquisa' | 'agente' | 'carrossel' | 'analisador' | 'radar' | 'score';
+type TabId = 'metodo' | 'descobrir' | 'criar' | 'avaliar' | 'agendar';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
-  { id: 'roteiro',   label: 'Roteiro',   icon: Zap },
-  { id: 'metricas',  label: 'Métricas',  icon: Calculator },
-  { id: 'produtos',  label: 'Produtos',  icon: ShoppingBag },
-  { id: 'agendador', label: 'Agendar',   icon: Calendar },
-  { id: 'pesquisa',  label: 'Pesquisa',  icon: BookOpen },
-  { id: 'agente',    label: 'Agente',    icon: Bot },
-  { id: 'carrossel', label: 'Carrossel', icon: Layers },
-  { id: 'analisador',label: 'Analisar',  icon: ScanSearch },
-  { id: 'radar',     label: 'Radar',     icon: Radio },
-  { id: 'score',     label: 'Score',     icon: Gauge },
+  { id: 'metodo',    label: 'Método',    icon: Zap },
+  { id: 'descobrir', label: 'Descobrir', icon: Search },
+  { id: 'criar',     label: 'Criar',     icon: Layers },
+  { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
+  { id: 'agendar',   label: 'Agendar',   icon: Calendar },
 ];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
@@ -577,8 +572,42 @@ function TeleprompterOverlay({
   );
 }
 
+// ─── Sub-tab bar reutilizável ─────────────────────────────────────────────────
+
+function SubTabBar<T extends string>({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: { id: T; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[];
+  active: T;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <div className="flex gap-1.5 mb-6 p-1 bg-secondary rounded-xl">
+      {tabs.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          onClick={() => onChange(id)}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+            active === id
+              ? 'bg-card text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Icon size={13} />
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function ViralOS() {
-  const [activeTab, setActiveTab] = useState<TabId>('roteiro');
+  const [activeTab, setActiveTab] = useState<TabId>('metodo');
+  const [metodoSubTab,    setMetodoSubTab]    = useState<'roteiro' | 'produtos'>('roteiro');
+  const [descobrirSubTab, setDescobrirSubTab] = useState<'pesquisa' | 'radar' | 'agente'>('pesquisa');
+  const [avaliarSubTab,   setAvaliarSubTab]   = useState<'analisador' | 'score' | 'metricas'>('analisador');
   const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
   const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
   const [state, setState] = useState<AppState>(initialState);
@@ -718,7 +747,8 @@ export default function ViralOS() {
         ...(script2 ? { '3.1.b': true } : {}),
       },
     }));
-    setActiveTab('roteiro');
+    setActiveTab('metodo');
+    setMetodoSubTab('roteiro');
     toast.success(
       hasScripts
         ? 'Dossie aplicado no roteiro: referencias, formatos e roteiros finais preenchidos.'
@@ -730,14 +760,15 @@ export default function ViralOS() {
 
   const handleUseInCarrossel = (script: string, topic: string) => {
     setCarouselPrefill({ script, topic });
-    setActiveTab('carrossel');
-    toast.success('Script carregado na aba Carrossel!');
+    setActiveTab('criar');
+    toast.success('Script carregado no Criar!');
     setTimeout(() => setCarouselPrefill(null), 500);
   };
 
   const handleEvaluateScript = (script: string, type: 'carousel' | 'reels') => {
     setScorePrefill({ script, type });
-    setActiveTab('score');
+    setActiveTab('avaliar');
+    setAvaliarSubTab('score');
     toast.success('Script carregado no Avaliador Viral!');
     setTimeout(() => setScorePrefill(null), 500);
   };
@@ -750,14 +781,15 @@ export default function ViralOS() {
       expandedSections: { ...prev.expandedSections, passo3: true },
       expandedItems: { ...prev.expandedItems, '3.1.a': true },
     }));
-    setActiveTab('roteiro');
+    setActiveTab('metodo');
+    setMetodoSubTab('roteiro');
     toast.success('Hook do Radar aplicado no Roteiro Final A!');
   };
 
   const handleRadarCarrossel = (topic: string) => {
     setCarouselPrefill({ script: '', topic });
-    setActiveTab('carrossel');
-    toast.success('Tema carregado na aba Carrossel!');
+    setActiveTab('criar');
+    toast.success('Tema carregado no Criar!');
     setTimeout(() => setCarouselPrefill(null), 500);
   };
 
@@ -817,7 +849,7 @@ export default function ViralOS() {
             </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
-            {activeTab === 'roteiro' && (
+            {activeTab === 'metodo' && metodoSubTab === 'roteiro' && (
               <div className="flex items-center gap-2 bg-secondary px-2.5 sm:px-3 py-1.5 rounded-full">
                 <div className="w-16 sm:w-24 h-1.5 bg-border rounded-full overflow-hidden">
                   <motion.div
@@ -874,20 +906,70 @@ export default function ViralOS() {
       </header>
 
       <main className="max-w-3xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8">
-        {activeTab === 'metricas'  && <MetricasCalculadora />}
-        {activeTab === 'produtos'  && <ProdutosEscalaveis />}
-        {activeTab === 'agendador' && <Agendador />}
-        {activeTab === 'pesquisa'  && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
-        {activeTab === 'agente'    && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
-        {activeTab === 'carrossel'  && <CarrosselInstagram prefillScript={carouselPrefill?.script} prefillTopic={carouselPrefill?.topic} />}
-        {activeTab === 'analisador' && <AnalisadorReels onUseInCarrossel={handleUseInCarrossel} onEvaluate={handleEvaluateScript} />}
-        {activeTab === 'radar'      && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} />}
-        {activeTab === 'score'      && <ViralScore
-          prefillScript={scorePrefill?.script}
-          prefillType={scorePrefill?.type}
-          onUseInCarrossel={(script) => handleUseInCarrossel(script, 'Script Melhorado do Score')}
-        />}
-        {activeTab === 'roteiro' && (<>
+
+        {/* ── DESCOBRIR ── */}
+        {activeTab === 'descobrir' && (
+          <>
+            <SubTabBar
+              tabs={[
+                { id: 'pesquisa', label: 'Pesquisa',   icon: BookOpen },
+                { id: 'radar',    label: 'Radar',      icon: Radio },
+                { id: 'agente',   label: 'Automático', icon: Bot },
+              ]}
+              active={descobrirSubTab}
+              onChange={(id) => setDescobrirSubTab(id as typeof descobrirSubTab)}
+            />
+            {descobrirSubTab === 'pesquisa' && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
+            {descobrirSubTab === 'radar'    && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} />}
+            {descobrirSubTab === 'agente'   && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
+          </>
+        )}
+
+        {/* ── CRIAR ── */}
+        {activeTab === 'criar' && (
+          <CarrosselInstagram prefillScript={carouselPrefill?.script} prefillTopic={carouselPrefill?.topic} />
+        )}
+
+        {/* ── AVALIAR ── */}
+        {activeTab === 'avaliar' && (
+          <>
+            <SubTabBar
+              tabs={[
+                { id: 'analisador', label: 'Analisar Reels', icon: ScanSearch },
+                { id: 'score',      label: 'Score Script',   icon: Gauge },
+                { id: 'metricas',   label: 'Métricas',       icon: Calculator },
+              ]}
+              active={avaliarSubTab}
+              onChange={(id) => setAvaliarSubTab(id as typeof avaliarSubTab)}
+            />
+            {avaliarSubTab === 'analisador' && <AnalisadorReels onUseInCarrossel={handleUseInCarrossel} onEvaluate={handleEvaluateScript} />}
+            {avaliarSubTab === 'score'      && <ViralScore
+              prefillScript={scorePrefill?.script}
+              prefillType={scorePrefill?.type}
+              onUseInCarrossel={(script) => handleUseInCarrossel(script, 'Script Melhorado do Score')}
+            />}
+            {avaliarSubTab === 'metricas'   && <MetricasCalculadora />}
+          </>
+        )}
+
+        {/* ── AGENDAR ── */}
+        {activeTab === 'agendar' && <Agendador />}
+
+        {/* ── MÉTODO ── */}
+        {activeTab === 'metodo' && (
+          <>
+            <SubTabBar
+              tabs={[
+                { id: 'roteiro',  label: 'Roteiro',  icon: Zap },
+                { id: 'produtos', label: 'Produtos', icon: ShoppingBag },
+              ]}
+              active={metodoSubTab}
+              onChange={(id) => setMetodoSubTab(id as typeof metodoSubTab)}
+            />
+            {metodoSubTab === 'produtos' && <ProdutosEscalaveis />}
+          </>
+        )}
+        {activeTab === 'metodo' && metodoSubTab === 'roteiro' && (<>
         <section className="mb-10">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 text-balance">
             Roteiro de Viralização
