@@ -21,6 +21,7 @@ interface CarouselConfig {
   bgColor: string;
   fontFamily: string;
   instagramHandle: string;
+  creatorName: string;
   profilePhotoUrl: string;
   numSlides: number;
   contentTone: string;
@@ -172,6 +173,7 @@ const DEFAULT_CONFIG: CarouselConfig = {
   bgColor: '#292A25',
   fontFamily: 'Raleway',
   instagramHandle: '',
+  creatorName: '',
   profilePhotoUrl: '',
   numSlides: 7,
   contentTone: 'investigativo',
@@ -522,6 +524,18 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
               value={config.niche}
               onChange={e => set('niche', e.target.value)}
               placeholder="Inteligência Artificial"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+              <Mic2 className="w-3.5 h-3.5" /> Seu Nome (exibido no badge e rodapé)
+            </label>
+            <input
+              type="text"
+              value={config.creatorName}
+              onChange={e => set('creatorName', e.target.value)}
+              placeholder="Fabricio Moura"
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             />
           </div>

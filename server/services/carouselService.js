@@ -454,23 +454,32 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       position: absolute;
       top: 44%; left: 50%; transform: translate(-50%, -50%);
       z-index: 2;
-      display: flex; flex-direction: column; align-items: center; gap: 18px;
+      display: flex; flex-direction: column; align-items: center; gap: 20px;
+    }
+    /* Anel degradê estilo Instagram Stories */
+    .clean-cover .avatar-ring {
+      width: 120px; height: 120px; border-radius: 50%;
+      background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+      padding: 4px;
+      display: flex; align-items: center; justify-content: center;
     }
     .clean-cover .avatar-circle {
-      width: 96px; height: 96px; border-radius: 50%;
-      border: 3px solid rgba(255,255,255,0.9);
+      width: 100%; height: 100%; border-radius: 50%;
+      background: #111;
+      overflow: hidden;
       display: flex; align-items: center; justify-content: center;
       font-size: 34px; font-weight: 800; color: white;
-      background: rgba(255,255,255,0.12);
-      overflow: hidden;
     }
     .clean-cover .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
     .clean-cover .profile-name {
-      font-size: 34px; font-weight: 700; color: white; text-align: center;
+      font-size: 36px; font-weight: 700; color: white; text-align: center;
+      display: flex; align-items: center; gap: 10px;
     }
-    .clean-cover .verified { color: #4FC3F7; font-size: 28px; }
+    /* Badge verificado azul (estilo Instagram) */
+    .clean-cover .verified-badge svg { width: 32px; height: 32px; display: block; }
     .clean-cover .profile-handle {
-      font-size: 23px; font-weight: 400; color: rgba(255,255,255,0.72); text-align: center;
+      font-size: 24px; font-weight: 400; color: rgba(255,255,255,0.65); text-align: center;
+      margin-top: -10px;
     }
     .clean-cover .cover-title {
       position: absolute; bottom: 148px; left: 64px; right: 64px; z-index: 2;
@@ -514,13 +523,26 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
     .clean-content .slide-footer {
       position: absolute; bottom: 0; left: 0; right: 0;
       display: flex; justify-content: space-between; align-items: center;
-      padding: 26px 64px;
+      padding: 28px 56px;
     }
-    .clean-content .footer-author {
-      font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.8);
+    .clean-content .footer-name-pill {
+      background: ${primaryColor};
+      border-radius: 60px;
+      padding: 16px 40px;
+      font-size: 26px; font-weight: 700; color: white;
+      white-space: nowrap;
+    }
+    .clean-content .footer-handle-pill {
+      border: 2px solid rgba(255,255,255,0.30);
+      border-radius: 60px;
+      padding: 16px 40px;
+      font-size: 26px; font-weight: 500; color: rgba(255,255,255,0.88);
+      background: rgba(255,255,255,0.04);
+      white-space: nowrap;
     }
     .clean-content .footer-swipe {
-      font-size: 20px; color: rgba(255,255,255,0.45);
+      font-size: 22px; color: rgba(255,255,255,0.42);
+      white-space: nowrap;
     }
 
     /* ── SLIDE DE CONTEÚDO — variante com foto no TOPO (meia altura) ── */
@@ -588,10 +610,11 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
 // ─── Prompt HTML layout "Clean" ───────────────────────────────────────────────
 
 function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
-  instagramHandle, profilePhotoUrl, numSlides, contentTone, unsplashImages, roteiro }) {
+  instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, unsplashImages, roteiro }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
+  const displayName = creatorName || handle.replace(/team$/, '').replace(/[._-]/g, ' ').trim() || handle;
   const totalContent = numSlides - 2;
   const cssTemplate = buildCleanCSSTemplate({ primaryColor, fontFamily });
 
@@ -632,8 +655,13 @@ SLIDE 1 — CAPA (.clean-cover):
   <div class="bg" style="background-image: url('FOTO_1')"></div>
   <div class="overlay"></div>
   <div class="profile-badge">
-    <div class="avatar-circle">${avatarContent}</div>
-    <div class="profile-name">[nome do criador sem @] <span class="verified">✓</span></div>
+    <div class="avatar-ring">
+      <div class="avatar-circle">${avatarContent}</div>
+    </div>
+    <div class="profile-name">
+      ${displayName}
+      <span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
     <div class="profile-handle">${handleAt}</div>
   </div>
   <div class="cover-title">[título impactante — até 12 palavras — 1-2 palavras em <span class="hl">destaque</span>]</div>
@@ -652,7 +680,8 @@ SLIDE 2 — COM FAIXA "ME SIGA" + FOTO NO TOPO (.clean-content.top-photo):
     <div class="content-body">[texto de apoio]</div>
   </div>
   <div class="slide-footer">
-    <span class="footer-author">[Nome] · ${handleAt}</span>
+    <span class="footer-name-pill">${displayName}</span>
+    <span class="footer-handle-pill">${handleAt}</span>
     <span class="footer-swipe">Arrasta para o lado ›</span>
   </div>
 </div>
@@ -663,7 +692,8 @@ SLIDES 3 a ${numSlides - 1} — CONTEÚDO (.clean-content):
   <div class="content-body">[texto de apoio — até 30 palavras]</div>
   <div class="photo-card"><img src="FOTO_N" alt="${topic}" /></div>
   <div class="slide-footer">
-    <span class="footer-author">[Nome] · ${handleAt}</span>
+    <span class="footer-name-pill">${displayName}</span>
+    <span class="footer-handle-pill">${handleAt}</span>
     <span class="footer-swipe">Arrasta para o lado ›</span>
   </div>
 </div>
@@ -841,6 +871,7 @@ async function generateCarousel(config) {
     bgColor = '#292A25',
     fontFamily = 'Raleway',
     instagramHandle = '',
+    creatorName = '',
     profilePhotoUrl = '',
     numSlides = 7,
     contentTone = 'investigativo',
@@ -868,12 +899,12 @@ async function generateCarousel(config) {
   const htmlPrompt = layoutStyle === 'clean'
     ? buildCleanHTMLPrompt({
         topic: topic.trim(), niche, primaryColor, fontFamily,
-        instagramHandle, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
+        instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
         unsplashImages,
       })
     : buildHTMLPrompt({
         topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
-        fontFamily, instagramHandle, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
+        fontFamily, instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
         redditTrends, unsplashImages,
       });
 
