@@ -1044,6 +1044,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                   setResult(prev => prev ? { ...prev, screenshots } : prev);
                   setCurrentSlide(0);
                 }}
+                onHtmlUpdated={(html) => setResult(prev => prev ? { ...prev, html } : prev)}
                 onTemplateSaved={refreshSavedCarousels}
               />
             )}
@@ -1216,6 +1217,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                       prev.map(c => c.id === editingSaved.id ? { ...c, screenshots } : c)
                     );
                   }}
+                  onHtmlUpdated={(html) => setEditingSavedHtml(html)}
                   onTemplateSaved={refreshSavedCarousels}
                 />
               </motion.div>

@@ -79,6 +79,7 @@ export interface CarouselEditorProps {
   config?: Record<string, unknown>;
   onScreenshotsUpdated: (screenshots: string[]) => void;
   onTemplateSaved?: () => void;
+  onHtmlUpdated?: (html: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -540,7 +541,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
 
 export default function CarouselEditor({
   html, folderName, topic, numSlides, legenda, config,
-  onScreenshotsUpdated, onTemplateSaved,
+  onScreenshotsUpdated, onTemplateSaved, onHtmlUpdated,
 }: CarouselEditorProps) {
   const [head, setHead] = useState('');
   const [slides, setSlides] = useState<EditableSlide[]>([]);
@@ -694,6 +695,19 @@ export default function CarouselEditor({
     ));
     return `<!DOCTYPE html><html><head>${head}</head><body>\n${built.join('\n')}\n</body></html>`;
   }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible]);
+
+  // ── Persistência: avisa o pai sempre que o HTML reconstruído mudar ───────────
+
+  const onHtmlUpdatedRef = useRef(onHtmlUpdated);
+  onHtmlUpdatedRef.current = onHtmlUpdated;
+
+  useEffect(() => {
+    if (!onHtmlUpdatedRef.current || slides.length === 0) return;
+    const timer = setTimeout(() => {
+      onHtmlUpdatedRef.current?.(rebuildHtml());
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, slides, rebuildHtml]);
 
   function liveSlideHtml(idx: number): string {
     const s = slides[idx]; if (!s) return '';
