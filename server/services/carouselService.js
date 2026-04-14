@@ -614,7 +614,10 @@ function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
-  const displayName = creatorName || handle.replace(/team$/, '').replace(/[._-]/g, ' ').trim() || handle;
+  const displayName = creatorName
+    || handle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+         .replace(/\b\w/g, c => c.toUpperCase())
+    || handle;
   const totalContent = numSlides - 2;
   const cssTemplate = buildCleanCSSTemplate({ primaryColor, fontFamily });
 
@@ -627,10 +630,8 @@ function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
     ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim()}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
-  // Avatar: foto de perfil ou iniciais
-  const avatarContent = profilePhotoUrl
-    ? `<img src="${profilePhotoUrl}" alt="${handle}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`
-    : handle.slice(0, 2).toUpperCase();
+  // Avatar: Claude gera apenas as iniciais; a foto é injetada em pós-processamento
+  const avatarContent = handle.slice(0, 2).toUpperCase();
 
   return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo limpo/minimalista.
 
@@ -935,6 +936,16 @@ async function generateCarousel(config) {
   }
 
   const legenda = (legendaRes.content[0]?.text || '').trim();
+
+  // Pós-processamento: injeta foto de perfil no avatar-circle (evita passar base64 enorme pro Claude)
+  if (profilePhotoUrl && profilePhotoUrl.trim()) {
+    const imgTag = `<img src="${profilePhotoUrl}" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`;
+    // Substitui o conteúdo do avatar-circle (iniciais) pela foto
+    html = html.replace(
+      /(<div[^>]*class="avatar-circle"[^>]*>)([\s\S]*?)(<\/div>)/,
+      `$1${imgTag}$3`
+    );
+  }
 
   // Passo 6: Salvar arquivos (output/<slug>-<ts>/)
   const slug = topic.trim().toLowerCase()

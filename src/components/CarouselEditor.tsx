@@ -41,10 +41,10 @@ export interface CarouselEditorProps {
 const BG_IMAGE_REGEX = /background-image\s*:\s*url\(["']?([^"')]+)["']?\)/i;
 
 function extractBgImageUrl(el: Element): string | null {
-  // Try .slide-bg child first
-  const slideBg = el.querySelector('.slide-bg');
-  if (slideBg) {
-    const styleAttr = slideBg.getAttribute('style') || '';
+  // Try .slide-bg (editorial) or .bg (clean) child first
+  const bgEl = el.querySelector('.slide-bg, .bg');
+  if (bgEl) {
+    const styleAttr = bgEl.getAttribute('style') || '';
     const match = BG_IMAGE_REGEX.exec(styleAttr);
     if (match) return match[1];
   }
@@ -56,18 +56,32 @@ function extractBgImageUrl(el: Element): string | null {
 
 function detectSlideType(el: Element): 'cover' | 'editorial' | 'cta' {
   const classes = el.className || '';
+  // Clean layout
+  if (classes.includes('clean-cover')) return 'cover';
+  if (classes.includes('clean-cta')) return 'cta';
+  if (classes.includes('clean-content')) return 'editorial';
+  // Editorial layout
   if (classes.includes('slide-editorial')) return 'editorial';
-  // heuristic: last slide in a carousel is often CTA
   if (el.querySelector('.cta') || classes.includes('cta')) return 'cta';
   if (el.querySelector('.title') && !classes.includes('slide-editorial')) return 'cover';
   return 'editorial';
 }
 
 const TEXT_SELECTORS = [
+  // Editorial layout
   { selector: '.title', isMain: true },
   { selector: '.subtitle', isMain: false },
   { selector: '.subtitle-accent', isMain: false },
   { selector: '.narrative-text', isMain: true },
+  // Clean layout
+  { selector: '.cover-title', isMain: true },
+  { selector: '.content-title', isMain: true },
+  { selector: '.content-body', isMain: true },
+  { selector: '.cta-title', isMain: true },
+  { selector: '.profile-name', isMain: false },
+  { selector: '.profile-handle', isMain: false },
+  { selector: '.follow-pill', isMain: false },
+  { selector: '.swipe-hint', isMain: false },
 ];
 
 function extractTextBlocks(el: Element): TextBlock[] {
@@ -77,8 +91,11 @@ function extractTextBlocks(el: Element): TextBlock[] {
   for (const { selector, isMain } of TEXT_SELECTORS) {
     const found = Array.from(el.querySelectorAll(selector));
     for (const node of found) {
-      // Skip if inside .top-header or .cover-branding span
+      // Skip non-editable containers
       if (node.closest('.top-header')) continue;
+      if (node.closest('.footer-name-pill')) continue;
+      if (node.closest('.footer-handle-pill')) continue;
+      if (node.closest('.follow-banner')) continue;
       if (seen.has(node)) continue;
       seen.add(node);
       const className = node.className || selector.slice(1);
@@ -97,7 +114,8 @@ function parseSlides(html: string): { slides: EditableSlide[]; head: string } {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   const head = doc.head.innerHTML;
-  const slideEls = Array.from(doc.querySelectorAll('.slide, .slide-editorial'));
+  // Supports both editorial (.slide, .slide-editorial) and clean (.clean-cover, .clean-content, .clean-cta)
+  const slideEls = Array.from(doc.querySelectorAll('.slide, .slide-editorial, .clean-cover, .clean-content, .clean-cta'));
 
   const slides: EditableSlide[] = slideEls.map((el, index) => ({
     index,
@@ -145,7 +163,7 @@ function rebuildSlideOuterHtml(slide: EditableSlide, editedTexts: TextBlock[], n
 
   // Apply background image if changed
   if (newBgUrl !== null) {
-    const slideBg = el.querySelector('.slide-bg') as HTMLElement | null;
+    const slideBg = el.querySelector('.slide-bg, .bg') as HTMLElement | null;
     if (slideBg) {
       const existingStyle = slideBg.getAttribute('style') || '';
       if (BG_IMAGE_REGEX.test(existingStyle)) {
