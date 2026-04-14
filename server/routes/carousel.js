@@ -57,7 +57,8 @@ router.post('/upload-photo', uploadPhoto.single('photo'), (req, res) => {
 router.post('/generate', async (req, res) => {
   const {
     topic, niche, primaryColor, accentColor, bgColor,
-    fontFamily, instagramHandle, numSlides, contentTone, roteiro, layoutStyle,
+    fontFamily, instagramHandle, creatorName, profilePhotoUrl,
+    numSlides, contentTone, roteiro, layoutStyle,
   } = req.body;
 
   if (!topic || !String(topic).trim()) {
@@ -67,7 +68,8 @@ router.post('/generate', async (req, res) => {
   try {
     const result = await generateCarousel({
       topic, niche, primaryColor, accentColor, bgColor,
-      fontFamily, instagramHandle, numSlides, contentTone, roteiro, layoutStyle,
+      fontFamily, instagramHandle, creatorName, profilePhotoUrl,
+      numSlides, contentTone, roteiro, layoutStyle,
     });
     res.json(result);
   } catch (err) {

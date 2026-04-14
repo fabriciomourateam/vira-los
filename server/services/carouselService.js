@@ -450,16 +450,17 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       background: linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.72) 55%, rgba(0,0,0,0.85) 100%);
       z-index: 1;
     }
-    /* Badge horizontal: foto à esquerda, nome+handle à direita — igual header do Instagram */
+    /* ── CAPA: bloco compacto na metade inferior ── */
     .clean-cover .profile-badge {
       position: absolute;
-      top: 44%; left: 50%; transform: translate(-50%, -50%);
+      top: 52%; left: 50%; transform: translateX(-50%);
       z-index: 2;
-      display: flex; flex-direction: row; align-items: center; gap: 28px;
+      display: flex; flex-direction: row; align-items: center; gap: 22px;
+      white-space: nowrap;
     }
     /* Anel degradê estilo Instagram Stories */
     .clean-cover .avatar-ring {
-      width: 110px; height: 110px; border-radius: 50%; flex-shrink: 0;
+      width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0;
       background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
       padding: 4px;
       display: flex; align-items: center; justify-content: center;
@@ -469,31 +470,31 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       background: #111;
       overflow: hidden;
       display: flex; align-items: center; justify-content: center;
-      font-size: 30px; font-weight: 800; color: white;
+      font-size: 28px; font-weight: 800; color: white;
     }
     .clean-cover .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
-    /* Bloco de texto à direita da foto */
     .clean-cover .profile-text {
-      display: flex; flex-direction: column; gap: 8px;
+      display: flex; flex-direction: column; gap: 6px;
     }
     .clean-cover .profile-name {
-      font-size: 38px; font-weight: 700; color: white;
-      display: flex; align-items: center; gap: 10px; white-space: nowrap;
+      font-size: 34px; font-weight: 700; color: white;
+      display: flex; align-items: center; gap: 8px;
     }
-    /* Badge verificado azul (estilo Instagram) */
-    .clean-cover .verified-badge svg { width: 32px; height: 32px; display: block; flex-shrink: 0; }
+    .clean-cover .verified-badge svg { width: 28px; height: 28px; display: block; flex-shrink: 0; }
     .clean-cover .profile-handle {
-      font-size: 26px; font-weight: 400; color: rgba(255,255,255,0.65);
+      font-size: 22px; font-weight: 400; color: rgba(255,255,255,0.60);
     }
+    /* Título centralizado abaixo do badge */
     .clean-cover .cover-title {
-      position: absolute; bottom: 148px; left: 64px; right: 64px; z-index: 2;
-      font-size: 70px; font-weight: 900; line-height: 1.08; color: white;
+      position: absolute; bottom: 130px; left: 60px; right: 60px; z-index: 2;
+      font-size: 68px; font-weight: 900; line-height: 1.1; color: white;
+      text-align: center;
     }
     .clean-cover .cover-title .hl { color: ${primaryColor}; }
     .clean-cover .swipe-hint {
-      position: absolute; bottom: 76px; left: 0; right: 0;
+      position: absolute; bottom: 64px; left: 0; right: 0;
       text-align: center; z-index: 2;
-      font-size: 22px; color: rgba(255,255,255,0.55);
+      font-size: 22px; color: rgba(255,255,255,0.50);
       font-weight: 400;
     }
 
