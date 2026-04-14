@@ -14,6 +14,7 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 interface CriterionScore {
   score: number;
   feedback: string;
+  trecho_original?: string;
   reescrita: string;
   titulo?: string;
   emocao_detectada?: string;
@@ -100,7 +101,7 @@ function CriterionCard({
   name: keyof typeof CRITERION_META;
   data: CriterionScore;
   applied?: boolean;
-  onApply?: (rewrite: string) => void;
+  onApply?: (data: CriterionScore) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -159,6 +160,14 @@ function CriterionCard({
               {/* Feedback completo */}
               <p className="text-xs leading-relaxed">{data.feedback}</p>
 
+              {/* Trecho original que será substituído */}
+              {data.trecho_original && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
+                  <span className="text-xs font-bold uppercase tracking-wide text-red-400/70 block mb-1">Trecho que será substituído</span>
+                  <p className="text-xs italic leading-relaxed text-red-300/80 line-through">"{data.trecho_original}"</p>
+                </div>
+              )}
+
               {/* Reescrita */}
               {data.reescrita && (
                 <div className="bg-background/30 rounded-lg p-2.5">
@@ -167,7 +176,7 @@ function CriterionCard({
                     <div className="flex items-center gap-2">
                       {onApply && (
                         <button
-                          onClick={() => onApply(data.reescrita)}
+                          onClick={() => onApply(data)}
                           className={`flex items-center gap-1 text-xs transition-colors ${
                             applied
                               ? 'text-emerald-500'
@@ -175,7 +184,7 @@ function CriterionCard({
                           }`}
                         >
                           {applied ? <Check size={11} /> : <Plus size={11} />}
-                          {applied ? 'Aplicado' : 'Aplicar'}
+                          {applied ? 'Aplicado ✓' : 'Aplicar'}
                         </button>
                       )}
                       <button onClick={copyRewrite} className="flex items-center gap-1 text-xs opacity-70 hover:opacity-100 transition-opacity">
@@ -206,20 +215,55 @@ export default function ViralScore({ prefillScript = '', prefillType = 'carousel
   const [appliedRewrites, setAppliedRewrites] = useState<Partial<Record<keyof typeof CRITERION_META, string>>>({});
   const [improvedScript, setImprovedScript]   = useState('');
 
-  function applyRewrite(name: keyof typeof CRITERION_META, rewrite: string) {
-    const isNew = !(name in appliedRewrites);
-    setAppliedRewrites(prev => ({ ...prev, [name]: rewrite }));
+  function applyRewrite(name: keyof typeof CRITERION_META, data: CriterionScore) {
+    setAppliedRewrites(prev => ({ ...prev, [name]: data.reescrita }));
     setImprovedScript(prev => {
       const base = prev || script;
-      const label = CRITERION_META[name].label.toUpperCase();
-      if (!isNew) {
-        // Replace existing entry for this criterion
-        const regex = new RegExp(`✅ \\[${label}\\]:.*`, 's');
-        return base.replace(regex, `✅ [${label}]: ${rewrite}`);
+      const original = data.trecho_original?.trim();
+      // Substituição cirúrgica: troca o trecho original pelo reescrito
+      if (original && base.includes(original)) {
+        return base.replace(original, data.reescrita);
       }
-      return base + `\n\n✅ [${label}]: ${rewrite}`;
+      // Fallback: se o trecho não foi encontrado literalmente, faz substituição fuzzy
+      // (primeiros 60 chars do original para localizar)
+      if (original && original.length > 20) {
+        const snippet = original.slice(0, 60).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(snippet + '[\\s\\S]*?' + original.slice(-30).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'm');
+        if (regex.test(base)) {
+          return base.replace(regex, data.reescrita);
+        }
+      }
+      // Último fallback: adiciona nota ao final
+      const label = CRITERION_META[name].label.toUpperCase();
+      return base + `\n\n✅ [${label}]: ${data.reescrita}`;
     });
-    toast.success(`"${CRITERION_META[name].label}" aplicado ao script`);
+    toast.success(`"${CRITERION_META[name].label}" aplicado no script`);
+  }
+
+  function applyAllRewrites() {
+    if (!result) return;
+    let updated = script;
+    const keys = (Object.keys(CRITERION_META) as Array<keyof typeof CRITERION_META>)
+      .filter(k => result.scores[k].score < 8); // só aplica os que têm nota baixa
+    const applied: Partial<Record<keyof typeof CRITERION_META, string>> = {};
+    for (const k of keys) {
+      const data = result.scores[k];
+      const original = data.trecho_original?.trim();
+      applied[k] = data.reescrita;
+      if (original && updated.includes(original)) {
+        updated = updated.replace(original, data.reescrita);
+      } else if (original && original.length > 20) {
+        const snippet = original.slice(0, 60).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(snippet + '[\\s\\S]*?' + original.slice(-30).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'm');
+        if (regex.test(updated)) updated = updated.replace(regex, data.reescrita);
+        else updated += `\n\n✅ [${CRITERION_META[k].label.toUpperCase()}]: ${data.reescrita}`;
+      } else {
+        updated += `\n\n✅ [${CRITERION_META[k].label.toUpperCase()}]: ${data.reescrita}`;
+      }
+    }
+    setAppliedRewrites(applied);
+    setImprovedScript(updated);
+    toast.success(`${keys.length} melhorias aplicadas de uma vez!`);
   }
 
   async function handleEvaluate() {
@@ -362,10 +406,18 @@ export default function ViralScore({ prefillScript = '', prefillType = 'carousel
 
             {/* Critérios */}
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-                <Target size={12} />
-                Avaliação por critério — clique para ver melhoria
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <Target size={12} />
+                  Avaliação por critério — clique para ver melhoria
+                </h2>
+                <button
+                  onClick={applyAllRewrites}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors"
+                >
+                  <Sparkles size={11} /> Aplicar Todas as Melhorias
+                </button>
+              </div>
               <div className="space-y-2">
                 {(Object.keys(CRITERION_META) as Array<keyof typeof CRITERION_META>).map(k => (
                   <CriterionCard
@@ -373,7 +425,7 @@ export default function ViralScore({ prefillScript = '', prefillType = 'carousel
                     name={k}
                     data={result.scores[k]}
                     applied={k in appliedRewrites}
-                    onApply={(rewrite) => applyRewrite(k, rewrite)}
+                    onApply={(data) => applyRewrite(k, data)}
                   />
                 ))}
               </div>

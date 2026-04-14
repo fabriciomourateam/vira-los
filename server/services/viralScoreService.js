@@ -45,29 +45,34 @@ Responda SOMENTE com o JSON abaixo — sem markdown, sem texto extra:
       "score": <0-10>,
       "titulo": "<1-3 palavras que resumem o hook atual>",
       "feedback": "<o que funciona e o que falta — 1 frase direta>",
-      "reescrita": "<versão melhorada do hook — texto exato para usar>"
+      "trecho_original": "<copie EXATAMENTE o trecho do script original que corresponde ao hook — primeiras linhas/palavras>",
+      "reescrita": "<versão melhorada do hook — mesmo comprimento e formato do original>"
     },
     "curiosity": {
       "score": <0-10>,
       "feedback": "<onde os gaps existem e onde faltam — 1 frase>",
-      "reescrita": "<1 exemplo de curiosity gap para adicionar — texto exato>"
+      "trecho_original": "<copie EXATAMENTE o trecho do script onde o curiosity gap deveria estar ou está fraco>",
+      "reescrita": "<versão melhorada desse trecho com curiosity gap inserido>"
     },
     "emotion": {
       "score": <0-10>,
       "emocao_detectada": "<medo|curiosidade|urgência|surpresa|aspiração|fraca/mista>",
       "feedback": "<se a emoção é clara e consistente — 1 frase>",
-      "reescrita": "<como amplificar — 1 ação específica com texto>"
+      "trecho_original": "<copie EXATAMENTE o trecho onde a emoção está fraca ou ausente>",
+      "reescrita": "<versão do mesmo trecho com a emoção amplificada>"
     },
     "cta": {
       "score": <0-10>,
       "feedback": "<se o CTA existe, está no lugar certo, e pede ação específica>",
-      "reescrita": "<CTA melhorado — texto exato>"
+      "trecho_original": "<copie EXATAMENTE o trecho de CTA atual do script, ou as últimas linhas se não houver>",
+      "reescrita": "<CTA melhorado — substitui diretamente o trecho original>"
     },
     "format": {
       "score": <0-10>,
       "formato_detectado": "<lista|revelação|mito-busting|antes-depois|tutorial|indefinido>",
       "feedback": "<se o formato está funcionando — 1 frase>",
-      "reescrita": "<ajuste estrutural recomendado — 1 ação concreta>"
+      "trecho_original": "<copie EXATAMENTE o trecho onde o formato precisa de ajuste>",
+      "reescrita": "<mesmo trecho reestruturado no formato viral recomendado>"
     }
   },
   "overall": <número: hook*0.30 + curiosity*0.20 + emotion*0.20 + cta*0.15 + format*0.15, arredondado para 1 decimal>,
