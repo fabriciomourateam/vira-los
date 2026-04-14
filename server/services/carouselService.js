@@ -140,6 +140,42 @@ async function fetchUnsplashImages(query, count = 12) {
   }
 }
 
+// ─── Passo 2b: Pexels API (fallback) ─────────────────────────────────────────
+
+async function fetchPexelsImages(query, count = 12) {
+  const key = process.env.PEXELS_API_KEY;
+  if (!key) {
+    console.warn('[CarouselService/Pexels] PEXELS_API_KEY não definida');
+    return [];
+  }
+
+  try {
+    const r = await axios.get('https://api.pexels.com/v1/search', {
+      params: { query, per_page: count, orientation: 'portrait' },
+      headers: { Authorization: key },
+      timeout: 10000,
+    });
+    const photos = r.data?.photos || [];
+    console.log(`[CarouselService/Pexels] ${photos.length} imagens para "${query}"`);
+    return photos.map(p => ({
+      url: p.src?.large2x || p.src?.large || p.src?.portrait || '',
+      alt: p.alt || query,
+    })).filter(p => p.url);
+  } catch (err) {
+    const status = err.response?.status;
+    console.error(`[CarouselService/Pexels] Erro ${status || ''}: ${err.message}`);
+    return [];
+  }
+}
+
+// Cascata: tenta Unsplash → Pexels
+async function fetchImages(query, count = 12) {
+  const images = await fetchUnsplashImages(query, count);
+  if (images.length) return images;
+  console.log('[CarouselService] Unsplash vazio, tentando Pexels...');
+  return fetchPexelsImages(query, count);
+}
+
 // ─── Passo 3: CSS template completo (baseado no gist) ────────────────────────
 
 function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
@@ -293,7 +329,7 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
 // ─── Passo 3: Prompt Claude para gerar o HTML ─────────────────────────────────
 
 function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fontFamily,
-  instagramHandle, numSlides, contentTone, redditTrends, unsplashImages, customScript }) {
+  instagramHandle, numSlides, contentTone, redditTrends, unsplashImages, roteiro }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
@@ -301,18 +337,18 @@ function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fon
   const totalContent = numSlides - 2;
   const cssTemplate = buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily });
 
-  const trendsSection = (!customScript && redditTrends.length)
+  const trendsSection = (!roteiro?.trim() && redditTrends.length)
     ? `\nTendências do Reddit sobre "${niche}" esta semana:\n${redditTrends.map((t, i) =>
         `${i + 1}. [r/${t.subreddit}] ${t.title} (${t.score} upvotes)`).join('\n')}`
     : '';
 
   const imagesSection = unsplashImages.length
-    ? `\nImagens Unsplash disponíveis — use estas URLs exatas no HTML (uma por slide):\n${unsplashImages.map((img, i) =>
+    ? `\nImagens disponíveis — use estas URLs exatas no HTML (uma por slide):\n${unsplashImages.map((img, i) =>
         `${i + 1}. ${img.url}`).join('\n')}`
-    : '\n(Sem imagens Unsplash — use gradientes CSS criativos no fundo dos slides de foto)';
+    : '\n(Sem imagens — use gradientes CSS criativos no fundo dos slides de foto)';
 
-  const scriptSection = customScript
-    ? `\n━━━ SCRIPT OBRIGATÓRIO (USE ESTE CONTEÚDO EXATO) ━━━\nO script abaixo foi pré-aprovado. Use o texto de cada SLIDE exatamente como está — não invente, não resuma, não adicione conteúdo.\n\n${customScript}\n`
+  const roteiroSection = roteiro && roteiro.trim()
+    ? `\n━━━ ROTEIRO DO CRIADOR — siga este conteúdo, não invente ━━━\n${roteiro.trim()}\n\nDistribua este roteiro pelos ${numSlides} slides:\n- SLIDE 1 (capa): gancho principal / título do roteiro\n- SLIDES 2 a ${numSlides - 1}: divida o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): use o CTA do roteiro ou crie um adequado\nUse APENAS o conteúdo acima — não adicione informações externas.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo editorial/investigativo.
@@ -324,7 +360,7 @@ Instagram: ${handleAt}
 Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
 ${trendsSection}
 ${imagesSection}
-${scriptSection}
+${roteiroSection}
 
 ━━━ REGRAS ABSOLUTAS ━━━
 - Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
@@ -384,6 +420,265 @@ ${cssTemplate}
 
 ━━━ SVG DO INSTAGRAM (copie exatamente em todos os footer-left e cover-branding) ━━━
 ${IG_SVG}
+
+Gere o HTML completo agora (apenas HTML, nada mais):`;
+}
+
+// ─── CSS template layout "Clean" (estilo Fabricio Moura) ─────────────────────
+
+function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
+  const font = fontFamily.replace(/ /g, '+');
+  return `
+  <link href="https://fonts.googleapis.com/css2?family=${font}:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── CAPA ── */
+    .clean-cover {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      font-family: '${fontFamily}', sans-serif;
+      page-break-after: always;
+    }
+    .clean-cover .bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      filter: brightness(0.45); z-index: 0;
+    }
+    .clean-cover .overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.72) 55%, rgba(0,0,0,0.85) 100%);
+      z-index: 1;
+    }
+    .clean-cover .profile-badge {
+      position: absolute;
+      top: 44%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 2;
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+    }
+    .clean-cover .avatar-circle {
+      width: 96px; height: 96px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.9);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 34px; font-weight: 800; color: white;
+      background: rgba(255,255,255,0.12);
+      overflow: hidden;
+    }
+    .clean-cover .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+    .clean-cover .profile-name {
+      font-size: 34px; font-weight: 700; color: white; text-align: center;
+    }
+    .clean-cover .verified { color: #4FC3F7; font-size: 28px; }
+    .clean-cover .profile-handle {
+      font-size: 23px; font-weight: 400; color: rgba(255,255,255,0.72); text-align: center;
+    }
+    .clean-cover .cover-title {
+      position: absolute; bottom: 148px; left: 64px; right: 64px; z-index: 2;
+      font-size: 70px; font-weight: 900; line-height: 1.08; color: white;
+    }
+    .clean-cover .cover-title .hl { color: ${primaryColor}; }
+    .clean-cover .swipe-hint {
+      position: absolute; bottom: 76px; left: 0; right: 0;
+      text-align: center; z-index: 2;
+      font-size: 22px; color: rgba(255,255,255,0.55);
+      font-weight: 400;
+    }
+
+    /* ── SLIDE DE CONTEÚDO — fundo escuro + foto em card ── */
+    .clean-content {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      background: #0f0f0f;
+      font-family: '${fontFamily}', sans-serif;
+      padding: 80px 64px 110px;
+      display: flex; flex-direction: column;
+      page-break-after: always;
+    }
+    .clean-content .content-title {
+      font-size: 66px; font-weight: 900; line-height: 1.08;
+      color: #ffffff; margin-bottom: 32px;
+    }
+    .clean-content .content-title .hl { color: ${primaryColor}; }
+    .clean-content .content-body {
+      font-size: 30px; font-weight: 400; line-height: 1.55;
+      color: rgba(255,255,255,0.68);
+    }
+    .clean-content .photo-card {
+      margin-top: auto; margin-bottom: 84px;
+      width: 100%; height: 510px;
+      border-radius: 24px; overflow: hidden; flex-shrink: 0;
+    }
+    .clean-content .photo-card img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .clean-content .slide-footer {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 26px 64px;
+    }
+    .clean-content .footer-author {
+      font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.8);
+    }
+    .clean-content .footer-swipe {
+      font-size: 20px; color: rgba(255,255,255,0.45);
+    }
+
+    /* ── SLIDE DE CONTEÚDO — variante com foto no TOPO (meia altura) ── */
+    .clean-content.top-photo {
+      padding: 0 0 110px;
+      flex-direction: column;
+    }
+    .clean-content.top-photo .top-photo-wrap {
+      width: 100%; height: 540px; overflow: hidden; flex-shrink: 0;
+    }
+    .clean-content.top-photo .top-photo-wrap img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .clean-content.top-photo .text-section {
+      padding: 48px 64px 0;
+      display: flex; flex-direction: column; gap: 24px;
+    }
+    /* faixa "Me siga" no topo (usada uma vez) */
+    .follow-banner {
+      background: #FF7B8B; width: 100%;
+      padding: 22px 64px;
+      display: flex; align-items: center; gap: 18px; flex-shrink: 0;
+      font-size: 27px; font-weight: 700; color: white;
+    }
+    .follow-banner svg { width: 36px; height: 36px; fill: white; flex-shrink: 0; }
+
+    /* ── CTA FINAL ── */
+    .clean-cta {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      font-family: '${fontFamily}', sans-serif;
+      page-break-after: always;
+    }
+    .clean-cta .bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      filter: brightness(0.3); z-index: 0;
+    }
+    .clean-cta .overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.62); z-index: 1;
+    }
+    .clean-cta .cta-inner {
+      position: relative; z-index: 2; height: 100%;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      padding: 80px 72px; text-align: center; gap: 48px;
+    }
+    .clean-cta .cta-title {
+      font-size: 70px; font-weight: 900; line-height: 1.08; color: white;
+    }
+    .clean-cta .cta-title .hl { color: ${primaryColor}; }
+    .clean-cta .follow-pill {
+      background: white; color: #0f0f0f;
+      border-radius: 60px; padding: 28px 72px;
+      font-size: 34px; font-weight: 900;
+    }
+    .clean-cta .cta-footer {
+      position: absolute; bottom: 60px; left: 0; right: 0;
+      text-align: center; z-index: 2;
+      font-size: 22px; color: rgba(255,255,255,0.5);
+    }
+  </style>`;
+}
+
+// ─── Prompt HTML layout "Clean" ───────────────────────────────────────────────
+
+function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
+  instagramHandle, numSlides, contentTone, unsplashImages, roteiro }) {
+
+  const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const handleAt = `@${handle}`;
+  const totalContent = numSlides - 2;
+  const cssTemplate = buildCleanCSSTemplate({ primaryColor, fontFamily });
+
+  const imagesSection = unsplashImages.length
+    ? `\nImagens disponíveis — use estas URLs exatas (uma por slide de conteúdo):\n${unsplashImages.map((img, i) =>
+        `${i + 1}. ${img.url}`).join('\n')}`
+    : '\n(Sem imagens — omita os .photo-card e .top-photo-wrap; use apenas texto nos slides de conteúdo)';
+
+  const roteiroSection = roteiro && roteiro.trim()
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim()}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  // Iniciais para o avatar
+  const initials = handle.slice(0, 2).toUpperCase();
+
+  return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo limpo/minimalista.
+
+Tema: "${topic}"
+Nicho: ${niche}
+Tom: ${contentTone}
+Instagram: ${handleAt}
+Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
+${imagesSection}
+${roteiroSection}
+
+━━━ REGRAS ABSOLUTAS ━━━
+- Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
+- NÃO use markdown, code fences, comentários ou qualquer texto fora do HTML
+- Use EXATAMENTE as classes CSS do template abaixo
+- Máximo 35 palavras por slide de conteúdo — menos é mais
+
+━━━ ESTRUTURA OBRIGATÓRIA ━━━
+
+SLIDE 1 — CAPA (.clean-cover):
+<div class="clean-cover">
+  <div class="bg" style="background-image: url('FOTO_1')"></div>
+  <div class="overlay"></div>
+  <div class="profile-badge">
+    <div class="avatar-circle">${initials}</div>
+    <div class="profile-name">[nome do criador sem @] <span class="verified">✓</span></div>
+    <div class="profile-handle">${handleAt}</div>
+  </div>
+  <div class="cover-title">[título impactante — até 12 palavras — 1-2 palavras em <span class="hl">destaque</span>]</div>
+  <div class="swipe-hint">Arrasta para o lado ›</div>
+</div>
+
+SLIDE 2 — COM FAIXA "ME SIGA" + FOTO NO TOPO (.clean-content.top-photo):
+<div class="clean-content top-photo">
+  <div class="follow-banner">
+    <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+    Me siga para mais conteúdos como esse!
+  </div>
+  <div class="top-photo-wrap"><img src="FOTO_2" alt="${topic}" /></div>
+  <div class="text-section">
+    <div class="content-title">[título do 1º ponto]</div>
+    <div class="content-body">[texto de apoio]</div>
+  </div>
+  <div class="slide-footer">
+    <span class="footer-author">[Nome] · ${handleAt}</span>
+    <span class="footer-swipe">Arrasta para o lado ›</span>
+  </div>
+</div>
+
+SLIDES 3 a ${numSlides - 1} — CONTEÚDO (.clean-content):
+<div class="clean-content">
+  <div class="content-title">[título do ponto — até 10 palavras — 1-2 em <span class="hl">destaque</span>]</div>
+  <div class="content-body">[texto de apoio — até 30 palavras]</div>
+  <div class="photo-card"><img src="FOTO_N" alt="${topic}" /></div>
+  <div class="slide-footer">
+    <span class="footer-author">[Nome] · ${handleAt}</span>
+    <span class="footer-swipe">Arrasta para o lado ›</span>
+  </div>
+</div>
+
+SLIDE ${numSlides} — CTA (.clean-cta):
+<div class="clean-cta">
+  <div class="bg" style="background-image: url('ULTIMA_FOTO')"></div>
+  <div class="overlay"></div>
+  <div class="cta-inner">
+    <div class="cta-title">Salve esse post e <span class="hl">compartilhe</span> com quem precisa</div>
+    <div class="follow-pill">Siga ${handleAt}</div>
+  </div>
+  <div class="cta-footer">${handleAt}</div>
+</div>
+
+━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
+${cssTemplate}
 
 Gere o HTML completo agora (apenas HTML, nada mais):`;
 }
@@ -546,31 +841,38 @@ async function generateCarousel(config) {
     instagramHandle = '',
     numSlides = 7,
     contentTone = 'investigativo',
-    customScript = null,
+    roteiro = '',
+    layoutStyle = 'editorial',
   } = config;
 
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
 
-  // Conta slides reais do script se fornecido
+  // Conta slides reais se roteiro tiver marcadores "SLIDE N"
   let slidesCount = Math.min(10, Math.max(5, Number(numSlides)));
-  if (customScript) {
-    const count = (customScript.match(/^SLIDE\s+\d+/gim) || []).length;
+  if (roteiro) {
+    const count = (roteiro.match(/^SLIDE\s+\d+/gim) || []).length;
     if (count >= 3) slidesCount = Math.min(10, count);
   }
 
-  // Passo 1 + 2: Reddit (só para imagens) e Unsplash em paralelo
+  // Passo 1 + 2: Reddit (skip se tiver roteiro) e imagens (Unsplash → Pexels) em paralelo
   const [redditTrends, unsplashImages] = await Promise.all([
-    customScript ? Promise.resolve([]) : fetchRedditTrends(topic),
-    fetchUnsplashImages(topic, slidesCount + 2),
+    roteiro ? Promise.resolve([]) : fetchRedditTrends(topic),
+    fetchImages(topic, slidesCount + 2),
   ]);
 
   // Passo 3 + 4: HTML e legenda em paralelo
-  const htmlPrompt = buildHTMLPrompt({
-    topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
-    fontFamily, instagramHandle, numSlides: slidesCount, contentTone,
-    redditTrends, unsplashImages, customScript,
-  });
+  const htmlPrompt = layoutStyle === 'clean'
+    ? buildCleanHTMLPrompt({
+        topic: topic.trim(), niche, primaryColor, fontFamily,
+        instagramHandle, numSlides: slidesCount, contentTone, roteiro,
+        unsplashImages,
+      })
+    : buildHTMLPrompt({
+        topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
+        fontFamily, instagramHandle, numSlides: slidesCount, contentTone, roteiro,
+        redditTrends, unsplashImages,
+      });
 
   const [htmlRes, legendaRes] = await Promise.all([
     anthropic.messages.create({

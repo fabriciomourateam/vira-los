@@ -133,6 +133,7 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
   const [aiError, setAiError] = useState('');
   const [roteiroLoading, setRoteiroLoading] = useState(false);
   const [roteiroText, setRoteiroText] = useState('');
+  const [roteiroContext, setRoteiroContext] = useState('');
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
   // Região
@@ -325,13 +326,14 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
   }
 
   async function generateRoteiro() {
-    if (!aiResults.length) return;
+    if (!aiResults.length && !roteiroContext.trim()) return;
     setRoteiroLoading(true);
     setRoteiroText('');
     try {
       const data = await api.post<{ roteiro: string }>('/api/research/roteiro-from-videos', {
         videos: aiResults.slice(0, 8),
         niche: aiNiche,
+        context: roteiroContext,
       });
       setRoteiroText(data.roteiro);
     } catch (e: any) {
@@ -806,6 +808,32 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
             {aiLoading ? 'Descobrindo...' : 'Descobrir'}
           </button>
         </form>
+
+        {/* ── Conteúdo / Rascunho para gerar roteiro ── */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5">
+            <FileText size={13} className="text-orange-500" />
+            <span className="text-xs font-semibold text-foreground">Seu conteúdo / rascunho</span>
+            <span className="text-[10px] text-muted-foreground">(opcional — IA usa como base para o roteiro)</span>
+          </div>
+          <textarea
+            placeholder={'Cole aqui suas notas, ideias, pontos que quer cobrir no reels...\nEx: "Quero falar sobre os 3 sinais de testosterona baixa que os médicos ignoram. Ponto 1: cansaço sem motivo. Ponto 2: gordura abdominal. Ponto 3: libido baixa."'}
+            value={roteiroContext}
+            onChange={(e) => setRoteiroContext(e.target.value)}
+            rows={4}
+            className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 resize-none placeholder:text-muted-foreground/60"
+          />
+          {roteiroContext.trim() && (
+            <button
+              onClick={generateRoteiro}
+              disabled={roteiroLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-bold hover:bg-orange-600 disabled:opacity-50 transition-all"
+            >
+              {roteiroLoading ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+              {roteiroLoading ? 'Gerando...' : 'Gerar Roteiro do Meu Conteúdo'}
+            </button>
+          )}
+        </div>
 
         {aiError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{aiError}</div>}
 

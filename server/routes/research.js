@@ -977,10 +977,10 @@ router.delete('/ideas/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Gerar Roteiro a partir dos vídeos virais encontrados ─────────────────────
+// ── Gerar Roteiro a partir dos vídeos virais e/ou conteúdo do criador ────────
 router.post('/roteiro-from-videos', async (req, res) => {
-  const { videos = [], niche = '' } = req.body;
-  if (!videos.length) return res.status(400).json({ error: 'Nenhum vídeo enviado' });
+  const { videos = [], niche = '', context = '' } = req.body;
+  if (!videos.length && !context.trim()) return res.status(400).json({ error: 'Envie vídeos virais ou cole seu conteúdo/rascunho' });
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!anthropicKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY não configurada' });
@@ -989,9 +989,45 @@ router.post('/roteiro-from-videos', async (req, res) => {
   const anthropic = new Anthropic({ apiKey: anthropicKey });
 
   const top = videos.slice(0, 8);
-  const videoList = top.map((v, i) =>
-    `${i + 1}. "${v.title || '(sem título)'}" — formato: ${v.roteiro_format || '?'}, viral: ${v.viral_score || '?'}/10, nicho: ${v.niche_fit || '?'}/10, ❤️ ${v.likes?.toLocaleString?.() || v.likes}, 👁 ${v.views?.toLocaleString?.() || v.views}`
-  ).join('\n');
+  const videoList = top.length
+    ? top.map((v, i) =>
+        `${i + 1}. "${v.title || '(sem título)'}" — formato: ${v.roteiro_format || '?'}, viral: ${v.viral_score || '?'}/10, nicho: ${v.niche_fit || '?'}/10, ❤️ ${v.likes?.toLocaleString?.() || v.likes}, 👁 ${v.views?.toLocaleString?.() || v.views}`
+      ).join('\n')
+    : '';
+
+  // Monta prompt do usuário combinando contexto próprio + vídeos virais
+  let userContent = `Nicho do criador: "${niche || 'saúde hormonal, testosterona, shape'}".`;
+
+  if (context.trim()) {
+    userContent += `\n\nCONTEÚDO / RASCUNHO DO CRIADOR (use como base para os roteiros):\n"""\n${context.trim()}\n"""`;
+  }
+
+  if (videoList) {
+    userContent += `\n\nTOP vídeos virais encontrados pela IA (ordenados por score):\n${videoList}`;
+  }
+
+  const hasVideos = videoList.length > 0;
+  const hasContext = context.trim().length > 0;
+
+  if (hasVideos && hasContext) {
+    userContent += '\n\nCom base no conteúdo do criador E na estrutura dos vídeos virais, gere 2 roteiros completos.';
+  } else if (hasContext) {
+    userContent += '\n\nTransforme esse conteúdo em 2 roteiros virais completos para Reels/TikTok.';
+  } else {
+    userContent += '\n\nCom base nesses vídeos virais, gere 2 roteiros completos que eu possa REPLICAR.';
+  }
+
+  userContent += `
+Para cada roteiro:
+
+## Roteiro [N] — [Formato: Lista/Revelação/Medo/etc]
+**Gancho (0-3s):** [texto exato que aparece na tela + o que falar]
+**Desenvolvimento (10-60s):**
+- [ponto 1]
+- [ponto 2]
+- [ponto 3]
+**CTA:** [o que falar no final]
+**Por que vai viralizar:** [1 frase]`;
 
   try {
     const msg = await anthropic.messages.create({
@@ -1004,27 +1040,7 @@ REGRAS DO ROTEIRO VIRA-LOS:
 - CTA: Comentar, seguir ou compartilhar — no começo, meio e final
 - EMOÇÃO CENTRAL: Curiosidade, surpresa, medo, urgência
 - DURAÇÃO IDEAL: 50s a 1min20`,
-      messages: [{
-        role: 'user',
-        content: `Nicho do criador: "${niche || 'saúde hormonal, testosterona, shape'}".
-
-Esses são os TOP vídeos virais encontrados pela IA (ordenados por score):
-${videoList}
-
-Com base nesses vídeos virais, gere 2 roteiros completos que eu possa REPLICAR adaptando para o meu nicho.
-Para cada roteiro:
-
-## Roteiro [N] — [Formato: Lista/Revelação/Medo/etc]
-**Gancho (0-3s):** [texto exato que aparece na tela + o que falar]
-**Desenvolvimento (10-60s):**
-- [ponto 1]
-- [ponto 2]
-- [ponto 3]
-**CTA:** [o que falar no final]
-**Por que vai viralizar:** [1 frase]
-
-Adapte os títulos e exemplos para o nicho informado, mas mantenha a ESTRUTURA dos vídeos que mais viralizaram.`,
-      }],
+      messages: [{ role: 'user', content: userContent }],
     });
 
     res.json({ roteiro: msg.content[0].text });

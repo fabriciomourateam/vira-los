@@ -2,6 +2,11 @@
  * carousel.js — Rotas do Gerador de Carrosseis para Instagram
  *
  * POST /api/carousel/generate          → gera HTML + screenshots + legenda.txt
+ * GET  /api/carousel/config            → retorna config salva
+ * PUT  /api/carousel/config            → salva config
+ * GET  /api/carousel/saved             → lista carrosseis salvos
+ * POST /api/carousel/saved             → salva carrossel no histórico
+ * DELETE /api/carousel/saved/:id       → exclui carrossel salvo
  * GET  /api/carousel/output/:name      → lista arquivos de um carrossel gerado
  */
 
@@ -10,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { generateCarousel } = require('../services/carouselService');
+const db = require('../db/database');
 
 const router = express.Router();
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
@@ -20,8 +26,7 @@ const OUTPUT_DIR = path.join(DATA_DIR, 'output');
 router.post('/generate', async (req, res) => {
   const {
     topic, niche, primaryColor, accentColor, bgColor,
-    fontFamily, instagramHandle, numSlides, contentTone,
-    customScript,
+    fontFamily, instagramHandle, numSlides, contentTone, roteiro, layoutStyle,
   } = req.body;
 
   if (!topic || !String(topic).trim()) {
@@ -31,14 +36,42 @@ router.post('/generate', async (req, res) => {
   try {
     const result = await generateCarousel({
       topic, niche, primaryColor, accentColor, bgColor,
-      fontFamily, instagramHandle, numSlides, contentTone,
-      customScript,
+      fontFamily, instagramHandle, numSlides, contentTone, roteiro, layoutStyle,
     });
     res.json(result);
   } catch (err) {
     console.error('[Carousel Route]', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── Config persistente ───────────────────────────────────────────────────────
+
+router.get('/config', (req, res) => {
+  res.json(db.getCarouselConfig());
+});
+
+router.put('/config', (req, res) => {
+  db.setCarouselConfig(req.body);
+  res.json({ ok: true });
+});
+
+// ─── Carrosseis salvos (histórico + templates) ────────────────────────────────
+
+router.get('/saved', (req, res) => {
+  res.json(db.getAllCarousels());
+});
+
+router.post('/saved', (req, res) => {
+  const { id, topic, folderName, numSlides, screenshots, legenda, config } = req.body;
+  if (!id || !topic) return res.status(400).json({ error: 'id e topic obrigatórios' });
+  db.saveCarousel({ id, topic, folderName, numSlides, screenshots, legenda, config });
+  res.json({ ok: true });
+});
+
+router.delete('/saved/:id', (req, res) => {
+  db.deleteCarousel(req.params.id);
+  res.json({ ok: true });
 });
 
 // ─── Diagnóstico de variáveis e conectividade ────────────────────────────────

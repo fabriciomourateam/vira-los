@@ -178,6 +178,18 @@ function logPostResult(result) {
   writeDb('post_results', db);
 }
 
+// ── Carousel Config (persistente, único por usuário) ──────────────────────────
+const getCarouselConfig = () => readObj('carousel_config');
+const setCarouselConfig = (config) => {
+  const { updated_at, ...rest } = config; // evita duplicar campo de controle
+  writeObj('carousel_config', { ...rest, updated_at: now() });
+};
+
+// ── Carrosseis Salvos (histórico + templates) ─────────────────────────────────
+const getAllCarousels  = () => readDb('carousels').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const saveCarousel    = (c) => { const db = readDb('carousels'); db.push({ ...c, created_at: now() }); writeDb('carousels', db); };
+const deleteCarousel  = (id) => writeDb('carousels', readDb('carousels').filter((c) => c.id !== id));
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -187,4 +199,6 @@ module.exports = {
   getAllHooks, createHook, incrementHookUse, deleteHook,
   getAllIdeas, createIdea, updateIdea, deleteIdea,
   logPostResult,
+  getCarouselConfig, setCarouselConfig,
+  getAllCarousels, saveCarousel, deleteCarousel,
 };

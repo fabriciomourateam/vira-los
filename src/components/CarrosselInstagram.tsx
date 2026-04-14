@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight,
-  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image, Edit3, Eye,
+  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
+  Trash2, Clock, FolderOpen, Edit3, Eye,
 } from 'lucide-react';
 import CarouselEditor from './CarouselEditor';
 
@@ -22,6 +23,8 @@ interface CarouselConfig {
   instagramHandle: string;
   numSlides: number;
   contentTone: string;
+  roteiro: string;
+  layoutStyle: 'editorial' | 'clean';
 }
 
 interface CarouselResult {
@@ -170,6 +173,8 @@ const DEFAULT_CONFIG: CarouselConfig = {
   instagramHandle: '',
   numSlides: 7,
   contentTone: 'investigativo',
+  roteiro: '',
+  layoutStyle: 'editorial',
 };
 
 // ─── Prévia de cores ──────────────────────────────────────────────────────────
@@ -184,34 +189,18 @@ function SlidePreview({
       className="relative rounded-xl overflow-hidden shadow-lg select-none"
       style={{ background: bgColor, aspectRatio: '4/5', fontFamily: `'${fontFamily}', sans-serif` }}
     >
-      {/* Gradient overlay */}
-      <div
-        className="absolute inset-0"
-        style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.85) 100%)' }}
-      />
-      {/* Top header */}
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.85) 100%)' }} />
       <div className="absolute top-0 left-0 right-0 flex justify-between items-center px-3 py-2 z-10">
-        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          {fontFamily}
-        </span>
+        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>{fontFamily}</span>
         <div className="w-3 h-3 rounded-full" style={{ background: primaryColor }} />
       </div>
-      {/* Content */}
       <div className="absolute bottom-0 left-0 right-0 p-3 z-10 space-y-1.5">
         <div className="text-[11px] font-black uppercase leading-tight" style={{ color: '#ffffff', textShadow: '1px 1px 6px rgba(0,0,0,0.8)' }}>
           TÍTULO DO <span style={{ color: primaryColor }}>SLIDE</span>
         </div>
-        <div className="text-[9px] leading-snug" style={{ color: 'rgba(255,255,255,0.7)' }}>
-          Subtítulo com informações de apoio sobre o conteúdo
-        </div>
-        <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: accentColor }}>
-          • Destaque do conteúdo
-        </div>
-        {/* Footer */}
-        <div
-          className="flex items-center justify-between pt-1 mt-1 border-t"
-          style={{ borderColor: 'rgba(255,255,255,0.15)' }}
-        >
+        <div className="text-[9px] leading-snug" style={{ color: 'rgba(255,255,255,0.7)' }}>Subtítulo com informações de apoio</div>
+        <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: accentColor }}>• Destaque do conteúdo</div>
+        <div className="flex items-center justify-between pt-1 mt-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.15)' }}>
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full" style={{ background: primaryColor }} />
             <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.5)' }}>@seucanal</span>
@@ -223,6 +212,19 @@ function SlidePreview({
   );
 }
 
+// ─── Tipos ────────────────────────────────────────────────────────────────────
+
+interface SavedCarousel {
+  id: string;
+  topic: string;
+  folderName: string;
+  numSlides: number;
+  screenshots: string[];
+  legenda: string;
+  config: CarouselConfig;
+  created_at: string;
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 interface CarrosselInstagramProps {
@@ -232,22 +234,47 @@ interface CarrosselInstagramProps {
 
 export default function CarrosselInstagram({ prefillScript, prefillTopic }: CarrosselInstagramProps = {}) {
   const [config, setConfig] = useState<CarouselConfig>(DEFAULT_CONFIG);
-  const [customScript, setCustomScript] = useState<string | undefined>(undefined);
+  const [configReady, setConfigReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CarouselResult | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [copied, setCopied] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
+  const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-fill when prefill props change
+  // Carrega config e histórico do servidor na montagem
   useEffect(() => {
-    if (prefillTopic) {
-      setConfig(prev => ({ ...prev, topic: prefillTopic }));
-    }
-    if (prefillScript) {
-      setCustomScript(prefillScript);
-    }
+    Promise.all([
+      fetch(`${API}/api/carousel/config`).then(r => r.json()).catch(() => ({})),
+      fetch(`${API}/api/carousel/saved`).then(r => r.json()).catch(() => []),
+    ]).then(([cfg, saved]) => {
+      if (cfg && Object.keys(cfg).filter(k => k !== 'updated_at').length > 0) {
+        setConfig(prev => ({ ...DEFAULT_CONFIG, ...prev, ...cfg }));
+      }
+      setSavedCarousels(Array.isArray(saved) ? saved : []);
+      setConfigReady(true);
+    });
+  }, []);
+
+  // Auto-fill de props externas (prefillTopic, prefillScript)
+  useEffect(() => {
+    if (prefillTopic) setConfig(prev => ({ ...prev, topic: prefillTopic }));
+    if (prefillScript) setConfig(prev => ({ ...prev, roteiro: prefillScript }));
   }, [prefillScript, prefillTopic]);
+
+  // Salva config no servidor com debounce de 800ms
+  useEffect(() => {
+    if (!configReady) return;
+    if (saveConfigTimer.current) clearTimeout(saveConfigTimer.current);
+    saveConfigTimer.current = setTimeout(() => {
+      fetch(`${API}/api/carousel/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      }).catch(() => {});
+    }, 800);
+    return () => { if (saveConfigTimer.current) clearTimeout(saveConfigTimer.current); };
+  }, [config, configReady]);
 
   function set<K extends keyof CarouselConfig>(key: K, value: CarouselConfig[K]) {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -261,16 +288,34 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     setLoading(true);
     setResult(null);
     setCurrentSlide(0);
-    setEditorOpen(false);
     try {
       const res = await fetch(`${API}/api/carousel/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...config, ...(customScript ? { customScript } : {}) }),
+        body: JSON.stringify(config),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
       setResult(data);
+
+      // Salva no histórico do servidor
+      const carouselId = `c_${Date.now()}`;
+      fetch(`${API}/api/carousel/saved`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: carouselId,
+          topic: data.topic,
+          folderName: data.folderName,
+          numSlides: data.numSlides,
+          screenshots: data.screenshots,
+          legenda: data.legenda,
+          config: { ...config },
+        }),
+      }).then(() => fetch(`${API}/api/carousel/saved`).then(r => r.json()))
+        .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
+        .catch(() => {});
+
       const pngCount = data.screenshots?.length || 0;
       toast.success(pngCount > 0
         ? `${data.numSlides} slides gerados com ${pngCount} PNGs!`
@@ -281,6 +326,17 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleDeleteSaved(id: string) {
+    await fetch(`${API}/api/carousel/saved/${id}`, { method: 'DELETE' });
+    setSavedCarousels(prev => prev.filter(c => c.id !== id));
+  }
+
+  function handleLoadConfig(saved: SavedCarousel) {
+    setConfig({ ...DEFAULT_CONFIG, ...saved.config });
+    toast.success(`Config "${saved.topic}" carregada`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function handleDownloadHTML() {
@@ -361,6 +417,41 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
 
       {/* Formulário */}
       <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+
+        {/* Layout Style */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+            <Palette className="w-3.5 h-3.5" /> Layout
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => set('layoutStyle', 'editorial')}
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-4 py-3 transition-all ${
+                config.layoutStyle === 'editorial'
+                  ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                  : 'border-border bg-secondary text-muted-foreground hover:border-border/80'
+              }`}
+            >
+              <Layers className="w-5 h-5" />
+              <span className="text-xs font-bold">Editorial</span>
+              <span className="text-[10px] opacity-70">Investigativo com header</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => set('layoutStyle', 'clean')}
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-4 py-3 transition-all ${
+                config.layoutStyle === 'clean'
+                  ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                  : 'border-border bg-secondary text-muted-foreground hover:border-border/80'
+              }`}
+            >
+              <Image className="w-5 h-5" />
+              <span className="text-xs font-bold">Clean / Minimal</span>
+              <span className="text-[10px] opacity-70">Dark + badge + foto card</span>
+            </button>
+          </div>
+        </div>
 
         {/* Tema */}
         <div>
@@ -498,18 +589,48 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           </div>
         </div>
 
-        {/* Botão gerar */}
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 transition-colors"
-        >
-          {loading ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Gerando carrossel…</>
-          ) : (
-            <><Sparkles className="w-4 h-4" /> Gerar Carrossel</>
+        {/* Roteiro (opcional) */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <FileText className="w-3.5 h-3.5" /> Roteiro / Script
+            <span className="normal-case font-normal text-[10px] ml-1">(opcional — IA distribui seu conteúdo pelos slides)</span>
+          </label>
+          <textarea
+            value={config.roteiro}
+            onChange={e => set('roteiro', e.target.value)}
+            placeholder={'Cole aqui seu roteiro ou pontos que quer cobrir.\nEx:\nGancho: "Você está errando no treino e nem sabe"\nPonto 1: treinar sem planejamento\nPonto 2: ignorar recuperação\nPonto 3: não medir progresso\nCTA: salve esse post'}
+            rows={5}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none placeholder:text-muted-foreground/50"
+          />
+          {config.roteiro.trim() && (
+            <p className="text-[10px] text-purple-500 mt-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3" /> A IA vai distribuir seu roteiro pelos {config.numSlides} slides
+            </p>
           )}
-        </button>
+        </div>
+
+        {/* Botões gerar + restaurar */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 transition-colors"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Gerando carrossel…</>
+            ) : (
+              <><Sparkles className="w-4 h-4" /> Gerar Carrossel</>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfig(DEFAULT_CONFIG)}
+            title="Restaurar configurações padrão"
+            className="px-3 rounded-xl border border-border bg-secondary text-muted-foreground hover:text-foreground transition-colors text-xs"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Resultado */}
@@ -691,6 +812,73 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Carrosseis Salvos ── */}
+      {savedCarousels.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">Carrosseis Salvos</span>
+            <span className="text-xs text-muted-foreground">({savedCarousels.length})</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {savedCarousels.map(saved => {
+              const thumb = saved.screenshots?.[0]
+                ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}`
+                : null;
+              const date = new Date(saved.created_at).toLocaleDateString('pt-BR', {
+                day: '2-digit', month: '2-digit', year: '2-digit',
+                hour: '2-digit', minute: '2-digit',
+              });
+              return (
+                <div key={saved.id} className="rounded-xl border border-border bg-card overflow-hidden group">
+                  <div className="relative aspect-[4/5] bg-secondary overflow-hidden">
+                    {thumb ? (
+                      <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <FolderOpen className="w-8 h-8 opacity-30" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <button
+                        onClick={() => handleLoadConfig(saved)}
+                        className="px-3 py-1.5 bg-white text-black rounded-lg text-xs font-bold hover:bg-gray-100 transition-colors"
+                      >
+                        Carregar config
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-3 space-y-1.5">
+                    <p className="text-xs font-semibold text-foreground line-clamp-2">{saved.topic}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground">{saved.numSlides} slides · {date}</span>
+                      <div className="flex items-center gap-1">
+                        <a
+                          href={`${API}/output/${saved.folderName}/carrossel.html`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                          title="Abrir HTML"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                        </a>
+                        <button
+                          onClick={() => handleDeleteSaved(saved.id)}
+                          className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
