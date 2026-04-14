@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   ChevronUp, ChevronDown, Download, RefreshCw, Loader2,
-  Image, Edit3, LayoutList, Eye,
+  Image, Edit3, LayoutList, Eye, BookmarkPlus,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -29,7 +29,11 @@ export interface CarouselEditorProps {
   html: string;
   folderName: string;
   topic: string;
+  numSlides?: number;
+  legenda?: string;
+  config?: Record<string, unknown>;
   onScreenshotsUpdated: (screenshots: string[]) => void;
+  onTemplateSaved?: () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -259,7 +263,11 @@ export default function CarouselEditor({
   html,
   folderName,
   topic,
+  numSlides,
+  legenda,
+  config,
   onScreenshotsUpdated,
+  onTemplateSaved,
 }: CarouselEditorProps) {
   // Estado parseado
   const [head, setHead] = useState('');
@@ -272,8 +280,10 @@ export default function CarouselEditor({
   // Slide selecionado
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  // Loading para screenshots
+  // Loading para screenshots e salvar template
   const [screenshotLoading, setScreenshotLoading] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateName, setTemplateName] = useState(topic);
 
   // ── Parse inicial ──────────────────────────────────────────────────────────
 
@@ -381,6 +391,36 @@ export default function CarouselEditor({
     }
   }
 
+  // ── Salvar como modelo ──────────────────────────────────────────────────────
+
+  async function handleSaveTemplate() {
+    const name = templateName.trim() || topic;
+    setTemplateLoading(true);
+    try {
+      const modifiedHtml = rebuildHtml();
+      const res = await fetch(`${API}/api/carousel/save-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html: modifiedHtml,
+          folderName,
+          name,
+          numSlides: numSlides ?? slides.length,
+          legenda: legenda ?? '',
+          config: config ?? {},
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar modelo');
+      toast.success(`Modelo "${name}" salvo com sucesso!`);
+      onTemplateSaved?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setTemplateLoading(false);
+    }
+  }
+
   // ── Download HTML editado ───────────────────────────────────────────────────
 
   function handleDownloadHtml() {
@@ -420,12 +460,12 @@ export default function CarouselEditor({
             {slides.length} slide{slides.length !== 1 ? 's' : ''}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={handleDownloadHtml}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors"
           >
-            <Download className="w-3.5 h-3.5" /> Baixar HTML Editado
+            <Download className="w-3.5 h-3.5" /> Baixar HTML
           </button>
           <button
             onClick={handleRegenerateScreenshots}
@@ -435,7 +475,25 @@ export default function CarouselEditor({
             {screenshotLoading ? (
               <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando…</>
             ) : (
-              <><RefreshCw className="w-3.5 h-3.5" /> Regenerar Screenshots</>
+              <><RefreshCw className="w-3.5 h-3.5" /> Screenshots</>
+            )}
+          </button>
+          <input
+            type="text"
+            value={templateName}
+            onChange={e => setTemplateName(e.target.value)}
+            placeholder="Nome do modelo…"
+            className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/50 w-36"
+          />
+          <button
+            onClick={handleSaveTemplate}
+            disabled={templateLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
+          >
+            {templateLoading ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando…</>
+            ) : (
+              <><BookmarkPlus className="w-3.5 h-3.5" /> Salvar como Modelo</>
             )}
           </button>
         </div>

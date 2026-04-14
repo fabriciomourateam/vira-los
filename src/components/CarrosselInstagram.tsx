@@ -784,9 +784,18 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                 html={result.html}
                 folderName={result.folderName}
                 topic={result.topic}
+                numSlides={result.numSlides}
+                legenda={result.legenda}
+                config={config as Record<string, unknown>}
                 onScreenshotsUpdated={(screenshots) => {
                   setResult(prev => prev ? { ...prev, screenshots } : prev);
                   setCurrentSlide(0);
+                }}
+                onTemplateSaved={() => {
+                  fetch(`${API}/api/carousel/saved`)
+                    .then(r => r.json())
+                    .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
+                    .catch(() => {});
                 }}
               />
             )}
