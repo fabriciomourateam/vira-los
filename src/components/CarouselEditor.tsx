@@ -560,11 +560,15 @@ export default function CarouselEditor({
   const bgFileRef = useRef<HTMLInputElement>(null);
   // Campos temporários para novo destaque de palavra (por bloco)
   const [newHl, setNewHl] = useState<Record<string, {word: string, color: string}>>({});
+  // Ref para evitar loop: ignora html prop quando ele veio de onHtmlUpdated
+  const lastEmittedHtml = useRef<string>('');
 
   // ── Parse inicial ────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!html) return;
+    // Se o html prop é o que acabamos de emitir, não reinicializa (evita loop)
+    if (html === lastEmittedHtml.current) return;
     const { slides: parsed, head: parsedHead } = parseSlides(html);
     setHead(parsedHead);
     setSlides(parsed);
@@ -704,7 +708,9 @@ export default function CarouselEditor({
   useEffect(() => {
     if (!onHtmlUpdatedRef.current || slides.length === 0) return;
     const timer = setTimeout(() => {
-      onHtmlUpdatedRef.current?.(rebuildHtml());
+      const built = rebuildHtml();
+      lastEmittedHtml.current = built;
+      onHtmlUpdatedRef.current?.(built);
     }, 600);
     return () => clearTimeout(timer);
   }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, slides, rebuildHtml]);
