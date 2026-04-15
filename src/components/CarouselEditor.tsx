@@ -21,6 +21,7 @@ interface TextBlock {
   isMain: boolean;
   fontSize?: number;
   color?: string;                   // cor de todo o bloco
+  fontFamily?: string;              // família de fonte
   highlights?: WordHighlight[];     // palavras específicas com cor própria
   textTransform?: 'none' | 'uppercase' | '';  // controle de caixa (uppercase/normal)
   textAlign?: 'left' | 'center' | 'right' | 'justify';
@@ -92,10 +93,22 @@ const FONT_SIZE_REGEX = /font-size\s*:\s*([\d.]+)\s*px/i;
 const COLOR_REGEX = /(?:^|;)\s*color\s*:\s*([^;]+)/i;
 const TEXT_TRANSFORM_REGEX = /text-transform\s*:\s*([^;]+)/i;
 const TEXT_ALIGN_REGEX = /text-align\s*:\s*([^;]+)/i;
+const FONT_FAMILY_REGEX = /(?:^|;)\s*font-family\s*:\s*([^;]+)/i;
+
+const FONT_OPTIONS = [
+  'Inter', 'Poppins', 'Montserrat', 'Raleway', 'Oswald',
+  'Playfair Display', 'Bebas Neue', 'Roboto', 'Lato', 'Open Sans',
+  'Ubuntu', 'Nunito', 'DM Sans', 'Space Grotesk', 'Syne',
+];
 
 function extractFontSize(el: Element): number | undefined {
   const m = FONT_SIZE_REGEX.exec(el.getAttribute('style') || '');
   return m ? parseFloat(m[1]) : undefined;
+}
+
+function extractFontFamily(el: Element): string | undefined {
+  const m = FONT_FAMILY_REGEX.exec(el.getAttribute('style') || '');
+  return m ? m[1].trim().replace(/['"]/g, '') : undefined;
 }
 
 function extractBgImageUrl(el: Element): string | null {
@@ -225,6 +238,7 @@ function extractTextBlocks(el: Element): TextBlock[] {
         isMain,
         fontSize: extractFontSize(node),
         color: extractBlockColor(node),
+        fontFamily: extractFontFamily(node),
         highlights: highlights.length > 0 ? highlights : undefined,
         textTransform: extractTextTransform(node),
         textAlign: extractTextAlign(node),
@@ -304,6 +318,11 @@ function rebuildSlideOuterHtml(
       if (tb.textAlign) {
         newStyle = newStyle.replace(TEXT_ALIGN_REGEX, '').replace(/\s{2,}/g, ' ').trim();
         newStyle = `${newStyle}; text-align: ${tb.textAlign};`.replace(/^;\s*/, '');
+      }
+      // Apply font-family override
+      if (tb.fontFamily) {
+        newStyle = newStyle.replace(FONT_FAMILY_REGEX, '').replace(/\s{2,}/g, ' ').trim();
+        newStyle = `${newStyle}; font-family: '${tb.fontFamily}', sans-serif;`.replace(/^;\s*/, '');
       }
       if (newStyle !== existingStyle) nodes[idx].setAttribute('style', newStyle);
     }
@@ -520,6 +539,8 @@ function buildDragScript(displayScale: number): string {
   function startDrag(cx,cy,target){
     var found=findEl(target);
     if(!found) return;
+    document.body.style.userSelect='none';
+    document.body.style.webkitUserSelect='none';
     var el=found.el;
     var cs=window.getComputedStyle(el);
     if(selected) highlight(selected,false);
@@ -552,6 +573,8 @@ function buildDragScript(displayScale: number): string {
   }
 
   function endDrag(){
+    document.body.style.userSelect='';
+    document.body.style.webkitUserSelect='';
     if(!dragging) return;
     var payload={type:'elementMoved',selector:dragging.sel,mode:dragging.mode};
     if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
@@ -935,6 +958,14 @@ export default function CarouselEditor({
     setEditedTexts(prev => {
       const b = [...(prev[si] ?? [])];
       b[bi] = { ...b[bi], color };
+      return { ...prev, [si]: b };
+    });
+  }
+
+  function updateFontFamily(si: number, bi: number, fontFamily: string) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      b[bi] = { ...b[bi], fontFamily: fontFamily || undefined };
       return { ...prev, [si]: b };
     });
   }
@@ -1456,6 +1487,17 @@ export default function CarouselEditor({
                                       <Plus className="w-2.5 h-2.5" />
                                     </button>
                                   </div>
+                                  {/* Font family */}
+                                  <select
+                                    value={block.fontFamily || ''}
+                                    onChange={e => updateFontFamily(selectedIndex, bi, e.target.value)}
+                                    className="w-full mt-1 rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                                  >
+                                    <option value="">— fonte padrão —</option>
+                                    {FONT_OPTIONS.map(f => (
+                                      <option key={f} value={f}>{f}</option>
+                                    ))}
+                                  </select>
                                 </div>
                                 {/* Editor rich text com toolbar */}
                                 <RichTextEditor
