@@ -27,6 +27,8 @@ interface TextBlock {
   textAlign?: 'left' | 'center' | 'right' | 'justify';
   richHtml?: string;               // HTML formatado do editor rich text
   deleted?: boolean;               // esconde o elemento no HTML final
+  posTop?: number;                 // posição Y para custom-text (salva pelo drag)
+  posLeft?: number;                // posição X para custom-text (salva pelo drag)
 }
 
 interface ElementOverride {
@@ -393,11 +395,19 @@ function rebuildSlideOuterHtml(
   const customTextsInEdited = editedTexts.filter(tb => tb.className.startsWith('custom-text'));
   for (let i = existingCustomTexts; i < customTextsInEdited.length; i++) {
     const ct = customTextsInEdited[i];
+    if (ct.deleted) continue;
     const div = doc.createElement('div');
     div.className = 'custom-text';
-    // Usa top+width explícitos (nunca bottom/right) para que o drag funcione corretamente
+    // data-ct-idx identifica este bloco para o drag (índice dentro de customTextsInEdited)
+    div.setAttribute('data-ct-idx', String(i));
+    // Usa posTop/posLeft salvos pelo drag; fallback: posição default escalonada
+    const defaultTop = 80 + (i - existingCustomTexts) * 80;
     div.setAttribute('style',
-      `position:absolute; z-index:10; top:${80 + (i - existingCustomTexts) * 80}px; left:60px; width:960px;` +
+      `position:absolute; z-index:10;` +
+      ` top:${ct.posTop !== undefined ? ct.posTop : defaultTop}px;` +
+      ` left:${ct.posLeft !== undefined ? ct.posLeft : 60}px;` +
+      ` width:960px;` +
+      (ct.fontFamily ? ` font-family:'${ct.fontFamily}',sans-serif;` : '') +
       (ct.fontSize ? ` font-size:${ct.fontSize}px;` : ' font-size:24px;') +
       (ct.color ? ` color:${ct.color};` : ' color:#ffffff;') +
       (ct.textAlign ? ` text-align:${ct.textAlign};` : ' text-align:center;') +
@@ -639,7 +649,8 @@ function buildDragScript(displayScale: number): string {
     document.body.style.userSelect='';
     document.body.style.webkitUserSelect='';
     if(!dragging) return;
-    var payload={type:'elementMoved',selector:dragging.sel,mode:dragging.mode};
+    var ctIdx=dragging.el.getAttribute('data-ct-idx');
+    var payload={type:'elementMoved',selector:dragging.sel,mode:dragging.mode,ctIdx:ctIdx};
     if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
     else{payload.transform=dragging.el.style.transform;}
     window.parent.postMessage(payload,'*');
@@ -694,7 +705,7 @@ function buildDragScript(displayScale: number): string {
 function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited, selectedIndex }: {
   slideHtml: string;
   head: string;
-  onElementMoved: (data: { selector: string; mode: string; left?: string; top?: string; transform?: string }) => void;
+  onElementMoved: (data: { selector: string; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => void;
   onTextEdited: (selector: string, innerHTML: string) => void;
   selectedIndex: number;
 }) {
@@ -1192,7 +1203,35 @@ export default function CarouselEditor({
     });
   }, [selectedIndex]);
 
-  const handleElementMoved = useCallback((data: { selector: string; mode: string; left?: string; top?: string; transform?: string }) => {
+  const handleElementMoved = useCallback((data: { selector: string; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => {
+    if (selectedIndex === null) return;
+
+    // Blocos custom-text NOVOS (injetados) identificam-se por data-ct-idx
+    // Salva posição diretamente no TextBlock para evitar o snap-back
+    if (data.ctIdx !== null && data.ctIdx !== undefined && data.mode === 'abs') {
+      const ctIdxNum = parseInt(data.ctIdx, 10);
+      setEditedTexts(prev => {
+        const blocks = [...(prev[selectedIndex] ?? [])];
+        let ctCount = 0;
+        for (let j = 0; j < blocks.length; j++) {
+          if (blocks[j].className.startsWith('custom-text') && !blocks[j].deleted) {
+            if (ctCount === ctIdxNum) {
+              blocks[j] = {
+                ...blocks[j],
+                posTop: parseFloat(data.top ?? String(blocks[j].posTop ?? 80)),
+                posLeft: parseFloat(data.left ?? String(blocks[j].posLeft ?? 60)),
+              };
+              break;
+            }
+            ctCount++;
+          }
+        }
+        return { ...prev, [selectedIndex]: blocks };
+      });
+      return;
+    }
+
+    // Elementos originais do slide: usa elementOverrides como antes
     setElementOverrides(prev => {
       if (selectedIndex === null) return prev;
       const override: ElementOverride = data.mode === 'abs'
