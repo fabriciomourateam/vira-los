@@ -22,6 +22,7 @@ interface TextBlock {
   fontSize?: number;
   color?: string;                   // cor de todo o bloco
   highlights?: WordHighlight[];     // palavras específicas com cor própria
+  textTransform?: 'none' | 'uppercase' | '';  // controle de caixa (uppercase/normal)
 }
 
 interface ElementOverride {
@@ -87,6 +88,7 @@ export interface CarouselEditorProps {
 const BG_IMAGE_REGEX = /background-image\s*:\s*url\(["']?([^"')]+)["']?\)/i;
 const FONT_SIZE_REGEX = /font-size\s*:\s*([\d.]+)\s*px/i;
 const COLOR_REGEX = /(?:^|;)\s*color\s*:\s*([^;]+)/i;
+const TEXT_TRANSFORM_REGEX = /text-transform\s*:\s*([^;]+)/i;
 
 function extractFontSize(el: Element): number | undefined {
   const m = FONT_SIZE_REGEX.exec(el.getAttribute('style') || '');
@@ -191,6 +193,12 @@ function extractBlockColor(el: Element): string | undefined {
   return m ? m[1].trim() : undefined;
 }
 
+function extractTextTransform(el: Element): TextBlock['textTransform'] {
+  const style = el.getAttribute('style') || '';
+  const m = TEXT_TRANSFORM_REGEX.exec(style);
+  return m ? m[1].trim() as TextBlock['textTransform'] : undefined;
+}
+
 function extractTextBlocks(el: Element): TextBlock[] {
   const blocks: TextBlock[] = [];
   const seen = new Set<Element>();
@@ -209,6 +217,7 @@ function extractTextBlocks(el: Element): TextBlock[] {
         fontSize: extractFontSize(node),
         color: extractBlockColor(node),
         highlights: highlights.length > 0 ? highlights : undefined,
+        textTransform: extractTextTransform(node),
       });
     }
   }
@@ -274,6 +283,11 @@ function rebuildSlideOuterHtml(
       if (tb.color) {
         newStyle = newStyle.replace(COLOR_REGEX, '').replace(/\s{2,}/g, ' ').trim();
         newStyle = `${newStyle}; color: ${tb.color};`.replace(/^;\s*/, '');
+      }
+      // Apply text-transform override
+      if (tb.textTransform !== undefined) {
+        newStyle = newStyle.replace(TEXT_TRANSFORM_REGEX, '').replace(/\s{2,}/g, ' ').trim();
+        newStyle = `${newStyle}; text-transform: ${tb.textTransform || 'none'};`.replace(/^;\s*/, '');
       }
       if (newStyle !== existingStyle) nodes[idx].setAttribute('style', newStyle);
     }
@@ -705,6 +719,16 @@ export default function CarouselEditor({
     setEditedTexts(prev => {
       const b = [...(prev[si] ?? [])];
       b[bi] = { ...b[bi], text: val };
+      return { ...prev, [si]: b };
+    });
+  }
+
+  function toggleTextTransform(si: number, bi: number) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      const current = b[bi].textTransform;
+      // Cycle: undefined (original) → none → uppercase → none
+      b[bi] = { ...b[bi], textTransform: current === 'none' ? 'uppercase' : 'none' };
       return { ...prev, [si]: b };
     });
   }
@@ -1181,6 +1205,20 @@ export default function CarouselEditor({
                                         title="Cor do texto"
                                       />
                                     </div>
+                                    {/* Text transform toggle */}
+                                    <button
+                                      onClick={() => toggleTextTransform(selectedIndex, bi)}
+                                      className={`px-1.5 h-5 rounded text-[9px] font-bold transition-colors ${
+                                        block.textTransform === 'uppercase'
+                                          ? 'bg-purple-600 text-white'
+                                          : block.textTransform === 'none'
+                                          ? 'bg-blue-600 text-white'
+                                          : 'bg-secondary text-muted-foreground hover:bg-border'
+                                      }`}
+                                      title={block.textTransform === 'uppercase' ? 'MAIÚSCULA — clique para normal' : block.textTransform === 'none' ? 'normal — clique para MAIÚSCULA' : 'Alternar maiúscula/normal'}
+                                    >
+                                      {block.textTransform === 'uppercase' ? 'AA' : 'Aa'}
+                                    </button>
                                     {/* Font size stepper */}
                                     <button onClick={() => updateFontSize(selectedIndex, bi, -2)}
                                       className="w-5 h-5 rounded flex items-center justify-center bg-secondary hover:bg-border transition-colors">
