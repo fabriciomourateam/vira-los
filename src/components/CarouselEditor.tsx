@@ -956,13 +956,22 @@ export default function CarouselEditor({
   async function handleSaveEdits() {
     setSaveLoading(true);
     try {
-      const res = await fetch(`${API}/api/carousel/save-html`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: rebuildHtml(), folderName }),
+      const modifiedHtml = rebuildHtml();
+
+      // 1. Salva HTML + regera screenshots de uma vez (o endpoint /screenshots já salva o HTML)
+      const res = await fetch(`${API}/api/carousel/screenshots`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
-      toast.success('Edições salvas!');
+
+      // 2. Atualiza os screenshots no componente pai (atualiza thumbnails na lista)
+      if (data.screenshots?.length) {
+        onScreenshotsUpdated(data.screenshots);
+      }
+
+      toast.success('Salvo com screenshots atualizados!');
     } catch (err: any) { toast.error(err.message); }
     finally { setSaveLoading(false); }
   }
