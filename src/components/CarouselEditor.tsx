@@ -51,6 +51,24 @@ const OVERLAY_PRESETS: { label: string; value: OverlayConfig['direction'] }[] = 
   { label: 'Sem gradiente', value: 'none' },
 ];
 
+// Color input que só propaga ao soltar (evita lag por re-renders em cada pixel)
+function LazyColorInput({ value, onChange, className, title }: {
+  value: string; onChange: (v: string) => void; className?: string; title?: string;
+}) {
+  const [local, setLocal] = React.useState(value);
+  React.useEffect(() => { setLocal(value); }, [value]);
+  return (
+    <input
+      type="color"
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={e => onChange(e.target.value)}
+      className={className}
+      title={title}
+    />
+  );
+}
+
 function buildOverlayStyle(cfg: OverlayConfig): string {
   const { opacity, direction, color } = cfg;
   const c = color || '0,0,0';
@@ -530,11 +548,18 @@ const DRAGGABLE_SELECTORS = [
 
 function buildDragScript(displayScale: number): string {
   const sels = JSON.stringify(DRAGGABLE_SELECTORS);
-  return `<script>
+  return `<style>
+  * { -webkit-user-select:none!important; user-select:none!important; }
+  </style>
+  <script>
 (function(){
   var SCALE=${displayScale.toFixed(6)};
   var SELS=${sels};
   var dragging=null, selected=null;
+
+  // Bloqueia completamente qualquer seleção de texto/área
+  document.addEventListener('selectstart', function(e){ e.preventDefault(); });
+  document.addEventListener('dragstart',   function(e){ e.preventDefault(); });
 
   function findEl(t){
     for(var i=0;i<SELS.length;i++){
@@ -1470,10 +1495,9 @@ export default function CarouselEditor({
                                     {/* Color picker */}
                                     <div className="relative flex items-center gap-1" title="Cor do texto">
                                       <label className="text-[10px] text-muted-foreground">Cor</label>
-                                      <input
-                                        type="color"
+                                      <LazyColorInput
                                         value={block.color || '#ffffff'}
-                                        onChange={e => updateTextColor(selectedIndex, bi, e.target.value)}
+                                        onChange={v => updateTextColor(selectedIndex, bi, v)}
                                         className="w-6 h-6 rounded cursor-pointer border border-border bg-transparent"
                                         title="Cor do texto"
                                       />
@@ -1653,9 +1677,9 @@ export default function CarouselEditor({
                             {/* Cor */}
                             <div className="flex items-center gap-2">
                               <label className="text-[11px] text-muted-foreground">Cor</label>
-                              <input type="color"
+                              <LazyColorInput
                                 value={rgbToHex(ov.color)}
-                                onChange={e => setOv({ color: hexToRgb(e.target.value) })}
+                                onChange={v => setOv({ color: hexToRgb(v) })}
                                 className="w-7 h-7 rounded cursor-pointer border border-border"
                                 title="Cor do gradiente"
                               />

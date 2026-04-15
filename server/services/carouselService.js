@@ -475,7 +475,7 @@ Gere o HTML completo agora (apenas HTML, nada mais):`;
 function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
   const font = fontFamily.replace(/ /g, '+');
   return `
-  <link href="https://fonts.googleapis.com/css2?family=${font}:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=${font}:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&family=Raleway:wght@400;500;600;700;800;900&family=Oswald:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800;900&family=Bebas+Neue&family=Roboto:wght@400;500;700;900&family=Lato:wght@400;700;900&family=Open+Sans:wght@400;500;600;700;800&family=Ubuntu:wght@400;500;700&family=Nunito:wght@400;500;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
