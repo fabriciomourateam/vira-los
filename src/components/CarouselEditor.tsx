@@ -24,6 +24,7 @@ interface TextBlock {
   highlights?: WordHighlight[];     // palavras específicas com cor própria
   textTransform?: 'none' | 'uppercase' | '';  // controle de caixa (uppercase/normal)
   textAlign?: 'left' | 'center' | 'right' | 'justify';
+  richHtml?: string;               // HTML formatado do editor rich text
 }
 
 interface ElementOverride {
@@ -227,6 +228,7 @@ function extractTextBlocks(el: Element): TextBlock[] {
         highlights: highlights.length > 0 ? highlights : undefined,
         textTransform: extractTextTransform(node),
         textAlign: extractTextAlign(node),
+        richHtml: node.innerHTML,
       });
     }
   }
@@ -280,7 +282,7 @@ function rebuildSlideOuterHtml(
     if (!nodes) continue;
     const idx = groupCounters[baseClass] ?? 0;
     if (nodes[idx]) {
-      nodes[idx].innerHTML = textToHtml(tb.text, tb.highlights);
+      nodes[idx].innerHTML = tb.richHtml || textToHtml(tb.text, tb.highlights);
       const existingStyle = nodes[idx].getAttribute('style') || '';
       let newStyle = existingStyle;
       // Apply font size
@@ -356,7 +358,7 @@ function rebuildSlideOuterHtml(
       (ct.textAlign ? ` text-align:${ct.textAlign};` : ' text-align:center;') +
       (ct.textTransform ? ` text-transform:${ct.textTransform};` : '')
     );
-    div.innerHTML = textToHtml(ct.text, ct.highlights);
+    div.innerHTML = ct.richHtml || textToHtml(ct.text, ct.highlights);
     el.appendChild(div);
   }
 
@@ -642,6 +644,103 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
   );
 }
 
+// ─── Editor de texto rico (contentEditable) ──────────────────────────────────
+
+function RichTextEditor({
+  html,
+  onChange,
+  textAlign,
+  blockColor,
+}: {
+  html: string;
+  onChange: (html: string) => void;
+  textAlign?: string;
+  blockColor?: string;
+}) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const isInternalChange = useRef(false);
+
+  // Inicializa o conteúdo apenas na montagem
+  useEffect(() => {
+    if (editorRef.current && !isInternalChange.current) {
+      editorRef.current.innerHTML = html;
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Atualiza se o HTML mudar de fora (ex: trocar de slide)
+  const prevHtml = useRef(html);
+  useEffect(() => {
+    if (html !== prevHtml.current && !isInternalChange.current && editorRef.current) {
+      editorRef.current.innerHTML = html;
+    }
+    prevHtml.current = html;
+  }, [html]);
+
+  function handleInput() {
+    if (editorRef.current) {
+      isInternalChange.current = true;
+      onChange(editorRef.current.innerHTML);
+      requestAnimationFrame(() => { isInternalChange.current = false; });
+    }
+  }
+
+  function exec(cmd: string, value?: string) {
+    document.execCommand(cmd, false, value);
+    handleInput();
+    editorRef.current?.focus();
+  }
+
+  const btnCls = (active?: boolean) =>
+    `px-1.5 py-1 rounded text-[11px] font-bold transition-colors ${
+      active ? 'bg-purple-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-border active:bg-border'
+    }`;
+
+  return (
+    <div className="space-y-1">
+      {/* Toolbar */}
+      <div className="flex items-center gap-1 flex-wrap">
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('bold')}
+          className={btnCls()} title="Negrito"><strong>B</strong></button>
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('italic')}
+          className={btnCls()} title="Itálico"><em>I</em></button>
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('underline')}
+          className={btnCls()} title="Sublinhado"><span className="underline">U</span></button>
+        {/* Cor do texto (seleção) */}
+        <label className="relative cursor-pointer shrink-0" title="Cor do texto selecionado">
+          <span className="px-1.5 py-1 rounded text-[11px] font-bold bg-secondary text-muted-foreground hover:bg-border flex items-center gap-1">
+            A<span className="w-3 h-1.5 rounded-sm" style={{ background: blockColor || '#fff' }} />
+          </span>
+          <input type="color" defaultValue={blockColor || '#ffffff'}
+            onChange={e => exec('foreColor', e.target.value)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+        </label>
+        {/* Marca-texto (highlight) */}
+        <label className="relative cursor-pointer shrink-0" title="Marca-texto (fundo da seleção)">
+          <span className="px-1.5 py-1 rounded text-[11px] font-bold bg-secondary text-muted-foreground hover:bg-border flex items-center gap-1">
+            <span className="px-1 rounded" style={{ background: '#fde047', color: '#000' }}>ab</span>
+          </span>
+          <input type="color" defaultValue="#fde047"
+            onChange={e => exec('hiliteColor', e.target.value)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+        </label>
+        {/* Remover formatação */}
+        <button type="button" onMouseDown={e => e.preventDefault()}
+          onClick={() => exec('removeFormat')}
+          className={btnCls()} title="Limpar formatação">✕</button>
+      </div>
+      {/* Editable area */}
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={handleInput}
+        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 min-h-[44px] break-words"
+        style={{ textAlign: textAlign as any, color: blockColor }}
+      />
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function CarouselEditor({
@@ -793,6 +892,14 @@ export default function CarouselEditor({
     setEditedTexts(prev => {
       const b = [...(prev[si] ?? [])];
       b[bi] = { ...b[bi], text: val };
+      return { ...prev, [si]: b };
+    });
+  }
+
+  function updateRichHtml(si: number, bi: number, html: string) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      b[bi] = { ...b[bi], richHtml: html };
       return { ...prev, [si]: b };
     });
   }
@@ -1350,12 +1457,13 @@ export default function CarouselEditor({
                                     </button>
                                   </div>
                                 </div>
-                                <textarea
-                                  value={block.text}
-                                  onChange={e => updateText(selectedIndex, bi, e.target.value)}
-                                  rows={block.isMain && block.text.length > 60 ? 4 : 2}
-                                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y"
-                                  style={{ color: block.color, textAlign: block.textAlign }}
+                                {/* Editor rich text com toolbar */}
+                                <RichTextEditor
+                                  key={`rt-${selectedIndex}-${bi}`}
+                                  html={block.richHtml || textToHtml(block.text, block.highlights)}
+                                  onChange={html => updateRichHtml(selectedIndex, bi, html)}
+                                  textAlign={block.textAlign}
+                                  blockColor={block.color}
                                 />
 
                                 {/* Alinhamento do texto */}
@@ -1375,72 +1483,6 @@ export default function CarouselEditor({
                                     </button>
                                   ))}
                                 </div>
-
-                                {/* Palavras em destaque */}
-                                {(() => {
-                                  const hlKey = `${selectedIndex}-${bi}`;
-                                  const hl = newHl[hlKey] ?? { word: '', color: '#f97316' };
-                                  return (
-                                    <div className="space-y-1.5 pl-1">
-                                      {(block.highlights ?? []).length > 0 && (
-                                        <p className="text-[10px] text-muted-foreground/70 uppercase tracking-wide font-semibold">Destaques</p>
-                                      )}
-                                      {(block.highlights ?? []).map((h, hi) => (
-                                        <div key={hi} className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary/30 px-2 py-1.5">
-                                          <input
-                                            type="text"
-                                            value={h.word}
-                                            onChange={e => updateWordHighlightWord(selectedIndex, bi, hi, e.target.value)}
-                                            className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-1 text-[11px] font-semibold focus:outline-none focus:ring-1 focus:ring-orange-500/50"
-                                            style={{ color: h.color }}
-                                            placeholder="palavra…"
-                                          />
-                                          <input
-                                            type="color"
-                                            value={h.color}
-                                            onChange={e => updateWordHighlightColor(selectedIndex, bi, hi, e.target.value)}
-                                            className="w-7 h-7 rounded cursor-pointer border border-border bg-transparent shrink-0"
-                                            title="Editar cor"
-                                          />
-                                          <button onClick={() => removeWordHighlight(selectedIndex, bi, hi)}
-                                            className="p-1 rounded text-muted-foreground hover:text-red-400 active:text-red-400 transition-colors shrink-0"
-                                            title="Remover destaque">
-                                            <Minus className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      ))}
-                                      {/* Adicionar novo destaque */}
-                                      <div className="flex items-center gap-1 pt-0.5">
-                                        <input
-                                          type="text"
-                                          value={hl.word}
-                                          onChange={e => setNewHl(p => ({ ...p, [hlKey]: { ...hl, word: e.target.value } }))}
-                                          placeholder="nova palavra de destaque…"
-                                          className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-orange-500/50"
-                                          onKeyDown={e => {
-                                            if (e.key === 'Enter' && hl.word.trim()) {
-                                              addWordHighlight(selectedIndex, bi, hl.word.trim(), hl.color);
-                                              setNewHl(p => ({ ...p, [hlKey]: { word: '', color: hl.color } }));
-                                            }
-                                          }}
-                                        />
-                                        <input type="color" value={hl.color}
-                                          onChange={e => setNewHl(p => ({ ...p, [hlKey]: { ...hl, color: e.target.value } }))}
-                                          className="w-7 h-7 rounded cursor-pointer border border-border shrink-0"
-                                          title="Cor da nova palavra"
-                                        />
-                                        <button
-                                          onClick={() => {
-                                            if (!hl.word.trim()) return;
-                                            addWordHighlight(selectedIndex, bi, hl.word.trim(), hl.color);
-                                            setNewHl(p => ({ ...p, [hlKey]: { word: '', color: hl.color } }));
-                                          }}
-                                          className="px-2 py-1 rounded bg-orange-600 hover:bg-orange-500 active:bg-orange-500 text-white text-[10px] font-semibold shrink-0 transition-colors"
-                                        >+</button>
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
                               </div>
                             );
                           })}
