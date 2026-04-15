@@ -665,8 +665,8 @@ function buildDragScript(displayScale: number): string {
 
   function moveDrag(cx,cy){
     if(!dragging) return;
-    var dx=(cx-dragging.startX)*SCALE;
-    var dy=(cy-dragging.startY)*SCALE;
+    var dx=cx-dragging.startX;
+    var dy=cy-dragging.startY;
     if(Math.abs(dx)>2||Math.abs(dy)>2) dragMoved=true;
     if(dragging.mode==='abs'){
       dragging.el.style.left=(dragging.origLeft+dx)+'px';
