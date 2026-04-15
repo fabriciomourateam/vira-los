@@ -115,6 +115,8 @@ const COLOR_REGEX = /(?:^|;)\s*color\s*:\s*([^;]+)/i;
 const TEXT_TRANSFORM_REGEX = /text-transform\s*:\s*([^;]+)/i;
 const TEXT_ALIGN_REGEX = /text-align\s*:\s*([^;]+)/i;
 const FONT_FAMILY_REGEX = /(?:^|;)\s*font-family\s*:\s*([^;]+)/i;
+const POS_TOP_REGEX = /(?:^|;)\s*top\s*:\s*([\d.]+)\s*px/i;
+const POS_LEFT_REGEX = /(?:^|;)\s*left\s*:\s*([\d.]+)\s*px/i;
 
 const FONT_OPTIONS = [
   'Inter', 'Poppins', 'Montserrat', 'Raleway', 'Oswald',
@@ -130,6 +132,16 @@ function extractFontSize(el: Element): number | undefined {
 function extractFontFamily(el: Element): string | undefined {
   const m = FONT_FAMILY_REGEX.exec(el.getAttribute('style') || '');
   return m ? m[1].trim().replace(/['"]/g, '') : undefined;
+}
+
+function extractPosTop(el: Element): number | undefined {
+  const m = POS_TOP_REGEX.exec(el.getAttribute('style') || '');
+  return m ? parseFloat(m[1]) : undefined;
+}
+
+function extractPosLeft(el: Element): number | undefined {
+  const m = POS_LEFT_REGEX.exec(el.getAttribute('style') || '');
+  return m ? parseFloat(m[1]) : undefined;
 }
 
 function extractBgImageUrl(el: Element): string | null {
@@ -253,6 +265,10 @@ function extractTextBlocks(el: Element): TextBlock[] {
       seen.add(node);
       const className = node.className || selector.slice(1);
       const highlights = extractWordHighlights(node);
+      // Para elementos com position:absolute (como custom-text), extrai top/left
+      // Isso garante que re-parse do HTML reconstruído preserve as posições do drag
+      const posTop = extractPosTop(node);
+      const posLeft = extractPosLeft(node);
       blocks.push({
         className: typeof className === 'string' ? className : selector.slice(1),
         text: getTextWithLineBreaks(node),
@@ -264,6 +280,8 @@ function extractTextBlocks(el: Element): TextBlock[] {
         textTransform: extractTextTransform(node),
         textAlign: extractTextAlign(node),
         richHtml: node.innerHTML,
+        posTop: posTop,
+        posLeft: posLeft,
       });
     }
   }
