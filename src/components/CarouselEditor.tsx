@@ -580,37 +580,44 @@ function buildDragScript(displayScale: number): string {
     return m ? {x:parseFloat(m[1]),y:parseFloat(m[2])} : {x:0,y:0};
   }
 
+  var dragMoved=false;
+
   function startDrag(cx,cy,target){
+    if(target&&target.isContentEditable) return false;
     var found=findEl(target);
-    if(!found) return;
+    if(!found) return false;
     document.body.style.userSelect='none';
     document.body.style.webkitUserSelect='none';
     var el=found.el;
     var cs=window.getComputedStyle(el);
     if(selected) highlight(selected,false);
     selected=el; highlight(el,true);
-    var isAbs = cs.position==='absolute'||cs.position==='fixed';
+    var isAbs=cs.position==='absolute'||cs.position==='fixed';
     if(isAbs){
+      // Limpa right/bottom para que o elemento mova em vez de esticar
+      el.style.right=''; el.style.bottom='';
       dragging={el:el,sel:found.sel,mode:'abs',startX:cx,startY:cy,
-        origLeft:parseFloat(el.style.left||cs.left)||0,
-        origTop:parseFloat(el.style.top||cs.top)||0};
+        origLeft:parseFloat(el.style.left)||parseFloat(cs.left)||0,
+        origTop:parseFloat(el.style.top)||parseFloat(cs.top)||0};
     } else {
       var tr=getTranslate(el);
-      dragging={el:el,sel:found.sel,mode:'translate',startX:cx,startY:cy,
-        origTx:tr.x,origTy:tr.y};
+      dragging={el:el,sel:found.sel,mode:'translate',startX:cx,startY:cy,origTx:tr.x,origTy:tr.y};
     }
+    dragMoved=false;
     window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
+    return true;
   }
 
   function moveDrag(cx,cy){
     if(!dragging) return;
     var dx=(cx-dragging.startX)*SCALE;
     var dy=(cy-dragging.startY)*SCALE;
+    if(Math.abs(dx)>2||Math.abs(dy)>2) dragMoved=true;
     if(dragging.mode==='abs'){
       dragging.el.style.left=(dragging.origLeft+dx)+'px';
       dragging.el.style.top=(dragging.origTop+dy)+'px';
     } else {
-      var nx=dragging.origTx+dx, ny=dragging.origTy+dy;
+      var nx=dragging.origTx+dx,ny=dragging.origTy+dy;
       var existing=(dragging.el.style.transform||'').replace(/translate\\([^)]+\\)/g,'').trim();
       dragging.el.style.transform=(existing+' translate('+nx+'px,'+ny+'px)').trim();
     }
@@ -627,41 +634,56 @@ function buildDragScript(displayScale: number): string {
     dragging=null;
   }
 
-  // Recebe comandos do pai (ex: mouseup fora do iframe)
+  // Edição inline: duplo clique → contentEditable
+  var TEXT_EDIT_SELS=['.title','.subtitle','.subtitle-accent','.narrative-text','.content-title','.content-body','.cta-title','.cover-title','.custom-text','.follow-pill','.footer-name-pill'];
+  document.addEventListener('dblclick',function(e){
+    var textEl=null;
+    for(var i=0;i<TEXT_EDIT_SELS.length;i++){var t=e.target.closest(TEXT_EDIT_SELS[i]);if(t){textEl=t;break;}}
+    if(!textEl) return;
+    e.preventDefault();
+    if(dragging) return;
+    textEl.contentEditable='true';
+    textEl.style.outline='2px dashed #f97316';
+    textEl.style.cursor='text';
+    textEl.focus();
+    var matchedSel=TEXT_EDIT_SELS[TEXT_EDIT_SELS.findIndex(function(s){return textEl.closest(s)===textEl;})];
+    function onBlur(){
+      textEl.contentEditable='false';
+      textEl.style.outline=selected===textEl?'3px solid #B078FF':'';
+      textEl.style.cursor=selected===textEl?'grab':'';
+      window.parent.postMessage({type:'textEdited',selector:matchedSel||('.'+textEl.className.trim().split(/\\s+/)[0]),innerHTML:textEl.innerHTML},'*');
+      textEl.removeEventListener('blur',onBlur);
+    }
+    textEl.addEventListener('blur',onBlur);
+  });
+
+  // Recebe comandos do pai
   window.addEventListener('message',function(e){
     if(e.data&&e.data.type==='forceEndDrag') endDrag();
     if(e.data&&e.data.type==='forceMoveDrag') moveDrag(e.data.cx,e.data.cy);
   });
 
-  // Mouse events
-  document.addEventListener('mousedown',function(e){startDrag(e.clientX,e.clientY,e.target);e.preventDefault();});
-  document.addEventListener('mousemove',function(e){moveDrag(e.clientX,e.clientY);e.preventDefault();});
-  document.addEventListener('mouseup',function(e){endDrag();});
-
-  // Touch events (mobile)
-  document.addEventListener('touchstart',function(e){
-    var t=e.touches[0];startDrag(t.clientX,t.clientY,e.target);
-  },{passive:false});
-  document.addEventListener('touchmove',function(e){
-    if(dragging){e.preventDefault();var t=e.touches[0];moveDrag(t.clientX,t.clientY);}
-  },{passive:false});
-  document.addEventListener('touchend',function(e){endDrag();});
+  // Mouse/touch events
+  document.addEventListener('mousedown',function(e){if(startDrag(e.clientX,e.clientY,e.target))e.preventDefault();});
+  document.addEventListener('mousemove',function(e){if(dragging){moveDrag(e.clientX,e.clientY);e.preventDefault();}});
+  document.addEventListener('mouseup',function(){endDrag();});
+  document.addEventListener('touchstart',function(e){var t=e.touches[0];startDrag(t.clientX,t.clientY,e.target);},{passive:false});
+  document.addEventListener('touchmove',function(e){if(dragging){e.preventDefault();var t=e.touches[0];moveDrag(t.clientX,t.clientY);}},{passive:false});
+  document.addEventListener('touchend',function(){endDrag();});
 
   document.addEventListener('click',function(e){
     var found=findEl(e.target);
-    if(!found&&selected){
-      highlight(selected,false); selected=null;
-      window.parent.postMessage({type:'elementDeselected'},'*');
-    }
+    if(!found&&selected){highlight(selected,false);selected=null;window.parent.postMessage({type:'elementDeselected'},'*');}
   });
 })();
 </script>`;
 }
 
-function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedIndex }: {
+function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited, selectedIndex }: {
   slideHtml: string;
   head: string;
   onElementMoved: (data: { selector: string; mode: string; left?: string; top?: string; transform?: string }) => void;
+  onTextEdited: (selector: string, innerHTML: string) => void;
   selectedIndex: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -709,9 +731,8 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
   useEffect(() => {
     function handleMsg(e: MessageEvent) {
       if (!e.data) return;
-      if (e.data.type === 'elementMoved') {
-        onElementMoved(e.data);
-      }
+      if (e.data.type === 'elementMoved') onElementMoved(e.data);
+      if (e.data.type === 'textEdited') onTextEdited(e.data.selector, e.data.innerHTML);
     }
     window.addEventListener('message', handleMsg);
     return () => window.removeEventListener('message', handleMsg);
@@ -859,8 +880,26 @@ export default function CarouselEditor({
   const bgFileRef = useRef<HTMLInputElement>(null);
   // Campos temporários para novo destaque de palavra (por bloco)
   const [newHl, setNewHl] = useState<Record<string, {word: string, color: string}>>({});
+  const [focusedBlockIdx, setFocusedBlockIdx] = useState<number | null>(null);
   // Ref para evitar loop: ignora html prop quando ele veio de onHtmlUpdated
   const lastEmittedHtml = useRef<string>('');
+
+  // Tecla Delete/Backspace deleta o bloco de texto focado
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') &&
+          focusedBlockIdx !== null && selectedIndex !== null &&
+          !(e.target instanceof HTMLInputElement) &&
+          !(e.target instanceof HTMLTextAreaElement) &&
+          !(e.target as HTMLElement).isContentEditable) {
+        e.preventDefault();
+        removeTextBlock(selectedIndex, focusedBlockIdx);
+        setFocusedBlockIdx(null);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusedBlockIdx, selectedIndex]);
 
   // ── Parse inicial ────────────────────────────────────────────────────────────
 
@@ -1095,8 +1134,8 @@ export default function CarouselEditor({
   // Insere rodapé de perfil (nome + handle + badge) diretamente no outerHtml do slide
   function insertProfileFooter(si: number) {
     const creatorName = (config as any)?.creatorName || 'Fabricio Moura';
-    const handle = (config as any)?.instagramHandle
-      ? `@${(config as any).instagramHandle}` : '@fabriciomourateam';
+    const rawHandle = ((config as any)?.instagramHandle || 'fabriciomourateam').replace(/^@/, '');
+    const handle = `@${rawHandle}`;
     const footerHtml = `<div class="slide-footer" style="position:absolute;bottom:30px;left:0;right:0;z-index:10;display:flex;align-items:center;justify-content:center;gap:12px;padding:0 40px;">
   <span class="footer-name-pill" style="background:linear-gradient(90deg,#f58529,#dd2a7b 50%,#8134af);border-radius:60px;padding:12px 28px;font-size:22px;font-weight:700;color:white;display:inline-flex;align-items:center;gap:6px;">
     ${creatorName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:18px;height:18px;display:block;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -1125,6 +1164,21 @@ export default function CarouselEditor({
   }
 
   // ── Element position overrides (drag no visual editor) ───────────────────────
+
+  // Edição inline no iframe → atualiza richHtml do bloco correspondente
+  const handleInlineTextEdit = useCallback((selector: string, innerHTML: string) => {
+    if (selectedIndex === null) return;
+    setEditedTexts(prev => {
+      const blocks = [...(prev[selectedIndex] ?? [])];
+      const idx = blocks.findIndex(b => {
+        const base = '.'+b.className.split(' ')[0];
+        return base === selector || b.className.includes(selector.slice(1));
+      });
+      if (idx === -1) return prev;
+      blocks[idx] = { ...blocks[idx], richHtml: innerHTML, text: innerHTML.replace(/<[^>]+>/g, '') };
+      return { ...prev, [selectedIndex]: blocks };
+    });
+  }, [selectedIndex]);
 
   const handleElementMoved = useCallback((data: { selector: string; mode: string; left?: string; top?: string; transform?: string }) => {
     setElementOverrides(prev => {
@@ -1524,7 +1578,9 @@ export default function CarouselEditor({
                             if (block.deleted) return null;
                             const currentSize = block.fontSize ?? (block.isMain ? 48 : 28);
                             return (
-                              <div key={`${block.className}-${bi}`} className="space-y-1">
+                              <div key={`${block.className}-${bi}`}
+                                className={`space-y-1 rounded-lg p-1 cursor-pointer transition-colors ${focusedBlockIdx === bi ? 'ring-1 ring-orange-500/50 bg-orange-500/5' : ''}`}
+                                onClick={() => setFocusedBlockIdx(bi)}>
                                 <div className="flex items-center justify-between">
                                   <label className="text-xs font-medium text-muted-foreground capitalize flex items-center gap-1">
                                     {block.className.startsWith('custom-text') ? (
@@ -1781,6 +1837,7 @@ export default function CarouselEditor({
                       slideHtml={liveSlideHtml(selectedIndex)}
                       head={head}
                       onElementMoved={handleElementMoved}
+                      onTextEdited={handleInlineTextEdit}
                       selectedIndex={selectedIndex}
                     />
 
