@@ -683,9 +683,7 @@ function buildTemplateHTMLPrompt({ templateHtml, topic, niche, instagramHandle, 
     ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo nos textos ━━━\n${roteiro.trim()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
-  return `Você é um especialista em carrosseis para Instagram.
-
-Você tem um carrossel HTML existente como TEMPLATE. Crie um NOVO carrossel sobre o tema abaixo, mantendo EXATAMENTE o mesmo layout visual: CSS, tamanhos de fonte, posicionamento dos elementos, classes, número de slides e estrutura HTML.
+  return `Você é um especialista em carrosseis para Instagram. Sua tarefa é criar um NOVO carrossel reutilizando EXATAMENTE o layout visual de um template existente.
 
 Tema: "${topic}"
 Nicho: ${niche}
@@ -693,14 +691,31 @@ Tom: ${contentTone}
 Instagram: ${handleAt} | Nome: ${displayName}
 ${roteiroSection}
 
-━━━ REGRAS OBRIGATÓRIAS ━━━
+━━━ O QUE VOCÊ DEVE MANTER IDÊNTICO (NÃO ALTERE) ━━━
+1. O bloco <style>...</style> INTEIRO — copie caractere por caractere
+2. A estrutura HTML de cada slide (tags, classes, hierarquia de divs)
+3. Todos os atributos "style" inline de TODOS os elementos — posição (top, left, right, bottom), transform, tamanhos, margens, cores de fundo
+4. SLIDE DE CAPA: preserve a posição e estilo de TODOS os elementos (.profile-badge, .avatar-circle, .profile-name, .profile-handle, .verified-badge, .cover-title, .swipe-hint, .follow-pill, .follow-banner)
+5. SLIDES INTERNOS: preserve EXATAMENTE a posição e estilo de:
+   - .slide-footer / .footer-name-pill / .footer-handle-pill (badges inferiores com nome/handle)
+   - .top-header / header com numeração
+   - .subtitle-accent / bullets decorativos
+   - Qualquer elemento com position:absolute — mantenha top/left/right/bottom idênticos
+6. SLIDE CTA (último): preserve toda a estrutura de layout, botões, posicionamento
+7. Número de slides: EXATAMENTE igual ao template
+
+━━━ O QUE VOCÊ DEVE SUBSTITUIR ━━━
+- Textos de conteúdo: .title, .narrative-text, .content-title, .content-body, .cover-title (trocar pelo novo tema)
+- Handle do Instagram → ${handleAt}
+- Nome do criador → ${displayName}
+- URLs de imagens de fundo (se novas imagens forem fornecidas abaixo)
+- Máximo 35 palavras por slide de conteúdo
+
+━━━ REGRAS DE FORMATO ━━━
 - Retorne APENAS o HTML completo. Comece com <!DOCTYPE html> e termine com </html>
 - NÃO use markdown, code fences ou texto fora do HTML
-- Mantenha TODO o bloco <style>...</style> EXATAMENTE como está no template
-- Mantenha as mesmas classes CSS e estrutura de cada slide
-- Substitua APENAS: textos de conteúdo (títulos, body, CTA), handle → ${handleAt}, nome → ${displayName}
-- Mantenha o número de slides igual ao template
-- Máximo 35 palavras por slide de conteúdo
+- NÃO altere font-size, color, ou qualquer propriedade CSS dos elementos
+- NÃO mova badges, footers, headers ou elementos de perfil — eles ficam onde estão
 
 ${imagesSection}
 
