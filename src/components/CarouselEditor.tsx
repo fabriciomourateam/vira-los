@@ -26,6 +26,7 @@ interface TextBlock {
   textTransform?: 'none' | 'uppercase' | '';  // controle de caixa (uppercase/normal)
   textAlign?: 'left' | 'center' | 'right' | 'justify';
   richHtml?: string;               // HTML formatado do editor rich text
+  deleted?: boolean;               // esconde o elemento no HTML final
 }
 
 interface ElementOverride {
@@ -296,6 +297,12 @@ function rebuildSlideOuterHtml(
     if (!nodes) continue;
     const idx = groupCounters[baseClass] ?? 0;
     if (nodes[idx]) {
+      // Se deletado, esconde o elemento e pula demais overrides
+      if (tb.deleted) {
+        (nodes[idx] as HTMLElement).style.display = 'none';
+        groupCounters[baseClass] = idx + 1;
+        continue;
+      }
       nodes[idx].innerHTML = tb.richHtml || textToHtml(tb.text, tb.highlights);
       const existingStyle = nodes[idx].getAttribute('style') || '';
       let newStyle = existingStyle;
@@ -770,7 +777,7 @@ function RichTextEditor({
         suppressContentEditableWarning
         onInput={handleInput}
         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 min-h-[44px] break-words"
-        style={{ textAlign: textAlign as any, color: blockColor }}
+        style={{ textAlign: textAlign as any }}
       />
     </div>
   );
@@ -1035,7 +1042,7 @@ export default function CarouselEditor({
   function removeTextBlock(si: number, bi: number) {
     setEditedTexts(prev => {
       const b = [...(prev[si] ?? [])];
-      b.splice(bi, 1);
+      b[bi] = { ...b[bi], deleted: true };
       return { ...prev, [si]: b };
     });
   }
@@ -1441,6 +1448,7 @@ export default function CarouselEditor({
                             <Edit3 className="w-3.5 h-3.5" /> Textos do slide
                           </p>
                           {selTexts.map((block, bi) => {
+                            if (block.deleted) return null;
                             const currentSize = block.fontSize ?? (block.isMain ? 48 : 28);
                             return (
                               <div key={`${block.className}-${bi}`} className="space-y-1">
@@ -1453,14 +1461,12 @@ export default function CarouselEditor({
                                     )}
                                   </label>
                                   <div className="flex items-center gap-1.5">
-                                    {/* Remove custom text block */}
-                                    {block.className.startsWith('custom-text') && (
-                                      <button onClick={() => removeTextBlock(selectedIndex, bi)}
-                                        className="w-5 h-5 rounded flex items-center justify-center bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors"
-                                        title="Remover este texto">
-                                        <Minus className="w-2.5 h-2.5" />
-                                      </button>
-                                    )}
+                                    {/* Remove text block */}
+                                    <button onClick={() => removeTextBlock(selectedIndex, bi)}
+                                      className="w-5 h-5 rounded flex items-center justify-center bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors"
+                                      title="Ocultar este bloco de texto">
+                                      <Minus className="w-2.5 h-2.5" />
+                                    </button>
                                     {/* Color picker */}
                                     <div className="relative flex items-center gap-1" title="Cor do texto">
                                       <label className="text-[10px] text-muted-foreground">Cor</label>
