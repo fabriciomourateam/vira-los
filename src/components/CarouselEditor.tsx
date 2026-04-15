@@ -379,8 +379,8 @@ function rebuildSlideOuterHtml(
   if (overrides) {
     for (const [sel, styles] of Object.entries(overrides)) {
       for (const node of Array.from(el.querySelectorAll(sel)) as HTMLElement[]) {
-        if (styles.left !== undefined) { node.style.left = styles.left; node.style.right = ''; }
-        if (styles.top !== undefined)  { node.style.top  = styles.top;  node.style.bottom = ''; }
+        if (styles.left !== undefined) { node.style.left = styles.left; if(node.style.right) node.style.right = ''; }
+        if (styles.top !== undefined)  { node.style.top  = styles.top;  if(node.style.bottom) node.style.bottom = ''; }
         if (styles.right !== undefined)  node.style.right  = styles.right;
         if (styles.bottom !== undefined) node.style.bottom = styles.bottom;
         if (styles.transform !== undefined) node.style.transform = styles.transform;
@@ -395,8 +395,9 @@ function rebuildSlideOuterHtml(
     const ct = customTextsInEdited[i];
     const div = doc.createElement('div');
     div.className = 'custom-text';
+    // Usa top+width explícitos (nunca bottom/right) para que o drag funcione corretamente
     div.setAttribute('style',
-      `position:absolute; z-index:10; bottom:${120 + (i - existingCustomTexts) * 60}px; left:40px; right:40px;` +
+      `position:absolute; z-index:10; top:${80 + (i - existingCustomTexts) * 80}px; left:60px; width:960px;` +
       (ct.fontSize ? ` font-size:${ct.fontSize}px;` : ' font-size:24px;') +
       (ct.color ? ` color:${ct.color};` : ' color:#ffffff;') +
       (ct.textAlign ? ` text-align:${ct.textAlign};` : ' text-align:center;') +
@@ -594,10 +595,20 @@ function buildDragScript(displayScale: number): string {
     selected=el; highlight(el,true);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
     if(isAbs){
-      // offsetTop/offsetLeft dão a posição visual real independente de top/bottom/right/left
-      var origTop=el.offsetTop, origLeft=el.offsetLeft;
-      // Converte para top+left explícitos e limpa bottom+right (evita esticamento)
-      el.style.top=origTop+'px'; el.style.left=origLeft+'px';
+      // Se o elemento usa bottom/right, converte para top/left antes de arrastar
+      var origTop, origLeft;
+      if(el.style.top && el.style.top!=='auto'){
+        origTop=parseFloat(el.style.top)||0;
+      } else {
+        origTop=el.offsetTop;
+        el.style.top=origTop+'px';
+      }
+      if(el.style.left && el.style.left!=='auto'){
+        origLeft=parseFloat(el.style.left)||0;
+      } else {
+        origLeft=el.offsetLeft;
+        el.style.left=origLeft+'px';
+      }
       el.style.right=''; el.style.bottom='';
       dragging={el:el,sel:found.sel,mode:'abs',startX:cx,startY:cy,origLeft:origLeft,origTop:origTop};
     } else {
