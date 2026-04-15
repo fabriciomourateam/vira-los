@@ -733,6 +733,16 @@ export default function CarouselEditor({
     });
   }
 
+  function updateWordHighlightWord(si: number, bi: number, hi: number, word: string) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      const hls = [...(b[bi].highlights ?? [])];
+      hls[hi] = { ...hls[hi], word };
+      b[bi] = { ...b[bi], highlights: hls };
+      return { ...prev, [si]: b };
+    });
+  }
+
   function updateBgUrl(si: number, url: string) {
     setEditedBgUrls(prev => ({ ...prev, [si]: url }));
   }
@@ -1121,31 +1131,41 @@ export default function CarouselEditor({
                                   const hlKey = `${selectedIndex}-${bi}`;
                                   const hl = newHl[hlKey] ?? { word: '', color: '#f97316' };
                                   return (
-                                    <div className="space-y-1 pl-1">
+                                    <div className="space-y-1.5 pl-1">
+                                      {(block.highlights ?? []).length > 0 && (
+                                        <p className="text-[10px] text-muted-foreground/70 uppercase tracking-wide font-semibold">Destaques</p>
+                                      )}
                                       {(block.highlights ?? []).map((h, hi) => (
-                                        <div key={hi} className="flex items-center gap-1 text-[11px]">
-                                          <span className="px-1.5 py-0.5 rounded font-semibold" style={{ color: h.color, background: `${h.color}20` }}>
-                                            "{h.word}"
-                                          </span>
-                                          <label className="relative cursor-pointer shrink-0" title="Editar cor">
-                                            <div className="w-4 h-4 rounded border border-border" style={{ background: h.color }} />
-                                            <input
-                                              type="color"
-                                              value={h.color}
-                                              onChange={e => updateWordHighlightColor(selectedIndex, bi, hi, e.target.value)}
-                                              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                                            />
-                                          </label>
+                                        <div key={hi} className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary/30 px-2 py-1.5">
+                                          <input
+                                            type="text"
+                                            value={h.word}
+                                            onChange={e => updateWordHighlightWord(selectedIndex, bi, hi, e.target.value)}
+                                            className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-1 text-[11px] font-semibold focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                                            style={{ color: h.color }}
+                                            placeholder="palavra…"
+                                          />
+                                          <input
+                                            type="color"
+                                            value={h.color}
+                                            onChange={e => updateWordHighlightColor(selectedIndex, bi, hi, e.target.value)}
+                                            className="w-7 h-7 rounded cursor-pointer border border-border bg-transparent shrink-0"
+                                            title="Editar cor"
+                                          />
                                           <button onClick={() => removeWordHighlight(selectedIndex, bi, hi)}
-                                            className="text-muted-foreground hover:text-red-400 transition-colors ml-auto">✕</button>
+                                            className="p-1 rounded text-muted-foreground hover:text-red-400 active:text-red-400 transition-colors shrink-0"
+                                            title="Remover destaque">
+                                            <Minus className="w-3 h-3" />
+                                          </button>
                                         </div>
                                       ))}
+                                      {/* Adicionar novo destaque */}
                                       <div className="flex items-center gap-1 pt-0.5">
                                         <input
                                           type="text"
                                           value={hl.word}
                                           onChange={e => setNewHl(p => ({ ...p, [hlKey]: { ...hl, word: e.target.value } }))}
-                                          placeholder="palavra de destaque…"
+                                          placeholder="nova palavra de destaque…"
                                           className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-orange-500/50"
                                           onKeyDown={e => {
                                             if (e.key === 'Enter' && hl.word.trim()) {
@@ -1156,8 +1176,8 @@ export default function CarouselEditor({
                                         />
                                         <input type="color" value={hl.color}
                                           onChange={e => setNewHl(p => ({ ...p, [hlKey]: { ...hl, color: e.target.value } }))}
-                                          className="w-6 h-6 rounded cursor-pointer border border-border shrink-0"
-                                          title="Cor da palavra"
+                                          className="w-7 h-7 rounded cursor-pointer border border-border shrink-0"
+                                          title="Cor da nova palavra"
                                         />
                                         <button
                                           onClick={() => {
@@ -1165,7 +1185,7 @@ export default function CarouselEditor({
                                             addWordHighlight(selectedIndex, bi, hl.word.trim(), hl.color);
                                             setNewHl(p => ({ ...p, [hlKey]: { word: '', color: hl.color } }));
                                           }}
-                                          className="px-1.5 py-1 rounded bg-orange-600 hover:bg-orange-500 text-white text-[10px] font-semibold shrink-0 transition-colors"
+                                          className="px-2 py-1 rounded bg-orange-600 hover:bg-orange-500 active:bg-orange-500 text-white text-[10px] font-semibold shrink-0 transition-colors"
                                         >+</button>
                                       </div>
                                     </div>
