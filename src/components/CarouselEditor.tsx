@@ -948,23 +948,48 @@ export default function CarouselEditor({
     if (!html) return;
     // Se o html prop é o que acabamos de emitir, não reinicializa (evita loop)
     if (html === lastEmittedHtml.current) return;
+
     const { slides: parsed, head: parsedHead } = parseSlides(html);
     setHead(parsedHead);
     setSlides(parsed);
-    const textsInit: Record<number, TextBlock[]> = {};
+
     const bgInit: Record<number, string> = {};
     for (const s of parsed) {
-      textsInit[s.index] = s.texts.map(t => ({ ...t }));
       if (s.bgImageUrl) bgInit[s.index] = s.bgImageUrl;
     }
-    // Init badge visibility from parsed HTML
     const badgeInit: Record<number, boolean> = {};
     for (const s of parsed) badgeInit[s.index] = s.hasBadge;
     setBadgeVisible(badgeInit);
-
-    setEditedTexts(textsInit);
     setEditedBgUrls(bgInit);
-    setSelectedIndex(parsed.length > 0 ? 0 : null);
+
+    // Mescla textos parseados com estado anterior para preservar:
+    //  - posTop / posLeft salvos pelo drag
+    //  - blocos extras adicionados via addTextBlock (custom-text que não estão no HTML original)
+    setEditedTexts(prev => {
+      const merged: Record<number, TextBlock[]> = {};
+      for (const s of parsed) {
+        const newTexts = s.texts.map(t => ({ ...t }));
+        const oldTexts = prev[s.index] ?? [];
+        // Para cada bloco do novo parse, preserva posTop/posLeft do estado anterior
+        const mergedBlocks: TextBlock[] = newTexts.map((nt, j) => {
+          const ot = oldTexts[j];
+          if (!ot) return nt;
+          return {
+            ...nt,
+            posTop:  ot.posTop  !== undefined ? ot.posTop  : nt.posTop,
+            posLeft: ot.posLeft !== undefined ? ot.posLeft : nt.posLeft,
+          };
+        });
+        // Mantém blocos extras do estado anterior (e.g. addTextBlock não presentes no HTML)
+        for (let j = newTexts.length; j < oldTexts.length; j++) {
+          mergedBlocks.push(oldTexts[j]);
+        }
+        merged[s.index] = mergedBlocks;
+      }
+      return merged;
+    });
+
+    setSelectedIndex(prev => prev !== null && prev < parsed.length ? prev : (parsed.length > 0 ? 0 : null));
   }, [html]);
 
   // ── Drag-and-drop de slides ──────────────────────────────────────────────────
