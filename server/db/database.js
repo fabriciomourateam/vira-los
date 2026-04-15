@@ -188,6 +188,7 @@ const setCarouselConfig = (config) => {
 // ── Carrosseis Salvos (histórico + templates) ─────────────────────────────────
 const getAllCarousels  = () => readDb('carousels').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const saveCarousel    = (c) => { const db = readDb('carousels'); db.push({ ...c, created_at: now() }); writeDb('carousels', db); };
+const updateCarousel  = (id, data) => { const db = readDb('carousels').map((c) => c.id === id ? { ...c, ...data } : c); writeDb('carousels', db); };
 const deleteCarousel  = (id) => writeDb('carousels', readDb('carousels').filter((c) => c.id !== id));
 
 module.exports = {
@@ -200,5 +201,5 @@ module.exports = {
   getAllIdeas, createIdea, updateIdea, deleteIdea,
   logPostResult,
   getCarouselConfig, setCarouselConfig,
-  getAllCarousels, saveCarousel, deleteCarousel,
+  getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
 };

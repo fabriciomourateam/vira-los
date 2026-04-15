@@ -1294,6 +1294,12 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                     setSavedCarousels(prev =>
                       prev.map(c => c.id === editingSaved.id ? { ...c, screenshots } : c)
                     );
+                    // Persiste no banco de dados
+                    fetch(`${API}/api/carousel/saved/${editingSaved.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ screenshots }),
+                    }).catch(() => {});
                   }}
                   onHtmlUpdated={(html) => setEditingSavedHtml(html)}
                   onTemplateSaved={refreshSavedCarousels}

@@ -190,6 +190,13 @@ router.delete('/saved/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+router.patch('/saved/:id', (req, res) => {
+  const { screenshots } = req.body;
+  if (!screenshots) return res.status(400).json({ error: 'screenshots obrigatório' });
+  db.updateCarousel(req.params.id, { screenshots });
+  res.json({ ok: true });
+});
+
 // ─── Diagnóstico de variáveis e conectividade ────────────────────────────────
 
 router.get('/check', async (req, res) => {
