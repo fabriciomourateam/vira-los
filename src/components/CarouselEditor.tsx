@@ -369,6 +369,17 @@ function rebuildSlideOuterHtml(
         newStyle = newStyle.replace(FONT_FAMILY_REGEX, '').replace(/\s{2,}/g, ' ').trim();
         newStyle = `${newStyle}; font-family: '${tb.fontFamily}', sans-serif;`.replace(/^;\s*/, '');
       }
+      // Apply position override for custom-text blocks (posTop/posLeft from drag)
+      if (baseClass === 'custom-text' && tb.posTop !== undefined) {
+        newStyle = newStyle.replace(POS_TOP_REGEX, '').replace(/\s{2,}/g, ' ').trim();
+        newStyle = `${newStyle}; top: ${tb.posTop}px;`.replace(/^;\s*/, '');
+        // Remove bottom to avoid CSS conflict
+        newStyle = newStyle.replace(/(?:^|;)\s*bottom\s*:\s*[^;]+/i, '').replace(/\s{2,}/g, ' ').trim();
+      }
+      if (baseClass === 'custom-text' && tb.posLeft !== undefined) {
+        newStyle = newStyle.replace(POS_LEFT_REGEX, '').replace(/\s{2,}/g, ' ').trim();
+        newStyle = `${newStyle}; left: ${tb.posLeft}px;`.replace(/^;\s*/, '');
+      }
       if (newStyle !== existingStyle) nodes[idx].setAttribute('style', newStyle);
     }
     groupCounters[baseClass] = idx + 1;
