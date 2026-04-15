@@ -23,6 +23,7 @@ interface TextBlock {
   color?: string;                   // cor de todo o bloco
   highlights?: WordHighlight[];     // palavras específicas com cor própria
   textTransform?: 'none' | 'uppercase' | '';  // controle de caixa (uppercase/normal)
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
 }
 
 interface ElementOverride {
@@ -89,6 +90,7 @@ const BG_IMAGE_REGEX = /background-image\s*:\s*url\(["']?([^"')]+)["']?\)/i;
 const FONT_SIZE_REGEX = /font-size\s*:\s*([\d.]+)\s*px/i;
 const COLOR_REGEX = /(?:^|;)\s*color\s*:\s*([^;]+)/i;
 const TEXT_TRANSFORM_REGEX = /text-transform\s*:\s*([^;]+)/i;
+const TEXT_ALIGN_REGEX = /text-align\s*:\s*([^;]+)/i;
 
 function extractFontSize(el: Element): number | undefined {
   const m = FONT_SIZE_REGEX.exec(el.getAttribute('style') || '');
@@ -199,6 +201,12 @@ function extractTextTransform(el: Element): TextBlock['textTransform'] {
   return m ? m[1].trim() as TextBlock['textTransform'] : undefined;
 }
 
+function extractTextAlign(el: Element): TextBlock['textAlign'] {
+  const style = el.getAttribute('style') || '';
+  const m = TEXT_ALIGN_REGEX.exec(style);
+  return m ? m[1].trim() as TextBlock['textAlign'] : undefined;
+}
+
 function extractTextBlocks(el: Element): TextBlock[] {
   const blocks: TextBlock[] = [];
   const seen = new Set<Element>();
@@ -218,6 +226,7 @@ function extractTextBlocks(el: Element): TextBlock[] {
         color: extractBlockColor(node),
         highlights: highlights.length > 0 ? highlights : undefined,
         textTransform: extractTextTransform(node),
+        textAlign: extractTextAlign(node),
       });
     }
   }
@@ -289,6 +298,11 @@ function rebuildSlideOuterHtml(
         newStyle = newStyle.replace(TEXT_TRANSFORM_REGEX, '').replace(/\s{2,}/g, ' ').trim();
         newStyle = `${newStyle}; text-transform: ${tb.textTransform || 'none'};`.replace(/^;\s*/, '');
       }
+      // Apply text-align override
+      if (tb.textAlign) {
+        newStyle = newStyle.replace(TEXT_ALIGN_REGEX, '').replace(/\s{2,}/g, ' ').trim();
+        newStyle = `${newStyle}; text-align: ${tb.textAlign};`.replace(/^;\s*/, '');
+      }
       if (newStyle !== existingStyle) nodes[idx].setAttribute('style', newStyle);
     }
     groupCounters[baseClass] = idx + 1;
@@ -338,7 +352,9 @@ function rebuildSlideOuterHtml(
     div.setAttribute('style',
       `position:absolute; z-index:10; bottom:${120 + (i - existingCustomTexts) * 60}px; left:40px; right:40px;` +
       (ct.fontSize ? ` font-size:${ct.fontSize}px;` : ' font-size:24px;') +
-      (ct.color ? ` color:${ct.color};` : ' color:#ffffff;')
+      (ct.color ? ` color:${ct.color};` : ' color:#ffffff;') +
+      (ct.textAlign ? ` text-align:${ct.textAlign};` : ' text-align:center;') +
+      (ct.textTransform ? ` text-transform:${ct.textTransform};` : '')
     );
     div.innerHTML = textToHtml(ct.text, ct.highlights);
     el.appendChild(div);
@@ -777,6 +793,14 @@ export default function CarouselEditor({
     setEditedTexts(prev => {
       const b = [...(prev[si] ?? [])];
       b[bi] = { ...b[bi], text: val };
+      return { ...prev, [si]: b };
+    });
+  }
+
+  function updateTextAlign(si: number, bi: number, align: TextBlock['textAlign']) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      b[bi] = { ...b[bi], textAlign: align };
       return { ...prev, [si]: b };
     });
   }
@@ -1331,8 +1355,26 @@ export default function CarouselEditor({
                                   onChange={e => updateText(selectedIndex, bi, e.target.value)}
                                   rows={block.isMain && block.text.length > 60 ? 4 : 2}
                                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y"
-                                  style={{ color: block.color }}
+                                  style={{ color: block.color, textAlign: block.textAlign }}
                                 />
+
+                                {/* Alinhamento do texto */}
+                                <div className="flex items-center gap-0.5">
+                                  {(['left', 'center', 'right', 'justify'] as const).map(align => (
+                                    <button
+                                      key={align}
+                                      onClick={() => updateTextAlign(selectedIndex, bi, align)}
+                                      className={`flex-1 py-1 rounded text-[10px] font-semibold transition-colors ${
+                                        (block.textAlign || 'left') === align
+                                          ? 'bg-purple-600 text-white'
+                                          : 'bg-secondary text-muted-foreground hover:bg-border active:bg-border'
+                                      }`}
+                                      title={align === 'left' ? 'Esquerda' : align === 'center' ? 'Centralizado' : align === 'right' ? 'Direita' : 'Justificado'}
+                                    >
+                                      {align === 'left' ? '⫷' : align === 'center' ? '⫿' : align === 'right' ? '⫸' : '⫼'}
+                                    </button>
+                                  ))}
+                                </div>
 
                                 {/* Palavras em destaque */}
                                 {(() => {
