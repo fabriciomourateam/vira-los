@@ -667,11 +667,14 @@ function buildDragScript(displayScale: number): string {
     document.body.style.userSelect='';
     document.body.style.webkitUserSelect='';
     if(!dragging) return;
-    var ctIdx=dragging.el.getAttribute('data-ct-idx');
-    var payload={type:'elementMoved',selector:dragging.sel,mode:dragging.mode,ctIdx:ctIdx};
-    if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
-    else{payload.transform=dragging.el.style.transform;}
-    window.parent.postMessage(payload,'*');
+    // Só notifica o pai se o elemento realmente foi movido (não apenas clicado)
+    if(dragMoved){
+      var ctIdx=dragging.el.getAttribute('data-ct-idx');
+      var payload={type:'elementMoved',selector:dragging.sel,mode:dragging.mode,ctIdx:ctIdx};
+      if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
+      else{payload.transform=dragging.el.style.transform;}
+      window.parent.postMessage(payload,'*');
+    }
     dragging=null;
   }
 
