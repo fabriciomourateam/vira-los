@@ -396,12 +396,24 @@ function rebuildSlideOuterHtml(
   }
 
   // Element position overrides from drag
+  // Chave pode ser ".selector@N" (índice específico) ou ".selector" (todos os matches)
   if (overrides) {
-    for (const [sel, styles] of Object.entries(overrides)) {
-      for (const node of Array.from(el.querySelectorAll(sel)) as HTMLElement[]) {
-        if (styles.left !== undefined) { node.style.left = styles.left; if(node.style.right) node.style.right = ''; }
-        if (styles.top !== undefined)  { node.style.top  = styles.top;  if(node.style.bottom) node.style.bottom = ''; }
-        if (styles.right !== undefined)  node.style.right  = styles.right;
+    for (const [key, styles] of Object.entries(overrides)) {
+      const atSign = key.lastIndexOf('@');
+      let targetNodes: HTMLElement[];
+      if (atSign > 0 && /^\d+$/.test(key.slice(atSign + 1))) {
+        // Override indexado: aplica somente ao N-ésimo elemento com esse seletor
+        const baseSel = key.slice(0, atSign);
+        const idx = parseInt(key.slice(atSign + 1), 10);
+        const all = Array.from(el.querySelectorAll(baseSel)) as HTMLElement[];
+        targetNodes = all[idx] !== undefined ? [all[idx]] : [];
+      } else {
+        targetNodes = Array.from(el.querySelectorAll(key)) as HTMLElement[];
+      }
+      for (const node of targetNodes) {
+        if (styles.left  !== undefined) { node.style.left  = styles.left;  if (node.style.right)  node.style.right  = ''; }
+        if (styles.top   !== undefined) { node.style.top   = styles.top;   if (node.style.bottom) node.style.bottom = ''; }
+        if (styles.right  !== undefined) node.style.right  = styles.right;
         if (styles.bottom !== undefined) node.style.bottom = styles.bottom;
         if (styles.transform !== undefined) node.style.transform = styles.transform;
       }
@@ -621,6 +633,9 @@ function buildDragScript(displayScale: number): string {
     var cs=window.getComputedStyle(el);
     if(selected) highlight(selected,false);
     selected=el; highlight(el,true);
+    // Índice do elemento entre todos os que têm o mesmo seletor (para override único)
+    var allWithSel=Array.from(document.querySelectorAll(found.sel));
+    var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
     if(isAbs){
       // Se o elemento usa bottom/right, converte para top/left antes de arrastar
@@ -638,10 +653,10 @@ function buildDragScript(displayScale: number): string {
         el.style.left=origLeft+'px';
       }
       el.style.right=''; el.style.bottom='';
-      dragging={el:el,sel:found.sel,mode:'abs',startX:cx,startY:cy,origLeft:origLeft,origTop:origTop};
+      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'abs',startX:cx,startY:cy,origLeft:origLeft,origTop:origTop};
     } else {
       var tr=getTranslate(el);
-      dragging={el:el,sel:found.sel,mode:'translate',startX:cx,startY:cy,origTx:tr.x,origTy:tr.y};
+      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'translate',startX:cx,startY:cy,origTx:tr.x,origTy:tr.y};
     }
     dragMoved=false;
     window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
@@ -670,7 +685,7 @@ function buildDragScript(displayScale: number): string {
     // Só notifica o pai se o elemento realmente foi movido (não apenas clicado)
     if(dragMoved){
       var ctIdx=dragging.el.getAttribute('data-ct-idx');
-      var payload={type:'elementMoved',selector:dragging.sel,mode:dragging.mode,ctIdx:ctIdx};
+      var payload={type:'elementMoved',selector:dragging.sel,elemIdx:dragging.elemIdx,mode:dragging.mode,ctIdx:ctIdx};
       if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
       else{payload.transform=dragging.el.style.transform;}
       window.parent.postMessage(payload,'*');
@@ -726,7 +741,7 @@ function buildDragScript(displayScale: number): string {
 function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited, selectedIndex }: {
   slideHtml: string;
   head: string;
-  onElementMoved: (data: { selector: string; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => void;
+  onElementMoved: (data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => void;
   onTextEdited: (selector: string, innerHTML: string) => void;
   selectedIndex: number;
 }) {
@@ -1252,7 +1267,7 @@ export default function CarouselEditor({
     });
   }, [selectedIndex]);
 
-  const handleElementMoved = useCallback((data: { selector: string; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => {
+  const handleElementMoved = useCallback((data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => {
     if (selectedIndex === null) return;
 
     // Blocos custom-text NOVOS (injetados) identificam-se por data-ct-idx
@@ -1280,15 +1295,17 @@ export default function CarouselEditor({
       return;
     }
 
-    // Elementos originais do slide: usa elementOverrides como antes
+    // Elementos originais do slide: usa elementOverrides com chave "selector@N"
+    // para evitar colisão quando múltiplos elementos têm o mesmo seletor CSS
     setElementOverrides(prev => {
       if (selectedIndex === null) return prev;
+      const overrideKey = `${data.selector}@${data.elemIdx ?? 0}`;
       const override: ElementOverride = data.mode === 'abs'
         ? { left: data.left, top: data.top }
         : { transform: data.transform };
       return {
         ...prev,
-        [selectedIndex]: { ...(prev[selectedIndex] ?? {}), [data.selector]: override },
+        [selectedIndex]: { ...(prev[selectedIndex] ?? {}), [overrideKey]: override },
       };
     });
   }, [selectedIndex]);
