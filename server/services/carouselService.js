@@ -582,7 +582,9 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       padding: 16px 40px;
       font-size: 26px; font-weight: 700; color: white;
       white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 8px;
     }
+    .clean-content .footer-name-pill .verified-badge svg { width: 26px; height: 26px; display: block; flex-shrink: 0; }
     .clean-content .footer-handle-pill {
       border: 2px solid rgba(255,255,255,0.30);
       border-radius: 60px;
@@ -649,7 +651,9 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       background: white; color: #0f0f0f;
       border-radius: 60px; padding: 28px 72px;
       font-size: 34px; font-weight: 900;
+      display: inline-flex; align-items: center; gap: 10px;
     }
+    .clean-cta .follow-pill .verified-badge svg { width: 30px; height: 30px; display: block; flex-shrink: 0; }
     .clean-cta .cta-footer {
       position: absolute; bottom: 60px; left: 0; right: 0;
       text-align: center; z-index: 2;
@@ -800,7 +804,7 @@ SLIDE 2 — COM FAIXA "ME SIGA" + FOTO NO TOPO (.clean-content.top-photo):
     <div class="content-body">[texto de apoio]</div>
   </div>
   <div class="slide-footer">
-    <span class="footer-name-pill">${displayName}</span>
+    <span class="footer-name-pill">${displayName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
     <span class="footer-handle-pill">${handleAt}</span>
     <span class="footer-swipe">Arrasta para o lado ›</span>
   </div>
@@ -812,7 +816,7 @@ SLIDES 3 a ${numSlides - 1} — CONTEÚDO (.clean-content):
   <div class="content-body">[texto de apoio — até 30 palavras]</div>
   <div class="photo-card"><img src="FOTO_N" alt="${topic}" /></div>
   <div class="slide-footer">
-    <span class="footer-name-pill">${displayName}</span>
+    <span class="footer-name-pill">${displayName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
     <span class="footer-handle-pill">${handleAt}</span>
     <span class="footer-swipe">Arrasta para o lado ›</span>
   </div>

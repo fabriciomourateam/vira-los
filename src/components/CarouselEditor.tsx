@@ -263,7 +263,7 @@ function parseSlides(html: string): { slides: EditableSlide[]; head: string } {
     type: detectSlideType(el),
     bgImageUrl: extractBgImageUrl(el),
     texts: extractTextBlocks(el),
-    hasBadge: !!el.querySelector('.verified-badge'),
+    hasBadge: !!el.querySelector('.profile-name .verified-badge, .footer-name-pill .verified-badge, .follow-pill .verified-badge'),
   }));
   return { slides, head };
 }
@@ -381,13 +381,25 @@ function rebuildSlideOuterHtml(
     el.appendChild(div);
   }
 
-  // Verified badge toggle
+  // Verified badge toggle — aplica em todos os elementos de nome do slide
   if (showBadge !== undefined) {
-    const profileName = el.querySelector('.profile-name');
-    if (profileName) {
-      const existing = profileName.querySelector('.verified-badge');
+    const BADGE_TARGETS = [
+      '.profile-name',
+      '.footer-name-pill',
+      '.follow-pill',
+      '.profile-badge .name',
+    ];
+    for (const sel of BADGE_TARGETS) {
+      const nameEl = el.querySelector(sel) as HTMLElement | null;
+      if (!nameEl) continue;
+      const existing = nameEl.querySelector('.verified-badge');
       if (showBadge && !existing) {
-        profileName.insertAdjacentHTML('beforeend', VERIFIED_BADGE_HTML);
+        // Garante flexbox para o badge ficar alinhado inline
+        const s = nameEl.getAttribute('style') || '';
+        if (!s.includes('display')) {
+          nameEl.setAttribute('style', `${s}; display:inline-flex; align-items:center; gap:6px;`.replace(/^;\s*/, ''));
+        }
+        nameEl.insertAdjacentHTML('beforeend', VERIFIED_BADGE_HTML);
       } else if (!showBadge && existing) {
         existing.remove();
       }
