@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
-  Download, RefreshCw, Loader2, Image, Edit3, LayoutList, Eye, Save,
+  Download, RefreshCw, Loader2, Image, Edit3, LayoutList, Eye, Save, Trash2,
   BookmarkPlus, GripVertical, Plus, Minus, Upload, MousePointer2, Type,
 } from 'lucide-react';
 
@@ -713,6 +713,64 @@ export default function CarouselEditor({
   }
   function handleDragEnd() { setDraggedIdx(null); setDragOverIdx(null); }
 
+  // ── Adicionar / remover slides ──────────────────────────────────────────────
+
+  function addNewSlide() {
+    const bgColor = (config as any)?.bgColor || '#1a1a1a';
+    const primaryColor = (config as any)?.primaryColor || '#B078FF';
+    const newOuterHtml = `<div class="slide-editorial" style="position:relative;width:1080px;height:1350px;background:${bgColor};overflow:hidden;font-family:'Raleway',sans-serif;">
+  <div class="overlay" style="position:absolute;inset:0;z-index:1;background:linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,rgba(0,0,0,0.6) 100%);"></div>
+  <div class="custom-text" style="position:absolute;z-index:10;top:100px;left:60px;right:60px;font-size:36px;color:#ffffff;text-align:center;">Novo slide — edite o texto</div>
+  <div class="slide-footer" style="position:absolute;bottom:30px;left:0;right:0;z-index:10;display:flex;align-items:center;justify-content:center;gap:8px;">
+    <span class="footer-name-pill" style="font-size:12px;color:rgba(255,255,255,0.5);">${(config as any)?.creatorName || ''}</span>
+    <span class="footer-handle-pill" style="font-size:12px;color:${primaryColor};">${(config as any)?.instagramHandle || ''}</span>
+  </div>
+</div>`;
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${newOuterHtml}</body>`, 'text/html');
+    const el = doc.body.firstElementChild!;
+
+    const newSlide: EditableSlide = {
+      index: slides.length,
+      html: el.innerHTML,
+      outerHtml: newOuterHtml,
+      type: 'editorial',
+      bgImageUrl: null,
+      texts: extractTextBlocks(el),
+      hasBadge: false,
+    };
+
+    setSlides(prev => [...prev, newSlide]);
+    setEditedTexts(prev => ({ ...prev, [newSlide.index]: newSlide.texts.map(t => ({ ...t })) }));
+    setSelectedIndex(newSlide.index);
+  }
+
+  function removeSlide(idx: number) {
+    if (slides.length <= 1) return;
+    setSlides(prev => {
+      const next = prev.filter((_, i) => i !== idx);
+      return next.map((s, i) => ({ ...s, index: i }));
+    });
+    // Rebuild editedTexts and editedBgUrls with new indices
+    setEditedTexts(prev => {
+      const arr = slides.map((_, i) => prev[i] ?? []);
+      arr.splice(idx, 1);
+      return Object.fromEntries(arr.map((v, i) => [i, v]));
+    });
+    setEditedBgUrls(prev => {
+      const arr = slides.map((_, i) => prev[i] ?? '');
+      arr.splice(idx, 1);
+      return Object.fromEntries(arr.map((v, i) => [i, v]).filter(([, v]) => v !== ''));
+    });
+    setSelectedIndex(prev => {
+      if (prev === null) return null;
+      if (prev >= slides.length - 1) return Math.max(0, slides.length - 2);
+      if (prev > idx) return prev - 1;
+      return prev;
+    });
+  }
+
   // ── Edição de texto ──────────────────────────────────────────────────────────
 
   function updateText(si: number, bi: number, val: string) {
@@ -1053,8 +1111,21 @@ export default function CarouselEditor({
         {/* ── Mobile: miniaturas horizontais / Desktop: coluna lateral ── */}
         {/* Mobile: horizontal scroll */}
         <div className="md:hidden border-b border-border">
-          <div className="px-3 py-2 border-b border-border">
+          <div className="px-3 py-2 border-b border-border flex items-center justify-between">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Slides</p>
+            <div className="flex items-center gap-1.5">
+              {selectedIndex !== null && slides.length > 1 && (
+                <button onClick={() => removeSlide(selectedIndex)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-red-400 bg-red-500/10 active:bg-red-500/20 transition-colors"
+                  title="Excluir slide selecionado">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+              <button onClick={addNewSlide}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-purple-400 bg-purple-500/10 active:bg-purple-500/20 transition-colors">
+                <Plus className="w-3 h-3" /> Slide
+              </button>
+            </div>
           </div>
           <div className="flex gap-2 overflow-x-auto p-2 scrollbar-hide">
             {slides.map((slide, listIdx) => (
@@ -1071,8 +1142,21 @@ export default function CarouselEditor({
 
         {/* Desktop: coluna lateral */}
         <div className="hidden md:flex w-[148px] shrink-0 border-r border-border flex-col">
-          <div className="px-3 py-2 border-b border-border">
+          <div className="px-3 py-2 border-b border-border space-y-1.5">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Slides</p>
+            <div className="flex gap-1">
+              <button onClick={addNewSlide}
+                className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-lg text-[10px] font-semibold text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 transition-colors">
+                <Plus className="w-3 h-3" /> Novo
+              </button>
+              {selectedIndex !== null && slides.length > 1 && (
+                <button onClick={() => removeSlide(selectedIndex)}
+                  className="px-1.5 py-1 rounded-lg text-[10px] font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors"
+                  title="Excluir slide selecionado">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {slides.map((slide, listIdx) => (
