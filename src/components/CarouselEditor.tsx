@@ -379,9 +379,9 @@ function rebuildSlideOuterHtml(
   if (overrides) {
     for (const [sel, styles] of Object.entries(overrides)) {
       for (const node of Array.from(el.querySelectorAll(sel)) as HTMLElement[]) {
-        if (styles.top !== undefined) node.style.top = styles.top;
-        if (styles.left !== undefined) node.style.left = styles.left;
-        if (styles.right !== undefined) node.style.right = styles.right;
+        if (styles.left !== undefined) { node.style.left = styles.left; node.style.right = ''; }
+        if (styles.top !== undefined)  { node.style.top  = styles.top;  node.style.bottom = ''; }
+        if (styles.right !== undefined)  node.style.right  = styles.right;
         if (styles.bottom !== undefined) node.style.bottom = styles.bottom;
         if (styles.transform !== undefined) node.style.transform = styles.transform;
       }
@@ -627,6 +627,12 @@ function buildDragScript(displayScale: number): string {
     dragging=null;
   }
 
+  // Recebe comandos do pai (ex: mouseup fora do iframe)
+  window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='forceEndDrag') endDrag();
+    if(e.data&&e.data.type==='forceMoveDrag') moveDrag(e.data.cx,e.data.cy);
+  });
+
   // Mouse events
   document.addEventListener('mousedown',function(e){startDrag(e.clientX,e.clientY,e.target);e.preventDefault();});
   document.addEventListener('mousemove',function(e){moveDrag(e.clientX,e.clientY);e.preventDefault();});
@@ -659,6 +665,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
   selectedIndex: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [displayW, setDisplayW] = useState(460);
 
   useEffect(() => {
@@ -679,6 +686,26 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
   const dragScript = buildDragScript(scale);
   const srcDoc = `<!DOCTYPE html><html><head>${head}${dragScript}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
 
+  // Encaminha mouseup/mousemove do pai para o iframe (fix: drag sai do iframe)
+  useEffect(() => {
+    const iw = iframeRef.current?.contentWindow;
+    function sendEnd() { iw?.postMessage({ type: 'forceEndDrag' }, '*'); }
+    function sendMove(e: MouseEvent) {
+      if (!iw) return;
+      const rect = iframeRef.current!.getBoundingClientRect();
+      // Converte coordenadas do pai para coordenadas do iframe (sem scale)
+      const cx = (e.clientX - rect.left) / scale;
+      const cy = (e.clientY - rect.top) / scale;
+      iw.postMessage({ type: 'forceMoveDrag', cx, cy }, '*');
+    }
+    window.addEventListener('mouseup', sendEnd);
+    window.addEventListener('mousemove', sendMove);
+    return () => {
+      window.removeEventListener('mouseup', sendEnd);
+      window.removeEventListener('mousemove', sendMove);
+    };
+  }, [scale, selectedIndex]);
+
   useEffect(() => {
     function handleMsg(e: MessageEvent) {
       if (!e.data) return;
@@ -695,6 +722,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, selectedInde
       <div className="rounded-xl overflow-hidden border-2 border-purple-500/40 shadow-xl mx-auto relative"
         style={{ width: displayW, height: displayH }}>
         <iframe
+          ref={iframeRef}
           key={`${selectedIndex}-${slideHtml.length}`}
           srcDoc={srcDoc}
           sandbox="allow-scripts allow-same-origin"
@@ -1062,6 +1090,26 @@ export default function CarouselEditor({
       });
       return { ...prev, [si]: b };
     });
+  }
+
+  // Insere rodapé de perfil (nome + handle + badge) diretamente no outerHtml do slide
+  function insertProfileFooter(si: number) {
+    const creatorName = (config as any)?.creatorName || 'Fabricio Moura';
+    const handle = (config as any)?.instagramHandle
+      ? `@${(config as any).instagramHandle}` : '@fabriciomourateam';
+    const footerHtml = `<div class="slide-footer" style="position:absolute;bottom:30px;left:0;right:0;z-index:10;display:flex;align-items:center;justify-content:center;gap:12px;padding:0 40px;">
+  <span class="footer-name-pill" style="background:linear-gradient(90deg,#f58529,#dd2a7b 50%,#8134af);border-radius:60px;padding:12px 28px;font-size:22px;font-weight:700;color:white;display:inline-flex;align-items:center;gap:6px;">
+    ${creatorName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:18px;height:18px;display:block;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+  </span>
+  <span class="footer-handle-pill" style="border:2px solid rgba(255,255,255,0.3);border-radius:60px;padding:12px 28px;font-size:22px;font-weight:500;color:rgba(255,255,255,0.88);background:rgba(255,255,255,0.04);">${handle}</span>
+</div>`;
+    setSlides(prev => prev.map((s, i) => {
+      if (i !== si) return s;
+      // evita duplicar se já existe .slide-footer
+      if (s.outerHtml.includes('slide-footer')) return s;
+      const newOuter = s.outerHtml.replace(/<\/div>\s*$/, `\n${footerHtml}\n</div>`);
+      return { ...s, outerHtml: newOuter };
+    }));
   }
 
   function removeTextBlock(si: number, bi: number) {
@@ -1575,13 +1623,24 @@ export default function CarouselEditor({
                         <p className="text-xs text-muted-foreground italic">Nenhum texto editável detectado neste slide.</p>
                       )}
 
-                      {/* Botão adicionar texto */}
-                      <button
-                        onClick={() => addTextBlock(selectedIndex)}
-                        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-purple-500/40 hover:border-purple-500 active:border-purple-500 bg-purple-500/5 hover:bg-purple-500/10 text-purple-400 text-xs font-semibold transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Adicionar caixa de texto
-                      </button>
+                      {/* Botões adicionar */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => addTextBlock(selectedIndex)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-purple-500/40 hover:border-purple-500 bg-purple-500/5 hover:bg-purple-500/10 text-purple-400 text-xs font-semibold transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Caixa de texto
+                        </button>
+                        {!sel?.outerHtml.includes('slide-footer') && (
+                          <button
+                            onClick={() => insertProfileFooter(selectedIndex)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-blue-500/40 hover:border-blue-500 bg-blue-500/5 hover:bg-blue-500/10 text-blue-400 text-xs font-semibold transition-colors"
+                            title="Insere rodapé com nome, @handle e badge verificado"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Rodapé + Badge
+                          </button>
+                        )}
+                      </div>
 
                       {/* Imagem de fundo */}
                       <div className="space-y-2 pt-2 border-t border-border">
