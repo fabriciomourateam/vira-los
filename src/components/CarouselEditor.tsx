@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
-  Download, RefreshCw, Loader2, Image, Edit3, LayoutList, Eye,
+  Download, RefreshCw, Loader2, Image, Edit3, LayoutList, Eye, Save,
   BookmarkPlus, GripVertical, Plus, Minus, Upload, MousePointer2, Type,
 } from 'lucide-react';
 
@@ -884,6 +884,24 @@ export default function CarouselEditor({
     finally { setTemplateLoading(false); }
   }
 
+  // ── Salvar edições (HTML no servidor, sem regerar screenshots) ────────────────
+
+  const [saveLoading, setSaveLoading] = useState(false);
+
+  async function handleSaveEdits() {
+    setSaveLoading(true);
+    try {
+      const res = await fetch(`${API}/api/carousel/save-html`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: rebuildHtml(), folderName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
+      toast.success('Edições salvas!');
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSaveLoading(false); }
+  }
+
   // ── Download HTML ─────────────────────────────────────────────────────────────
 
   function handleDownloadHtml() {
@@ -922,6 +940,12 @@ export default function CarouselEditor({
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
+          <button onClick={handleSaveEdits} disabled={saveLoading}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors"
+            title="Salvar edições no servidor">
+            {saveLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+            Salvar
+          </button>
           <button onClick={handleDownloadHtml}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border active:bg-border text-foreground text-xs font-semibold transition-colors">
             <Download className="w-3 h-3" /> HTML

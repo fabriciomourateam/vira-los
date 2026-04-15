@@ -91,6 +91,22 @@ router.put('/config', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Salvar HTML editado (sem regerar screenshots) ──────────────────────────
+
+router.put('/save-html', (req, res) => {
+  const { html, folderName } = req.body;
+  if (!html || !folderName) return res.status(400).json({ error: 'html e folderName obrigatórios' });
+
+  const folderPath = path.join(OUTPUT_DIR, folderName);
+  if (!fs.existsSync(folderPath)) {
+    fs.mkdirSync(folderPath, { recursive: true });
+  }
+
+  const htmlFilePath = path.join(folderPath, 'carrossel.html');
+  fs.writeFileSync(htmlFilePath, html, 'utf8');
+  res.json({ ok: true });
+});
+
 // ─── Regenerar screenshots a partir de HTML editado ──────────────────────────
 
 router.post('/screenshots', async (req, res) => {
