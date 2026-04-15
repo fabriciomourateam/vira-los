@@ -594,11 +594,12 @@ function buildDragScript(displayScale: number): string {
     selected=el; highlight(el,true);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
     if(isAbs){
-      // Limpa right/bottom para que o elemento mova em vez de esticar
+      // offsetTop/offsetLeft dão a posição visual real independente de top/bottom/right/left
+      var origTop=el.offsetTop, origLeft=el.offsetLeft;
+      // Converte para top+left explícitos e limpa bottom+right (evita esticamento)
+      el.style.top=origTop+'px'; el.style.left=origLeft+'px';
       el.style.right=''; el.style.bottom='';
-      dragging={el:el,sel:found.sel,mode:'abs',startX:cx,startY:cy,
-        origLeft:parseFloat(el.style.left)||parseFloat(cs.left)||0,
-        origTop:parseFloat(el.style.top)||parseFloat(cs.top)||0};
+      dragging={el:el,sel:found.sel,mode:'abs',startX:cx,startY:cy,origLeft:origLeft,origTop:origTop};
     } else {
       var tr=getTranslate(el);
       dragging={el:el,sel:found.sel,mode:'translate',startX:cx,startY:cy,origTx:tr.x,origTy:tr.y};
