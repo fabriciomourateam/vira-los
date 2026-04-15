@@ -750,13 +750,16 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited
   const srcDoc = `<!DOCTYPE html><html><head>${head}${dragScript}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
 
   // Encaminha mouseup/mousemove do pai para o iframe (fix: drag sai do iframe)
+  // Lê iframeRef.current DENTRO das funções para sempre usar o iframe atual
+  // (o iframe remonta quando slideHtml muda, então iw capturado na montagem fica stale)
   useEffect(() => {
-    const iw = iframeRef.current?.contentWindow;
-    function sendEnd() { iw?.postMessage({ type: 'forceEndDrag' }, '*'); }
+    function sendEnd() {
+      iframeRef.current?.contentWindow?.postMessage({ type: 'forceEndDrag' }, '*');
+    }
     function sendMove(e: MouseEvent) {
-      if (!iw) return;
-      const rect = iframeRef.current!.getBoundingClientRect();
-      // Converte coordenadas do pai para coordenadas do iframe (sem scale)
+      const iw = iframeRef.current?.contentWindow;
+      if (!iw || !iframeRef.current) return;
+      const rect = iframeRef.current.getBoundingClientRect();
       const cx = (e.clientX - rect.left) / scale;
       const cy = (e.clientY - rect.top) / scale;
       iw.postMessage({ type: 'forceMoveDrag', cx, cy }, '*');
@@ -767,7 +770,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited
       window.removeEventListener('mouseup', sendEnd);
       window.removeEventListener('mousemove', sendMove);
     };
-  }, [scale, selectedIndex]);
+  }, [scale]);
 
   useEffect(() => {
     function handleMsg(e: MessageEvent) {
