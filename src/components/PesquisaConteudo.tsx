@@ -511,13 +511,25 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>
                   )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  {/* Desktop hover overlay */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex items-center justify-center gap-2">
                     <a href={v.url} target="_blank" rel="noreferrer"
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30">
                       <ExternalLink size={16} />
                     </a>
                     <button onClick={() => saveAsReference(v)}
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Salvar como referência">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  {/* Mobile: always-visible buttons */}
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-5 pb-1.5 px-2 flex justify-center gap-2 sm:hidden">
+                    <a href={v.url} target="_blank" rel="noreferrer"
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40">
+                      <ExternalLink size={16} />
+                    </a>
+                    <button onClick={() => saveAsReference(v)}
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40" title="Salvar como referência">
                       <Plus size={16} />
                     </button>
                   </div>
@@ -636,9 +648,15 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
                 <div className="relative aspect-[9/16] bg-secondary overflow-hidden">
                   {v.cover ? <img src={v.cover} alt={v.title} className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  {/* Desktop hover overlay */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex items-center justify-center gap-2">
                     <a href={v.url} target="_blank" rel="noreferrer" className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30"><ExternalLink size={16} /></a>
                     <button onClick={() => saveAsReference(v)} className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30"><Plus size={16} /></button>
+                  </div>
+                  {/* Mobile: always-visible buttons */}
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-5 pb-1.5 px-2 flex justify-center gap-2 sm:hidden">
+                    <a href={v.url} target="_blank" rel="noreferrer" className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40"><ExternalLink size={16} /></a>
+                    <button onClick={() => saveAsReference(v)} className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40"><Plus size={16} /></button>
                   </div>
                 </div>
                 <div className="p-2">
@@ -741,13 +759,25 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>
                   )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  {/* Desktop hover overlay */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex items-center justify-center gap-2">
                     <a href={v.url} target="_blank" rel="noreferrer"
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30">
                       <ExternalLink size={16} />
                     </a>
                     <button onClick={() => saveAsReference(v)}
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Salvar como referência">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  {/* Mobile: always-visible buttons */}
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-5 pb-1.5 px-2 flex justify-center gap-2 sm:hidden">
+                    <a href={v.url} target="_blank" rel="noreferrer"
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40">
+                      <ExternalLink size={16} />
+                    </a>
+                    <button onClick={() => saveAsReference(v)}
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40" title="Salvar como referência">
                       <Plus size={16} />
                     </button>
                   </div>

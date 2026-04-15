@@ -504,7 +504,7 @@ function TeleprompterOverlay({
           </div>
         </div>
 
-        <div className="grid gap-4 border-b border-white/10 bg-zinc-950 px-4 py-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 border-b border-white/10 bg-zinc-950 px-4 py-3 sm:grid-cols-3">
           <label className="space-y-2">
             <span className="block text-xs font-bold uppercase tracking-[0.2em] text-white/50">Velocidade</span>
             <div className="flex items-center gap-3">

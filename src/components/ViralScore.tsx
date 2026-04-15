@@ -180,14 +180,14 @@ function CriterionCard({
                           className={`flex items-center gap-1 text-xs transition-colors ${
                             applied
                               ? 'text-emerald-500'
-                              : 'opacity-70 hover:opacity-100 hover:text-purple-400'
+                              : 'sm:opacity-70 hover:opacity-100 active:text-purple-400 hover:text-purple-400'
                           }`}
                         >
                           {applied ? <Check size={11} /> : <Plus size={11} />}
                           {applied ? 'Aplicado ✓' : 'Aplicar'}
                         </button>
                       )}
-                      <button onClick={copyRewrite} className="flex items-center gap-1 text-xs opacity-70 hover:opacity-100 transition-opacity">
+                      <button onClick={copyRewrite} className="flex items-center gap-1 text-xs sm:opacity-70 hover:opacity-100 transition-opacity">
                         {copied ? <Check size={11} /> : <Copy size={11} />}
                         {copied ? 'Copiado' : 'Copiar'}
                       </button>

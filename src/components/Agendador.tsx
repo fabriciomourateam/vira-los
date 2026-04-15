@@ -354,9 +354,9 @@ function ContentCard({ item, onSchedule, onDelete }: {
         </div>
         <button
           onClick={() => onDelete(item.id)}
-          className="absolute top-2 right-2 w-6 h-6 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute top-2 right-2 w-7 h-7 bg-black/50 rounded-full flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
         >
-          <Trash2 size={12} className="text-white" />
+          <Trash2 size={13} className="text-white" />
         </button>
       </div>
       {/* Info */}
@@ -662,11 +662,11 @@ function UploadModal({ type, onClose, onSuccess }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 p-4 overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-background rounded-2xl p-6 w-full max-w-md"
+        className="bg-background rounded-2xl p-5 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto"
         style={{ boxShadow: 'var(--shadow-layered)' }}
       >
         <div className="flex items-center justify-between mb-5">
@@ -828,7 +828,7 @@ function ScheduleModal({ item, platforms, onClose, onSuccess }: {
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-background rounded-2xl p-6 w-full max-w-md my-4"
+        className="bg-background rounded-2xl p-5 sm:p-6 w-full max-w-md my-4 max-h-[90vh] overflow-y-auto"
         style={{ boxShadow: 'var(--shadow-layered)' }}
       >
         <div className="flex items-center justify-between mb-5">
@@ -1056,7 +1056,7 @@ function PlatformsModal({ platforms, onClose, onRefresh }: {
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-background rounded-2xl p-6 w-full max-w-md my-4"
+        className="bg-background rounded-2xl p-5 sm:p-6 w-full max-w-md my-4 max-h-[90vh] overflow-y-auto"
         style={{ boxShadow: 'var(--shadow-layered)' }}
       >
         <div className="flex items-center justify-between mb-5">
