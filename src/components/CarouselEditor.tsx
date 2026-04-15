@@ -125,6 +125,7 @@ const TEXT_SELECTORS = [
   { selector: '.profile-handle', isMain: false },
   { selector: '.follow-pill', isMain: false },
   { selector: '.swipe-hint', isMain: false },
+  { selector: '.custom-text', isMain: true },
 ];
 
 // Converte <br> → \n para exibir corretamente no textarea
@@ -313,6 +314,22 @@ function rebuildSlideOuterHtml(
     }
   }
 
+  // Inject new custom-text blocks that don't exist in original HTML
+  const existingCustomTexts = el.querySelectorAll('.custom-text').length;
+  const customTextsInEdited = editedTexts.filter(tb => tb.className.startsWith('custom-text'));
+  for (let i = existingCustomTexts; i < customTextsInEdited.length; i++) {
+    const ct = customTextsInEdited[i];
+    const div = doc.createElement('div');
+    div.className = 'custom-text';
+    div.setAttribute('style',
+      `position:absolute; z-index:10; bottom:${120 + (i - existingCustomTexts) * 60}px; left:40px; right:40px;` +
+      (ct.fontSize ? ` font-size:${ct.fontSize}px;` : ' font-size:24px;') +
+      (ct.color ? ` color:${ct.color};` : ' color:#ffffff;')
+    );
+    div.innerHTML = textToHtml(ct.text, ct.highlights);
+    el.appendChild(div);
+  }
+
   // Verified badge toggle
   if (showBadge !== undefined) {
     const profileName = el.querySelector('.profile-name');
@@ -437,6 +454,8 @@ const DRAGGABLE_SELECTORS = [
   '.title', '.subtitle', '.subtitle-accent', '.narrative-text',
   '.content-title', '.content-body', '.cta-title',
   '.follow-pill', '.profile-name', '.profile-handle',
+  // Custom text blocks
+  '.custom-text',
 ];
 
 function buildDragScript(displayScale: number): string {
@@ -739,6 +758,28 @@ export default function CarouselEditor({
       const hls = [...(b[bi].highlights ?? [])];
       hls[hi] = { ...hls[hi], word };
       b[bi] = { ...b[bi], highlights: hls };
+      return { ...prev, [si]: b };
+    });
+  }
+
+  function addTextBlock(si: number) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      b.push({
+        className: 'custom-text',
+        text: 'Novo texto',
+        isMain: true,
+        fontSize: 24,
+        color: '#ffffff',
+      });
+      return { ...prev, [si]: b };
+    });
+  }
+
+  function removeTextBlock(si: number, bi: number) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      b.splice(bi, 1);
       return { ...prev, [si]: b };
     });
   }
@@ -1113,10 +1154,22 @@ export default function CarouselEditor({
                             return (
                               <div key={`${block.className}-${bi}`} className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <label className="text-xs font-medium text-muted-foreground capitalize">
-                                    .{block.className.split(' ')[0]}
+                                  <label className="text-xs font-medium text-muted-foreground capitalize flex items-center gap-1">
+                                    {block.className.startsWith('custom-text') ? (
+                                      <span className="text-purple-400">Texto adicionado</span>
+                                    ) : (
+                                      <>.{block.className.split(' ')[0]}</>
+                                    )}
                                   </label>
                                   <div className="flex items-center gap-1.5">
+                                    {/* Remove custom text block */}
+                                    {block.className.startsWith('custom-text') && (
+                                      <button onClick={() => removeTextBlock(selectedIndex, bi)}
+                                        className="w-5 h-5 rounded flex items-center justify-center bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors"
+                                        title="Remover este texto">
+                                        <Minus className="w-2.5 h-2.5" />
+                                      </button>
+                                    )}
                                     {/* Color picker */}
                                     <div className="relative flex items-center gap-1" title="Cor do texto">
                                       <label className="text-[10px] text-muted-foreground">Cor</label>
@@ -1222,6 +1275,14 @@ export default function CarouselEditor({
                       ) : (
                         <p className="text-xs text-muted-foreground italic">Nenhum texto editável detectado neste slide.</p>
                       )}
+
+                      {/* Botão adicionar texto */}
+                      <button
+                        onClick={() => addTextBlock(selectedIndex)}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-purple-500/40 hover:border-purple-500 active:border-purple-500 bg-purple-500/5 hover:bg-purple-500/10 text-purple-400 text-xs font-semibold transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Adicionar caixa de texto
+                      </button>
 
                       {/* Imagem de fundo */}
                       <div className="space-y-2 pt-2 border-t border-border">
