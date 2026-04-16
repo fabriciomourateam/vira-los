@@ -58,7 +58,7 @@ router.post('/generate', async (req, res) => {
   const {
     topic, niche, primaryColor, accentColor, bgColor,
     fontFamily, instagramHandle, creatorName, profilePhotoUrl,
-    numSlides, contentTone, roteiro, layoutStyle,
+    numSlides, contentTone, dominantEmotion, roteiro, layoutStyle,
     templateHtml,
   } = req.body;
 
@@ -70,7 +70,7 @@ router.post('/generate', async (req, res) => {
     const result = await generateCarousel({
       topic, niche, primaryColor, accentColor, bgColor,
       fontFamily, instagramHandle, creatorName, profilePhotoUrl,
-      numSlides, contentTone, roteiro, layoutStyle,
+      numSlides, contentTone, dominantEmotion, roteiro, layoutStyle,
       templateHtml,
     });
     res.json(result);

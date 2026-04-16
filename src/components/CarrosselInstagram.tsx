@@ -25,6 +25,7 @@ interface CarouselConfig {
   profilePhotoUrl: string;
   numSlides: number;
   contentTone: string;
+  dominantEmotion: string;
   roteiro: string;
   layoutStyle: 'editorial' | 'clean';
 }
@@ -161,6 +162,39 @@ const TONE_OPTIONS = [
   { value: 'informativo',    label: 'Informativo' },
 ];
 
+const EMOTION_OPTIONS = [
+  {
+    value: 'medo de perder',
+    label: 'Medo de perder',
+    badge: '🔥 Mais viral',
+    description: 'Use quando o tema é sobre erros que custam resultado, tempo desperdiçado ou armadilhas comuns. A audiência já sabe que tem um problema — "você está perdendo resultado por causa disso" para o scroll melhor que qualquer promessa positiva.',
+  },
+  {
+    value: 'curiosidade',
+    label: 'Curiosidade',
+    badge: 'Top de funil',
+    description: 'Use para verdades contraintuitivas, "o que poucos sabem", a ciência por trás de algo. Funciona melhor para atrair audiência nova que ainda não conhece você.',
+  },
+  {
+    value: 'urgência',
+    label: 'Urgência',
+    badge: 'Timing',
+    description: 'Use quando há uma janela de oportunidade, timing específico (fase do ciclo, período de bulking/cutting) ou prazo real. Força ação imediata.',
+  },
+  {
+    value: 'surpresa',
+    label: 'Surpresa',
+    badge: 'Mito-busting',
+    description: 'Use para quebrar mitos, revelar o oposto do que todo mundo faz. Ótimo para compartilhamento — as pessoas adoram compartilhar o que contradiz o senso comum.',
+  },
+  {
+    value: 'aspiração',
+    label: 'Aspiração',
+    badge: 'Transformação',
+    description: 'Use para mostrar transformação possível, resultado real com contexto, antes/depois com substância. Ideal quando você quer inspirar e não assustar.',
+  },
+];
+
 const FONT_OPTIONS = [
   'Raleway', 'Montserrat', 'Poppins', 'Inter', 'Oswald', 'Playfair Display',
 ];
@@ -177,6 +211,7 @@ const DEFAULT_CONFIG: CarouselConfig = {
   profilePhotoUrl: '',
   numSlides: 7,
   contentTone: 'investigativo',
+  dominantEmotion: 'medo de perder',
   roteiro: '',
   layoutStyle: 'editorial',
 };
@@ -796,8 +831,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           </div>
         </div>
 
-        {/* Fonte + Tom + Slides */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Fonte + Tom */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
               <Type className="w-3.5 h-3.5" /> Fonte
@@ -823,20 +858,62 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
               {TONE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
+        </div>
 
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
-              <Layers className="w-3.5 h-3.5" /> Nº de Slides
-            </label>
-            <div className="flex items-center gap-2 mt-1">
-              <input
-                type="range" min={5} max={10}
-                value={config.numSlides}
-                onChange={e => set('numSlides', Number(e.target.value))}
-                className="flex-1 accent-purple-500"
-              />
-              <span className="text-sm font-bold w-5 text-center text-foreground">{config.numSlides}</span>
-            </div>
+        {/* Emoção Dominante */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="w-3.5 h-3.5" /> Emoção Dominante
+            <span className="normal-case font-normal text-[10px] ml-1">(define o gatilho emocional de todos os slides)</span>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+            {EMOTION_OPTIONS.map(em => (
+              <button
+                key={em.value}
+                type="button"
+                onClick={() => set('dominantEmotion', em.value)}
+                className={`relative flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                  config.dominantEmotion === em.value
+                    ? 'border-purple-500 bg-purple-500/15 shadow-sm shadow-purple-500/20'
+                    : 'border-border bg-background hover:border-purple-400/50 hover:bg-purple-500/5'
+                }`}
+              >
+                {em.value === 'medo de perder' && (
+                  <span className="absolute -top-2 -right-1 text-[9px] font-bold bg-orange-500 text-white px-1.5 py-0.5 rounded-full leading-none">
+                    {em.badge}
+                  </span>
+                )}
+                <span className={`text-xs font-semibold ${config.dominantEmotion === em.value ? 'text-purple-300' : 'text-foreground'}`}>
+                  {em.label}
+                </span>
+              </button>
+            ))}
+          </div>
+          {/* Descrição da emoção selecionada */}
+          {(() => {
+            const selected = EMOTION_OPTIONS.find(e => e.value === config.dominantEmotion);
+            return selected ? (
+              <div className="mt-2 flex items-start gap-2 rounded-lg bg-purple-500/8 border border-purple-500/20 px-3 py-2">
+                <span className="text-purple-400 mt-0.5 shrink-0">→</span>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{selected.description}</p>
+              </div>
+            ) : null;
+          })()}
+        </div>
+
+        {/* Nº de Slides */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Layers className="w-3.5 h-3.5" /> Nº de Slides
+          </label>
+          <div className="flex items-center gap-2 mt-1">
+            <input
+              type="range" min={5} max={10}
+              value={config.numSlides}
+              onChange={e => set('numSlides', Number(e.target.value))}
+              className="flex-1 accent-purple-500"
+            />
+            <span className="text-sm font-bold w-5 text-center text-foreground">{config.numSlides}</span>
           </div>
         </div>
 

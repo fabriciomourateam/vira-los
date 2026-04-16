@@ -375,7 +375,7 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
 // ─── Passo 3: Prompt Claude para gerar o HTML ─────────────────────────────────
 
 function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fontFamily,
-  instagramHandle, profilePhotoUrl, numSlides, contentTone, redditTrends, unsplashImages, roteiro }) {
+  instagramHandle, profilePhotoUrl, numSlides, contentTone, dominantEmotion, redditTrends, unsplashImages, roteiro }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
@@ -427,39 +427,70 @@ Footer direito: número N/${totalContent} — APENAS slides 2 a ${numSlides - 1}
 A CAPA (slide 1) e o CTA (slide ${numSlides}) NÃO têm número no rodapé direito
 
 ━━━ ESTRUTURA DOS SLIDES ━━━
+Emoção dominante a manter do início ao fim: ${dominantEmotion.toUpperCase()}
+Máximo 40 palavras por slide de conteúdo.
 
-SLIDE 1 — CAPA (.slide):
+SLIDE 1 — HOOK (.slide — capa):
 - <div class="slide-bg"> com foto Unsplash ou gradiente como fundo
 - <div class="slide-overlay">
 - .top-header com os 3 elementos acima
 - .cover-branding: SVG IG + "${handleAt}" centralizados
-- .slide-content com .title (CAIXA ALTA, 1-2 palavras em <span class="highlight">)
-- .subtitle explicando o tema
+- .slide-content com .title (CAIXA ALTA): as primeiras palavras param o scroll — use número específico, promessa clara ou dor real
+- .subtitle: reforça o hook sem resolver — deixa o leitor com vontade de continuar
 - .footer SEM número de página
+- Proibido: abertura genérica, frase motivacional, pergunta retórica fraca
 
-SLIDES 2 a ${numSlides - 1} — CONTEÚDO (.slide-editorial):
-- Use as 4 variantes distribuídas (NÃO coloque todas as fotos na mesma posição):
+SLIDE 2 — QUEBRA DE EXPECTATIVA (.slide-editorial):
+- .top-header
+- .editorial-content: mostre que o problema real não é o que parece — contradiga a crença mais comum do nicho
+- .narrative-text (38px): gera a sensação "espera, não é isso que eu sempre ouvi?"
+- .narrative-text.secondary (28px): termine com frase que cria lacuna — o leitor precisa ir para o próximo slide
+- .footer com número 1/${totalContent}
+
+SLIDES 3-4 — AMPLIFICAÇÃO (.slide-editorial):
+- Use variantes de foto (A, B ou C) para variar o visual:
   • Variante A (foto no meio): texto grande → foto → texto menor
   • Variante B (foto na base): texto grande → texto médio → foto
   • Variante C (foto no topo): foto → texto grande → texto menor
-  • Variante D (sem foto, .slide-editorial.accent-bg): use em 1-2 slides para impacto máximo
-- .top-header em todos
-- .editorial-content com .narrative-text (principal 38px) e .narrative-text.secondary (28px)
-- Palavras-chave: <span class="highlight"> (${primaryColor}) ou <span class="highlight-green"> (verde)
-- Frases importantes: <strong>
-- Preencher TODO o espaço — sem áreas vazias grandes
-${customScript
-  ? '- Use o texto EXATO do SCRIPT OBRIGATÓRIO acima — cada "SLIDE N" do script vira um slide de conteúdo. Não invente nem altere o texto.'
-  : '- Máximo 30 palavras por slide. Capitalize natural, SEM CAIXA ALTA nos internos'}
-- .footer com número de página N/${totalContent} (começando em 1/${totalContent} no slide 2)
+- .narrative-text: descreva o comportamento incoerente que a maioria tem — identificação direta (o leitor pensa "isso sou eu")
+- .narrative-text.secondary: inclua uma consequência real e específica de continuar assim
+- Palavras-chave: <span class="highlight"> (${primaryColor}) ou <span class="highlight-green">
+- .footer com número correspondente
+
+SLIDES 5-6 — REVELAÇÃO DA VERDADE (.slide-editorial):
+- .narrative-text: entregue o insight central — uma frase forte que reframe tudo que veio antes
+- .narrative-text.secondary: metáfora simples e visual que qualquer pessoa entende em 3 segundos
+- Use Variante D (.slide-editorial.accent-bg sem foto) em um desses slides para impacto máximo
+- .footer com número correspondente
+
+SLIDE 7 — CONSEQUÊNCIA DE CONTINUAR NO ERRO (.slide-editorial):
+- .narrative-text: mostre o custo de ignorar o que foi revelado — seja específico, não genérico
+- Use dados, prazo ou comparação concreta
+- .footer com número correspondente
+
+SLIDE 8 — FRASE FINAL DE IMPACTO (.slide-editorial.accent-bg):
+- .narrative-text: uma única ideia, curta, que sintetize a emoção dominante (${dominantEmotion})
+- Sem explicação. Sem suavização. Sem clichê
+- Use Variante D para máximo impacto visual
+- .footer com número correspondente
 
 SLIDE ${numSlides} — CTA (.slide):
 - Foto de fundo + overlay
 - .top-header
-- .title com "SALVE ESTE POST", "COMPARTILHE" etc., palavras em .highlight
-- Ícones SVG inline de salvar (bookmark), enviar (paper plane) e curtir (heart)
+- .title: call-to-action diretamente atrelado ao tema — peça ação concreta e específica
+  Exemplo: "Comenta [palavra-chave do tema] aqui embaixo se faz sentido pra você" + palavras em .highlight
 - Box destacado com "SIGA ${handleAt}" em #D9D353
 - .footer com número ${numSlides - 1}/${totalContent}
+
+REGRAS DE ESCRITA (obrigatórias):
+- Linguagem direta, como alguém falando com um amigo inteligente
+- Sem travessão no meio das frases
+- Sem clichês ou frases que poderiam estar em qualquer post de qualquer nicho
+- Cada slide entrega um insight novo, nunca repete o anterior
+- Tom provocador e inteligente, nunca agressivo ou panfletário
+${roteiro && roteiro.trim()
+  ? '- Use o ROTEIRO DO CRIADOR acima como conteúdo — distribua pela estrutura acima mantendo a emoção dominante. Não invente nem altere o texto.'
+  : '- Capitalize natural, SEM CAIXA ALTA nos slides internos (exceto palavras de impacto).'}
 
 ━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
 ${cssTemplate}
@@ -664,7 +695,7 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
 
 // ─── Prompt baseado em template HTML salvo ────────────────────────────────────
 
-function buildTemplateHTMLPrompt({ templateHtml, topic, niche, instagramHandle, creatorName, contentTone, unsplashImages, roteiro, numSlides }) {
+function buildTemplateHTMLPrompt({ templateHtml, topic, niche, instagramHandle, creatorName, contentTone, dominantEmotion, unsplashImages, roteiro, numSlides }) {
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
   const displayName = creatorName
@@ -692,8 +723,13 @@ function buildTemplateHTMLPrompt({ templateHtml, topic, niche, instagramHandle, 
 Tema: "${topic}"
 Nicho: ${niche}
 Tom: ${contentTone}
+Emoção dominante: ${dominantEmotion || 'medo de perder'}
 Instagram: ${handleAt} | Nome: ${displayName}
 ${roteiroSection}
+
+Progressão de conteúdo obrigatória (emoção dominante: ${(dominantEmotion || 'medo de perder').toUpperCase()}):
+Slide 1 = HOOK (para o scroll, número/promessa/dor real) → Slide 2 = QUEBRA DE EXPECTATIVA (contradiz crença comum, lacuna) → Slides 3-4 = AMPLIFICAÇÃO (identificação + consequência) → Slides 5-6 = REVELAÇÃO (insight + metáfora) → Slide 7 = CONSEQUÊNCIA (custo real e específico) → Slide 8 = FRASE FINAL (curta, sem suavização) → Último slide = CTA (ação concreta atrelada ao tema).
+Linguagem direta, sem travessão no meio das frases, sem clichês, máximo 40 palavras por slide.
 
 ━━━ O QUE VOCÊ DEVE MANTER IDÊNTICO (NÃO ALTERE) ━━━
 1. O bloco <style>...</style> INTEIRO — copie caractere por caractere
@@ -730,7 +766,7 @@ ${cleanedHtml}`;
 // ─── Prompt HTML layout "Clean" ───────────────────────────────────────────────
 
 function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
-  instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, unsplashImages, roteiro }) {
+  instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
@@ -759,6 +795,7 @@ function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
 Tema: "${topic}"
 Nicho: ${niche}
 Tom: ${contentTone}
+Emoção dominante: ${dominantEmotion}
 Instagram: ${handleAt}
 Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
 ${imagesSection}
@@ -768,9 +805,21 @@ ${roteiroSection}
 - Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
 - NÃO use markdown, code fences, comentários ou qualquer texto fora do HTML
 - Use EXATAMENTE as classes CSS do template abaixo
-- Máximo 35 palavras por slide de conteúdo — menos é mais
+- Máximo 40 palavras por slide de conteúdo
 
-━━━ ESTRUTURA OBRIGATÓRIA ━━━
+━━━ ESTRUTURA DE CONTEÚDO (siga esta progressão — emoção dominante: ${dominantEmotion.toUpperCase()}) ━━━
+SLIDE 1 — HOOK: as primeiras palavras param o scroll — número específico, promessa clara ou dor real. Proibido: abertura genérica ou motivacional.
+SLIDE 2 — QUEBRA DE EXPECTATIVA: contradiga a crença mais comum do nicho. Termine com frase que cria lacuna.
+SLIDES 3-4 — AMPLIFICAÇÃO: comportamento incoerente que a maioria tem (o leitor pensa "isso sou eu") + consequência real de continuar assim.
+SLIDES 5-6 — REVELAÇÃO: insight central que reframe tudo + metáfora simples e visual.
+SLIDE 7 — CONSEQUÊNCIA: custo real e específico de ignorar a revelação — dados, prazo ou comparação concreta.
+SLIDE 8 — FRASE FINAL: uma única ideia curta que sintetize a emoção dominante. Sem explicação. Sem suavização.
+SLIDE ${numSlides} — CTA: ação concreta e específica atrelada ao tema (comentar palavra-chave + seguir).
+${roteiro && roteiro.trim()
+  ? 'Distribuir o ROTEIRO DO CRIADOR por essa estrutura mantendo a emoção dominante. Não inventar nem alterar o texto.'
+  : 'Linguagem direta, sem travessão no meio das frases, sem clichês, cada slide com insight novo.'}
+
+━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
 
 SLIDE 1 — CAPA (.clean-cover):
 <div class="clean-cover">
@@ -999,6 +1048,7 @@ async function generateCarousel(config) {
     profilePhotoUrl = '',
     numSlides = 7,
     contentTone = 'investigativo',
+    dominantEmotion = 'medo de perder',
     roteiro = '',
     layoutStyle = 'editorial',
     templateHtml = '',   // HTML de modelo salvo para usar como base de layout
@@ -1040,19 +1090,19 @@ async function generateCarousel(config) {
     htmlPrompt = buildTemplateHTMLPrompt({
       templateHtml: templateHtml.trim(),
       topic: topic.trim(), niche, instagramHandle, creatorName,
-      contentTone, roteiro, unsplashImages, numSlides: slidesCount,
+      contentTone, dominantEmotion, roteiro, unsplashImages, numSlides: slidesCount,
     });
   } else if (layoutStyle === 'clean') {
     htmlPrompt = buildCleanHTMLPrompt({
       topic: topic.trim(), niche, primaryColor, fontFamily,
-      instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
-      unsplashImages,
+      instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
+      contentTone, dominantEmotion, roteiro, unsplashImages,
     });
   } else {
     htmlPrompt = buildHTMLPrompt({
       topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
-      fontFamily, instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount, contentTone, roteiro,
-      redditTrends, unsplashImages,
+      fontFamily, instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
+      contentTone, dominantEmotion, roteiro, redditTrends, unsplashImages,
     });
   }
 
