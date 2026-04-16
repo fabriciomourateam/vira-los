@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const multer = require('multer');
-const { generateCarousel, takeScreenshots, OUTPUT_DIR } = require('../services/carouselService');
+const { generateCarousel, takeScreenshots, OUTPUT_DIR, regenerateSlide } = require('../services/carouselService');
 const db = require('../db/database');
 
 const router = express.Router();
@@ -222,6 +222,51 @@ router.get('/check', async (req, res) => {
   }
 
   res.json({ vars, unsplash: { ok: unsplashOk, error: unsplashError } });
+});
+
+// ─── Busca Unsplash inline ────────────────────────────────────────────────────
+
+router.get('/unsplash-search', async (req, res) => {
+  const { q, page = '1' } = req.query;
+  if (!q) return res.status(400).json({ error: 'q obrigatório' });
+  if (!process.env.UNSPLASH_ACCESS_KEY) return res.status(503).json({ error: 'UNSPLASH_ACCESS_KEY não configurada' });
+  try {
+    const r = await axios.get('https://api.unsplash.com/search/photos', {
+      params: { query: q, per_page: 9, page: parseInt(page) || 1, orientation: 'portrait' },
+      headers: { Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}` },
+      timeout: 8000,
+    });
+    res.json({
+      results: r.data.results.map(p => ({
+        id: p.id,
+        url: p.urls.regular,
+        thumb: p.urls.thumb,
+        alt: p.alt_description || p.description || String(q),
+        author: p.user.name,
+      })),
+      totalPages: r.data.total_pages,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.errors?.[0] || err.message });
+  }
+});
+
+// ─── Regenerar slide individual ───────────────────────────────────────────────
+
+router.post('/regenerate-slide', async (req, res) => {
+  const { slideIndex, numSlides, slideHtml, topic, instructions, niche,
+          contentTone, dominantEmotion, instagramHandle, userHint } = req.body;
+  if (!slideHtml || !topic) return res.status(400).json({ error: 'slideHtml e topic obrigatórios' });
+  try {
+    const html = await regenerateSlide({
+      slideIndex, numSlides, slideHtml, topic, instructions, niche,
+      contentTone, dominantEmotion, instagramHandle, userHint,
+    });
+    res.json({ slideHtml: html });
+  } catch (err) {
+    console.error('[Carousel/RegenSlide]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Listar arquivos de um carrossel ──────────────────────────────────────────

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import {
   Download, RefreshCw, Loader2, Image, Edit3, LayoutList, Eye, Save, Trash2,
   BookmarkPlus, GripVertical, Plus, Minus, Upload, MousePointer2, Type,
+  Undo2, Redo2, Search, Copy, Sparkles,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -1041,6 +1042,38 @@ export default function CarouselEditor({
   // Ref para evitar loop: ignora html prop quando ele veio de onHtmlUpdated
   const lastEmittedHtml = useRef<string>('');
 
+  // ── Undo / Redo ───────────────────────────────────────────────────────────────
+  type Snapshot = {
+    editedTexts: Record<number, TextBlock[]>;
+    editedBgUrls: Record<number, string>;
+    elementOverrides: Record<number, Record<string, ElementOverride>>;
+    overlayConfigs: Record<number, OverlayConfig>;
+    bgImageConfigs: Record<number, BgImageConfig>;
+    followBannerConfigs: Record<number, FollowBannerConfig>;
+    badgeVisible: Record<number, boolean>;
+    slides: EditableSlide[];
+  };
+  const historyRef = useRef<Snapshot[]>([]);
+  const historyIndexRef = useRef(-1);
+  const isRestoringRef = useRef(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // ── Auto-save / draft restore ─────────────────────────────────────────────────
+  const hasRestoredDraftRef = useRef(false);
+
+  // ── Regenerar slide individual ────────────────────────────────────────────────
+  const [regenLoading, setRegenLoading] = useState(false);
+  const [regenHint, setRegenHint] = useState('');
+  const [showRegenInput, setShowRegenInput] = useState(false);
+
+  // ── Unsplash inline search ────────────────────────────────────────────────────
+  const [imgSearch, setImgSearch] = useState('');
+  const [imgSearchResults, setImgSearchResults] = useState<{id:string;url:string;thumb:string;alt:string}[]>([]);
+  const [imgSearchLoading, setImgSearchLoading] = useState(false);
+  const [imgSearchPage, setImgSearchPage] = useState(1);
+  const [imgTarget, setImgTarget] = useState<'bg' | number>('bg');
+
   // Tecla Delete/Backspace deleta o bloco de texto focado
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -1057,6 +1090,71 @@ export default function CarouselEditor({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [focusedBlockIdx, selectedIndex]);
+
+  // ── Histórico: snapshot a cada mudança (debounce 400ms) ──────────────────────
+
+  useEffect(() => {
+    if (isRestoringRef.current || slides.length === 0) return;
+    const timer = setTimeout(() => {
+      const snap: Snapshot = { editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, slides };
+      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+      historyRef.current.push(snap);
+      if (historyRef.current.length > 20) historyRef.current.shift();
+      else historyIndexRef.current++;
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, slides]); // eslint-disable-line
+
+  // ── Undo / Redo: Ctrl+Z / Ctrl+Y ─────────────────────────────────────────────
+
+  useEffect(() => {
+    function onUndoRedo(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement).isContentEditable) return;
+      const undo = (e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey;
+      const redo = (e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey));
+      if (!undo && !redo) return;
+      e.preventDefault();
+      if (undo && historyIndexRef.current <= 0) return;
+      if (redo && historyIndexRef.current >= historyRef.current.length - 1) return;
+      historyIndexRef.current += undo ? -1 : 1;
+      const snap = historyRef.current[historyIndexRef.current];
+      if (!snap) return;
+      isRestoringRef.current = true;
+      setEditedTexts(snap.editedTexts);
+      setEditedBgUrls(snap.editedBgUrls);
+      setElementOverrides(snap.elementOverrides);
+      setOverlayConfigs(snap.overlayConfigs);
+      setBgImageConfigs(snap.bgImageConfigs);
+      setFollowBannerConfigs(snap.followBannerConfigs);
+      setBadgeVisible(snap.badgeVisible);
+      setSlides(snap.slides);
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+      requestAnimationFrame(() => { isRestoringRef.current = false; });
+      toast.success(undo ? 'Desfeito' : 'Refeito', { duration: 1000 });
+    }
+    window.addEventListener('keydown', onUndoRedo);
+    return () => window.removeEventListener('keydown', onUndoRedo);
+  }, []); // eslint-disable-line
+
+  // ── Auto-save para localStorage ───────────────────────────────────────────────
+
+  const DRAFT_KEY = `carousel-editor-draft-${folderName}`;
+
+  useEffect(() => {
+    if (slides.length === 0) return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
+          editedTexts, editedBgUrls, elementOverrides, overlayConfigs,
+          bgImageConfigs, followBannerConfigs, badgeVisible, savedAt: Date.now(),
+        }));
+      } catch (_) { /* quota exceeded — ignora */ }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, slides]); // eslint-disable-line
 
   // ── Parse inicial ────────────────────────────────────────────────────────────
 
@@ -1132,7 +1230,33 @@ export default function CarouselEditor({
     });
 
     setSelectedIndex(prev => prev !== null && prev < parsed.length ? prev : (parsed.length > 0 ? 0 : null));
-  }, [html]);
+
+    // Restaura rascunho do localStorage (somente no primeiro mount)
+    if (!hasRestoredDraftRef.current) {
+      hasRestoredDraftRef.current = true;
+      try {
+        const saved = localStorage.getItem(`carousel-editor-draft-${folderName}`);
+        if (saved) {
+          const draft = JSON.parse(saved);
+          const ageMs = Date.now() - (draft.savedAt || 0);
+          if (ageMs < 7 * 24 * 60 * 60 * 1000) { // 7 dias
+            setTimeout(() => {
+              isRestoringRef.current = true;
+              if (draft.editedTexts)       setEditedTexts(draft.editedTexts);
+              if (draft.editedBgUrls)      setEditedBgUrls(draft.editedBgUrls);
+              if (draft.elementOverrides)  setElementOverrides(draft.elementOverrides);
+              if (draft.overlayConfigs)    setOverlayConfigs(draft.overlayConfigs);
+              if (draft.bgImageConfigs)    setBgImageConfigs(draft.bgImageConfigs);
+              if (draft.followBannerConfigs) setFollowBannerConfigs(draft.followBannerConfigs);
+              if (draft.badgeVisible)      setBadgeVisible(draft.badgeVisible);
+              requestAnimationFrame(() => { isRestoringRef.current = false; });
+              toast.success('Rascunho restaurado', { duration: 3000 });
+            }, 150);
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
+  }, [html]); // eslint-disable-line
 
   // ── Drag-and-drop de slides ──────────────────────────────────────────────────
 
@@ -1154,6 +1278,125 @@ export default function CarouselEditor({
       return Object.fromEntries(arr.map((v, i) => [i, v]).filter(([, v]) => v !== ''));
     });
     setSelectedIndex(to);
+  }
+
+  // ── Duplicar slide ────────────────────────────────────────────────────────────
+
+  function duplicateSlide(idx: number) {
+    function shiftUp<T>(rec: Record<number, T>): Record<number, T> {
+      const out: Record<number, T> = {};
+      for (const [k, v] of Object.entries(rec)) {
+        const ki = parseInt(k);
+        out[ki <= idx ? ki : ki + 1] = v as T;
+      }
+      if (rec[idx] !== undefined) out[idx + 1] = rec[idx];
+      return out;
+    }
+    setSlides(prev => {
+      const next = [...prev];
+      next.splice(idx + 1, 0, { ...prev[idx] });
+      return next.map((s, i) => ({ ...s, index: i }));
+    });
+    setEditedTexts(prev => shiftUp(prev));
+    setEditedBgUrls(prev => shiftUp(prev));
+    setElementOverrides(prev => shiftUp(prev));
+    setOverlayConfigs(prev => shiftUp(prev));
+    setBgImageConfigs(prev => shiftUp(prev));
+    setFollowBannerConfigs(prev => shiftUp(prev));
+    setBadgeVisible(prev => shiftUp(prev));
+    setSelectedIndex(idx + 1);
+    toast.success('Slide duplicado');
+  }
+
+  // ── Unsplash inline search ────────────────────────────────────────────────────
+
+  async function searchUnsplash(q: string, page = 1) {
+    if (!q.trim()) return;
+    setImgSearchLoading(true);
+    try {
+      const r = await fetch(`${API}/api/carousel/unsplash-search?q=${encodeURIComponent(q)}&page=${page}`);
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      if (page === 1) setImgSearchResults(data.results ?? []);
+      else setImgSearchResults(prev => [...prev, ...(data.results ?? [])]);
+      setImgSearchPage(page);
+    } catch (err: unknown) {
+      toast.error('Busca falhou: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setImgSearchLoading(false);
+    }
+  }
+
+  function applyImageUrl(url: string) {
+    if (selectedIndex === null) return;
+    if (imgTarget === 'bg') {
+      updateBgUrl(selectedIndex, url);
+    } else {
+      const imgIdx = imgTarget as number;
+      setSlides(prev => prev.map((s, i) => {
+        if (i !== selectedIndex) return s;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
+        const el = doc.body.firstElementChild!;
+        const imgs = Array.from(el.querySelectorAll('img')).filter(img => {
+          const src = img.getAttribute('src') || '';
+          return src && !src.startsWith('data:');
+        });
+        if (imgs[imgIdx]) imgs[imgIdx].setAttribute('src', url);
+        return { ...s, outerHtml: el.outerHTML };
+      }));
+    }
+    toast.success('Imagem aplicada');
+  }
+
+  // ── Regenerar slide individual ────────────────────────────────────────────────
+
+  async function regenerateCurrentSlide() {
+    if (selectedIndex === null) return;
+    setRegenLoading(true);
+    setShowRegenInput(false);
+    try {
+      const slideHtml = liveSlideHtml(selectedIndex);
+      const res = await fetch(`${API}/api/carousel/regenerate-slide`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slideIndex: selectedIndex,
+          numSlides: slides.length,
+          slideHtml,
+          topic: (config as any)?.topic || topic,
+          instructions: (config as any)?.instructions || '',
+          niche: (config as any)?.niche || 'Geral',
+          contentTone: (config as any)?.contentTone || 'investigativo',
+          dominantEmotion: (config as any)?.dominantEmotion || 'medo de perder',
+          instagramHandle: (config as any)?.instagramHandle || '',
+          userHint: regenHint.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<body>${data.slideHtml}</body>`, 'text/html');
+      const el = doc.body.firstElementChild as HTMLElement;
+      if (!el) throw new Error('HTML inválido');
+      const newSlide: EditableSlide = {
+        index: selectedIndex,
+        html: el.innerHTML,
+        outerHtml: el.outerHTML,
+        type: detectSlideType(el),
+        bgImageUrl: extractBgImageUrl(el),
+        texts: extractTextBlocks(el),
+        hasBadge: !!el.querySelector('.verified-badge'),
+      };
+      setSlides(prev => prev.map((s, i) => i === selectedIndex ? newSlide : s));
+      setEditedTexts(prev => { const n = { ...prev }; delete n[selectedIndex]; return n; });
+      setRegenHint('');
+      toast.success(`Slide ${selectedIndex + 1} regenerado`);
+    } catch (err: unknown) {
+      toast.error('Erro: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setRegenLoading(false);
+    }
   }
 
   function handleDragStart(e: React.DragEvent, idx: number) {
@@ -1640,6 +1883,16 @@ export default function CarouselEditor({
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
+          <button onClick={() => { if(canUndo){const e=new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true});window.dispatchEvent(e);}}} disabled={!canUndo}
+            title="Desfazer (Ctrl+Z)"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border disabled:opacity-40 text-foreground text-xs font-semibold transition-colors">
+            <Undo2 className="w-3 h-3" />
+          </button>
+          <button onClick={() => { if(canRedo){const e=new KeyboardEvent('keydown',{key:'y',ctrlKey:true,bubbles:true});window.dispatchEvent(e);}}} disabled={!canRedo}
+            title="Refazer (Ctrl+Y)"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border disabled:opacity-40 text-foreground text-xs font-semibold transition-colors">
+            <Redo2 className="w-3 h-3" />
+          </button>
           <button onClick={handleSaveEdits} disabled={saveLoading}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors"
             title="Salvar edições no servidor">
@@ -1717,6 +1970,13 @@ export default function CarouselEditor({
                 className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-lg text-[10px] font-semibold text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 transition-colors">
                 <Plus className="w-3 h-3" /> Novo
               </button>
+              {selectedIndex !== null && (
+                <button onClick={() => duplicateSlide(selectedIndex)}
+                  className="px-1.5 py-1 rounded-lg text-[10px] font-semibold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
+                  title="Duplicar slide selecionado">
+                  <Copy className="w-3 h-3" />
+                </button>
+              )}
               {selectedIndex !== null && slides.length > 1 && (
                 <button onClick={() => removeSlide(selectedIndex)}
                   className="px-1.5 py-1 rounded-lg text-[10px] font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors"
@@ -1756,7 +2016,7 @@ export default function CarouselEditor({
 
           {/* Sub-tabs: Texto | Visual */}
           {sel !== null && selectedIndex !== null && (
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-border bg-secondary/30">
+            <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-secondary/30 flex-wrap">
               <button
                 onClick={() => setEditMode('text')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
@@ -1773,6 +2033,35 @@ export default function CarouselEditor({
               >
                 <MousePointer2 className="w-3.5 h-3.5" /> Visual (arrastar)
               </button>
+              {/* Regenerar slide */}
+              <div className="ml-auto flex items-center gap-1">
+                {showRegenInput && (
+                  <input
+                    value={regenHint}
+                    onChange={e => setRegenHint(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && regenerateCurrentSlide()}
+                    placeholder="O que mudar? (opcional)"
+                    className="w-40 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                    autoFocus
+                  />
+                )}
+                <button
+                  onClick={() => setShowRegenInput(v => !v)}
+                  title="Definir instrução antes de regenerar"
+                  className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors ${showRegenInput ? 'bg-orange-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-border'}`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={regenerateCurrentSlide}
+                  disabled={regenLoading}
+                  title={`Regenerar slide ${(selectedIndex ?? 0) + 1}`}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white transition-colors"
+                >
+                  {regenLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  Regen
+                </button>
+              </div>
             </div>
           )}
 
@@ -1966,11 +2255,65 @@ export default function CarouselEditor({
                       {/* Imagem de fundo */}
                       <div className="space-y-2 pt-2 border-t border-border">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                          <Image className="w-3.5 h-3.5" /> Imagem de fundo
+                          <Image className="w-3.5 h-3.5" /> Imagem
                         </p>
-                        {selBg && (
-                          <div className="rounded-lg overflow-hidden border border-border" style={{ maxHeight: 72 }}>
-                            <img src={selBg} alt="Fundo atual" className="w-full object-cover" style={{ maxHeight: 72 }}
+
+                        {/* Selector de alvo (fundo vs img inline) */}
+                        {(() => {
+                          const parser = new DOMParser();
+                          const doc = parser.parseFromString(`<body>${sel?.outerHtml ?? ''}</body>`, 'text/html');
+                          const el = doc.body.firstElementChild;
+                          const inlineImgs = el ? Array.from(el.querySelectorAll('img'))
+                            .map((img, i) => ({ idx: i, src: img.getAttribute('src') || '', label: img.closest('.photo-card') ? `Card ${i+1}` : img.closest('.top-photo-wrap') ? `Topo ${i+1}` : `Img ${i+1}` }))
+                            .filter(img => img.src && !img.src.startsWith('data:') && !img.src.includes('svg') && !img.src.includes('badge')) : [];
+                          if (inlineImgs.length === 0) return null;
+                          return (
+                            <div className="flex gap-1 flex-wrap">
+                              <button onClick={() => setImgTarget('bg')} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${imgTarget === 'bg' ? 'bg-purple-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-border'}`}>Fundo</button>
+                              {inlineImgs.map(img => (
+                                <button key={img.idx} onClick={() => setImgTarget(img.idx)} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${imgTarget === img.idx ? 'bg-purple-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-border'}`}>{img.label}</button>
+                              ))}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Busca Unsplash */}
+                        <div className="space-y-2">
+                          <div className="flex gap-1.5">
+                            <input
+                              value={imgSearch}
+                              onChange={e => setImgSearch(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && searchUnsplash(imgSearch)}
+                              placeholder="Buscar no Unsplash…"
+                              className="flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                            />
+                            <button onClick={() => searchUnsplash(imgSearch, 1)} disabled={imgSearchLoading || !imgSearch.trim()}
+                              className="px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border disabled:opacity-50 text-foreground transition-colors">
+                              {imgSearchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                          {imgSearchResults.length > 0 && (
+                            <div className="space-y-1.5">
+                              <div className="grid grid-cols-3 gap-1">
+                                {imgSearchResults.map(img => (
+                                  <button key={img.id} onClick={() => applyImageUrl(img.url)}
+                                    title={img.alt}
+                                    className="rounded overflow-hidden border border-border hover:border-purple-400 hover:ring-2 hover:ring-purple-500/40 transition-all">
+                                    <img src={img.thumb} alt={img.alt} className="w-full h-16 object-cover" />
+                                  </button>
+                                ))}
+                              </div>
+                              <button onClick={() => searchUnsplash(imgSearch, imgSearchPage + 1)} disabled={imgSearchLoading}
+                                className="w-full py-1 rounded text-[11px] text-muted-foreground hover:text-foreground bg-secondary hover:bg-border transition-colors disabled:opacity-50">
+                                {imgSearchLoading ? 'Carregando…' : 'Ver mais'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {selBg && imgTarget === 'bg' && (
+                          <div className="rounded-lg overflow-hidden border border-border" style={{ maxHeight: 60 }}>
+                            <img src={selBg} alt="Fundo atual" className="w-full object-cover" style={{ maxHeight: 60 }}
                               onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           </div>
                         )}

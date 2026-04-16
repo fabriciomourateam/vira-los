@@ -1225,4 +1225,67 @@ async function generateCarousel(config) {
   };
 }
 
-module.exports = { generateCarousel, takeScreenshots, OUTPUT_DIR };
+// ─── Regenerar slide individual ───────────────────────────────────────────────
+
+async function regenerateSlide({ slideIndex, numSlides, slideHtml, topic, instructions, niche,
+  contentTone, dominantEmotion, instagramHandle, userHint }) {
+
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
+
+  const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const handleAt = `@${handle}`;
+  const slideNum = (slideIndex ?? 0) + 1;
+  const n = numSlides || 7;
+
+  // Extrai descrição da função deste slide a partir da estrutura viral
+  const fullStructure = buildViralStructure({ numSlides: n, dominantEmotion: dominantEmotion || 'medo de perder', handleAt, roteiro: '' });
+  const typeDesc = fullStructure.split('\n\n').find(s => s.trimStart().startsWith(`SLIDE ${slideNum} —`)) || `SLIDE ${slideNum}`;
+
+  const instructionsLine = instructions && instructions.trim() ? `\nDiretriz de conteúdo: ${instructions.trim()}` : '';
+  const hintLine = userHint && userHint.trim() ? `\nPedido do criador: "${userHint.trim()}"` : '';
+
+  const prompt = `Você é especialista em carrosseis virais para Instagram.
+
+Regenere APENAS o conteúdo de texto do SLIDE ${slideNum} de ${n}, mantendo EXATAMENTE a estrutura HTML.
+
+Tema: "${topic}"
+Nicho: ${niche || 'Geral'}
+Tom: ${contentTone || 'investigativo'}
+Emoção dominante: ${dominantEmotion || 'medo de perder'}${instructionsLine}${hintLine}
+
+Função deste slide:
+${typeDesc}
+
+REGRAS OBRIGATÓRIAS:
+- Retorne SOMENTE o elemento <div> externo do slide, nada mais
+- NÃO altere classes CSS, styles inline, estrutura de divs ou src de imagens
+- Substitua APENAS os textos em: .title, .subtitle, .narrative-text, .content-title, .content-body, .cover-title, .cta-title
+- Máximo 40 palavras por slide
+- Sem travessão (—) no meio de frases
+- Sem clichês ou frases genéricas
+
+HTML atual:
+${slideHtml}
+
+Retorne apenas o <div> externo com novo conteúdo:`;
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 3000,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  let result = (response.content[0]?.text || '').trim()
+    .replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // Garante que retornou um <div> (não HTML completo)
+  if (!result.startsWith('<div') && !result.startsWith('<section')) {
+    const match = result.match(/<div[\s\S]*<\/div>/);
+    if (match) result = match[0];
+    else throw new Error('Resposta inválida: Claude não retornou um elemento de slide');
+  }
+
+  return result;
+}
+
+module.exports = { generateCarousel, takeScreenshots, OUTPUT_DIR, regenerateSlide };

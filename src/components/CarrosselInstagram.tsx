@@ -584,6 +584,10 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function handleLegendaChange(text: string) {
+    setResult(prev => prev ? { ...prev, legenda: text } : prev);
+  }
+
   // Slides para preview: PNGs se disponíveis, senão extrai do HTML
   const hasPNGs = (result?.screenshots?.length ?? 0) > 0;
 
@@ -1238,9 +1242,12 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                     {copied ? <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copiado!</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
                   </button>
                 </div>
-                <pre className="p-4 text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
-                  {result.legenda}
-                </pre>
+                <textarea
+                  value={result.legenda}
+                  onChange={e => handleLegendaChange(e.target.value)}
+                  rows={8}
+                  className="w-full p-4 text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30 rounded-b-xl"
+                />
               </div>
             )}
           </motion.div>
