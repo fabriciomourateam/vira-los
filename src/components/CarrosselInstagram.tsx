@@ -3,9 +3,9 @@ import { HexColorPicker } from 'react-colorful';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
-  Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight,
+  Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
-  Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate,
+  Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 
@@ -285,6 +285,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [editingSavedHtml, setEditingSavedHtml] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [showPersonalization, setShowPersonalization] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -682,153 +683,169 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           />
         </div>
 
-        {/* Nicho + Handle */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-              Nicho / Área
-            </label>
-            <input
-              type="text"
-              value={config.niche}
-              onChange={e => set('niche', e.target.value)}
-              placeholder="Inteligência Artificial"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-              <Mic2 className="w-3.5 h-3.5" /> Seu Nome
-              {!config.creatorName && (
-                <span className="ml-1 text-[10px] font-bold text-orange-400 bg-orange-400/15 px-1.5 py-0.5 rounded-full">
-                  obrigatório
-                </span>
+        {/* ── Personalização (colapsável) ─────────────────────────────── */}
+        <div className="rounded-lg border border-border overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowPersonalization(p => !p)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-secondary/50 hover:bg-secondary transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Personalização</span>
+              <span className="text-[10px] text-muted-foreground font-normal">
+                — nicho, perfil, cores, fonte
+              </span>
+              {/* Badges de resumo quando colapsado */}
+              {!showPersonalization && (
+                <div className="flex items-center gap-1.5 ml-1">
+                  <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.primaryColor }} />
+                  <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.accentColor }} />
+                  <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.bgColor }} />
+                  <span className="text-[10px] text-muted-foreground">{config.fontFamily}</span>
+                </div>
               )}
-            </label>
-            <input
-              type="text"
-              value={config.creatorName}
-              onChange={e => set('creatorName', e.target.value)}
-              placeholder="Ex: Fabricio Moura"
-              className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${
-                !config.creatorName
-                  ? 'border-orange-400/60 focus:ring-orange-400/40'
-                  : 'border-border'
-              }`}
-            />
-            {!config.creatorName && (
-              <p className="text-[11px] text-orange-400/80 mt-1">
-                Aparece no badge da capa e no rodapé de cada slide.
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-              <Mic2 className="w-3.5 h-3.5" /> Handle do Instagram
-            </label>
-            <input
-              type="text"
-              value={config.instagramHandle}
-              onChange={e => set('instagramHandle', e.target.value)}
-              placeholder="@seucanal"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-            />
-          </div>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${showPersonalization ? 'rotate-180' : ''}`} />
+          </button>
 
-          {/* Foto de perfil */}
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
-              <Mic2 className="w-3.5 h-3.5" /> Foto de Perfil
-            </label>
-            <div className="flex items-center gap-3">
-              {/* Preview circular */}
-              <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 border-border bg-secondary flex items-center justify-center">
-                {config.profilePhotoUrl ? (
-                  <img
-                    src={config.profilePhotoUrl}
-                    alt="Foto de perfil"
-                    className="w-full h-full object-cover"
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          {showPersonalization && (
+            <div className="p-4 space-y-5 border-t border-border">
+
+              {/* Nicho + Nome + Handle + Foto */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                    Nicho / Área
+                  </label>
+                  <input
+                    type="text"
+                    value={config.niche}
+                    onChange={e => set('niche', e.target.value)}
+                    placeholder="Ex: Fitness, Dieta, Hormônios"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                   />
-                ) : (
-                  <span className="text-xs font-bold text-muted-foreground">
-                    {config.instagramHandle ? config.instagramHandle.replace('@', '').slice(0, 2).toUpperCase() : 'FM'}
-                  </span>
-                )}
-              </div>
-              {/* Botão de upload */}
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handlePhotoUpload}
-              />
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                disabled={photoUploading}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border hover:border-purple-500 hover:bg-purple-500/10 text-sm text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-60"
-              >
-                {photoUploading
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando…</>
-                  : <><UploadCloud className="w-4 h-4" /> Fazer upload</>}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1.5">
-              Envie sua foto de perfil (JPG/PNG, até 5 MB) — ela aparece no badge do 1º slide.
-            </p>
-          </div>
-        </div>
-
-        {/* Cores */}
-        <div>
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
-            <Palette className="w-3.5 h-3.5" /> Paleta de Cores
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <ColorPicker label="Cor Principal"   value={config.primaryColor} onChange={v => set('primaryColor', v)} />
-            <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
-            <ColorPicker label="Fundo Slides"    value={config.bgColor}      onChange={v => set('bgColor', v)} />
-          </div>
-        </div>
-
-        {/* Prévia Visual das Cores */}
-        <div>
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
-            <Eye className="w-3.5 h-3.5" /> Prévia das Cores
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <SlidePreview
-              bgColor={config.bgColor}
-              primaryColor={config.primaryColor}
-              accentColor={config.accentColor}
-              fontFamily={config.fontFamily}
-            />
-            {/* Variante: slide editorial (sem foto de fundo) */}
-            <div
-              className="relative rounded-xl overflow-hidden shadow-lg select-none"
-              style={{ background: config.bgColor, aspectRatio: '4/5', fontFamily: `'${config.fontFamily}', sans-serif` }}
-            >
-              <div className="absolute inset-0 p-3 flex flex-col justify-center gap-1.5">
-                <div className="w-1/3 h-0.5 rounded-full" style={{ background: config.primaryColor }} />
-                <div className="text-[10px] font-black uppercase leading-tight" style={{ color: config.primaryColor }}>
-                  Slide Editorial
                 </div>
-                <div className="space-y-1 mt-1">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="flex items-start gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full mt-0.5 shrink-0" style={{ background: config.accentColor }} />
-                      <div className="h-1.5 rounded-full flex-1" style={{ background: 'rgba(255,255,255,0.15)' }} />
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                    <Mic2 className="w-3.5 h-3.5" /> Seu Nome
+                    {!config.creatorName && (
+                      <span className="ml-1 text-[10px] font-bold text-orange-400 bg-orange-400/15 px-1.5 py-0.5 rounded-full">
+                        obrigatório
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    value={config.creatorName}
+                    onChange={e => set('creatorName', e.target.value)}
+                    placeholder="Ex: Fabricio Moura"
+                    className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${
+                      !config.creatorName ? 'border-orange-400/60 focus:ring-orange-400/40' : 'border-border'
+                    }`}
+                  />
+                  {!config.creatorName && (
+                    <p className="text-[11px] text-orange-400/80 mt-1">Aparece no badge da capa e no rodapé de cada slide.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                    <Mic2 className="w-3.5 h-3.5" /> Handle do Instagram
+                  </label>
+                  <input
+                    type="text"
+                    value={config.instagramHandle}
+                    onChange={e => set('instagramHandle', e.target.value)}
+                    placeholder="@seucanal"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                    <Mic2 className="w-3.5 h-3.5" /> Foto de Perfil
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 border-border bg-secondary flex items-center justify-center">
+                      {config.profilePhotoUrl ? (
+                        <img
+                          src={config.profilePhotoUrl}
+                          alt="Foto de perfil"
+                          className="w-full h-full object-cover"
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-muted-foreground">
+                          {config.instagramHandle ? config.instagramHandle.replace('@', '').slice(0, 2).toUpperCase() : 'FM'}
+                        </span>
+                      )}
                     </div>
-                  ))}
-                </div>
-                <div className="mt-2 text-[8px] font-bold uppercase tracking-widest" style={{ color: config.accentColor }}>
-                  {config.fontFamily}
+                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      disabled={photoUploading}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border hover:border-purple-500 hover:bg-purple-500/10 text-sm text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-60"
+                    >
+                      {photoUploading
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando…</>
+                        : <><UploadCloud className="w-4 h-4" /> Fazer upload</>}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">JPG/PNG até 5 MB — aparece no badge do 1º slide.</p>
                 </div>
               </div>
+
+              {/* Paleta de Cores */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                  <Palette className="w-3.5 h-3.5" /> Paleta de Cores
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <ColorPicker label="Cor Principal"   value={config.primaryColor} onChange={v => set('primaryColor', v)} />
+                  <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
+                  <ColorPicker label="Fundo Slides"    value={config.bgColor}      onChange={v => set('bgColor', v)} />
+                </div>
+              </div>
+
+              {/* Prévia Visual das Cores */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                  <Eye className="w-3.5 h-3.5" /> Prévia das Cores
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <SlidePreview
+                    bgColor={config.bgColor}
+                    primaryColor={config.primaryColor}
+                    accentColor={config.accentColor}
+                    fontFamily={config.fontFamily}
+                  />
+                  <div
+                    className="relative rounded-xl overflow-hidden shadow-lg select-none"
+                    style={{ background: config.bgColor, aspectRatio: '4/5', fontFamily: `'${config.fontFamily}', sans-serif` }}
+                  >
+                    <div className="absolute inset-0 p-3 flex flex-col justify-center gap-1.5">
+                      <div className="w-1/3 h-0.5 rounded-full" style={{ background: config.primaryColor }} />
+                      <div className="text-[10px] font-black uppercase leading-tight" style={{ color: config.primaryColor }}>
+                        Slide Editorial
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="flex items-start gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full mt-0.5 shrink-0" style={{ background: config.accentColor }} />
+                            <div className="h-1.5 rounded-full flex-1" style={{ background: 'rgba(255,255,255,0.15)' }} />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-[8px] font-bold uppercase tracking-widest" style={{ color: config.accentColor }}>
+                        {config.fontFamily}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
-          </div>
+          )}
         </div>
 
         {/* Fonte + Tom */}
