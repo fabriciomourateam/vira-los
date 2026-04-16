@@ -15,6 +15,7 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface CarouselConfig {
   topic: string;
+  instructions: string;          // foco / diretrizes de conteúdo (opcional)
   niche: string;
   primaryColor: string;
   accentColor: string;
@@ -201,6 +202,7 @@ const FONT_OPTIONS = [
 
 const DEFAULT_CONFIG: CarouselConfig = {
   topic: '',
+  instructions: '',
   niche: 'Inteligência Artificial',
   primaryColor: '#B078FF',
   accentColor: '#5197b5',
@@ -681,6 +683,26 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
             placeholder="Ex: IA generativa está matando empregos criativos"
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
           />
+        </div>
+
+        {/* Foco / Instruções adicionais */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Mic2 className="w-3.5 h-3.5" /> Foco / Instruções
+            <span className="normal-case font-normal text-[10px] ml-1">(opcional — diretriz de conteúdo para a IA)</span>
+          </label>
+          <textarea
+            value={config.instructions}
+            onChange={e => set('instructions', e.target.value)}
+            placeholder={`Ex: fale sobre os benefícios sem induzir ao uso, sem fazer promessas médicas, foque em como funciona e resultados esperados`}
+            rows={2}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none placeholder:text-muted-foreground/50"
+          />
+          {config.instructions.trim() && (
+            <p className="text-[10px] text-orange-400 mt-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3" /> A IA vai seguir essa diretriz em todos os slides
+            </p>
+          )}
         </div>
 
         {/* ── Personalização (colapsável) ─────────────────────────────── */}

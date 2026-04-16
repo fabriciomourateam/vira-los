@@ -462,7 +462,7 @@ REGRAS DE ESCRITA:
 
 // ─── Prompt HTML layout "Editorial" ──────────────────────────────────────────
 
-function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fontFamily,
+function buildHTMLPrompt({ topic, instructions, niche, primaryColor, accentColor, bgColor, fontFamily,
   instagramHandle, profilePhotoUrl, numSlides, contentTone, dominantEmotion, redditTrends, unsplashImages, roteiro }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
@@ -485,6 +485,10 @@ function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fon
     ? `\n━━━ ROTEIRO DO CRIADOR — siga este conteúdo, não invente ━━━\n${roteiro.trim()}\n\nDistribua este roteiro pelos ${numSlides} slides:\n- SLIDE 1 (capa): gancho principal / título do roteiro\n- SLIDES 2 a ${numSlides - 1}: divida o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): use o CTA do roteiro ou crie um adequado\nUse APENAS o conteúdo acima — não adicione informações externas.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
+  const instructionsSection = instructions && instructions.trim()
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
   return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo editorial/investigativo.
 
 Tema: "${topic}"
@@ -492,6 +496,7 @@ Nicho: ${niche}
 Tom: ${contentTone}
 Instagram: ${handleAt}
 Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
+${instructionsSection}
 ${trendsSection}
 ${imagesSection}
 ${roteiroSection}
@@ -726,7 +731,7 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
 
 // ─── Prompt baseado em template HTML salvo ────────────────────────────────────
 
-function buildTemplateHTMLPrompt({ templateHtml, topic, niche, instagramHandle, creatorName, contentTone, dominantEmotion, unsplashImages, roteiro, numSlides }) {
+function buildTemplateHTMLPrompt({ templateHtml, topic, instructions, niche, instagramHandle, creatorName, contentTone, dominantEmotion, unsplashImages, roteiro, numSlides }) {
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
   const displayName = creatorName
@@ -749,6 +754,10 @@ function buildTemplateHTMLPrompt({ templateHtml, topic, niche, instagramHandle, 
     ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo nos textos ━━━\n${roteiro.trim()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
+  const instructionsSection = instructions && instructions.trim()
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
   return `Você é um especialista em carrosseis para Instagram. Sua tarefa é criar um NOVO carrossel reutilizando EXATAMENTE o layout visual de um template existente.
 
 Tema: "${topic}"
@@ -756,6 +765,7 @@ Nicho: ${niche}
 Tom: ${contentTone}
 Emoção dominante: ${dominantEmotion || 'medo de perder'}
 Instagram: ${handleAt} | Nome: ${displayName}
+${instructionsSection}
 ${roteiroSection}
 
 ${buildViralStructure({ numSlides, dominantEmotion: dominantEmotion || 'medo de perder', handleAt, roteiro })}
@@ -794,7 +804,7 @@ ${cleanedHtml}`;
 
 // ─── Prompt HTML layout "Clean" ───────────────────────────────────────────────
 
-function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
+function buildCleanHTMLPrompt({ topic, instructions, niche, primaryColor, fontFamily,
   instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
@@ -816,6 +826,10 @@ function buildCleanHTMLPrompt({ topic, niche, primaryColor, fontFamily,
     ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim()}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
+  const instructionsSection = instructions && instructions.trim()
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
   // Avatar: Claude gera apenas as iniciais; a foto é injetada em pós-processamento
   const avatarContent = handle.slice(0, 2).toUpperCase();
 
@@ -827,6 +841,7 @@ Tom: ${contentTone}
 Emoção dominante: ${dominantEmotion}
 Instagram: ${handleAt}
 Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
+${instructionsSection}
 ${imagesSection}
 ${roteiroSection}
 
@@ -1057,6 +1072,7 @@ async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, f
 async function generateCarousel(config) {
   const {
     topic,
+    instructions = '',             // foco / diretrizes de conteúdo (opcional)
     niche = 'Inteligência Artificial',
     primaryColor = '#B078FF',
     accentColor = '#5197b5',
@@ -1108,18 +1124,18 @@ async function generateCarousel(config) {
   if (templateHtml && templateHtml.trim()) {
     htmlPrompt = buildTemplateHTMLPrompt({
       templateHtml: templateHtml.trim(),
-      topic: topic.trim(), niche, instagramHandle, creatorName,
+      topic: topic.trim(), instructions: instructions.trim(), niche, instagramHandle, creatorName,
       contentTone, dominantEmotion, roteiro, unsplashImages, numSlides: slidesCount,
     });
   } else if (layoutStyle === 'clean') {
     htmlPrompt = buildCleanHTMLPrompt({
-      topic: topic.trim(), niche, primaryColor, fontFamily,
+      topic: topic.trim(), instructions: instructions.trim(), niche, primaryColor, fontFamily,
       instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, unsplashImages,
     });
   } else {
     htmlPrompt = buildHTMLPrompt({
-      topic: topic.trim(), niche, primaryColor, accentColor, bgColor,
+      topic: topic.trim(), instructions: instructions.trim(), niche, primaryColor, accentColor, bgColor,
       fontFamily, instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, redditTrends, unsplashImages,
     });
