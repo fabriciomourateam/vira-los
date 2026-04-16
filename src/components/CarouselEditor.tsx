@@ -1004,8 +1004,23 @@ export default function CarouselEditor({
       for (const s of parsed) {
         const newTexts = s.texts.map(t => ({ ...t }));
         const oldTexts = prev[s.index] ?? [];
-        // Para cada bloco do novo parse, preserva posTop/posLeft do estado anterior
+
+        // Índice de todos os custom-text no estado anterior (para match por posição relativa)
+        const oldCustomTexts = oldTexts.filter(b => b.className.startsWith('custom-text') && !b.deleted);
+        let customTextMatchIdx = 0;
+
         const mergedBlocks: TextBlock[] = newTexts.map((nt, j) => {
+          // Para custom-text: tenta match pelo contador de custom-texts (mais robusto que índice absoluto)
+          if (nt.className.startsWith('custom-text')) {
+            const ot = oldCustomTexts[customTextMatchIdx++] ?? oldTexts[j];
+            if (!ot) return nt;
+            return {
+              ...nt,
+              posTop:  ot.posTop  !== undefined ? ot.posTop  : nt.posTop,
+              posLeft: ot.posLeft !== undefined ? ot.posLeft : nt.posLeft,
+            };
+          }
+          // Para outros blocos: match por índice
           const ot = oldTexts[j];
           if (!ot) return nt;
           return {
@@ -1015,8 +1030,19 @@ export default function CarouselEditor({
           };
         });
         // Mantém blocos extras do estado anterior (e.g. addTextBlock não presentes no HTML)
+        const newCustomTextCount = newTexts.filter(b => b.className.startsWith('custom-text')).length;
+        const oldCustomTextCount = oldCustomTexts.length;
+        if (oldCustomTextCount > newCustomTextCount) {
+          // Blocos custom-text do estado que não apareceram no novo parse → preserva
+          for (let k = newCustomTextCount; k < oldCustomTextCount; k++) {
+            mergedBlocks.push(oldCustomTexts[k]);
+          }
+        }
+        // Outros blocos extras (não custom-text) do estado anterior
         for (let j = newTexts.length; j < oldTexts.length; j++) {
-          mergedBlocks.push(oldTexts[j]);
+          if (!oldTexts[j].className.startsWith('custom-text')) {
+            mergedBlocks.push(oldTexts[j]);
+          }
         }
         merged[s.index] = mergedBlocks;
       }
@@ -1284,9 +1310,14 @@ export default function CarouselEditor({
     if (selectedIndex === null) return;
 
     // Blocos custom-text NOVOS (injetados) identificam-se por data-ct-idx
-    // Salva posição diretamente no TextBlock para evitar o snap-back
+    // Salva posição em DOIS lugares para máxima resiliência:
+    //   1) posTop/posLeft no TextBlock → usado na injeção (caminho primário)
+    //   2) elementOverrides com selector [data-ct-idx="N"] → usado quando o bloco
+    //      já está no outerHtml base (caminho de backup — nunca é apagado por re-parse)
     if (data.ctIdx !== null && data.ctIdx !== undefined && data.mode === 'abs') {
       const ctIdxNum = parseInt(data.ctIdx, 10);
+
+      // Caminho primário: salva posTop/posLeft no TextBlock
       setEditedTexts(prev => {
         const blocks = [...(prev[selectedIndex] ?? [])];
         let ctCount = 0;
@@ -1304,6 +1335,19 @@ export default function CarouselEditor({
           }
         }
         return { ...prev, [selectedIndex]: blocks };
+      });
+
+      // Caminho de backup: salva em elementOverrides com selector de atributo
+      // Isso garante a posição mesmo se o elemento já estiver no outerHtml base
+      setElementOverrides(prev => {
+        const overrideKey = `[data-ct-idx="${data.ctIdx}"]`;
+        return {
+          ...prev,
+          [selectedIndex]: {
+            ...(prev[selectedIndex] ?? {}),
+            [overrideKey]: { left: data.left, top: data.top },
+          },
+        };
       });
       return;
     }
