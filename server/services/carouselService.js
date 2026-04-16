@@ -374,6 +374,94 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
 
 // ─── Passo 3: Prompt Claude para gerar o HTML ─────────────────────────────────
 
+// ─── Estrutura de conteúdo viral adaptada ao número de slides ────────────────
+
+function buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro }) {
+  const emo = (dominantEmotion || 'medo de perder').toUpperCase();
+  const roteiroNote = roteiro && roteiro.trim()
+    ? 'Distribuir o ROTEIRO DO CRIADOR por essa estrutura mantendo a emoção dominante. Não inventar nem alterar o texto.'
+    : 'Linguagem direta, sem travessão no meio das frases, sem clichês, cada slide com insight novo.';
+
+  const rules = `
+REGRAS DE ESCRITA:
+- Linguagem direta, como alguém falando com um amigo inteligente
+- Sem travessão no meio das frases
+- Sem clichês ou frases genéricas
+- Cada slide entrega um insight novo, nunca repete o anterior
+- Tom provocador e inteligente, nunca agressivo
+- Máximo 40 palavras por slide de conteúdo
+- ${roteiroNote}`;
+
+  // Blocos reutilizáveis
+  const HOOK        = (n) => `SLIDE ${n} — HOOK (para o scroll): número específico, promessa clara ou dor real. Proibido: abertura genérica, frase motivacional ou pergunta retórica fraca.`;
+  const QUEBRA      = (n) => `SLIDE ${n} — QUEBRA DE EXPECTATIVA: contradiga a crença mais comum do nicho. Gera a sensação "espera, não é isso que eu sempre ouvi?". Termine com frase que cria lacuna — o leitor precisa ir para o próximo slide.`;
+  const AMPLI       = (n, extra='') => `SLIDE ${n} — AMPLIFICAÇÃO${extra}: comportamento incoerente que a maioria tem (o leitor pensa "isso sou eu") + consequência real e específica de continuar assim.`;
+  const REVELACAO   = (n, extra='') => `SLIDE ${n} — REVELAÇÃO${extra}: insight central que reframe tudo que veio antes + metáfora simples e visual que qualquer pessoa entende em 3 segundos.`;
+  const CONSEQUENCIA = (n) => `SLIDE ${n} — CONSEQUÊNCIA: custo real e específico de ignorar a revelação — use dados, prazo ou comparação concreta. Sem generalização.`;
+  const FRASE       = (n) => `SLIDE ${n} — FRASE FINAL DE IMPACTO: uma única ideia curta que sintetize a emoção dominante (${dominantEmotion}). Sem explicação. Sem suavização.`;
+  const CTA         = (n) => `SLIDE ${n} — CTA: ação concreta e específica atrelada ao tema. Peça comentar uma palavra-chave + seguir ${handleAt} para mais conteúdos. Não use CTA genérico.`;
+
+  let structure = `━━━ ESTRUTURA DOS SLIDES (emoção dominante: ${emo}) ━━━\nMáximo 40 palavras por slide.\n\n`;
+
+  if (numSlides <= 5) {
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      `SLIDE 3 — AMPLIFICAÇÃO + REVELAÇÃO: comportamento incoerente da maioria + insight central que reframe. Metáfora simples e visual.`,
+      `SLIDE 4 — CONSEQUÊNCIA + FRASE FINAL: custo específico de ignorar + uma frase curta que sintetize a emoção (${dominantEmotion}).`,
+      CTA(5),
+    ].join('\n\n');
+  } else if (numSlides === 6) {
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      AMPLI(3),
+      REVELACAO(4),
+      `SLIDE 5 — CONSEQUÊNCIA + FRASE FINAL: custo específico de ignorar (dados/prazo/comparação) + frase curta que sintetize a emoção (${dominantEmotion}).`,
+      CTA(6),
+    ].join('\n\n');
+  } else if (numSlides === 7) {
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      AMPLI(3),
+      REVELACAO(4),
+      CONSEQUENCIA(5),
+      FRASE(6),
+      CTA(7),
+    ].join('\n\n');
+  } else if (numSlides === 8) {
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      AMPLI(3, ' pt.1'),
+      AMPLI(4, ' pt.2'),
+      REVELACAO(5),
+      CONSEQUENCIA(6),
+      FRASE(7),
+      CTA(8),
+    ].join('\n\n');
+  } else {
+    // 9 ou 10 slides — estrutura completa
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      AMPLI(3, ' pt.1'),
+      AMPLI(4, ' pt.2'),
+      REVELACAO(5, ' pt.1'),
+      REVELACAO(6, ' pt.2'),
+      CONSEQUENCIA(7),
+      FRASE(8),
+      ...(numSlides >= 10 ? [`SLIDE 9 — REFORÇO: exemplo real ou dado extra que solidifica a revelação. Direto e específico.`] : []),
+      CTA(numSlides),
+    ].join('\n\n');
+  }
+
+  return structure + rules;
+}
+
+// ─── Prompt HTML layout "Editorial" ──────────────────────────────────────────
+
 function buildHTMLPrompt({ topic, niche, primaryColor, accentColor, bgColor, fontFamily,
   instagramHandle, profilePhotoUrl, numSlides, contentTone, dominantEmotion, redditTrends, unsplashImages, roteiro }) {
 
@@ -426,71 +514,14 @@ Footer esquerdo: SVG do Instagram + "${handleAt}"
 Footer direito: número N/${totalContent} — APENAS slides 2 a ${numSlides - 1}
 A CAPA (slide 1) e o CTA (slide ${numSlides}) NÃO têm número no rodapé direito
 
-━━━ ESTRUTURA DOS SLIDES ━━━
-Emoção dominante a manter do início ao fim: ${dominantEmotion.toUpperCase()}
-Máximo 40 palavras por slide de conteúdo.
+━━━ CLASSES HTML OBRIGATÓRIAS POR TIPO DE SLIDE ━━━
+SLIDE 1 (capa) → use .slide: slide-bg + slide-overlay + top-header + cover-branding + slide-content (.title CAIXA ALTA + .subtitle) + .footer SEM número
+SLIDES INTERNOS → use .slide-editorial: top-header + editorial-content (.narrative-text 38px + .narrative-text.secondary 28px) + .footer com número N/${totalContent}
+  Variantes de foto: A (meio) | B (base) | C (topo) | D (.accent-bg sem foto, use em 1-2 slides de impacto)
+  Destaques: <span class="highlight"> ou <span class="highlight-green">
+SLIDE ${numSlides} (CTA) → use .slide: foto + overlay + top-header + .title com CTA + box "SIGA ${handleAt}" em #D9D353 + .footer com ${numSlides - 1}/${totalContent}
 
-SLIDE 1 — HOOK (.slide — capa):
-- <div class="slide-bg"> com foto Unsplash ou gradiente como fundo
-- <div class="slide-overlay">
-- .top-header com os 3 elementos acima
-- .cover-branding: SVG IG + "${handleAt}" centralizados
-- .slide-content com .title (CAIXA ALTA): as primeiras palavras param o scroll — use número específico, promessa clara ou dor real
-- .subtitle: reforça o hook sem resolver — deixa o leitor com vontade de continuar
-- .footer SEM número de página
-- Proibido: abertura genérica, frase motivacional, pergunta retórica fraca
-
-SLIDE 2 — QUEBRA DE EXPECTATIVA (.slide-editorial):
-- .top-header
-- .editorial-content: mostre que o problema real não é o que parece — contradiga a crença mais comum do nicho
-- .narrative-text (38px): gera a sensação "espera, não é isso que eu sempre ouvi?"
-- .narrative-text.secondary (28px): termine com frase que cria lacuna — o leitor precisa ir para o próximo slide
-- .footer com número 1/${totalContent}
-
-SLIDES 3-4 — AMPLIFICAÇÃO (.slide-editorial):
-- Use variantes de foto (A, B ou C) para variar o visual:
-  • Variante A (foto no meio): texto grande → foto → texto menor
-  • Variante B (foto na base): texto grande → texto médio → foto
-  • Variante C (foto no topo): foto → texto grande → texto menor
-- .narrative-text: descreva o comportamento incoerente que a maioria tem — identificação direta (o leitor pensa "isso sou eu")
-- .narrative-text.secondary: inclua uma consequência real e específica de continuar assim
-- Palavras-chave: <span class="highlight"> (${primaryColor}) ou <span class="highlight-green">
-- .footer com número correspondente
-
-SLIDES 5-6 — REVELAÇÃO DA VERDADE (.slide-editorial):
-- .narrative-text: entregue o insight central — uma frase forte que reframe tudo que veio antes
-- .narrative-text.secondary: metáfora simples e visual que qualquer pessoa entende em 3 segundos
-- Use Variante D (.slide-editorial.accent-bg sem foto) em um desses slides para impacto máximo
-- .footer com número correspondente
-
-SLIDE 7 — CONSEQUÊNCIA DE CONTINUAR NO ERRO (.slide-editorial):
-- .narrative-text: mostre o custo de ignorar o que foi revelado — seja específico, não genérico
-- Use dados, prazo ou comparação concreta
-- .footer com número correspondente
-
-SLIDE 8 — FRASE FINAL DE IMPACTO (.slide-editorial.accent-bg):
-- .narrative-text: uma única ideia, curta, que sintetize a emoção dominante (${dominantEmotion})
-- Sem explicação. Sem suavização. Sem clichê
-- Use Variante D para máximo impacto visual
-- .footer com número correspondente
-
-SLIDE ${numSlides} — CTA (.slide):
-- Foto de fundo + overlay
-- .top-header
-- .title: call-to-action diretamente atrelado ao tema — peça ação concreta e específica
-  Exemplo: "Comenta [palavra-chave do tema] aqui embaixo se faz sentido pra você" + palavras em .highlight
-- Box destacado com "SIGA ${handleAt}" em #D9D353
-- .footer com número ${numSlides - 1}/${totalContent}
-
-REGRAS DE ESCRITA (obrigatórias):
-- Linguagem direta, como alguém falando com um amigo inteligente
-- Sem travessão no meio das frases
-- Sem clichês ou frases que poderiam estar em qualquer post de qualquer nicho
-- Cada slide entrega um insight novo, nunca repete o anterior
-- Tom provocador e inteligente, nunca agressivo ou panfletário
-${roteiro && roteiro.trim()
-  ? '- Use o ROTEIRO DO CRIADOR acima como conteúdo — distribua pela estrutura acima mantendo a emoção dominante. Não invente nem altere o texto.'
-  : '- Capitalize natural, SEM CAIXA ALTA nos slides internos (exceto palavras de impacto).'}
+${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
 
 ━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
 ${cssTemplate}
@@ -727,9 +758,7 @@ Emoção dominante: ${dominantEmotion || 'medo de perder'}
 Instagram: ${handleAt} | Nome: ${displayName}
 ${roteiroSection}
 
-Progressão de conteúdo obrigatória (emoção dominante: ${(dominantEmotion || 'medo de perder').toUpperCase()}):
-Slide 1 = HOOK (para o scroll, número/promessa/dor real) → Slide 2 = QUEBRA DE EXPECTATIVA (contradiz crença comum, lacuna) → Slides 3-4 = AMPLIFICAÇÃO (identificação + consequência) → Slides 5-6 = REVELAÇÃO (insight + metáfora) → Slide 7 = CONSEQUÊNCIA (custo real e específico) → Slide 8 = FRASE FINAL (curta, sem suavização) → Último slide = CTA (ação concreta atrelada ao tema).
-Linguagem direta, sem travessão no meio das frases, sem clichês, máximo 40 palavras por slide.
+${buildViralStructure({ numSlides, dominantEmotion: dominantEmotion || 'medo de perder', handleAt, roteiro })}
 
 ━━━ O QUE VOCÊ DEVE MANTER IDÊNTICO (NÃO ALTERE) ━━━
 1. O bloco <style>...</style> INTEIRO — copie caractere por caractere
@@ -807,17 +836,7 @@ ${roteiroSection}
 - Use EXATAMENTE as classes CSS do template abaixo
 - Máximo 40 palavras por slide de conteúdo
 
-━━━ ESTRUTURA DE CONTEÚDO (siga esta progressão — emoção dominante: ${dominantEmotion.toUpperCase()}) ━━━
-SLIDE 1 — HOOK: as primeiras palavras param o scroll — número específico, promessa clara ou dor real. Proibido: abertura genérica ou motivacional.
-SLIDE 2 — QUEBRA DE EXPECTATIVA: contradiga a crença mais comum do nicho. Termine com frase que cria lacuna.
-SLIDES 3-4 — AMPLIFICAÇÃO: comportamento incoerente que a maioria tem (o leitor pensa "isso sou eu") + consequência real de continuar assim.
-SLIDES 5-6 — REVELAÇÃO: insight central que reframe tudo + metáfora simples e visual.
-SLIDE 7 — CONSEQUÊNCIA: custo real e específico de ignorar a revelação — dados, prazo ou comparação concreta.
-SLIDE 8 — FRASE FINAL: uma única ideia curta que sintetize a emoção dominante. Sem explicação. Sem suavização.
-SLIDE ${numSlides} — CTA: ação concreta e específica atrelada ao tema (comentar palavra-chave + seguir).
-${roteiro && roteiro.trim()
-  ? 'Distribuir o ROTEIRO DO CRIADOR por essa estrutura mantendo a emoção dominante. Não inventar nem alterar o texto.'
-  : 'Linguagem direta, sem travessão no meio das frases, sem clichês, cada slide com insight novo.'}
+${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
 
 ━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
 
