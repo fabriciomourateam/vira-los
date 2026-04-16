@@ -176,6 +176,11 @@ const TEXT_SELECTORS = [
   { selector: '.profile-handle', isMain: false },
   { selector: '.follow-pill', isMain: false },
   { selector: '.swipe-hint', isMain: false },
+  { selector: '.footer-name-pill', isMain: false },
+  { selector: '.footer-handle-pill', isMain: false },
+  { selector: '.header-name', isMain: false },
+  { selector: '.header-handle', isMain: false },
+  { selector: '.slide-number', isMain: false },
   { selector: '.custom-text', isMain: true },
 ];
 
@@ -259,9 +264,7 @@ function extractTextBlocks(el: Element): TextBlock[] {
   const seen = new Set<Element>();
   for (const { selector, isMain } of TEXT_SELECTORS) {
     for (const node of Array.from(el.querySelectorAll(selector))) {
-      if (node.closest('.top-header') || node.closest('.footer-name-pill') ||
-          node.closest('.footer-handle-pill') || node.closest('.follow-banner') ||
-          seen.has(node)) continue;
+      if (seen.has(node)) continue;
       seen.add(node);
       const className = node.className || selector.slice(1);
       const highlights = extractWordHighlights(node);
@@ -323,8 +326,7 @@ function rebuildSlideOuterHtml(
 
   const classGroups: Record<string, Element[]> = {};
   for (const { selector } of TEXT_SELECTORS) {
-    classGroups[selector.slice(1)] = Array.from(el.querySelectorAll(selector))
-      .filter(n => !n.closest('.top-header'));
+    classGroups[selector.slice(1)] = Array.from(el.querySelectorAll(selector));
   }
   const groupCounters: Record<string, number> = {};
   for (const { selector } of TEXT_SELECTORS) groupCounters[selector.slice(1)] = 0;
