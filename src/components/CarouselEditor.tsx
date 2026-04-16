@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import {
   Download, RefreshCw, Loader2, Image, Edit3, LayoutList, Eye, Save, Trash2,
   BookmarkPlus, GripVertical, Plus, Minus, Upload, MousePointer2, Type,
-  Undo2, Redo2, Search, Copy, Sparkles,
+  Undo2, Redo2, Search, Copy, Sparkles, ChevronDown,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -1067,6 +1067,60 @@ export default function CarouselEditor({
   const [regenHint, setRegenHint] = useState('');
   const [showRegenInput, setShowRegenInput] = useState(false);
 
+  // ── Blocos e seções colapsáveis ───────────────────────────────────────────────
+  const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    texts: true, image: true, banner: true, gradient: true,
+  });
+  function toggleSection(key: string) {
+    setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+  function toggleBlock(key: string) {
+    setCollapsedBlocks(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+  // Ao trocar de slide, colapsa todos os blocos
+  const prevSelectedRef = useRef<number | null>(null);
+  if (prevSelectedRef.current !== selectedIndex) {
+    prevSelectedRef.current = selectedIndex;
+    // Reset acontece via key do componente; não precisamos resetar aqui
+  }
+
+  function blockLabel(className: string): string {
+    if (className.startsWith('custom-text')) return 'Texto adicionado';
+    const cn = className.split(' ')[0];
+    const map: Record<string, string> = {
+      title: 'Título principal',
+      'slide-title': 'Título do slide',
+      subtitle: 'Subtítulo',
+      'slide-subtitle': 'Subtítulo',
+      'narrative-text': 'Texto narrativo',
+      'body-text': 'Corpo do texto',
+      'hook-text': 'Gancho (Hook)',
+      'cta-text': 'Call to Action',
+      cta: 'Call to Action',
+      'profile-name': 'Nome do perfil',
+      'profile-handle': '@Handle do perfil',
+      handle: '@Handle',
+      caption: 'Legenda',
+      'slide-caption': 'Legenda',
+      label: 'Rótulo',
+      'card-title': 'Título do card',
+      'card-text': 'Texto do card',
+      'list-item': 'Item de lista',
+      tag: 'Tag',
+      badge: 'Badge',
+      number: 'Número',
+      quote: 'Citação',
+      'author-name': 'Autor',
+      highlight: 'Destaque',
+      'step-title': 'Título do passo',
+      'step-text': 'Texto do passo',
+      'footer-text': 'Rodapé',
+      'slide-footer': 'Rodapé',
+    };
+    return map[cn] ?? `.${cn}`;
+  }
+
   // ── Unsplash inline search ────────────────────────────────────────────────────
   const [imgSearch, setImgSearch] = useState('');
   const [imgSearchResults, setImgSearchResults] = useState<{id:string;url:string;thumb:string;alt:string}[]>([]);
@@ -2125,106 +2179,162 @@ export default function CarouselEditor({
 
                       {selTexts.length > 0 ? (
                         <>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                            <Edit3 className="w-3.5 h-3.5" /> Textos do slide
-                          </p>
-                          {selTexts.map((block, bi) => {
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-1.5 text-left"
+                            onClick={() => toggleSection('texts')}
+                          >
+                            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['texts'] ? '-rotate-90' : 'rotate-0'}`} />
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                              <Edit3 className="w-3.5 h-3.5" /> Textos do slide
+                            </span>
+                            <span className="ml-auto text-[10px] text-muted-foreground/60">{selTexts.filter(b => !b.deleted).length} bloco{selTexts.filter(b => !b.deleted).length !== 1 ? 's' : ''}</span>
+                          </button>
+                          {!collapsedSections['texts'] && selTexts.map((block, bi) => {
                             if (block.deleted) return null;
                             const currentSize = block.fontSize ?? (block.isMain ? 48 : 28);
+                            const blockKey = `${selectedIndex}-${bi}`;
+                            // Por padrão collapsed=true (se a chave não existe, começa fechado)
+                            const isCollapsed = collapsedBlocks[blockKey] !== false;
+                            const label = blockLabel(block.className);
+                            // Preview de texto simples (sem tags HTML) para o header colapsado
+                            const textPreview = (block.richHtml
+                              ? block.richHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+                              : block.text || '').slice(0, 40) + ((block.richHtml?.replace(/<[^>]+>/g, '') || block.text || '').length > 40 ? '…' : '');
+
                             return (
                               <div key={`${block.className}-${bi}`}
-                                className={`space-y-1 rounded-lg p-1 cursor-pointer transition-colors ${focusedBlockIdx === bi ? 'ring-1 ring-orange-500/50 bg-orange-500/5' : ''}`}
+                                className={`rounded-lg border transition-colors ${
+                                  focusedBlockIdx === bi
+                                    ? 'border-orange-500/40 bg-orange-500/5'
+                                    : 'border-border bg-secondary/20 hover:bg-secondary/40'
+                                }`}
                                 onClick={() => setFocusedBlockIdx(bi)}>
-                                <div className="flex items-center justify-between">
-                                  <label className="text-xs font-medium text-muted-foreground capitalize flex items-center gap-1">
-                                    {block.className.startsWith('custom-text') ? (
-                                      <span className="text-purple-400">Texto adicionado</span>
-                                    ) : (
-                                      <>.{block.className.split(' ')[0]}</>
-                                    )}
-                                  </label>
-                                  <div className="flex items-center gap-1.5">
-                                    {/* Remove text block */}
-                                    <button onClick={() => removeTextBlock(selectedIndex, bi)}
-                                      className="w-5 h-5 rounded flex items-center justify-center bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors"
-                                      title="Ocultar este bloco de texto">
-                                      <Minus className="w-2.5 h-2.5" />
-                                    </button>
-                                    {/* Color picker */}
-                                    <div className="relative flex items-center gap-1" title="Cor do texto">
-                                      <label className="text-[10px] text-muted-foreground">Cor</label>
-                                      <LazyColorInput
-                                        value={block.color || '#ffffff'}
-                                        onChange={v => updateTextColor(selectedIndex, bi, v)}
-                                        className="w-6 h-6 rounded cursor-pointer border border-border bg-transparent"
-                                        title="Cor do texto"
-                                      />
-                                    </div>
-                                    {/* Text transform toggle */}
-                                    <button
-                                      onClick={() => toggleTextTransform(selectedIndex, bi)}
-                                      className={`px-1.5 h-5 rounded text-[9px] font-bold transition-colors ${
-                                        block.textTransform === 'uppercase'
-                                          ? 'bg-purple-600 text-white'
-                                          : block.textTransform === 'none'
-                                          ? 'bg-blue-600 text-white'
-                                          : 'bg-secondary text-muted-foreground hover:bg-border'
-                                      }`}
-                                      title={block.textTransform === 'uppercase' ? 'MAIÚSCULA — clique para normal' : block.textTransform === 'none' ? 'normal — clique para MAIÚSCULA' : 'Alternar maiúscula/normal'}
-                                    >
-                                      {block.textTransform === 'uppercase' ? 'AA' : 'Aa'}
-                                    </button>
-                                    {/* Font size stepper */}
-                                    <button onClick={() => updateFontSize(selectedIndex, bi, -2)}
-                                      className="w-5 h-5 rounded flex items-center justify-center bg-secondary hover:bg-border transition-colors">
-                                      <Minus className="w-2.5 h-2.5" />
-                                    </button>
-                                    <span className="text-[10px] font-mono text-muted-foreground w-8 text-center">
-                                      {currentSize}px
-                                    </span>
-                                    <button onClick={() => updateFontSize(selectedIndex, bi, 2)}
-                                      className="w-5 h-5 rounded flex items-center justify-center bg-secondary hover:bg-border transition-colors">
-                                      <Plus className="w-2.5 h-2.5" />
-                                    </button>
-                                  </div>
-                                  {/* Font family */}
-                                  <select
-                                    value={block.fontFamily || ''}
-                                    onChange={e => updateFontFamily(selectedIndex, bi, e.target.value)}
-                                    className="w-full mt-1 rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                                  >
-                                    <option value="">— fonte padrão —</option>
-                                    {FONT_OPTIONS.map(f => (
-                                      <option key={f} value={f}>{f}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                {/* Editor rich text com toolbar */}
-                                <RichTextEditor
-                                  key={`rt-${selectedIndex}-${bi}`}
-                                  html={block.richHtml || textToHtml(block.text, block.highlights)}
-                                  onChange={html => updateRichHtml(selectedIndex, bi, html)}
-                                  textAlign={block.textAlign}
-                                  blockColor={block.color}
-                                />
 
-                                {/* Alinhamento do texto */}
-                                <div className="flex items-center gap-0.5">
-                                  {(['left', 'center', 'right', 'justify'] as const).map(align => (
-                                    <button
-                                      key={align}
-                                      onClick={() => updateTextAlign(selectedIndex, bi, align)}
-                                      className={`flex-1 py-1 rounded text-[10px] font-semibold transition-colors ${
-                                        (block.textAlign || 'left') === align
-                                          ? 'bg-purple-600 text-white'
-                                          : 'bg-secondary text-muted-foreground hover:bg-border active:bg-border'
-                                      }`}
-                                      title={align === 'left' ? 'Esquerda' : align === 'center' ? 'Centralizado' : align === 'right' ? 'Direita' : 'Justificado'}
+                                {/* ── Header (sempre visível) ── */}
+                                <button
+                                  type="button"
+                                  className="w-full flex items-center gap-2 px-2.5 py-2 text-left"
+                                  onClick={e => { e.stopPropagation(); toggleBlock(blockKey); setFocusedBlockIdx(bi); }}
+                                >
+                                  {/* Chevron */}
+                                  <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+
+                                  {/* Label + preview */}
+                                  <div className="flex-1 min-w-0">
+                                    <span className={`text-[11px] font-semibold ${block.className.startsWith('custom-text') ? 'text-purple-400' : 'text-foreground'}`}>
+                                      {label}
+                                    </span>
+                                    {isCollapsed && textPreview && (
+                                      <span className="ml-1.5 text-[10px] text-muted-foreground truncate">{textPreview}</span>
+                                    )}
+                                  </div>
+
+                                  {/* Cor + tamanho no header (quick-view) */}
+                                  <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                                    <div
+                                      className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
+                                      style={{ background: block.color || '#ffffff' }}
+                                      title={block.color || '#ffffff'}
+                                    />
+                                    <span className="text-[10px] font-mono text-muted-foreground">{currentSize}px</span>
+                                  </div>
+                                </button>
+
+                                {/* ── Corpo expandido ── */}
+                                {!isCollapsed && (
+                                  <div className="px-2.5 pb-2.5 space-y-1.5 border-t border-border/50">
+
+                                    {/* Linha de controles rápidos */}
+                                    <div className="flex items-center flex-wrap gap-1.5 pt-2">
+                                      {/* Remove block */}
+                                      <button onClick={e => { e.stopPropagation(); removeTextBlock(selectedIndex, bi); }}
+                                        className="w-5 h-5 rounded flex items-center justify-center bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors"
+                                        title="Ocultar este bloco de texto">
+                                        <Minus className="w-2.5 h-2.5" />
+                                      </button>
+
+                                      {/* Color picker */}
+                                      <div className="flex items-center gap-1" title="Cor do texto" onClick={e => e.stopPropagation()}>
+                                        <span className="text-[10px] text-muted-foreground">Cor</span>
+                                        <LazyColorInput
+                                          value={block.color || '#ffffff'}
+                                          onChange={v => updateTextColor(selectedIndex, bi, v)}
+                                          className="w-6 h-6 rounded cursor-pointer border border-border bg-transparent"
+                                          title="Cor do texto"
+                                        />
+                                      </div>
+
+                                      {/* Text transform */}
+                                      <button
+                                        onClick={e => { e.stopPropagation(); toggleTextTransform(selectedIndex, bi); }}
+                                        className={`px-1.5 h-5 rounded text-[9px] font-bold transition-colors ${
+                                          block.textTransform === 'uppercase'
+                                            ? 'bg-purple-600 text-white'
+                                            : block.textTransform === 'none'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-secondary text-muted-foreground hover:bg-border'
+                                        }`}
+                                        title={block.textTransform === 'uppercase' ? 'MAIÚSCULA → normal' : block.textTransform === 'none' ? 'normal → MAIÚSCULA' : 'Alternar maiúscula/normal'}
+                                      >
+                                        {block.textTransform === 'uppercase' ? 'AA' : 'Aa'}
+                                      </button>
+
+                                      {/* Font size stepper */}
+                                      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                                        <button onClick={() => updateFontSize(selectedIndex, bi, -2)}
+                                          className="w-5 h-5 rounded flex items-center justify-center bg-secondary hover:bg-border transition-colors">
+                                          <Minus className="w-2.5 h-2.5" />
+                                        </button>
+                                        <span className="text-[10px] font-mono text-muted-foreground w-8 text-center">{currentSize}px</span>
+                                        <button onClick={() => updateFontSize(selectedIndex, bi, 2)}
+                                          className="w-5 h-5 rounded flex items-center justify-center bg-secondary hover:bg-border transition-colors">
+                                          <Plus className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Font family */}
+                                    <select
+                                      value={block.fontFamily || ''}
+                                      onChange={e => { e.stopPropagation(); updateFontFamily(selectedIndex, bi, e.target.value); }}
+                                      onClick={e => e.stopPropagation()}
+                                      className="w-full rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
                                     >
-                                      {align === 'left' ? '⫷' : align === 'center' ? '⫿' : align === 'right' ? '⫸' : '⫼'}
-                                    </button>
-                                  ))}
-                                </div>
+                                      <option value="">— fonte padrão —</option>
+                                      {FONT_OPTIONS.map(f => (
+                                        <option key={f} value={f}>{f}</option>
+                                      ))}
+                                    </select>
+
+                                    {/* Rich text editor */}
+                                    <RichTextEditor
+                                      key={`rt-${selectedIndex}-${bi}`}
+                                      html={block.richHtml || textToHtml(block.text, block.highlights)}
+                                      onChange={html => updateRichHtml(selectedIndex, bi, html)}
+                                      textAlign={block.textAlign}
+                                      blockColor={block.color}
+                                    />
+
+                                    {/* Alinhamento */}
+                                    <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                                      {(['left', 'center', 'right', 'justify'] as const).map(align => (
+                                        <button
+                                          key={align}
+                                          onClick={() => updateTextAlign(selectedIndex, bi, align)}
+                                          className={`flex-1 py-1 rounded text-[10px] font-semibold transition-colors ${
+                                            (block.textAlign || 'left') === align
+                                              ? 'bg-purple-600 text-white'
+                                              : 'bg-secondary text-muted-foreground hover:bg-border'
+                                          }`}
+                                          title={align === 'left' ? 'Esquerda' : align === 'center' ? 'Centralizado' : align === 'right' ? 'Direita' : 'Justificado'}
+                                        >
+                                          {align === 'left' ? '⫷' : align === 'center' ? '⫿' : align === 'right' ? '⫸' : '⫼'}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -2253,10 +2363,18 @@ export default function CarouselEditor({
                       </div>
 
                       {/* Imagem de fundo */}
-                      <div className="space-y-2 pt-2 border-t border-border">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                          <Image className="w-3.5 h-3.5" /> Imagem
-                        </p>
+                      <div className="pt-2 border-t border-border">
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-1.5 mb-2 text-left"
+                          onClick={() => toggleSection('image')}
+                        >
+                          <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['image'] ? '-rotate-90' : 'rotate-0'}`} />
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                            <Image className="w-3.5 h-3.5" /> Imagem
+                          </p>
+                        </button>
+                      {!collapsedSections['image'] && <div className="space-y-2">
 
                         {/* Selector de alvo (fundo vs img inline) */}
                         {(() => {
@@ -2392,6 +2510,7 @@ export default function CarouselEditor({
                             </div>
                           );
                         })()}
+                      </div>}
                       </div>
 
                       {/* ── Banner "Me Siga" ── */}
@@ -2424,26 +2543,41 @@ export default function CarouselEditor({
                           );
                         }
                         return (
-                          <div className="space-y-2 pt-3 border-t border-border">
-                            <div className="flex items-center justify-between">
+                          <div className="pt-2 border-t border-border">
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-1.5 mb-2 text-left"
+                              onClick={() => toggleSection('banner')}
+                            >
+                              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['banner'] ? '-rotate-90' : 'rotate-0'}`} />
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Banner "Me Siga"</p>
-                              <button
-                                onClick={() => setBanner({ visible: !bannerCfg.visible })}
-                                className={`px-2 py-1 rounded text-[11px] font-semibold transition-colors ${bannerCfg.visible ? 'bg-pink-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-border'}`}
-                              >
+                              {/* Status badge quick-view */}
+                              <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded font-semibold ${bannerCfg.visible ? 'bg-pink-600/30 text-pink-300' : 'bg-secondary text-muted-foreground'}`}>
                                 {bannerCfg.visible ? 'Visível' : 'Oculto'}
-                              </button>
-                            </div>
-                            {bannerCfg.visible && (
-                              <div className="flex items-center gap-2">
-                                <label className="text-[11px] text-muted-foreground">Cor do banner</label>
-                                <LazyColorInput
-                                  value={bannerCfg.color}
-                                  onChange={v => setBanner({ color: v })}
-                                  className="w-7 h-7 rounded cursor-pointer border border-border"
-                                  title="Cor do banner"
-                                />
-                                <span className="text-[11px] text-muted-foreground">{bannerCfg.color}</span>
+                              </span>
+                            </button>
+                            {!collapsedSections['banner'] && (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <button
+                                    onClick={() => setBanner({ visible: !bannerCfg.visible })}
+                                    className={`px-2 py-1 rounded text-[11px] font-semibold transition-colors ${bannerCfg.visible ? 'bg-pink-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-border'}`}
+                                  >
+                                    {bannerCfg.visible ? 'Visível' : 'Oculto'}
+                                  </button>
+                                </div>
+                                {bannerCfg.visible && (
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-[11px] text-muted-foreground">Cor do banner</label>
+                                    <LazyColorInput
+                                      value={bannerCfg.color}
+                                      onChange={v => setBanner({ color: v })}
+                                      className="w-7 h-7 rounded cursor-pointer border border-border"
+                                      title="Cor do banner"
+                                    />
+                                    <span className="text-[11px] text-muted-foreground">{bannerCfg.color}</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -2471,10 +2605,23 @@ export default function CarouselEditor({
                           return `${r},${g},${b}`;
                         };
                         return (
-                          <div className="space-y-3 pt-3 border-t border-border">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                              Gradiente da capa
-                            </p>
+                          <div className="pt-3 border-t border-border">
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-1.5 mb-2 text-left"
+                              onClick={() => toggleSection('gradient')}
+                            >
+                              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['gradient'] ? '-rotate-90' : 'rotate-0'}`} />
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                Gradiente da capa
+                              </p>
+                              {/* Mini preview no header */}
+                              {ov.direction !== 'none' && (
+                                <div className="ml-auto w-10 h-4 rounded border border-border shrink-0"
+                                  style={{ background: buildOverlayStyle(ov) }} />
+                              )}
+                            </button>
+                          {!collapsedSections['gradient'] && <div className="space-y-3">
 
                             {/* Direção */}
                             <div className="space-y-1">
@@ -2552,6 +2699,7 @@ export default function CarouselEditor({
                                 Restaurar padrão
                               </button>
                             )}
+                          </div>}
                           </div>
                         );
                       })()}
