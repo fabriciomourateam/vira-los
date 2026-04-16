@@ -43,6 +43,17 @@ interface OverlayConfig {
   opacity: number;       // 0–1
   direction: 'to bottom' | 'to top' | 'to right' | 'radial' | 'none';
   color: string;         // ex: '0,0,0' ou '80,0,120'
+  startAt?: number;      // 0–100% — onde o gradiente começa (só para 'to bottom')
+}
+
+interface BgImageConfig {
+  position: string;   // CSS background-position, ex: 'center top'
+  brightness: number; // 0–200, padrão 100
+}
+
+interface FollowBannerConfig {
+  visible: boolean;
+  color: string;  // hex da cor de fundo do banner
 }
 
 const OVERLAY_PRESETS: { label: string; value: OverlayConfig['direction'] }[] = [
@@ -72,7 +83,7 @@ function LazyColorInput({ value, onChange, className, title }: {
 }
 
 function buildOverlayStyle(cfg: OverlayConfig): string {
-  const { opacity, direction, color } = cfg;
+  const { opacity, direction, color, startAt = 0 } = cfg;
   const c = color || '0,0,0';
   const hi = opacity.toFixed(2);
   const lo = (opacity * 0.15).toFixed(2);
@@ -81,7 +92,13 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
     case 'to right':  return `linear-gradient(to right, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 60%, rgba(${c},0) 100%)`;
     case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
     case 'none':      return 'rgba(0,0,0,0)';
-    default:          return `linear-gradient(to bottom, rgba(${c},${lo}) 0%, rgba(${c},${hi}) 55%, rgba(${c},${Math.min(1,opacity*1.1).toFixed(2)}) 100%)`;
+    default: {
+      if (startAt > 0) {
+        const mid = Math.min(99, startAt + (100 - startAt) * 0.35);
+        return `linear-gradient(to bottom, rgba(${c},0) 0%, rgba(${c},0) ${startAt}%, rgba(${c},${lo}) ${mid.toFixed(0)}%, rgba(${c},${hi}) 100%)`;
+      }
+      return `linear-gradient(to bottom, rgba(${c},${lo}) 0%, rgba(${c},${hi}) 55%, rgba(${c},${Math.min(1,opacity*1.1).toFixed(2)}) 100%)`;
+    }
   }
 }
 
@@ -319,6 +336,8 @@ function rebuildSlideOuterHtml(
   overrides?: Record<string, ElementOverride>,
   overlayConfig?: OverlayConfig,
   showBadge?: boolean,
+  bgImageConfig?: BgImageConfig,
+  followBannerConfig?: FollowBannerConfig,
 ): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
@@ -387,15 +406,40 @@ function rebuildSlideOuterHtml(
     groupCounters[baseClass] = idx + 1;
   }
 
-  // Background
-  if (newBgUrl !== null) {
+  // Background image + position + brightness
+  if (newBgUrl !== null || bgImageConfig) {
     const slideBg = el.querySelector('.slide-bg, .bg') as HTMLElement | null;
     const target = slideBg || el as HTMLElement;
-    const s = target.getAttribute('style') || '';
-    target.setAttribute('style', BG_IMAGE_REGEX.test(s)
-      ? s.replace(BG_IMAGE_REGEX, `background-image: url('${newBgUrl}')`)
-      : `${s} background-image: url('${newBgUrl}');`
-    );
+    let s = target.getAttribute('style') || '';
+    if (newBgUrl !== null) {
+      s = BG_IMAGE_REGEX.test(s)
+        ? s.replace(BG_IMAGE_REGEX, `background-image: url('${newBgUrl}')`)
+        : `${s} background-image: url('${newBgUrl}');`;
+    }
+    if (bgImageConfig) {
+      s = s.replace(/background-position\s*:\s*[^;]+;?/i, '').trim();
+      s = `${s}; background-position: ${bgImageConfig.position};`;
+      s = s.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?/i, '').trim();
+      if (bgImageConfig.brightness !== 100) {
+        s = `${s}; filter: brightness(${bgImageConfig.brightness}%);`;
+      }
+    }
+    target.setAttribute('style', s);
+  }
+
+  // Follow banner visibility + cor
+  if (followBannerConfig) {
+    const bannerEl = el.querySelector('.follow-banner') as HTMLElement | null;
+    if (bannerEl) {
+      if (!followBannerConfig.visible) {
+        bannerEl.style.display = 'none';
+      } else {
+        bannerEl.style.display = '';
+        let bs = bannerEl.getAttribute('style') || '';
+        bs = bs.replace(/background(?:-color)?\s*:\s*[^;]+;?/gi, '').trim();
+        bannerEl.setAttribute('style', `${bs}; background-color: ${followBannerConfig.color};`.replace(/^;\s*/, ''));
+      }
+    }
   }
 
   // Overlay gradient
@@ -980,6 +1024,8 @@ export default function CarouselEditor({
   const [editedBgUrls, setEditedBgUrls] = useState<Record<number, string>>({});
   const [elementOverrides, setElementOverrides] = useState<Record<number, Record<string, ElementOverride>>>({});
   const [overlayConfigs, setOverlayConfigs] = useState<Record<number, OverlayConfig>>({});
+  const [bgImageConfigs, setBgImageConfigs] = useState<Record<number, BgImageConfig>>({});
+  const [followBannerConfigs, setFollowBannerConfigs] = useState<Record<number, FollowBannerConfig>>({});
   const [badgeVisible, setBadgeVisible] = useState<Record<number, boolean>>({});
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editMode, setEditMode] = useState<'text' | 'visual'>('text');
@@ -1413,9 +1459,11 @@ export default function CarouselEditor({
       elementOverrides[s.index],
       overlayConfigs[s.index],
       badgeVisible[s.index],
+      bgImageConfigs[s.index],
+      followBannerConfigs[s.index],
     ));
     return `<!DOCTYPE html><html><head>${head}</head><body>\n${built.join('\n')}\n</body></html>`;
-  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible]);
+  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs]);
 
   // ── Persistência: avisa o pai sempre que o HTML reconstruído mudar ───────────
 
@@ -1430,7 +1478,7 @@ export default function CarouselEditor({
       onHtmlUpdatedRef.current?.(built);
     }, 600);
     return () => clearTimeout(timer);
-  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, slides, rebuildHtml]);
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, slides, rebuildHtml]);
 
   function liveSlideHtml(idx: number): string {
     const s = slides[idx]; if (!s) return '';
@@ -1441,6 +1489,8 @@ export default function CarouselEditor({
       elementOverrides[idx],
       overlayConfigs[idx],
       badgeVisible[idx],
+      bgImageConfigs[idx],
+      followBannerConfigs[idx],
     );
   }
 
@@ -1940,7 +1990,117 @@ export default function CarouselEditor({
                             Remover imagem
                           </button>
                         )}
+
+                        {/* Posicionamento da imagem */}
+                        {selBg && (() => {
+                          const bgCfg: BgImageConfig = bgImageConfigs[selectedIndex] ?? { position: 'center center', brightness: 100 };
+                          const setBg = (patch: Partial<BgImageConfig>) =>
+                            setBgImageConfigs(prev => ({ ...prev, [selectedIndex]: { ...bgCfg, ...patch } }));
+                          const POS_GRID = [
+                            ['left top','center top','right top'],
+                            ['left center','center center','right center'],
+                            ['left bottom','center bottom','right bottom'],
+                          ];
+                          const POS_LABELS: Record<string,string> = {
+                            'left top':'↖','center top':'↑','right top':'↗',
+                            'left center':'←','center center':'·','right center':'→',
+                            'left bottom':'↙','center bottom':'↓','right bottom':'↘',
+                          };
+                          return (
+                            <div className="space-y-2 pt-2 border-t border-border">
+                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Posição da imagem</p>
+                              <div className="grid grid-cols-3 gap-1 w-24">
+                                {POS_GRID.map(row => row.map(pos => (
+                                  <button key={pos}
+                                    onClick={() => setBg({ position: pos })}
+                                    title={pos}
+                                    className={`w-7 h-7 rounded text-sm flex items-center justify-center transition-colors ${
+                                      bgCfg.position === pos
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-secondary hover:bg-border text-muted-foreground'
+                                    }`}
+                                  >{POS_LABELS[pos]}</button>
+                                )))}
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">Brilho da imagem</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{bgCfg.brightness}%</span>
+                                </div>
+                                <input type="range" min={0} max={200} value={bgCfg.brightness}
+                                  onChange={e => setBg({ brightness: Number(e.target.value) })}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Escuro</span><span>Normal</span><span>Claro</span>
+                                </div>
+                              </div>
+                              {bgImageConfigs[selectedIndex] && (
+                                <button onClick={() => setBgImageConfigs(prev => { const n = {...prev}; delete n[selectedIndex]; return n; })}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+                                  Restaurar padrão
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
+
+                      {/* ── Banner "Me Siga" ── */}
+                      {(() => {
+                        const hasBanner = sel?.outerHtml.includes('follow-banner');
+                        const bannerCfg: FollowBannerConfig = followBannerConfigs[selectedIndex] ?? { visible: true, color: '#e8778a' };
+                        const setBanner = (patch: Partial<FollowBannerConfig>) =>
+                          setFollowBannerConfigs(prev => ({ ...prev, [selectedIndex]: { ...bannerCfg, ...patch } }));
+
+                        if (!hasBanner) {
+                          return (
+                            <div className="pt-2 border-t border-border">
+                              <button
+                                onClick={() => {
+                                  const FOLLOW_BANNER_HTML = `<div class="follow-banner" style="position:absolute;top:0;left:0;right:0;z-index:20;background:#e8778a;padding:10px 20px;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:700;color:#fff;"><svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>Me siga para mais conteúdos como esse!</div>`;
+                                  setSlides(prev => prev.map((s, i) => {
+                                    if (i !== selectedIndex) return s;
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
+                                    const el = doc.body.firstElementChild!;
+                                    el.insertAdjacentHTML('afterbegin', FOLLOW_BANNER_HTML);
+                                    return { ...s, outerHtml: el.outerHTML };
+                                  }));
+                                }}
+                                className="flex items-center gap-1.5 py-2 px-3 rounded-lg border border-dashed border-pink-500/40 hover:border-pink-500 bg-pink-500/5 hover:bg-pink-500/10 text-pink-400 text-xs font-semibold transition-colors w-full justify-center"
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Inserir banner "Me Siga"
+                              </button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="space-y-2 pt-3 border-t border-border">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Banner "Me Siga"</p>
+                              <button
+                                onClick={() => setBanner({ visible: !bannerCfg.visible })}
+                                className={`px-2 py-1 rounded text-[11px] font-semibold transition-colors ${bannerCfg.visible ? 'bg-pink-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-border'}`}
+                              >
+                                {bannerCfg.visible ? 'Visível' : 'Oculto'}
+                              </button>
+                            </div>
+                            {bannerCfg.visible && (
+                              <div className="flex items-center gap-2">
+                                <label className="text-[11px] text-muted-foreground">Cor do banner</label>
+                                <LazyColorInput
+                                  value={bannerCfg.color}
+                                  onChange={v => setBanner({ color: v })}
+                                  className="w-7 h-7 rounded cursor-pointer border border-border"
+                                  title="Cor do banner"
+                                />
+                                <span className="text-[11px] text-muted-foreground">{bannerCfg.color}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* ── Gradiente / Overlay ── */}
                       {sel.outerHtml.includes('class="overlay"') && (() => {
@@ -1986,6 +2146,23 @@ export default function CarouselEditor({
                                 ))}
                               </div>
                             </div>
+
+                            {/* Começa em (só para 'to bottom') */}
+                            {ov.direction === 'to bottom' && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">Começa em</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{ov.startAt ?? 0}%</span>
+                                </div>
+                                <input type="range" min={0} max={80} value={ov.startAt ?? 0}
+                                  onChange={e => setOv({ startAt: Number(e.target.value) })}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Topo</span><span>Meio</span><span>Base</span>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Intensidade */}
                             <div className="space-y-1">
