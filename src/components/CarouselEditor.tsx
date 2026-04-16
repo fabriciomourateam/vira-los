@@ -601,7 +601,7 @@ function SlidePreview({ slideHtml, head }: { slideHtml: string; head: string }) 
     const ro = new ResizeObserver(entries => {
       for (const entry of entries) {
         const w = Math.floor(entry.contentRect.width);
-        setContainerW(Math.min(w, 320));
+        setContainerW(Math.min(w, 440));
       }
     });
     ro.observe(el);
@@ -1781,25 +1781,30 @@ export default function CarouselEditor({
               <motion.div key={`${selectedIndex}-${editMode}`}
                 initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}
-                className="flex-1 flex flex-col overflow-y-auto"
+                className="flex-1 flex flex-col overflow-hidden min-h-0"
               >
                 {/* ── MODO TEXTO ── */}
                 {editMode === 'text' && (
-                  <>
-                    {/* Preview estático */}
-                    <div className="px-3 sm:px-5 pt-4 pb-3 border-b border-border bg-secondary/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                          Preview — Slide {selectedIndex + 1}
-                          <span className="ml-2 capitalize font-normal opacity-60">{sel.type}</span>
-                        </span>
+                  <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+
+                    {/* Preview — coluna esquerda fixa */}
+                    <div className="md:w-[44%] shrink-0 border-b md:border-b-0 md:border-r border-border bg-secondary/10 overflow-hidden flex flex-col">
+                      <div className="px-3 pt-3 pb-2 border-b border-border/50">
+                        <div className="flex items-center gap-2">
+                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            Preview — Slide {selectedIndex + 1}
+                            <span className="ml-2 capitalize font-normal opacity-60">{sel.type}</span>
+                          </span>
+                        </div>
                       </div>
-                      <SlidePreview slideHtml={liveSlideHtml(selectedIndex)} head={head} />
+                      <div className="flex-1 flex items-start justify-center px-3 py-4 overflow-hidden">
+                        <SlidePreview slideHtml={liveSlideHtml(selectedIndex)} head={head} />
+                      </div>
                     </div>
 
-                    {/* Campos */}
-                    <div className="px-3 sm:px-5 py-4 space-y-4 flex-1">
+                    {/* Controles — coluna direita rolável */}
+                    <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-4">
 
                       {/* ── Selo Verificado (só aparece em slides com .profile-name) ── */}
                       {sel.outerHtml.includes('profile-name') && (
@@ -2208,7 +2213,7 @@ export default function CarouselEditor({
                         );
                       })()}
                     </div>
-                  </>
+                  </div>
                 )}
 
                 {/* ── MODO VISUAL ── */}
