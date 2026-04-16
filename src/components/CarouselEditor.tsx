@@ -881,6 +881,25 @@ function RichTextEditor({
     editorRef.current?.focus();
   }
 
+  // Aplica tamanho de fonte (em px) ao texto selecionado usando mark-then-replace
+  function applyFontSize(px: number) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    // Marca com font size=7 para identificar os nós afetados
+    document.execCommand('fontSize', false, '7');
+    if (editorRef.current) {
+      // Substitui todas as <font size="7"> por <span style="font-size:Xpx">
+      editorRef.current.querySelectorAll('font[size="7"]').forEach(el => {
+        const span = document.createElement('span');
+        span.style.fontSize = `${px}px`;
+        span.innerHTML = (el as HTMLElement).innerHTML;
+        el.parentNode?.replaceChild(span, el);
+      });
+    }
+    handleInput();
+    editorRef.current?.focus();
+  }
+
   const btnCls = (active?: boolean) =>
     `px-1.5 py-1 rounded text-[11px] font-bold transition-colors ${
       active ? 'bg-purple-600 text-white' : 'bg-secondary text-muted-foreground hover:bg-border active:bg-border'
@@ -896,6 +915,23 @@ function RichTextEditor({
           className={btnCls()} title="Itálico"><em>I</em></button>
         <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('underline')}
           className={btnCls()} title="Sublinhado"><span className="underline">U</span></button>
+        {/* Tamanho de fonte inline (por seleção) */}
+        <select
+          title="Tamanho de fonte da seleção"
+          defaultValue=""
+          onMouseDown={e => e.stopPropagation()}
+          onChange={e => {
+            const v = parseInt(e.target.value, 10);
+            if (v) applyFontSize(v);
+            e.target.value = '';
+          }}
+          className="h-[26px] rounded text-[11px] bg-secondary text-muted-foreground border border-border px-1 cursor-pointer hover:bg-border"
+        >
+          <option value="" disabled>px</option>
+          {[12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 96].map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         {/* Cor do texto (seleção) */}
         <label className="relative cursor-pointer shrink-0" title="Cor do texto selecionado">
           <span className="px-1.5 py-1 rounded text-[11px] font-bold bg-secondary text-muted-foreground hover:bg-border flex items-center gap-1">
