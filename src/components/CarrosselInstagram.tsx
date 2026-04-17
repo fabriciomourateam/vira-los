@@ -1350,6 +1350,15 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                             <LayoutTemplate className="w-3 h-3" /> Usar
                           </button>
                         )}
+                        {saved.legenda && (
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(saved.legenda); toast.success('Legenda copiada!'); }}
+                            className="p-1 rounded text-muted-foreground hover:text-blue-400 transition-colors"
+                            title={`Copiar legenda:\n${saved.legenda.substring(0, 120)}…`}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleEditSaved(saved)}
                           className={`p-1 rounded transition-colors ${
@@ -1379,6 +1388,10 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                         </button>
                       </div>
                     </div>
+                    {/* Legenda expandida — mostra preview + botão copiar */}
+                    {saved.legenda && (
+                      <LegendaPreview legenda={saved.legenda} />
+                    )}
                   </div>
                 </div>
               );
@@ -1432,6 +1445,39 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
               </motion.div>
             )}
           </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Componente: preview colapsável da legenda ─────────────────────────────────
+
+function LegendaPreview({ legenda }: { legenda: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const preview = legenda.substring(0, 80);
+  return (
+    <div className="mt-1 rounded-lg bg-secondary/60 border border-border overflow-hidden">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full px-2.5 py-1.5 text-left flex items-center justify-between gap-2 hover:bg-secondary transition-colors"
+      >
+        <span className="text-[10px] text-muted-foreground truncate flex-1">
+          📝 {expanded ? 'Legenda' : preview + (legenda.length > 80 ? '…' : '')}
+        </span>
+        <span className="text-[10px] text-muted-foreground shrink-0">{expanded ? '▲' : '▼'}</span>
+      </button>
+      {expanded && (
+        <div className="px-2.5 pb-2.5 space-y-2">
+          <p className="text-[11px] text-foreground whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+            {legenda}
+          </p>
+          <button
+            onClick={() => { navigator.clipboard.writeText(legenda); toast.success('Legenda copiada!'); }}
+            className="w-full py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <Copy className="w-3 h-3" /> Copiar legenda completa
+          </button>
         </div>
       )}
     </div>
