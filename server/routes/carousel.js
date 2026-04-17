@@ -269,6 +269,29 @@ router.post('/regenerate-slide', async (req, res) => {
   }
 });
 
+// ─── Slides Salvos (biblioteca) ───────────────────────────────────────────────
+
+router.get('/saved-slides', (req, res) => {
+  res.json(db.getSavedSlides());
+});
+
+router.post('/saved-slides', (req, res) => {
+  const { html, label } = req.body;
+  if (!html) return res.status(400).json({ error: 'html obrigatório' });
+  const slide = {
+    id: `slide-${Date.now()}`,
+    label: (label || 'Slide salvo').substring(0, 80),
+    html,
+  };
+  db.saveSlide(slide);
+  res.json(slide);
+});
+
+router.delete('/saved-slides/:id', (req, res) => {
+  db.deleteSavedSlide(req.params.id);
+  res.json({ ok: true });
+});
+
 // ─── Listar arquivos de um carrossel ──────────────────────────────────────────
 
 router.get('/output/:name', (req, res) => {

@@ -220,6 +220,11 @@ const addTrackedPost       = (p) => { const db = readDb('tracked_posts'); db.pus
 const updateTrackedPost    = (id, data) => writeDb('tracked_posts', readDb('tracked_posts').map(p => p.id === id ? { ...p, ...data, updated_at: now() } : p));
 const deleteTrackedPost    = (id) => writeDb('tracked_posts', readDb('tracked_posts').filter(p => p.id !== id));
 
+// ── Slides Salvos (biblioteca de slides reutilizáveis) ────────────────────────
+const getSavedSlides  = () => readDb('saved_slides').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const saveSlide       = (s) => { const db = readDb('saved_slides'); db.push({ ...s, created_at: now() }); writeDb('saved_slides', db); };
+const deleteSavedSlide = (id) => writeDb('saved_slides', readDb('saved_slides').filter(s => s.id !== id));
+
 // ── Carousel Config (persistente, único por usuário) ──────────────────────────
 const getCarouselConfig = () => readObj('carousel_config');
 const setCarouselConfig = (config) => {
@@ -242,6 +247,7 @@ module.exports = {
   getAllHooks, createHook, incrementHookUse, deleteHook,
   getAllIdeas, createIdea, updateIdea, deleteIdea,
   logPostResult,
+  getSavedSlides, saveSlide, deleteSavedSlide,
   getCarouselConfig, setCarouselConfig,
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
   // Ideas Generator

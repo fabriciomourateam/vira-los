@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import {
   Download, RefreshCw, Loader2, Image, Edit3, LayoutList, Eye, Save, Trash2,
   BookmarkPlus, GripVertical, Plus, Minus, Upload, MousePointer2, Type,
-  Undo2, Redo2, Search, Copy, Sparkles, ChevronDown,
+  Undo2, Redo2, Search, Copy, Sparkles, ChevronDown, Library, Bookmark, X,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -1059,6 +1059,74 @@ export default function CarouselEditor({
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
+  // ── Biblioteca de slides salvos ───────────────────────────────────────────────
+  interface SavedSlide { id: string; label: string; html: string; created_at: string; }
+  const [savedSlides, setSavedSlides] = useState<SavedSlide[]>([]);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [saveSlideLoading, setSaveSlideLoading] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API}/api/carousel/saved-slides`).then(r => r.ok ? r.json() : []).then(setSavedSlides).catch(() => {});
+  }, []);
+
+  async function saveCurrentSlide() {
+    if (selectedIndex === null) return;
+    const slideHtml = liveSlideHtml(selectedIndex);
+    const texts = (editedTexts[selectedIndex] ?? slides[selectedIndex]?.texts ?? []);
+    const mainText = texts.find(t => t.isMain)?.text || '';
+    const label = mainText.substring(0, 60) || `Slide ${selectedIndex + 1} — ${topic}`;
+    setSaveSlideLoading(true);
+    try {
+      const r = await fetch(`${API}/api/carousel/saved-slides`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: slideHtml, label }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error);
+      const saved: SavedSlide = await r.json();
+      setSavedSlides(prev => [saved, ...prev]);
+      toast.success('Slide salvo na biblioteca!');
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSaveSlideLoading(false); }
+  }
+
+  function insertSavedSlide(saved: SavedSlide) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${saved.html}</body>`, 'text/html');
+    const el = doc.body.firstElementChild as HTMLElement;
+    if (!el) { toast.error('HTML inválido'); return; }
+    const insertAt = selectedIndex !== null ? selectedIndex + 1 : slides.length;
+    const newSlide: EditableSlide = {
+      index: insertAt,
+      html: el.innerHTML,
+      outerHtml: el.outerHTML,
+      type: detectSlideType(el),
+      bgImageUrl: extractBgImageUrl(el),
+      texts: extractTextBlocks(el),
+      hasBadge: !!el.querySelector('.verified-badge'),
+    };
+    setSlides(prev => {
+      const next = [...prev];
+      next.splice(insertAt, 0, newSlide);
+      return next.map((s, i) => ({ ...s, index: i }));
+    });
+    setEditedTexts(prev => {
+      const shifted: Record<number, TextBlock[]> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const ki = parseInt(k);
+        shifted[ki < insertAt ? ki : ki + 1] = v;
+      }
+      return shifted;
+    });
+    setSelectedIndex(insertAt);
+    setLibraryOpen(false);
+    toast.success(`"${saved.label.substring(0, 40)}" inserido!`);
+  }
+
+  async function deleteSavedSlide(id: string) {
+    await fetch(`${API}/api/carousel/saved-slides/${id}`, { method: 'DELETE' });
+    setSavedSlides(prev => prev.filter(s => s.id !== id));
+  }
+
   // ── Auto-save / draft restore ─────────────────────────────────────────────────
   const hasRestoredDraftRef = useRef(false);
 
@@ -1989,6 +2057,17 @@ export default function CarouselEditor({
           <div className="px-3 py-2 border-b border-border flex items-center justify-between">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Slides</p>
             <div className="flex items-center gap-1.5">
+              {selectedIndex !== null && (
+                <button onClick={saveCurrentSlide} disabled={saveSlideLoading}
+                  title="Salvar slide na biblioteca"
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-amber-400 bg-amber-500/10 active:bg-amber-500/20 disabled:opacity-50 transition-colors">
+                  {saveSlideLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bookmark className="w-3 h-3" />}
+                </button>
+              )}
+              <button onClick={() => setLibraryOpen(v => !v)}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors ${libraryOpen ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground bg-secondary'}`}>
+                <Library className="w-3 h-3" />
+              </button>
               {selectedIndex !== null && slides.length > 1 && (
                 <button onClick={() => removeSlide(selectedIndex)}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-red-400 bg-red-500/10 active:bg-red-500/20 transition-colors"
@@ -2018,12 +2097,26 @@ export default function CarouselEditor({
         {/* Desktop: coluna lateral */}
         <div className="hidden md:flex w-[148px] shrink-0 border-r border-border flex-col">
           <div className="px-3 py-2 border-b border-border space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Slides</p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Slides</p>
+              <button onClick={() => setLibraryOpen(v => !v)}
+                title="Biblioteca de slides salvos"
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${libraryOpen ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10'}`}>
+                <Library className="w-3 h-3" /> Biblioteca
+              </button>
+            </div>
             <div className="flex gap-1">
               <button onClick={addNewSlide}
                 className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-lg text-[10px] font-semibold text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 transition-colors">
                 <Plus className="w-3 h-3" /> Novo
               </button>
+              {selectedIndex !== null && (
+                <button onClick={saveCurrentSlide} disabled={saveSlideLoading}
+                  title="Salvar slide na biblioteca"
+                  className="px-1.5 py-1 rounded-lg text-[10px] font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50 transition-colors">
+                  {saveSlideLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bookmark className="w-3 h-3" />}
+                </button>
+              )}
               {selectedIndex !== null && (
                 <button onClick={() => duplicateSlide(selectedIndex)}
                   className="px-1.5 py-1 rounded-lg text-[10px] font-semibold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
@@ -2064,6 +2157,65 @@ export default function CarouselEditor({
             ))}
           </div>
         </div>
+
+        {/* ── Biblioteca de slides salvos ── */}
+        {libraryOpen && (
+          <div className="w-full md:w-64 border-r border-border flex flex-col bg-secondary/20">
+            <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Library className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-xs font-bold">Biblioteca</span>
+                <span className="text-[10px] text-muted-foreground">({savedSlides.length})</span>
+              </div>
+              <button onClick={() => setLibraryOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {savedSlides.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-4 text-center gap-2">
+                <Bookmark className="w-8 h-8 text-muted-foreground/20" />
+                <p className="text-xs text-muted-foreground">Nenhum slide salvo ainda.</p>
+                <p className="text-[11px] text-muted-foreground/60">Selecione um slide e clique em 🔖 para salvar.</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                {savedSlides.map(saved => (
+                  <div key={saved.id} className="rounded-lg border border-border bg-card hover:border-amber-500/40 transition-colors overflow-hidden group">
+                    {/* Mini preview */}
+                    <div className="w-full h-20 overflow-hidden bg-zinc-900 relative">
+                      <iframe
+                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8">${head}</head><body style="margin:0;padding:0;overflow:hidden">${saved.html}</body></html>`}
+                        className="absolute top-0 left-0 origin-top-left pointer-events-none"
+                        style={{ width: 1080, height: 1350, transform: 'scale(0.074)', transformOrigin: '0 0' }}
+                        scrolling="no"
+                        title={saved.label}
+                      />
+                    </div>
+                    <div className="p-2 space-y-1.5">
+                      <p className="text-[11px] text-foreground font-medium leading-tight line-clamp-2">{saved.label}</p>
+                      <p className="text-[10px] text-muted-foreground/60">{new Date(saved.created_at).toLocaleDateString('pt-BR')}</p>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => insertSavedSlide(saved)}
+                          className="flex-1 py-1 rounded text-[10px] font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-colors"
+                        >
+                          + Inserir
+                        </button>
+                        <button
+                          onClick={() => deleteSavedSlide(saved.id)}
+                          className="py-1 px-1.5 rounded text-[10px] text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Remover da biblioteca"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Editor panel ── */}
         <div className="flex-1 flex flex-col min-w-0">
