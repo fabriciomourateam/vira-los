@@ -371,22 +371,26 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
             <label className="text-xs text-muted-foreground font-medium">Plataformas de busca</label>
             <div className="flex flex-wrap gap-2">
               {([
-                { id: 'instagram', label: 'Instagram', emoji: '📸' },
-                { id: 'tiktok',   label: 'TikTok',    emoji: '🎵' },
-                { id: 'trends',   label: 'G. Trends', emoji: '📈' },
-                { id: 'reddit',   label: 'Reddit',    emoji: '💬' },
-              ]).map(p => (
+                { id: 'reddit',    label: 'Reddit',    emoji: '💬', free: true  },
+                { id: 'trends',    label: 'G. Trends', emoji: '📈', free: true  },
+                { id: 'tiktok',    label: 'TikTok CC', emoji: '🎵', free: true  },
+                { id: 'instagram', label: 'Instagram', emoji: '📸', free: false },
+              ] as const).map(p => (
                 <button key={p.id}
                   onClick={() => setConfig(prev => ({
                     ...prev,
                     platforms: prev.platforms.includes(p.id) ? prev.platforms.filter(x => x !== p.id) : [...prev.platforms, p.id],
                   }))}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${config.platforms.includes(p.id) ? 'bg-orange-500/20 border-orange-500/40 text-orange-300' : 'bg-secondary border-border text-muted-foreground hover:border-orange-500/30'}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors flex items-center gap-1.5 ${config.platforms.includes(p.id) ? 'bg-orange-500/20 border-orange-500/40 text-orange-300' : 'bg-secondary border-border text-muted-foreground hover:border-orange-500/30'}`}
                 >
                   {p.emoji} {p.label}
+                  <span className={`text-[9px] px-1 py-0.5 rounded ${p.free ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                    {p.free ? 'grátis' : 'Apify'}
+                  </span>
                 </button>
               ))}
             </div>
+            <p className="text-[10px] text-muted-foreground/60">Instagram requer APIFY_API_KEY. As demais fontes são 100% gratuitas.</p>
           </div>
 
           <button onClick={saveConfig} className="px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors">
@@ -409,6 +413,30 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
               )}
             </div>
 
+            {/* Fontes ativas */}
+            {!isRunning && (
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { key: 'reddit',    label: 'Reddit',    emoji: '💬', free: true  },
+                  { key: 'trends',    label: 'G. Trends', emoji: '📈', free: true  },
+                  { key: 'tiktok',    label: 'TikTok CC', emoji: '🎵', free: true  },
+                  { key: 'instagram', label: 'Instagram', emoji: '📸', free: false },
+                ].map(p => {
+                  const active = config.platforms.includes(p.key);
+                  return (
+                    <span key={p.key} className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                      active
+                        ? p.free ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                        : 'bg-secondary border-border text-muted-foreground/50 line-through'
+                    }`}>
+                      {p.emoji} {p.label}
+                      {p.free ? <span className="text-[9px] opacity-70">grátis</span> : <span className="text-[9px] opacity-70">Apify</span>}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
             {isRunning && jobStatus ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -418,21 +446,6 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
                 <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-orange-500 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${jobStatus.progress}%` }} />
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { key: 'instagram', label: 'Instagram', emoji: '📸' },
-                    { key: 'tiktok',    label: 'TikTok',    emoji: '🎵' },
-                    { key: 'trends',    label: 'Trends',    emoji: '📈' },
-                    { key: 'reddit',    label: 'Reddit',    emoji: '💬' },
-                  ].filter(p => config.platforms.includes(p.key)).map(p => {
-                    const done = jobStatus.progress >= 60;
-                    return (
-                      <span key={p.key} className={`text-[10px] px-2 py-0.5 rounded-full border ${done ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-secondary border-border text-muted-foreground'}`}>
-                        {p.emoji} {p.label} {done ? '✓' : '...'}
-                      </span>
-                    );
-                  })}
-                </div>
               </div>
             ) : (
               <button
@@ -441,13 +454,13 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
               >
                 <Zap className="w-4 h-4" />
-                Descobrir Ideias com Dados Reais
+                Descobrir Ideias
               </button>
             )}
 
             {!isRunning && (
-              <p className="text-[11px] text-muted-foreground/70 text-center">
-                Raspa Instagram · TikTok · Google Trends · Reddit → Claude analisa padrões → 12 ideias prontas
+              <p className="text-[11px] text-muted-foreground/60 text-center">
+                TikTok CC · Google Trends · Reddit (grátis) → Claude analisa → 12 ideias prontas
               </p>
             )}
           </div>

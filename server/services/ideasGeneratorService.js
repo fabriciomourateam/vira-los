@@ -18,31 +18,57 @@ async function generateIdeas(scrapedData, config) {
 
   const { instagram = [], tiktok = [], reddit = [], trends = [] } = scrapedData;
   const totalPosts = instagram.length + tiktok.length + reddit.length;
+  const hasScrapeData = totalPosts > 0 || trends.length > 0;
 
-  // ── Montar resumo dos dados para o Claude ──
-  const fmtIG = instagram.slice(0, 12).map(
-    p => `  • [IG] "${p.title.substring(0, 120)}" — ${p.likes.toLocaleString()} curtidas, ${p.comments} comentários`
-  ).join('\n') || '  (sem dados)';
+  // ── Formatar cada fonte de dados ──
+  const sections = [];
 
-  const fmtTT = tiktok.slice(0, 12).map(
-    p => `  • [TikTok] "${p.title.substring(0, 120)}" — ${p.likes.toLocaleString()} likes, ${p.shares} shares`
-  ).join('\n') || '  (sem dados)';
+  if (instagram.length > 0) {
+    sections.push(
+      `INSTAGRAM — posts de maior engajamento por hashtag:\n` +
+      instagram.slice(0, 12).map(p =>
+        `  • "${p.title.substring(0, 120)}" — ${p.likes.toLocaleString()} curtidas, ${p.comments} comentários`
+      ).join('\n')
+    );
+  }
 
-  const fmtReddit = reddit.slice(0, 12).map(
-    p => `  • [Reddit r/${p.subreddit}] "${p.title}" — ${p.score} upvotes, ${p.comments} comentários`
-  ).join('\n') || '  (sem dados)';
+  if (tiktok.length > 0) {
+    // Diferencia entre dados do Creative Center e dados completos
+    const ccItems = tiktok.filter(p => p.platform === 'tiktok_cc');
+    const fullItems = tiktok.filter(p => p.platform === 'tiktok');
+    if (ccItems.length > 0) {
+      sections.push(
+        `TIKTOK TRENDING (Creative Center Brasil):\n` +
+        ccItems.slice(0, 12).map(p => `  • ${p.title}`).join('\n')
+      );
+    }
+    if (fullItems.length > 0) {
+      sections.push(
+        `TIKTOK — vídeos mais engajados:\n` +
+        fullItems.slice(0, 10).map(p =>
+          `  • "${p.title.substring(0, 120)}" — ${(p.likes || 0).toLocaleString()} likes`
+        ).join('\n')
+      );
+    }
+  }
 
-  const fmtTrends = trends.length
-    ? `QUERIES EM ALTA NO GOOGLE (Brasil, 7 dias):\n  ${trends.join(' • ')}`
-    : '';
+  if (reddit.length > 0) {
+    sections.push(
+      `REDDIT — perguntas e dores reais da audiência (top posts da semana):\n` +
+      reddit.slice(0, 12).map(p =>
+        `  • [r/${p.subreddit}] "${p.title}" — ${p.score} upvotes, ${p.comments} comentários`
+      ).join('\n')
+    );
+  }
 
-  const dataSection = totalPosts > 0
-    ? `Coletei ${totalPosts} posts reais de alto engajamento sobre o nicho "${niche}".\n\n` +
-      `INSTAGRAM — top posts por hashtag:\n${fmtIG}\n\n` +
-      `TIKTOK — vídeos mais engajados:\n${fmtTT}\n\n` +
-      `REDDIT — perguntas e dores reais da audiência:\n${fmtReddit}\n\n` +
-      fmtTrends
-    : `Sem dados de scraping disponíveis. Use expertise sobre "${niche}" para gerar ideias baseadas em princípios virais comprovados.`;
+  if (trends.length > 0) {
+    sections.push(`GOOGLE TRENDS — buscas em alta no Brasil hoje:\n  ${trends.join(' • ')}`);
+  }
+
+  const dataSection = hasScrapeData
+    ? `Dados coletados em tempo real (${totalPosts} posts + ${trends.length} trending topics):\n\n` +
+      sections.join('\n\n')
+    : `[Sem dados de APIs externas disponíveis nesta rodada. Use seu conhecimento profundo e atualizado sobre o nicho "${niche}" — você foi treinado em milhões de posts, vídeos e discussões sobre fitness, nutrição esportiva e hormônios, e sabe quais formatos e ângulos geram mais engajamento no Instagram e TikTok brasileiros.]`;
 
   const prompt = `Você é um estrategista de conteúdo viral especializado em Instagram para o nicho de ${niche}.
 
