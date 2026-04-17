@@ -1898,7 +1898,15 @@ export default function CarouselEditor({
     const file = e.target.files?.[0];
     if (!file || selectedIndex === null) return;
     const reader = new FileReader();
-    reader.onload = ev => updateBgUrl(selectedIndex, ev.target?.result as string);
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string;
+      if (imgTarget === 'bg') {
+        updateBgUrl(selectedIndex, dataUrl);
+      } else {
+        // aplica na imagem inline correspondente ao imgTarget
+        applyImageUrl(dataUrl);
+      }
+    };
     reader.readAsDataURL(file);
     e.target.value = '';
   }
@@ -2593,7 +2601,9 @@ export default function CarouselEditor({
                         <button onClick={() => bgFileRef.current?.click()}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-border hover:border-purple-400 bg-background hover:bg-purple-500/5 text-muted-foreground hover:text-purple-400 text-xs font-medium transition-colors w-full justify-center">
                           <Upload className="w-3.5 h-3.5" />
-                          {selBg ? 'Trocar imagem' : 'Upload do computador'}
+                          {imgTarget === 'bg'
+                            ? (selBg ? 'Trocar imagem de fundo' : 'Upload — fundo do slide')
+                            : `Upload — Img ${(imgTarget as number) + 1} do slide`}
                         </button>
                         <div className="relative">
                           <span className="absolute inset-y-0 left-3 flex items-center text-[10px] text-muted-foreground/50 pointer-events-none">URL</span>
