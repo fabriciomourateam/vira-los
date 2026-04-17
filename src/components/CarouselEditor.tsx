@@ -1115,6 +1115,8 @@ export default function CarouselEditor({
         const ki = parseInt(k);
         shifted[ki < insertAt ? ki : ki + 1] = v;
       }
+      // Popula o índice do novo slide com os blocos extraídos do HTML salvo
+      shifted[insertAt] = newSlide.texts.map(t => ({ ...t }));
       return shifted;
     });
     setSelectedIndex(insertAt);
@@ -1990,7 +1992,7 @@ export default function CarouselEditor({
   }
 
   const sel = selectedIndex !== null ? slides[selectedIndex] : null;
-  const selTexts = selectedIndex !== null ? (editedTexts[selectedIndex] ?? []) : [];
+  const selTexts = selectedIndex !== null ? (editedTexts[selectedIndex] ?? sel?.texts ?? []) : [];
   const selBg = selectedIndex !== null ? (editedBgUrls[selectedIndex] ?? '') : '';
 
   return (
