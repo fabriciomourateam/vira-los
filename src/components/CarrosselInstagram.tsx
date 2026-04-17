@@ -6,6 +6,7 @@ import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
+  Archive, ArchiveRestore,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 
@@ -265,6 +266,7 @@ interface SavedCarousel {
   config: CarouselConfig;
   created_at: string;
   isTemplate?: boolean;
+  archived?: boolean;
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -282,6 +284,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [currentSlide, setCurrentSlide] = useState(0);
   const [copied, setCopied] = useState(false);
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSaved, setEditingSaved] = useState<SavedCarousel | null>(null);
   const [editingSavedHtml, setEditingSavedHtml] = useState<string | null>(null);
@@ -476,6 +479,18 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
       setEditingSaved(null);
       setEditingSavedHtml(null);
     }
+  }
+
+  async function toggleArchive(saved: SavedCarousel) {
+    const next = !saved.archived;
+    await fetch(`${API}/api/carousel/saved/${saved.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: next }),
+    });
+    setSavedCarousels(prev => prev.map(c => c.id === saved.id ? { ...c, archived: next } : c));
+    if (next && editingSaved?.id === saved.id) { setEditingSaved(null); setEditingSavedHtml(null); }
+    toast.success(next ? 'Carrossel arquivado' : 'Carrossel restaurado');
   }
 
   async function handleEditSaved(saved: SavedCarousel) {
@@ -1262,15 +1277,24 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-semibold text-foreground">Carrosseis Salvos</span>
-            <span className="text-xs text-muted-foreground">({savedCarousels.length})</span>
+            <span className="text-xs text-muted-foreground">({savedCarousels.filter(c => !c.archived).length} ativos)</span>
             {savedCarousels.some(c => c.isTemplate) && (
               <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
                 <LayoutTemplate className="w-3 h-3" /> inclui modelos
               </span>
             )}
+            {savedCarousels.some(c => c.archived) && (
+              <button
+                onClick={() => setShowArchived(v => !v)}
+                className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${showArchived ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+              >
+                <Archive className="w-3.5 h-3.5" />
+                Arquivados ({savedCarousels.filter(c => c.archived).length})
+              </button>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="saved-carousels-grid">
-            {savedCarousels.map(saved => {
+            {savedCarousels.filter(c => showArchived ? c.archived : !c.archived).map(saved => {
               const thumb = saved.screenshots?.[0]
                 ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}`
                 : null;
@@ -1359,17 +1383,19 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        <button
-                          onClick={() => handleEditSaved(saved)}
-                          className={`p-1 rounded transition-colors ${
-                            editingSaved?.id === saved.id
-                              ? 'text-purple-400 bg-purple-500/10'
-                              : 'text-muted-foreground hover:text-purple-400'
-                          }`}
-                          title="Editar"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
+                        {!saved.archived && (
+                          <button
+                            onClick={() => handleEditSaved(saved)}
+                            className={`p-1 rounded transition-colors ${
+                              editingSaved?.id === saved.id
+                                ? 'text-purple-400 bg-purple-500/10'
+                                : 'text-muted-foreground hover:text-purple-400'
+                            }`}
+                            title="Editar"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <a
                           href={`${API}/output/${saved.folderName}/carrossel.html`}
                           target="_blank"
@@ -1379,6 +1405,13 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
                         >
                           <FileText className="w-3.5 h-3.5" />
                         </a>
+                        <button
+                          onClick={() => toggleArchive(saved)}
+                          className={`p-1 rounded transition-colors ${saved.archived ? 'text-amber-400 hover:text-foreground' : 'text-muted-foreground hover:text-amber-400'}`}
+                          title={saved.archived ? 'Restaurar' : 'Arquivar (já postei)'}
+                        >
+                          {saved.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                        </button>
                         <button
                           onClick={() => handleDeleteSaved(saved.id)}
                           className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors"
