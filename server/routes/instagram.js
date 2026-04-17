@@ -74,10 +74,35 @@ router.get('/callback', async (req, res) => {
   }
 });
 
+// ─── Helper: busca token do Analytics OU do Agendador (fallback) ─────────────
+
+function getEffectiveToken() {
+  // 1. Token próprio do Analytics (OAuth completo)
+  const igToken = db.getInstagramToken();
+  if (igToken?.accessToken) return igToken;
+
+  // 2. Fallback: token manual do Agendador (platforms/instagram)
+  const platformToken = db.getPlatformToken('instagram');
+  if (platformToken?.access_token) {
+    return {
+      accessToken: platformToken.access_token,
+      igUserId: platformToken.user_id,
+      username: platformToken.username || 'instagram',
+      profilePicture: null,
+      followersCount: null,
+      expiresAt: null,
+      lastSync: platformToken.updated_at || null,
+      fromScheduler: true,
+    };
+  }
+
+  return null;
+}
+
 // ─── Status ───────────────────────────────────────────────────────────────────
 
 router.get('/status', (req, res) => {
-  const token = db.getInstagramToken();
+  const token = getEffectiveToken();
   if (!token?.accessToken) {
     return res.json({ connected: false });
   }
@@ -93,6 +118,7 @@ router.get('/status', (req, res) => {
     followersCount: token.followersCount,
     daysLeft,
     lastSync:       token.lastSync || null,
+    fromScheduler:  token.fromScheduler || false,
   });
 });
 
@@ -107,16 +133,17 @@ router.delete('/disconnect', (req, res) => {
 // ─── Sync Posts ───────────────────────────────────────────────────────────────
 
 router.post('/sync', async (req, res) => {
-  const token = db.getInstagramToken();
+  const token = getEffectiveToken();
   if (!token?.accessToken) {
-    return res.status(401).json({ error: 'Conta não conectada' });
+    return res.status(401).json({ error: 'Conta não conectada. Conecte pelo Analytics ou pelo Agendador.' });
   }
 
   try {
     const posts = await syncPosts(token.accessToken, token.igUserId);
     db.saveInstagramPosts(posts);
-    // Store lastSync inside the token object
-    db.setInstagramToken({ ...token, lastSync: new Date().toISOString() });
+    if (!token.fromScheduler) {
+      db.setInstagramToken({ ...token, lastSync: new Date().toISOString() });
+    }
     res.json({ ok: true, count: posts.length });
   } catch (err) {
     console.error('[Instagram/Sync]', err.message);
@@ -143,9 +170,9 @@ router.get('/analysis', (req, res) => {
 // ─── Run AI Analysis ──────────────────────────────────────────────────────────
 
 router.post('/analyze', async (req, res) => {
-  const token = db.getInstagramToken();
+  const token = getEffectiveToken();
   if (!token?.accessToken) {
-    return res.status(401).json({ error: 'Conta não conectada' });
+    return res.status(401).json({ error: 'Conta não conectada. Conecte pelo Analytics ou pelo Agendador.' });
   }
 
   const posts = db.getInstagramPosts();
