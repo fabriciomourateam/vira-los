@@ -89,23 +89,36 @@ async function runDiscovery(jobId, config) {
       reddit:    redditResult.status === 'fulfilled' ? redditResult.value : [],
     };
 
-    const total = scrapedData.instagram.length + scrapedData.tiktok.length + scrapedData.reddit.length;
-    update('scraping_done', 60, `${total} posts coletados. Analisando padrões virais...`);
+    const total = scrapedData.instagram.length + scrapedData.tiktok.length +
+                  scrapedData.reddit.length + scrapedData.trends.length;
 
-    const ideas = await generateIdeas(scrapedData, config);
-    update('ideas_done', 95, `${ideas.length} ideias geradas!`);
-
-    // Persiste
-    db.saveDiscoveredIdeas(ideas);
-
+    // ── Pausa para revisão: o usuário verá os dados antes de gerar ideias ──────
+    update('scraped', 65, `${total} resultados coletados. Revise os dados abaixo.`);
     const job = jobs.get(jobId);
-    jobs.set(jobId, { ...job, status: 'done', results: ideas, progress: 100 });
+    jobs.set(jobId, { ...job, status: 'scraped', scrapedData, progress: 65 });
+    // Geração de ideias é disparada separadamente por POST /generate-ideas
+
   } catch (err) {
     console.error('[Ideas/Discovery]', err.message);
     const job = jobs.get(jobId);
     if (job) jobs.set(jobId, { ...job, status: 'error', error: err.message });
   }
 }
+
+// ─── Gerar ideias a partir de dados já coletados (disparado pelo usuário) ─────
+router.post('/generate-ideas', async (req, res) => {
+  const { scrapedData } = req.body;
+  if (!scrapedData) return res.status(400).json({ error: 'scrapedData obrigatório' });
+  try {
+    const config = db.getIdeasConfig();
+    const ideas = await generateIdeas(scrapedData, config);
+    db.saveDiscoveredIdeas(ideas);
+    res.json({ ideas });
+  } catch (err) {
+    console.error('[Ideas/GenerateIdeas]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── Status do job ────────────────────────────────────────────────────────────
 router.get('/status/:jobId', (req, res) => {

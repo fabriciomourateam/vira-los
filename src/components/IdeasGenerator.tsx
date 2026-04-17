@@ -42,10 +42,32 @@ interface ContentIdea {
   created_at?: string;
 }
 
+interface ScrapedItem {
+  platform: string;
+  title?: string;
+  hashtag?: string;
+  subreddit?: string;
+  likes?: number;
+  comments?: number;
+  score?: number;
+  views?: number;
+  videoCount?: number;
+  engagement?: number;
+  url?: string;
+}
+
+interface ScrapedData {
+  instagram: ScrapedItem[];
+  tiktok: ScrapedItem[];
+  reddit: ScrapedItem[];
+  trends: string[];
+}
+
 interface JobStatus {
-  status: 'running' | 'done' | 'error';
+  status: 'running' | 'scraped' | 'done' | 'error';
   progress: number;
   steps: { step: string; label: string; time: string }[];
+  scrapedData?: ScrapedData;
   results: ContentIdea[] | null;
   error: string | null;
   startedAt: string;
@@ -117,6 +139,9 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [ideas, setIdeas] = useState<ContentIdea[]>([]);
+  const [scrapedData, setScrapedData] = useState<ScrapedData | null>(null);
+  const [generatingIdeas, setGeneratingIdeas] = useState(false);
+  const [collapsedSources, setCollapsedSources] = useState<Record<string, boolean>>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Calendário
@@ -198,7 +223,20 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
         if (!r.ok) return;
         const status: JobStatus = await r.json();
         setJobStatus(status);
-        if (status.status === 'done') {
+
+        if (status.status === 'scraped') {
+          // Coleta concluída — exibe dados para revisão
+          clearInterval(pollRef.current!);
+          setJobId(null);
+          if (status.scrapedData) {
+            setScrapedData(status.scrapedData);
+            const total = (status.scrapedData.reddit?.length || 0) +
+                          (status.scrapedData.tiktok?.length || 0) +
+                          (status.scrapedData.instagram?.length || 0) +
+                          (status.scrapedData.trends?.length || 0);
+            toast.success(`${total} resultados coletados — revise antes de gerar ideias`);
+          }
+        } else if (status.status === 'done') {
           clearInterval(pollRef.current!);
           setJobId(null);
           if (status.results) { setIdeas(status.results); toast.success(`${status.results.length} ideias geradas! 🎉`); }
@@ -211,6 +249,38 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
     }, 2500);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [jobId]);
+
+  // ── Gerar ideias a partir dos dados revisados ─────────────────────────────────
+  async function generateFromScrapedData(data: ScrapedData) {
+    setGeneratingIdeas(true);
+    try {
+      const r = await fetch(`${API}/api/ideas/generate-ideas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scrapedData: data }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error);
+      const { ideas: newIdeas } = await r.json();
+      setIdeas(newIdeas);
+      setScrapedData(null);
+      toast.success(`${newIdeas.length} ideias geradas! 🎉`);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao gerar ideias');
+    } finally {
+      setGeneratingIdeas(false);
+    }
+  }
+
+  // ── Remover item dos dados coletados ──────────────────────────────────────────
+  function removeScrapedItem(source: keyof ScrapedData, index: number) {
+    if (!scrapedData) return;
+    const updated = { ...scrapedData };
+    if (source === 'trends') {
+      updated.trends = (updated.trends as string[]).filter((_, i) => i !== index);
+    } else {
+      (updated[source] as ScrapedItem[]) = (updated[source] as ScrapedItem[]).filter((_, i) => i !== index);
+    }
+    setScrapedData(updated);
+  }
 
   // ── Criar carrossel a partir de ideia ─────────────────────────────────────────
   function createCarouselFromIdea(idea: ContentIdea) {
@@ -465,8 +535,121 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
             )}
           </div>
 
+          {/* ── Revisão dos dados coletados ── */}
+          {scrapedData && !generatingIdeas && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-0 overflow-hidden">
+              {/* Header */}
+              <div className="px-4 py-3 flex items-center justify-between border-b border-amber-500/20">
+                <div>
+                  <p className="text-sm font-bold text-foreground">📊 Dados coletados — revise antes de gerar</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Remova o que não é relevante para o seu nicho. O que sobrar alimenta a IA.
+                  </p>
+                </div>
+                <button onClick={() => setScrapedData(null)} className="text-muted-foreground hover:text-foreground ml-3 shrink-0"><X className="w-4 h-4" /></button>
+              </div>
+
+              {/* Reddit */}
+              {scrapedData.reddit?.length > 0 && (
+                <ScrapedSection
+                  emoji="💬" label="Reddit" subtitle="Dores e perguntas reais da audiência"
+                  count={scrapedData.reddit.length}
+                  collapsed={!!collapsedSources['reddit']}
+                  onToggle={() => setCollapsedSources(p => ({ ...p, reddit: !p['reddit'] }))}
+                  onRemoveAll={() => setScrapedData(p => p ? { ...p, reddit: [] } : p)}
+                >
+                  {scrapedData.reddit.map((item, i) => (
+                    <ScrapedItemRow key={i}
+                      label={item.title || ''}
+                      meta={`r/${item.subreddit} · ${(item.score || 0).toLocaleString()} upvotes · ${item.comments} comentários`}
+                      onRemove={() => removeScrapedItem('reddit', i)}
+                    />
+                  ))}
+                </ScrapedSection>
+              )}
+
+              {/* TikTok CC */}
+              {scrapedData.tiktok?.length > 0 && (
+                <ScrapedSection
+                  emoji="🎵" label="TikTok" subtitle="Hashtags e vídeos trending"
+                  count={scrapedData.tiktok.length}
+                  collapsed={!!collapsedSources['tiktok']}
+                  onToggle={() => setCollapsedSources(p => ({ ...p, tiktok: !p['tiktok'] }))}
+                  onRemoveAll={() => setScrapedData(p => p ? { ...p, tiktok: [] } : p)}
+                >
+                  {scrapedData.tiktok.map((item, i) => (
+                    <ScrapedItemRow key={i}
+                      label={item.title || `#${item.hashtag}`}
+                      meta={item.views ? `${(item.views / 1000000).toFixed(1)}M views · ${(item.videoCount || 0).toLocaleString()} vídeos` : ''}
+                      onRemove={() => removeScrapedItem('tiktok', i)}
+                    />
+                  ))}
+                </ScrapedSection>
+              )}
+
+              {/* Google Trends */}
+              {scrapedData.trends?.length > 0 && (
+                <ScrapedSection
+                  emoji="📈" label="Google Trends" subtitle="Buscas em alta no Brasil agora"
+                  count={scrapedData.trends.length}
+                  collapsed={!!collapsedSources['trends']}
+                  onToggle={() => setCollapsedSources(p => ({ ...p, trends: !p['trends'] }))}
+                  onRemoveAll={() => setScrapedData(p => p ? { ...p, trends: [] } : p)}
+                >
+                  <div className="flex flex-wrap gap-1.5 px-3 pb-3">
+                    {scrapedData.trends.map((t, i) => (
+                      <span key={i} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary border border-border text-[11px] text-foreground">
+                        {t}
+                        <button onClick={() => removeScrapedItem('trends', i)} className="text-muted-foreground hover:text-red-400 transition-colors"><X className="w-2.5 h-2.5" /></button>
+                      </span>
+                    ))}
+                  </div>
+                </ScrapedSection>
+              )}
+
+              {/* Instagram */}
+              {scrapedData.instagram?.length > 0 && (
+                <ScrapedSection
+                  emoji="📸" label="Instagram" subtitle="Posts de maior engajamento"
+                  count={scrapedData.instagram.length}
+                  collapsed={!!collapsedSources['instagram']}
+                  onToggle={() => setCollapsedSources(p => ({ ...p, instagram: !p['instagram'] }))}
+                  onRemoveAll={() => setScrapedData(p => p ? { ...p, instagram: [] } : p)}
+                >
+                  {scrapedData.instagram.map((item, i) => (
+                    <ScrapedItemRow key={i}
+                      label={item.title || ''}
+                      meta={`${(item.likes || 0).toLocaleString()} curtidas · ${item.comments} comentários`}
+                      onRemove={() => removeScrapedItem('instagram', i)}
+                    />
+                  ))}
+                </ScrapedSection>
+              )}
+
+              {/* Botão gerar */}
+              <div className="px-4 py-3 bg-secondary/30 border-t border-amber-500/20">
+                <button
+                  onClick={() => generateFromScrapedData(scrapedData)}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Gerar 12 Ideias com esses dados
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Gerando ideias (loading) */}
+          {generatingIdeas && (
+            <div className="rounded-xl border border-border bg-card p-6 text-center space-y-3">
+              <Loader2 className="w-8 h-8 animate-spin text-orange-400 mx-auto" />
+              <p className="text-sm font-semibold text-foreground">Claude analisando padrões virais...</p>
+              <p className="text-xs text-muted-foreground">Identificando formatos, hooks e ângulos que funcionam</p>
+            </div>
+          )}
+
           {/* Lista de ideias */}
-          {ideas.length > 0 && (
+          {ideas.length > 0 && !scrapedData && !generatingIdeas && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -801,6 +984,80 @@ function IdeaCard({
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Componente: Seção de dados coletados (colapsável) ────────────────────────
+
+function ScrapedSection({
+  emoji, label, subtitle, count, collapsed, onToggle, onRemoveAll, children,
+}: {
+  emoji: string;
+  label: string;
+  subtitle: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+  onRemoveAll: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-amber-500/10 last:border-b-0">
+      {/* Header da seção */}
+      <div
+        className="flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-amber-500/5 transition-colors select-none"
+        onClick={onToggle}
+      >
+        <span className="text-base leading-none">{emoji}</span>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-semibold text-foreground">{label}</span>
+          <span className="text-[11px] text-muted-foreground ml-2">{subtitle}</span>
+        </div>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary border border-border text-muted-foreground font-mono shrink-0">
+          {count}
+        </span>
+        <button
+          onClick={e => { e.stopPropagation(); onRemoveAll(); }}
+          className="text-[10px] text-muted-foreground/50 hover:text-red-400 transition-colors px-1.5 py-0.5 rounded hover:bg-red-500/10 shrink-0"
+          title="Remover todos"
+        >
+          Limpar
+        </button>
+        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0 ${collapsed ? '' : 'rotate-180'}`} />
+      </div>
+      {/* Conteúdo */}
+      {!collapsed && (
+        <div className="pb-1">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Componente: Linha de item coletado ────────────────────────────────────────
+
+function ScrapedItemRow({
+  label, meta, onRemove,
+}: {
+  label: string;
+  meta?: string;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-start gap-2 px-4 py-1.5 hover:bg-secondary/40 transition-colors group">
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] text-foreground leading-snug line-clamp-2">{label}</p>
+        {meta && <p className="text-[10px] text-muted-foreground/60 mt-0.5">{meta}</p>}
+      </div>
+      <button
+        onClick={onRemove}
+        className="shrink-0 mt-0.5 text-muted-foreground/30 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+        title="Remover"
+      >
+        <X className="w-3 h-3" />
+      </button>
     </div>
   );
 }
