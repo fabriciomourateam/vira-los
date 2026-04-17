@@ -345,10 +345,12 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   }, []);
 
   // Auto-fill de props externas (prefillTopic, prefillScript)
+  // Aguarda configReady para garantir que o prefill não seja sobrescrito pelo config do servidor
   useEffect(() => {
+    if (!configReady) return;
     if (prefillTopic) setConfig(prev => ({ ...prev, topic: prefillTopic }));
     if (prefillScript) setConfig(prev => ({ ...prev, roteiro: prefillScript }));
-  }, [prefillScript, prefillTopic]);
+  }, [prefillScript, prefillTopic, configReady]);
 
   // Salva config no servidor com debounce de 800ms
   useEffect(() => {
