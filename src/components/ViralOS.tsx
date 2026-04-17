@@ -41,15 +41,17 @@ import AnalisadorReels from './AnalisadorReels';
 import TrendRadar from './TrendRadar';
 import ViralScore from './ViralScore';
 import ProfileSettings from './ProfileSettings';
+import IdeasGenerator from './IdeasGenerator';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'descobrir' | 'criar' | 'avaliar' | 'agendar';
+type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'agendar';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'metodo',    label: 'Método',    icon: Zap },
   { id: 'descobrir', label: 'Descobrir', icon: Search },
+  { id: 'ideias',    label: 'Ideias',    icon: Sparkles },
   { id: 'criar',     label: 'Criar',     icon: Layers },
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
   { id: 'agendar',   label: 'Agendar',   icon: Calendar },
@@ -923,6 +925,16 @@ export default function ViralOS() {
             {descobrirSubTab === 'radar'    && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} />}
             {descobrirSubTab === 'agente'   && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
           </>
+        )}
+
+        {/* ── IDEIAS ── */}
+        {activeTab === 'ideias' && (
+          <IdeasGenerator
+            onCreateCarousel={(topic, script) => {
+              setCarouselPrefill({ topic, script });
+              setActiveTab('criar');
+            }}
+          />
         )}
 
         {/* ── CRIAR ── */}

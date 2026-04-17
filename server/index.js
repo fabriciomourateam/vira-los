@@ -30,6 +30,7 @@ app.use('/api/reels-analyzer',  require('./routes/reelsAnalyzer'));
 app.use('/api/viral-score',     require('./routes/viralScore'));
 app.use('/api/trend-radar',     require('./routes/trendRadar'));
 app.use('/api/story-sequence',  require('./routes/storySequence'));
+app.use('/api/ideas',           require('./routes/ideas'));
 
 // Health check
 app.get('/api/health', (_req, res) =>

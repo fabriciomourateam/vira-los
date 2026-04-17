@@ -178,6 +178,48 @@ function logPostResult(result) {
   writeDb('post_results', db);
 }
 
+// ── Ideas Generator Config (pré-carregado com nicho do usuário) ───────────────
+const IDEAS_CONFIG_FILE = dbPath('ideas_config');
+if (!fs.existsSync(IDEAS_CONFIG_FILE)) {
+  writeObj('ideas_config', {
+    niche: 'Nutrição esportiva, fitness, uso de hormônios para fins estéticos, dieta e treino',
+    instagramHandle: 'fabriciomourateam',
+    hashtags: [
+      'nutricaoesportiva', 'fitness', 'musculacao', 'dieta', 'treino', 'academia',
+      'testosterona', 'oxandrolona', 'mounjaro', 'semaglutida', 'trt',
+      'hipertrofia', 'emagrecimento', 'cutting', 'bulking', 'composicaocorporal',
+      'suplementacao', 'bodybuilding', 'transformacaocorporal', 'saudemasculina',
+      'peptideos', 'hormonioestetico', 'anabolizantes', 'nutricionista',
+      'personaltrainer', 'ozempic', 'tirzepatida', 'nutricaofuncional',
+      'perdadegordura', 'ganhodemassa', 'shape', 'definicaomuscular',
+    ],
+    keywords: [
+      'nutrição esportiva', 'testosterona TRT', 'mounjaro emagrecimento',
+      'oxandrolona resultados', 'hipertrofia dicas', 'dieta fitness',
+      'hormônios estéticos', 'composição corporal', 'semaglutida emagrecimento',
+    ],
+    platforms: ['instagram', 'tiktok', 'trends', 'reddit'],
+    postsPerDay: 3,
+    country: 'BR',
+    updated_at: new Date().toISOString(),
+  });
+}
+
+const getIdeasConfig       = () => readObj('ideas_config');
+const setIdeasConfig       = (c) => writeObj('ideas_config', { ...c, updated_at: now() });
+
+const getDiscoveredIdeas   = () => readDb('discovered_ideas').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+const saveDiscoveredIdeas  = (ideas) => writeDb('discovered_ideas', ideas.map(i => ({ ...i, created_at: i.created_at || now() })));
+const deleteDiscoveredIdea = (id) => writeDb('discovered_ideas', readDb('discovered_ideas').filter(i => i.id !== id));
+
+const getContentCalendar   = () => readObj('content_calendar');
+const setContentCalendar   = (cal) => writeObj('content_calendar', cal);
+
+const getTrackedPosts      = () => readDb('tracked_posts').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+const addTrackedPost       = (p) => { const db = readDb('tracked_posts'); db.push({ ...p, created_at: now() }); writeDb('tracked_posts', db); };
+const updateTrackedPost    = (id, data) => writeDb('tracked_posts', readDb('tracked_posts').map(p => p.id === id ? { ...p, ...data, updated_at: now() } : p));
+const deleteTrackedPost    = (id) => writeDb('tracked_posts', readDb('tracked_posts').filter(p => p.id !== id));
+
 // ── Carousel Config (persistente, único por usuário) ──────────────────────────
 const getCarouselConfig = () => readObj('carousel_config');
 const setCarouselConfig = (config) => {
@@ -202,4 +244,9 @@ module.exports = {
   logPostResult,
   getCarouselConfig, setCarouselConfig,
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
+  // Ideas Generator
+  getIdeasConfig, setIdeasConfig,
+  getDiscoveredIdeas, saveDiscoveredIdeas, deleteDiscoveredIdea,
+  getContentCalendar, setContentCalendar,
+  getTrackedPosts, addTrackedPost, updateTrackedPost, deleteTrackedPost,
 };
