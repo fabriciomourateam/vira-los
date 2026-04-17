@@ -215,24 +215,70 @@ export default function ViralScore({ prefillScript = '', prefillType = 'carousel
   const [appliedRewrites, setAppliedRewrites] = useState<Partial<Record<keyof typeof CRITERION_META, string>>>({});
   const [improvedScript, setImprovedScript]   = useState('');
 
+  // Normaliza texto para comparação: remove espaços extras, pontuação e case
+  function normalize(s: string): string {
+    return s.toLowerCase().replace(/[\s\n\r]+/g, ' ').replace(/[""''«»]/g, '"').replace(/[—–]/g, '-').trim();
+  }
+
+  // Encontra o trecho no base que melhor corresponde ao original (tolerante a diferenças)
+  function findAndReplace(base: string, original: string, replacement: string): string | null {
+    // 1. Match exato
+    if (base.includes(original)) {
+      return base.replace(original, replacement);
+    }
+
+    // 2. Match normalizado: compara ignorando espaços, case e pontuação
+    const normBase = normalize(base);
+    const normOrig = normalize(original);
+    const idx = normBase.indexOf(normOrig);
+    if (idx !== -1) {
+      // Encontra a posição correspondente no texto original (não normalizado)
+      // Mapeia char por char do normalizado para o original
+      let origIdx = 0, matchStart = -1, matchLen = 0;
+      let normPos = 0;
+      const baseChars = base.replace(/[\s\n\r]+/g, ' ').trim();
+      // Abordagem simplificada: busca por palavras-chave
+      const origWords = original.split(/\s+/).filter(w => w.length > 3);
+      if (origWords.length >= 2) {
+        const firstWord = origWords[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const lastWord = origWords[origWords.length - 1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const fuzzyRegex = new RegExp(firstWord + '[\\s\\S]{0,' + Math.max(original.length * 2, 200) + '?}' + lastWord, 'i');
+        const match = fuzzyRegex.exec(base);
+        if (match) {
+          return base.slice(0, match.index) + replacement + base.slice(match.index + match[0].length);
+        }
+      }
+    }
+
+    // 3. Match por palavras-chave (primeiras + últimas palavras significativas)
+    if (original.length > 15) {
+      const words = original.split(/\s+/).filter(w => w.length > 3);
+      if (words.length >= 2) {
+        const first = words[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const last = words[words.length - 1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const maxGap = Math.max(original.length * 3, 300);
+        const regex = new RegExp(first + '[\\s\\S]{0,' + maxGap + '?}' + last, 'i');
+        const match = regex.exec(base);
+        if (match) {
+          return base.slice(0, match.index) + replacement + base.slice(match.index + match[0].length);
+        }
+      }
+    }
+
+    return null;
+  }
+
   function applyRewrite(name: keyof typeof CRITERION_META, data: CriterionScore) {
     setAppliedRewrites(prev => ({ ...prev, [name]: data.reescrita }));
     setImprovedScript(prev => {
       const base = prev || script;
       const original = data.trecho_original?.trim();
-      // Substituição cirúrgica: troca o trecho original pelo reescrito
-      if (original && base.includes(original)) {
-        return base.replace(original, data.reescrita);
+
+      if (original) {
+        const replaced = findAndReplace(base, original, data.reescrita);
+        if (replaced) return replaced;
       }
-      // Fallback: se o trecho não foi encontrado literalmente, faz substituição fuzzy
-      // (primeiros 60 chars do original para localizar)
-      if (original && original.length > 20) {
-        const snippet = original.slice(0, 60).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(snippet + '[\\s\\S]*?' + original.slice(-30).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'm');
-        if (regex.test(base)) {
-          return base.replace(regex, data.reescrita);
-        }
-      }
+
       // Último fallback: adiciona nota ao final
       const label = CRITERION_META[name].label.toUpperCase();
       return base + `\n\n✅ [${label}]: ${data.reescrita}`;
@@ -244,22 +290,18 @@ export default function ViralScore({ prefillScript = '', prefillType = 'carousel
     if (!result) return;
     let updated = script;
     const keys = (Object.keys(CRITERION_META) as Array<keyof typeof CRITERION_META>)
-      .filter(k => result.scores[k].score < 8); // só aplica os que têm nota baixa
+      .filter(k => result.scores[k].score < 8);
     const applied: Partial<Record<keyof typeof CRITERION_META, string>> = {};
     for (const k of keys) {
       const data = result.scores[k];
       const original = data.trecho_original?.trim();
       applied[k] = data.reescrita;
-      if (original && updated.includes(original)) {
-        updated = updated.replace(original, data.reescrita);
-      } else if (original && original.length > 20) {
-        const snippet = original.slice(0, 60).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(snippet + '[\\s\\S]*?' + original.slice(-30).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'm');
-        if (regex.test(updated)) updated = updated.replace(regex, data.reescrita);
-        else updated += `\n\n✅ [${CRITERION_META[k].label.toUpperCase()}]: ${data.reescrita}`;
-      } else {
-        updated += `\n\n✅ [${CRITERION_META[k].label.toUpperCase()}]: ${data.reescrita}`;
+
+      if (original) {
+        const replaced = findAndReplace(updated, original, data.reescrita);
+        if (replaced) { updated = replaced; continue; }
       }
+      updated += `\n\n✅ [${CRITERION_META[k].label.toUpperCase()}]: ${data.reescrita}`;
     }
     setAppliedRewrites(applied);
     setImprovedScript(updated);
