@@ -225,6 +225,18 @@ const getSavedSlides  = () => readDb('saved_slides').sort((a, b) => b.created_at
 const saveSlide       = (s) => { const db = readDb('saved_slides'); db.push({ ...s, created_at: now() }); writeDb('saved_slides', db); };
 const deleteSavedSlide = (id) => writeDb('saved_slides', readDb('saved_slides').filter(s => s.id !== id));
 
+// ── Instagram Token + Posts + Analysis ───────────────────────────────────────
+const getInstagramToken     = () => readObj('instagram_token');
+const setInstagramToken     = (data) => writeObj('instagram_token', { ...data, updatedAt: now() });
+const clearInstagramToken   = () => {
+  const p = dbPath('instagram_token');
+  if (fs.existsSync(p)) fs.unlinkSync(p);
+};
+const getInstagramPosts     = () => readDb('instagram_posts');
+const saveInstagramPosts    = (posts) => writeDb('instagram_posts', posts);
+const getInstagramAnalysis  = () => readObj('instagram_analysis');
+const saveInstagramAnalysis = (data) => writeObj('instagram_analysis', { ...data, savedAt: now() });
+
 // ── Carousel Config (persistente, único por usuário) ──────────────────────────
 const getCarouselConfig = () => readObj('carousel_config');
 const setCarouselConfig = (config) => {
@@ -250,6 +262,9 @@ module.exports = {
   getSavedSlides, saveSlide, deleteSavedSlide,
   getCarouselConfig, setCarouselConfig,
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
+  getInstagramToken, setInstagramToken, clearInstagramToken,
+  getInstagramPosts, saveInstagramPosts,
+  getInstagramAnalysis, saveInstagramAnalysis,
   // Ideas Generator
   getIdeasConfig, setIdeasConfig,
   getDiscoveredIdeas, saveDiscoveredIdeas, deleteDiscoveredIdea,

@@ -28,6 +28,7 @@ import {
   User,
   Sparkles,
   Loader2,
+  Instagram,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -42,11 +43,12 @@ import TrendRadar from './TrendRadar';
 import ViralScore from './ViralScore';
 import ProfileSettings from './ProfileSettings';
 import IdeasGenerator from './IdeasGenerator';
+import InstagramAnalytics from './InstagramAnalytics';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'agendar';
+type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'agendar' | 'analytics';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'metodo',    label: 'Método',    icon: Zap },
@@ -55,6 +57,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'criar',     label: 'Criar',     icon: Layers },
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
   { id: 'agendar',   label: 'Agendar',   icon: Calendar },
+  { id: 'analytics', label: 'Analytics', icon: Instagram },
 ];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
@@ -966,6 +969,18 @@ export default function ViralOS() {
 
         {/* ── AGENDAR ── */}
         {activeTab === 'agendar' && <Agendador />}
+
+        {/* ── ANALYTICS ── */}
+        {activeTab === 'analytics' && (
+          <InstagramAnalytics
+            onCreateReels={(idea) => {
+              setCarouselPrefill({ topic: idea.title, script: idea.hook });
+              setActiveTab('criar');
+              toast.success('Post carregado no Criar!');
+              setTimeout(() => setCarouselPrefill(null), 500);
+            }}
+          />
+        )}
 
         {/* ── MÉTODO ── */}
         {activeTab === 'metodo' && (
