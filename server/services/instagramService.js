@@ -131,11 +131,62 @@ async function getPostInsights(mediaId, mediaType, token) {
   }
 }
 
+// ─── Resolve IG Business Account ID from token ──────────────────────────────
+// Quando o user_id salvo é inválido (ex: ID do Facebook, não do IG Business),
+// tenta descobrir o ID correto via /me/accounts → instagram_business_account
+
+async function resolveIGUserId(token, providedId) {
+  // Primeiro tenta usar o ID fornecido
+  if (providedId) {
+    try {
+      await axios.get(`${FB_API}/${providedId}`, {
+        params: { fields: 'id,username', access_token: token },
+        timeout: 8000,
+      });
+      return providedId; // ID válido
+    } catch {
+      // ID inválido — tenta resolver via Pages
+    }
+  }
+
+  // Busca Pages e encontra o IG Business Account
+  try {
+    const r = await axios.get(`${FB_API}/me/accounts`, {
+      params: { fields: 'id,name,instagram_business_account', access_token: token },
+      timeout: 10000,
+    });
+    const pages = r.data.data || [];
+    for (const page of pages) {
+      if (page.instagram_business_account?.id) {
+        return page.instagram_business_account.id;
+      }
+    }
+  } catch {
+    // Token sem permissão de pages — tenta via /me
+  }
+
+  // Última tentativa: /me com o token pode retornar o IG user
+  try {
+    const r = await axios.get(`${FB_API}/me`, {
+      params: { fields: 'id', access_token: token },
+      timeout: 8000,
+    });
+    return r.data.id;
+  } catch {
+    // Nada funcionou
+  }
+
+  return providedId; // retorna o que tem
+}
+
 // ─── Sync Posts ───────────────────────────────────────────────────────────────
 
 async function syncPosts(token, igUserId) {
+  // Resolve o ID correto (pode ser diferente do salvo no Agendador)
+  const resolvedId = await resolveIGUserId(token, igUserId);
+
   // Fetch up to 50 most recent posts
-  const r = await axios.get(`${FB_API}/${igUserId}/media`, {
+  const r = await axios.get(`${FB_API}/${resolvedId}/media`, {
     params: {
       fields: 'id,media_type,thumbnail_url,media_url,permalink,timestamp,caption,like_count,comments_count',
       limit: 50,
