@@ -46,6 +46,7 @@ interface OverlayConfig {
   direction: 'to bottom' | 'to top' | 'to right' | 'radial' | 'none';
   color: string;         // ex: '0,0,0' ou '80,0,120'
   startAt?: number;      // 0–100% — onde o gradiente começa (só para 'to bottom')
+  topOpacity?: number;   // 0–1 — opacidade no topo (default 0 = transparente)
 }
 
 interface BgImageConfig {
@@ -95,11 +96,11 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
     case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
     case 'none':      return 'rgba(0,0,0,0)';
     default: {
-      // Gradiente estilo Leo Baltazar: limpo no topo, banda de 20% de transição, preto no rodapé
-      // Espelha o CSS gerado pelo servidor: clear→startAt%, 0.78×hi→startAt+20%, hi→100%
+      // Gradiente estilo Leo Baltazar: topo levemente escuro, banda de 20%, preto no rodapé
+      const topOp = (cfg.topOpacity ?? 0).toFixed(2);
       const transitionEnd = Math.min(97, startAt + 20);
-      const midOpacity = (opacity * 0.81).toFixed(2); // ~0.78 quando opacity=0.96
-      return `linear-gradient(to bottom, rgba(${c},0) 0%, rgba(${c},0) ${startAt}%, rgba(${c},${midOpacity}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
+      const midOpacity = (opacity * 0.81).toFixed(2);
+      return `linear-gradient(to bottom, rgba(${c},${topOp}) 0%, rgba(${c},${topOp}) ${startAt}%, rgba(${c},${midOpacity}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
     }
   }
 }
@@ -2865,7 +2866,7 @@ export default function CarouselEditor({
                               {/* Preset Leo Baltazar — sempre visível */}
                               <button
                                 type="button"
-                                onClick={() => setOv({ direction: 'to bottom', startAt: 40, opacity: 0.97, color: '0,0,0' })}
+                                onClick={() => setOv({ direction: 'to bottom', startAt: 40, opacity: 0.97, color: '0,0,0', topOpacity: 0.15 })}
                                 className="shrink-0 px-2 py-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold transition-colors"
                                 title="Aplica gradiente estilo Leo Baltazar: topo limpo, escuro forte na metade inferior"
                               >
@@ -2906,6 +2907,23 @@ export default function CarouselEditor({
                                 />
                                 <div className="flex justify-between text-[10px] text-muted-foreground/50">
                                   <span>Topo</span><span>Meio</span><span>Base</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Escurecimento no topo (só para 'to bottom') */}
+                            {ov.direction === 'to bottom' && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">Escurecimento no topo</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{Math.round((ov.topOpacity ?? 0) * 100)}%</span>
+                                </div>
+                                <input type="range" min={0} max={50} value={Math.round((ov.topOpacity ?? 0) * 100)}
+                                  onChange={e => setOv({ topOpacity: Number(e.target.value) / 100 })}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Sem</span><span>15% (Leo)</span><span>50%</span>
                                 </div>
                               </div>
                             )}
