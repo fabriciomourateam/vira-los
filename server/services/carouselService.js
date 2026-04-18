@@ -250,12 +250,12 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
       position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
       background-size: cover; background-position: center;
-      filter: brightness(0.5); z-index: 0;
+      z-index: 0;
     }
     .slide-overlay {
       position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
-      background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%);
+      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.85) 100%);
       z-index: 1;
     }
     .slide-content {
