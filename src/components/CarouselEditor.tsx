@@ -2704,32 +2704,54 @@ export default function CarouselEditor({
                           const bgCfg: BgImageConfig = bgImageConfigs[selectedIndex] ?? { position: 'center center', brightness: 100 };
                           const setBg = (patch: Partial<BgImageConfig>) =>
                             setBgImageConfigs(prev => ({ ...prev, [selectedIndex]: { ...bgCfg, ...patch } }));
-                          const POS_GRID = [
-                            ['left top','center top','right top'],
-                            ['left center','center center','right center'],
-                            ['left bottom','center bottom','right bottom'],
-                          ];
-                          const POS_LABELS: Record<string,string> = {
-                            'left top':'↖','center top':'↑','right top':'↗',
-                            'left center':'←','center center':'·','right center':'→',
-                            'left bottom':'↙','center bottom':'↓','right bottom':'↘',
+
+                          // Converte posição CSS para X/Y em %
+                          const keywordToNum = (k: string) =>
+                            k === 'left' || k === 'top' ? 0 : k === 'right' || k === 'bottom' ? 100 : 50;
+                          const parsePosNum = (v: string): number => {
+                            if (v.endsWith('%')) return parseInt(v);
+                            return keywordToNum(v);
                           };
+                          const parts = bgCfg.position.trim().split(/\s+/);
+                          const posX = parsePosNum(parts[0] ?? 'center');
+                          const posY = parsePosNum(parts[1] ?? 'center');
+                          const setPosXY = (x: number, y: number) => setBg({ position: `${x}% ${y}%` });
+
                           return (
                             <div className="space-y-2 pt-2 border-t border-border">
                               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Posição da imagem</p>
-                              <div className="grid grid-cols-3 gap-1 w-24">
-                                {POS_GRID.map(row => row.map(pos => (
-                                  <button key={pos}
-                                    onClick={() => setBg({ position: pos })}
-                                    title={pos}
-                                    className={`w-7 h-7 rounded text-sm flex items-center justify-center transition-colors ${
-                                      bgCfg.position === pos
-                                        ? 'bg-purple-600 text-white'
-                                        : 'bg-secondary hover:bg-border text-muted-foreground'
-                                    }`}
-                                  >{POS_LABELS[pos]}</button>
-                                )))}
+
+                              {/* Slider X — horizontal */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">← Horizontal →</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{posX}%</span>
+                                </div>
+                                <input type="range" min={0} max={100} value={posX}
+                                  onChange={e => setPosXY(Number(e.target.value), posY)}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Esquerda</span><span>Centro</span><span>Direita</span>
+                                </div>
                               </div>
+
+                              {/* Slider Y — vertical */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">↑ Vertical ↓</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{posY}%</span>
+                                </div>
+                                <input type="range" min={0} max={100} value={posY}
+                                  onChange={e => setPosXY(posX, Number(e.target.value))}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Topo</span><span>Centro</span><span>Base</span>
+                                </div>
+                              </div>
+
+                              {/* Brilho */}
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between">
                                   <label className="text-[11px] text-muted-foreground">Brilho da imagem</label>
@@ -2743,6 +2765,7 @@ export default function CarouselEditor({
                                   <span>Escuro</span><span>Normal</span><span>Claro</span>
                                 </div>
                               </div>
+
                               {bgImageConfigs[selectedIndex] && (
                                 <button onClick={() => setBgImageConfigs(prev => { const n = {...prev}; delete n[selectedIndex]; return n; })}
                                   className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
