@@ -199,6 +199,7 @@ const EMOTION_OPTIONS = [
 
 const FONT_OPTIONS = [
   'Raleway', 'Montserrat', 'Poppins', 'Inter', 'Oswald', 'Playfair Display',
+  'Bebas Neue', 'Anton', 'Syne', 'Space Grotesk',
 ];
 
 const DEFAULT_CONFIG: CarouselConfig = {

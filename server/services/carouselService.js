@@ -226,8 +226,13 @@ Responda APENAS com um JSON array de strings, sem markdown:
 
 function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
   const font = fontFamily.replace(/ /g, '+');
+  // Bebas Neue e Anton só têm peso 400, sem itálico — import simplificado
+  const displayFonts = ['Bebas Neue', 'Anton'];
+  const fontLink = displayFonts.includes(fontFamily)
+    ? `https://fonts.googleapis.com/css2?family=${font}:wght@400&family=Space+Grotesk:wght@300;400;500;600;700&display=swap`
+    : `https://fonts.googleapis.com/css2?family=${font}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap`;
   return `
-  <link href="https://fonts.googleapis.com/css2?family=${font}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="${fontLink}" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
