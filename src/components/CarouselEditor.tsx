@@ -98,8 +98,8 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
     default: {
       // Gradiente estilo Leo Baltazar: topo levemente escuro, banda de 20%, preto no rodapé
       const topOp = (cfg.topOpacity ?? 0).toFixed(2);
-      const transitionEnd = Math.min(97, startAt + 20);
-      const midOpacity = (opacity * 0.81).toFixed(2);
+      const transitionEnd = Math.min(97, startAt + 15);
+      const midOpacity = (opacity * 0.93).toFixed(2);
       return `linear-gradient(to bottom, rgba(${c},${topOp}) 0%, rgba(${c},${topOp}) ${startAt}%, rgba(${c},${midOpacity}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
     }
   }
