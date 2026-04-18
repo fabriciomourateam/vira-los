@@ -146,8 +146,13 @@ router.post('/sync', async (req, res) => {
     }
     res.json({ ok: true, count: posts.length });
   } catch (err) {
-    console.error('[Instagram/Sync]', err.message);
-    res.status(500).json({ error: err.message });
+    // Extrai a mensagem real do Meta API (axios encapsula em err.response.data.error)
+    const metaError = err.response?.data?.error;
+    const msg = metaError
+      ? `[Meta API ${metaError.code}] ${metaError.message}`
+      : err.message;
+    console.error('[Instagram/Sync]', msg, err.response?.data || '');
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -188,7 +193,11 @@ router.post('/analyze', async (req, res) => {
     db.saveInstagramAnalysis(analysis);
     res.json(analysis);
   } catch (err) {
-    console.error('[Instagram/Analyze]', err.message);
+    const metaError = err.response?.data?.error;
+    const msg = metaError ? `[Meta API ${metaError.code}] ${metaError.message}` : err.message;
+    console.error('[Instagram/Analyze]', msg);
+    // redefine err.message para o bloco abaixo
+    err.message = msg;
     res.status(500).json({ error: err.message });
   }
 });
