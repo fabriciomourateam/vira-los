@@ -448,10 +448,10 @@ function rebuildSlideOuterHtml(
     if (bgImageConfig) {
       s = s.replace(/background-position\s*:\s*[^;]+;?/i, '').trim();
       s = `${s}; background-position: ${bgImageConfig.position};`;
+      // Remove any existing brightness filter from inline style, then ALWAYS re-add it
+      // This overrides any CSS class rule (e.g. old carousels had filter:brightness(0.45) in stylesheet)
       s = s.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?/i, '').trim();
-      if (bgImageConfig.brightness !== 100) {
-        s = `${s}; filter: brightness(${bgImageConfig.brightness}%);`;
-      }
+      s = `${s}; filter: brightness(${bgImageConfig.brightness}%);`;
     }
     target.setAttribute('style', s);
   }
