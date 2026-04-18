@@ -574,7 +574,7 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
     .clean-cover .bg {
       position: absolute; inset: 0;
       background-size: cover; background-position: center;
-      filter: brightness(0.45); z-index: 0;
+      z-index: 0;
     }
     .clean-cover .overlay {
       position: absolute; inset: 0;
