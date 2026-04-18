@@ -2869,7 +2869,7 @@ export default function CarouselEditor({
                                 className="shrink-0 px-2 py-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold transition-colors"
                                 title="Aplica gradiente estilo Leo Baltazar: topo limpo, escuro forte na metade inferior"
                               >
-                                Leo ↓
+                                ↓
                               </button>
                             </div>
                           {!collapsedSections['gradient'] && <div className="space-y-3">
