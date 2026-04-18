@@ -269,7 +269,7 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
     .slide-overlay {
       position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
-      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.7) 65%, rgba(0,0,0,0.93) 100%);
+      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.88) 62%, rgba(0,0,0,0.97) 100%);
       z-index: 1;
     }
     .slide-content {
@@ -578,7 +578,7 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
     }
     .clean-cover .overlay {
       position: absolute; inset: 0;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.72) 55%, rgba(0,0,0,0.85) 100%);
+      background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 38%, rgba(0,0,0,0.88) 60%, rgba(0,0,0,0.97) 100%);
       z-index: 1;
     }
     /* ── CAPA: bloco compacto na metade inferior ── */

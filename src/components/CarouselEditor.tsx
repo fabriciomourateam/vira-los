@@ -88,16 +88,18 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
   const { opacity, direction, color, startAt = 0 } = cfg;
   const c = color || '0,0,0';
   const hi = opacity.toFixed(2);
-  const lo = (opacity * 0.15).toFixed(2);
+  const lo = (opacity * 0.5).toFixed(2);
   switch (direction) {
-    case 'to top':    return `linear-gradient(to top, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 60%, rgba(${c},0) 100%)`;
-    case 'to right':  return `linear-gradient(to right, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 60%, rgba(${c},0) 100%)`;
+    case 'to top':    return `linear-gradient(to top, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 55%, rgba(${c},0) 100%)`;
+    case 'to right':  return `linear-gradient(to right, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 55%, rgba(${c},0) 100%)`;
     case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
     case 'none':      return 'rgba(0,0,0,0)';
     default: {
-      // Sempre começa do zero opaco para evitar salto ao mover o slider de 0 → 1
-      const mid = Math.min(98, startAt + (100 - startAt) * 0.35);
-      return `linear-gradient(to bottom, rgba(${c},0) 0%, rgba(${c},0) ${startAt}%, rgba(${c},${lo}) ${mid.toFixed(0)}%, rgba(${c},${hi}) 100%)`;
+      // Gradiente estilo Leo Baltazar: limpo no topo, banda de 20% de transição, preto no rodapé
+      // Espelha o CSS gerado pelo servidor: clear→startAt%, 0.78×hi→startAt+20%, hi→100%
+      const transitionEnd = Math.min(97, startAt + 20);
+      const midOpacity = (opacity * 0.81).toFixed(2); // ~0.78 quando opacity=0.96
+      return `linear-gradient(to bottom, rgba(${c},0) 0%, rgba(${c},0) ${startAt}%, rgba(${c},${midOpacity}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
     }
   }
 }
@@ -468,12 +470,20 @@ function rebuildSlideOuterHtml(
     }
   }
 
-  // Overlay gradient
+  // Overlay gradient — tenta todos os seletores possíveis de overlay
   if (overlayConfig) {
-    const overlayEl = el.querySelector('.overlay') as HTMLElement | null;
+    const overlayEl = (
+      el.querySelector('.overlay') ??
+      el.querySelector('.slide-overlay') ??
+      el.querySelector('[class*="overlay"]')
+    ) as HTMLElement | null;
     if (overlayEl) {
+      const existing = overlayEl.getAttribute('style') || '';
+      const cleaned = existing
+        .replace(/background\s*:[^;]+;?/gi, '')
+        .replace(/\s{2,}/g, ' ').trim().replace(/;$/, '');
       overlayEl.setAttribute('style',
-        `position:absolute;inset:0;z-index:1;background:${buildOverlayStyle(overlayConfig)};`
+        `${cleaned}${cleaned ? '; ' : ''}background:${buildOverlayStyle(overlayConfig)};`
       );
     }
   }
@@ -1170,6 +1180,22 @@ export default function CarouselEditor({
   function toggleSection(key: string) {
     setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }));
   }
+
+  // Quando a seção de gradiente é aberta para um slide que ainda não tem overlayConfig,
+  // inicializa com o padrão Leo Baltazar para que o preview já mostre o efeito
+  useEffect(() => {
+    if (collapsedSections['gradient']) return; // seção fechada → nada a fazer
+    if (overlayConfigs[selectedIndex]) return;  // já tem config → não sobrescreve
+    const sel = slides[selectedIndex];
+    if (!sel) return;
+    const hasOverlay = sel.outerHtml.includes('class="overlay"') || sel.outerHtml.includes('class="slide-overlay"');
+    if (!hasOverlay) return;
+    setOverlayConfigs(prev => ({
+      ...prev,
+      [selectedIndex]: { opacity: 0.96, direction: 'to bottom', color: '0,0,0', startAt: 40 },
+    }));
+  }, [collapsedSections['gradient'], selectedIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function toggleBlock(key: string) {
     setCollapsedBlocks(prev => ({ ...prev, [key]: !prev[key] }));
   }
@@ -2800,9 +2826,9 @@ export default function CarouselEditor({
                       })()}
 
                       {/* ── Gradiente / Overlay ── */}
-                      {sel.outerHtml.includes('class="overlay"') && (() => {
+                      {(sel.outerHtml.includes('class="overlay"') || sel.outerHtml.includes('class="slide-overlay"')) && (() => {
                         const ov: OverlayConfig = overlayConfigs[selectedIndex] ?? {
-                          opacity: 0.75, direction: 'to bottom', color: '0,0,0'
+                          opacity: 0.96, direction: 'to bottom', color: '0,0,0', startAt: 40
                         };
                         function setOv(patch: Partial<OverlayConfig>) {
                           setOverlayConfigs(prev => ({ ...prev, [selectedIndex]: { ...ov, ...patch } }));
@@ -2821,21 +2847,31 @@ export default function CarouselEditor({
                         };
                         return (
                           <div className="pt-3 border-t border-border">
-                            <button
-                              type="button"
-                              className="w-full flex items-center gap-1.5 mb-2 text-left"
-                              onClick={() => toggleSection('gradient')}
-                            >
-                              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['gradient'] ? '-rotate-90' : 'rotate-0'}`} />
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                Gradiente da capa
-                              </p>
-                              {/* Mini preview no header */}
-                              {ov.direction !== 'none' && (
-                                <div className="ml-auto w-10 h-4 rounded border border-border shrink-0"
-                                  style={{ background: buildOverlayStyle(ov) }} />
-                              )}
-                            </button>
+                            <div className="flex items-center gap-2 mb-2">
+                              <button
+                                type="button"
+                                className="flex-1 flex items-center gap-1.5 text-left"
+                                onClick={() => toggleSection('gradient')}
+                              >
+                                <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['gradient'] ? '-rotate-90' : 'rotate-0'}`} />
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Gradiente da capa
+                                </p>
+                                {ov.direction !== 'none' && (
+                                  <div className="ml-auto w-10 h-4 rounded border border-border shrink-0"
+                                    style={{ background: buildOverlayStyle(ov) }} />
+                                )}
+                              </button>
+                              {/* Preset Leo Baltazar — sempre visível */}
+                              <button
+                                type="button"
+                                onClick={() => setOv({ direction: 'to bottom', startAt: 40, opacity: 0.97, color: '0,0,0' })}
+                                className="shrink-0 px-2 py-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold transition-colors"
+                                title="Aplica gradiente estilo Leo Baltazar: topo limpo, escuro forte na metade inferior"
+                              >
+                                Leo ↓
+                              </button>
+                            </div>
                           {!collapsedSections['gradient'] && <div className="space-y-3">
 
                             {/* Direção */}
@@ -2915,6 +2951,37 @@ export default function CarouselEditor({
                               </button>
                             )}
                           </div>}
+
+                          {/* ── Aplicar gradiente — sempre visível, injeta direto no HTML ── */}
+                          {(() => {
+                            const applyGradient = () => {
+                              const gradient = buildOverlayStyle(ov);
+                              setSlides(prev => prev.map((s, i) => {
+                                if (i !== selectedIndex) return s;
+                                const parser = new DOMParser();
+                                const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
+                                const root = doc.body.firstElementChild!;
+                                const overlayEl = (
+                                  root.querySelector('.overlay') ??
+                                  root.querySelector('.slide-overlay') ??
+                                  root.querySelector('[class*="overlay"]')
+                                ) as HTMLElement | null;
+                                if (!overlayEl) return s;
+                                const existing = overlayEl.getAttribute('style') || '';
+                                const cleaned = existing.replace(/background\s*:[^;]+;?/gi, '').replace(/\s{2,}/g, ' ').trim().replace(/;$/, '');
+                                overlayEl.setAttribute('style', `${cleaned}${cleaned ? '; ' : ''}background:${gradient};`);
+                                return { ...s, outerHtml: root.outerHTML };
+                              }));
+                            };
+                            return (
+                              <button
+                                onClick={applyGradient}
+                                className="mt-2 w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors"
+                              >
+                                ✓ Aplicar gradiente no slide
+                              </button>
+                            );
+                          })()}
                           </div>
                         );
                       })()}
