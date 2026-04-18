@@ -94,11 +94,9 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
     case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
     case 'none':      return 'rgba(0,0,0,0)';
     default: {
-      if (startAt > 0) {
-        const mid = Math.min(99, startAt + (100 - startAt) * 0.35);
-        return `linear-gradient(to bottom, rgba(${c},0) 0%, rgba(${c},0) ${startAt}%, rgba(${c},${lo}) ${mid.toFixed(0)}%, rgba(${c},${hi}) 100%)`;
-      }
-      return `linear-gradient(to bottom, rgba(${c},${lo}) 0%, rgba(${c},${hi}) 55%, rgba(${c},${Math.min(1,opacity*1.1).toFixed(2)}) 100%)`;
+      // Sempre começa do zero opaco para evitar salto ao mover o slider de 0 → 1
+      const mid = Math.min(98, startAt + (100 - startAt) * 0.35);
+      return `linear-gradient(to bottom, rgba(${c},0) 0%, rgba(${c},0) ${startAt}%, rgba(${c},${lo}) ${mid.toFixed(0)}%, rgba(${c},${hi}) 100%)`;
     }
   }
 }
