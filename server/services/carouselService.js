@@ -269,7 +269,7 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
     .slide-overlay {
       position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
-      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.85) 100%);
+      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.7) 65%, rgba(0,0,0,0.93) 100%);
       z-index: 1;
     }
     .slide-content {

@@ -137,9 +137,30 @@ const POS_LEFT_REGEX = /(?:^|;)\s*left\s*:\s*([\d.]+)\s*px/i;
 
 const FONT_OPTIONS = [
   'Inter', 'Poppins', 'Montserrat', 'Raleway', 'Oswald',
-  'Playfair Display', 'Bebas Neue', 'Roboto', 'Lato', 'Open Sans',
+  'Playfair Display', 'Bebas Neue', 'Anton', 'Roboto', 'Lato', 'Open Sans',
   'Ubuntu', 'Nunito', 'DM Sans', 'Space Grotesk', 'Syne',
 ];
+
+// Injeta todas as fontes nos iframes do editor — funciona para carrosseis antigos e novos
+const ALL_FONTS_LINK =
+  `<link href="https://fonts.googleapis.com/css2?` +
+  `family=Inter:wght@300;400;500;600;700;800;900` +
+  `&family=Poppins:wght@300;400;500;600;700;800;900` +
+  `&family=Montserrat:wght@300;400;500;600;700;800;900` +
+  `&family=Raleway:wght@300;400;500;600;700;800;900` +
+  `&family=Oswald:wght@300;400;500;600;700` +
+  `&family=Playfair+Display:wght@400;500;600;700;800;900` +
+  `&family=Bebas+Neue:wght@400` +
+  `&family=Anton:wght@400` +
+  `&family=Roboto:wght@300;400;500;700;900` +
+  `&family=Lato:wght@300;400;700;900` +
+  `&family=Open+Sans:wght@300;400;500;600;700;800` +
+  `&family=Ubuntu:wght@300;400;500;700` +
+  `&family=Nunito:wght@300;400;500;600;700;800;900` +
+  `&family=DM+Sans:wght@300;400;500;600;700` +
+  `&family=Space+Grotesk:wght@300;400;500;600;700` +
+  `&family=Syne:wght@400;500;600;700;800` +
+  `&display=swap" rel="stylesheet">`;
 
 function extractFontSize(el: Element): number | undefined {
   const m = FONT_SIZE_REGEX.exec(el.getAttribute('style') || '');
@@ -574,7 +595,7 @@ function SlideThumbnail({ slideHtml, head, index, selected, onClick, horizontal 
   const THUMB_W = horizontal ? 80 : 120;
   const scale = THUMB_W / 1080;
   const thumbH = Math.round(1350 * scale);
-  const srcDoc = `<!DOCTYPE html><html><head>${head}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
+  const srcDoc = `<!DOCTYPE html><html><head>${head}${ALL_FONTS_LINK}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
   return (
     <button type="button" onClick={onClick}
       className={`relative rounded-xl overflow-hidden border-2 transition-all shrink-0 ${
@@ -616,7 +637,7 @@ function SlidePreview({ slideHtml, head }: { slideHtml: string; head: string }) 
   const PREVIEW_W = containerW;
   const scale = PREVIEW_W / 1080;
   const previewH = Math.round(1350 * scale);
-  const srcDoc = `<!DOCTYPE html><html><head>${head}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
+  const srcDoc = `<!DOCTYPE html><html><head>${head}${ALL_FONTS_LINK}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
   return (
     <div ref={containerRef} className="w-full">
     <div className="rounded-xl overflow-hidden border border-border shadow-lg mx-auto"
