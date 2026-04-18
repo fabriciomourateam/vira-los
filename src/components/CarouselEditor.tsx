@@ -446,12 +446,28 @@ function rebuildSlideOuterHtml(
         : `${s} background-image: url('${newBgUrl}');`;
     }
     if (bgImageConfig) {
+      // Parse X/Y position values (slider gives 0-100, 50 = center)
+      const posParts = bgImageConfig.position.trim().split(/\s+/);
+      const posX = parseFloat(posParts[0]) || 50;
+      const posY = parseFloat(posParts[1] ?? posParts[0]) || 50;
+
+      // Strategy: expand the .bg element 15% beyond each container edge via inset:-15%,
+      // then use transform:translate() to pan. This guarantees visible movement regardless
+      // of image/container aspect ratio (unlike background-position which needs "excess" image).
+      // At posX=50 posY=50 the image looks identical to the original (centered, no visual change).
+      const maxT = 11.5; // % of expanded element ≈ 15% visual pan range
+      const tx = ((50 - posX) / 50) * maxT;  // posX=0 → shift right (show left side)
+      const ty = ((50 - posY) / 50) * maxT;  // posY=0 → shift down (show top)
+
+      // Remove conflicting inline properties before setting new ones
+      s = s.replace(/inset\s*:\s*[^;]+;?/i, '').trim();
+      s = s.replace(/transform\s*:[^;]+;?/i, '').trim();
       s = s.replace(/background-position\s*:\s*[^;]+;?/i, '').trim();
-      s = `${s}; background-position: ${bgImageConfig.position};`;
-      // Remove any existing brightness filter from inline style, then ALWAYS re-add it
-      // This overrides any CSS class rule (e.g. old carousels had filter:brightness(0.45) in stylesheet)
+      s = s.replace(/background-size\s*:\s*[^;]+;?/i, '').trim();
       s = s.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?/i, '').trim();
-      s = `${s}; filter: brightness(${bgImageConfig.brightness}%);`;
+      s += `; inset: -15%; background-size: cover; background-position: center;`
+         + ` transform: translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
+         + ` filter: brightness(${bgImageConfig.brightness}%);`;
     }
     target.setAttribute('style', s);
   }
