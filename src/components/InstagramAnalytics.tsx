@@ -272,8 +272,8 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
       } else {
         toast.error('Não foi possível obter o link de conexão.');
       }
-    } catch {
-      toast.error('Erro ao buscar URL de conexão.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao buscar URL de conexão.');
     } finally {
       setLoadingConnect(false);
     }
@@ -289,10 +289,10 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
         await fetchPosts();
         await fetchStatus();
       } else {
-        toast.error('Sincronização falhou.');
+        toast.error(data.error || 'Sincronização falhou.');
       }
-    } catch {
-      toast.error('Erro ao sincronizar.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao sincronizar.');
     } finally {
       setLoadingSync(false);
     }
@@ -302,12 +302,12 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
     setLoadingAnalyze(true);
     try {
       const res = await fetch(`${API}/api/instagram/analyze`, { method: 'POST' });
-      if (!res.ok) throw new Error();
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao analisar com IA.');
       setAnalysis(data);
       toast.success('Análise IA concluída!');
-    } catch {
-      toast.error('Erro ao analisar com IA.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao analisar com IA.');
     } finally {
       setLoadingAnalyze(false);
     }

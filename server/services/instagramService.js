@@ -10,7 +10,7 @@
 
 const axios = require('axios');
 
-const FB_API = 'https://graph.facebook.com/v19.0';
+const FB_API = 'https://graph.facebook.com/v22.0';
 
 function getAppCredentials() {
   const appId       = process.env.FACEBOOK_APP_ID;
