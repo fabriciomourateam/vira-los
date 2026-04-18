@@ -446,13 +446,15 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
                     : ''}
                   {status.daysLeft !== undefined && (
                     <span
-                      className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
-                        status.daysLeft < 7
-                          ? 'bg-red-500/20 text-red-400'
+                      className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${
+                        status.daysLeft === 0
+                          ? 'bg-red-500/30 text-red-300'
+                          : status.daysLeft < 7
+                          ? 'bg-orange-500/20 text-orange-400'
                           : 'bg-green-500/20 text-green-400'
                       }`}
                     >
-                      token: {status.daysLeft}d
+                      {status.daysLeft === 0 ? '⚠ token expirado' : `token: ${status.daysLeft}d`}
                     </span>
                   )}
                 </p>
@@ -464,10 +466,23 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
               </div>
             </div>
 
+            {status.daysLeft === 0 && (
+              <div className="w-full mt-2 px-3 py-2 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle size={13} className="shrink-0" />
+                Token expirado. Desconecte e reconecte para sincronizar novamente.
+              </div>
+            )}
+            {status.daysLeft !== undefined && status.daysLeft > 0 && status.daysLeft <= 7 && (
+              <div className="w-full mt-2 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-300 text-xs flex items-center gap-2">
+                <AlertCircle size={13} className="shrink-0" />
+                Token expira em {status.daysLeft} dia{status.daysLeft !== 1 ? 's' : ''}. Reconecte em breve para não perder o acesso.
+              </div>
+            )}
+
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleSync}
-                disabled={loadingSync}
+                disabled={loadingSync || status.daysLeft === 0}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium transition-colors disabled:opacity-60"
               >
                 {loadingSync ? (
