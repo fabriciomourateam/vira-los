@@ -23,6 +23,7 @@ interface TextBlock {
   fontSize?: number;
   color?: string;                   // cor de todo o bloco
   fontFamily?: string;              // família de fonte
+  fontWeight?: number;              // 300 | 400 | 500 | 600 | 700 | 800 | 900
   highlights?: WordHighlight[];     // palavras específicas com cor própria
   textTransform?: 'none' | 'uppercase' | '';  // controle de caixa (uppercase/normal)
   textAlign?: 'left' | 'center' | 'right' | 'justify';
@@ -388,6 +389,11 @@ function rebuildSlideOuterHtml(
       if (tb.fontFamily) {
         newStyle = newStyle.replace(FONT_FAMILY_REGEX, '').replace(/\s{2,}/g, ' ').trim();
         newStyle = `${newStyle}; font-family: '${tb.fontFamily}', sans-serif;`.replace(/^;\s*/, '');
+      }
+      // Apply font-weight override
+      if (tb.fontWeight !== undefined) {
+        newStyle = newStyle.replace(/(?:^|;)\s*font-weight\s*:\s*[^;]+/gi, '').replace(/\s{2,}/g, ' ').trim();
+        newStyle = `${newStyle}; font-weight: ${tb.fontWeight};`.replace(/^;\s*/, '');
       }
       // Apply position override for custom-text blocks (posTop/posLeft from drag)
       if (baseClass === 'custom-text' && tb.posTop !== undefined) {
@@ -1654,6 +1660,14 @@ export default function CarouselEditor({
     });
   }
 
+  function updateFontWeight(si: number, bi: number, fontWeight: number | undefined) {
+    setEditedTexts(prev => {
+      const b = [...(prev[si] ?? [])];
+      b[bi] = { ...b[bi], fontWeight };
+      return { ...prev, [si]: b };
+    });
+  }
+
   function addWordHighlight(si: number, bi: number, word: string, color: string) {
     setEditedTexts(prev => {
       const b = [...(prev[si] ?? [])];
@@ -2454,18 +2468,36 @@ export default function CarouselEditor({
                                       </div>
                                     </div>
 
-                                    {/* Font family */}
-                                    <select
-                                      value={block.fontFamily || ''}
-                                      onChange={e => { e.stopPropagation(); updateFontFamily(selectedIndex, bi, e.target.value); }}
-                                      onClick={e => e.stopPropagation()}
-                                      className="w-full rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-                                    >
-                                      <option value="">— fonte padrão —</option>
-                                      {FONT_OPTIONS.map(f => (
-                                        <option key={f} value={f}>{f}</option>
-                                      ))}
-                                    </select>
+                                    {/* Font family + weight */}
+                                    <div className="flex gap-1.5">
+                                      <select
+                                        value={block.fontFamily || ''}
+                                        onChange={e => { e.stopPropagation(); updateFontFamily(selectedIndex, bi, e.target.value); }}
+                                        onClick={e => e.stopPropagation()}
+                                        className="flex-1 rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                                      >
+                                        <option value="">— fonte padrão —</option>
+                                        {FONT_OPTIONS.map(f => (
+                                          <option key={f} value={f}>{f}</option>
+                                        ))}
+                                      </select>
+                                      <select
+                                        value={block.fontWeight ?? ''}
+                                        onChange={e => { e.stopPropagation(); updateFontWeight(selectedIndex, bi, e.target.value ? Number(e.target.value) : undefined); }}
+                                        onClick={e => e.stopPropagation()}
+                                        className="w-20 rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                                        title="Peso da fonte"
+                                      >
+                                        <option value="">— peso —</option>
+                                        <option value="300">Light</option>
+                                        <option value="400">Regular</option>
+                                        <option value="500">Medium</option>
+                                        <option value="600">SemiBold</option>
+                                        <option value="700">Bold</option>
+                                        <option value="800">ExtraBold</option>
+                                        <option value="900">Black</option>
+                                      </select>
+                                    </div>
 
                                     {/* Rich text editor */}
                                     <RichTextEditor

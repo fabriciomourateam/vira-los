@@ -224,15 +224,29 @@ Responda APENAS com um JSON array de strings, sem markdown:
 
 // ─── Passo 3: CSS template completo (baseado no gist) ────────────────────────
 
+// URL única que carrega todas as fontes disponíveis no editor
+const ALL_FONTS_URL =
+  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900' +
+  '&family=Poppins:wght@300;400;500;600;700;800;900' +
+  '&family=Montserrat:wght@300;400;500;600;700;800;900' +
+  '&family=Raleway:wght@300;400;500;600;700;800;900' +
+  '&family=Oswald:wght@300;400;500;600;700' +
+  '&family=Playfair+Display:wght@400;500;600;700;800;900' +
+  '&family=Bebas+Neue:wght@400' +
+  '&family=Anton:wght@400' +
+  '&family=Roboto:wght@300;400;500;700;900' +
+  '&family=Lato:wght@300;400;700;900' +
+  '&family=Open+Sans:wght@300;400;500;600;700;800' +
+  '&family=Ubuntu:wght@300;400;500;700' +
+  '&family=Nunito:wght@300;400;500;600;700;800;900' +
+  '&family=DM+Sans:wght@300;400;500;600;700' +
+  '&family=Space+Grotesk:wght@300;400;500;600;700' +
+  '&family=Syne:wght@400;500;600;700;800' +
+  '&display=swap';
+
 function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
-  const font = fontFamily.replace(/ /g, '+');
-  // Bebas Neue e Anton só têm peso 400, sem itálico — import simplificado
-  const displayFonts = ['Bebas Neue', 'Anton'];
-  const fontLink = displayFonts.includes(fontFamily)
-    ? `https://fonts.googleapis.com/css2?family=${font}:wght@400&family=Space+Grotesk:wght@300;400;500;600;700&display=swap`
-    : `https://fonts.googleapis.com/css2?family=${font}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap`;
   return `
-  <link href="${fontLink}" rel="stylesheet">
+  <link href="${ALL_FONTS_URL}" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -545,9 +559,8 @@ Gere o HTML completo agora (apenas HTML, nada mais):`;
 // ─── CSS template layout "Clean" (estilo Fabricio Moura) ─────────────────────
 
 function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
-  const font = fontFamily.replace(/ /g, '+');
   return `
-  <link href="https://fonts.googleapis.com/css2?family=${font}:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&family=Raleway:wght@400;500;600;700;800;900&family=Oswald:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800;900&family=Bebas+Neue&family=Roboto:wght@400;500;700;900&family=Lato:wght@400;700;900&family=Open+Sans:wght@400;500;600;700;800&family=Ubuntu:wght@400;500;700&family=Nunito:wght@400;500;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="${ALL_FONTS_URL}" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
