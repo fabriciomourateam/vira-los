@@ -722,7 +722,6 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
                   >Resetar</button>
                 )}
               </div>
-              </p>
               <div className="space-y-2">
                 {analysis.aiInsights.actionPriority.map((a, i) => (
                   <div
