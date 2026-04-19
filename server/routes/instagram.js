@@ -48,18 +48,33 @@ router.get('/callback', async (req, res) => {
   }
 
   try {
-    const longLivedToken         = await exchangeCodeForToken(code);
-    const { igUserId, pageToken } = await getIGBusinessAccount(longLivedToken);
-    const igInfo                  = await getIGUserInfo(igUserId, longLivedToken);
+    const { shortToken, longToken } = await exchangeCodeForToken(code);
 
-    // Long-lived tokens last 60 days
+    // Tenta com long-lived primeiro, fallback para short-lived
+    let discovery;
+    try {
+      discovery = await getIGBusinessAccount(longToken);
+    } catch (err) {
+      console.warn('[Instagram/Callback] Long token falhou, tentando short token:', err.message);
+      discovery = await getIGBusinessAccount(shortToken);
+    }
+    const { igUserId, pageToken } = discovery;
+
+    const effectiveToken = pageToken || longToken;
+    let igInfo;
+    try {
+      igInfo = await getIGUserInfo(igUserId, effectiveToken);
+    } catch {
+      igInfo = await getIGUserInfo(igUserId, longToken);
+    }
+
     const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
     db.setInstagramToken({
-      accessToken:    longLivedToken,
+      accessToken:    effectiveToken,
       pageToken,
       igUserId,
-      username:       igInfo.username,
+      username:       igInfo.username || igInfo.name,
       name:           igInfo.name,
       profilePicture: igInfo.profile_picture_url,
       followersCount: igInfo.followers_count,

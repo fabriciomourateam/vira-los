@@ -54,16 +54,23 @@ async function exchangeCodeForToken(code) {
   const shortToken = r1.data.access_token;
 
   // Step 2 — exchange for 60-day long-lived token
-  const r2 = await axios.get(`${FB_API}/oauth/access_token`, {
-    params: {
-      grant_type: 'fb_exchange_token',
-      client_id: appId,
-      client_secret: appSecret,
-      fb_exchange_token: shortToken,
-    },
-    timeout: 10000,
-  });
-  return r2.data.access_token;
+  let longToken = shortToken;
+  try {
+    const r2 = await axios.get(`${FB_API}/oauth/access_token`, {
+      params: {
+        grant_type: 'fb_exchange_token',
+        client_id: appId,
+        client_secret: appSecret,
+        fb_exchange_token: shortToken,
+      },
+      timeout: 10000,
+    });
+    longToken = r2.data.access_token;
+  } catch (err) {
+    console.warn('[Instagram/Token] Long-lived exchange falhou, usando short-lived:', err.message);
+  }
+
+  return { shortToken, longToken };
 }
 
 // ─── Account Discovery ────────────────────────────────────────────────────────
