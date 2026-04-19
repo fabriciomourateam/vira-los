@@ -34,6 +34,7 @@ interface IGPost {
   shares: number;
   views: number;
   reach: number;
+  follows: number;
   engagementRate: number;
   saveRate: number;
   reelCandidateScore: number;
@@ -325,7 +326,20 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
     }
   }
 
-  const sortedPosts = [...posts].sort((a, b) => b.engagementRate - a.engagementRate);
+  type SortKey = 'engagement' | 'likes' | 'follows' | 'saves' | 'views' | 'comments' | 'recent';
+  const [postSort, setPostSort] = useState<SortKey>('engagement');
+
+  const sortFns: Record<SortKey, (a: IGPost, b: IGPost) => number> = {
+    engagement: (a, b) => b.engagementRate - a.engagementRate,
+    likes:      (a, b) => b.likes - a.likes,
+    follows:    (a, b) => (b.follows || 0) - (a.follows || 0),
+    saves:      (a, b) => b.saves - a.saves,
+    views:      (a, b) => b.views - a.views,
+    comments:   (a, b) => b.comments - a.comments,
+    recent:     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  };
+
+  const sortedPosts = [...posts].sort(sortFns[postSort]);
   const maxEng = sortedPosts[0]?.engagementRate || 1;
 
   if (loadingStatus) {
@@ -687,12 +701,35 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
       {/* ── Lista de todos os posts ── */}
       {sortedPosts.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <BarChart3 size={16} className="text-muted-foreground" />
             <h3 className="font-semibold text-foreground">Todos os posts</h3>
             <span className="text-xs bg-secondary text-muted-foreground px-2 py-0.5 rounded-full">
               {sortedPosts.length}
             </span>
+          </div>
+          <div className="flex gap-1 flex-wrap">
+            {([
+              ['engagement', 'Engajamento'],
+              ['likes', 'Curtidas'],
+              ['follows', 'Seguidores'],
+              ['saves', 'Salvos'],
+              ['views', 'Views'],
+              ['comments', 'Comentários'],
+              ['recent', 'Recentes'],
+            ] as [SortKey, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setPostSort(key)}
+                className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  postSort === key
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-secondary text-muted-foreground hover:bg-border active:bg-border'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {sortedPosts.map((post) => {
@@ -740,6 +777,17 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
                       <span className="text-xs text-muted-foreground flex-shrink-0">
                         {post.saves} saves
                       </span>
+                      {post.follows > 0 && (
+                        <span className="text-xs text-green-500 font-semibold flex-shrink-0">
+                          +{post.follows} seg
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>❤️ {post.likes}</span>
+                      <span>💬 {post.comments}</span>
+                      <span>👁 {post.views}</span>
+                      {post.shares > 0 && <span>↗ {post.shares}</span>}
                     </div>
                   </div>
                   <a

@@ -160,9 +160,8 @@ async function getIGUserInfo(igUserId, token) {
 
 async function getPostInsights(mediaId, mediaType, token) {
   const isReel = mediaType === 'REELS' || mediaType === 'VIDEO';
-  // Reels use "plays"; static/carousel use "impressions"
   const metric = isReel
-    ? 'plays,reach,saved,shares'
+    ? 'plays,reach,saved,shares,follows'
     : 'impressions,reach,saved,shares';
   try {
     const r = await axios.get(`${FB_API}/${mediaId}/insights`, {
@@ -255,6 +254,7 @@ async function syncPosts(token, igUserId) {
     const saves    = insights.saved     || 0;
     const shares   = insights.shares    || 0;
     const views    = insights.plays     || insights.impressions || 0;
+    const follows  = insights.follows   || 0;
 
     // Se reach=0 (insights indisponível), estima com base em likes*10 ou views
     const reach = rawReach > 0 ? rawReach : Math.max(views, likes * 10, 1);
@@ -283,6 +283,7 @@ async function syncPosts(token, igUserId) {
       shares,
       views,
       reach,
+      follows,
       engagementRate:    Math.round(engagementRate    * 100) / 100,
       saveRate:          Math.round(saveRate           * 100) / 100,
       reelCandidateScore:Math.round(reelCandidateScore * 100) / 100,

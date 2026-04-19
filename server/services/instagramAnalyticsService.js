@@ -53,7 +53,8 @@ async function analyzeWithAI(posts, igAccount) {
 
   const fmt = (p, i) =>
     `${i + 1}. [${p.mediaType}] Eng: ${p.engagementRate}% | ` +
-    `Saves: ${p.saves} | Shares: ${p.shares} | Reach: ${p.reach} | ` +
+    `Likes: ${p.likes} | Saves: ${p.saves} | Shares: ${p.shares} | ` +
+    `Follows: ${p.follows || 0} | Reach: ${p.reach} | ` +
     `${new Date(p.timestamp).toLocaleDateString('pt-BR')} | ` +
     `"${sanitizeText((p.caption || '').substring(0, 100))}"`;
 
