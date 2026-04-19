@@ -72,6 +72,7 @@ async function exchangeCodeForToken(code) {
  * Returns { igUserId, pageToken } for the first page with an IG business account.
  */
 async function getIGBusinessAccount(longLivedToken) {
+  // Tenta /me/accounts (método padrão)
   const r = await axios.get(`${FB_API}/me/accounts`, {
     params: {
       access_token: longLivedToken,
@@ -81,6 +82,10 @@ async function getIGBusinessAccount(longLivedToken) {
   });
 
   const pages = r.data.data || [];
+  console.log(`[Instagram/Discovery] ${pages.length} páginas encontradas:`,
+    pages.map(p => ({ id: p.id, name: p.name, ig: p.instagram_business_account?.id || 'N/A' }))
+  );
+
   for (const page of pages) {
     if (page.instagram_business_account?.id) {
       return {
@@ -89,8 +94,55 @@ async function getIGBusinessAccount(longLivedToken) {
       };
     }
   }
+
+  // Fallback: busca cada página individualmente pedindo instagram_business_account
+  for (const page of pages) {
+    try {
+      const pr = await axios.get(`${FB_API}/${page.id}`, {
+        params: {
+          fields: 'instagram_business_account',
+          access_token: page.access_token || longLivedToken,
+        },
+        timeout: 8000,
+      });
+      if (pr.data.instagram_business_account?.id) {
+        console.log(`[Instagram/Discovery] IG Business encontrado via fallback: ${pr.data.instagram_business_account.id}`);
+        return {
+          igUserId: pr.data.instagram_business_account.id,
+          pageToken: page.access_token,
+        };
+      }
+    } catch (err) {
+      console.warn(`[Instagram/Discovery] Fallback falhou para página ${page.id}:`, err.message);
+    }
+  }
+
+  // Segundo fallback: tenta usar o IG user ID do escopo instagram_basic
+  try {
+    const igMe = await axios.get(`${FB_API}/me`, {
+      params: {
+        fields: 'id,name,accounts{instagram_business_account{id,username}}',
+        access_token: longLivedToken,
+      },
+      timeout: 10000,
+    });
+    const accts = igMe.data.accounts?.data || [];
+    for (const a of accts) {
+      if (a.instagram_business_account?.id) {
+        console.log(`[Instagram/Discovery] IG Business encontrado via /me expandido: ${a.instagram_business_account.id}`);
+        return {
+          igUserId: a.instagram_business_account.id,
+          pageToken: longLivedToken,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[Instagram/Discovery] /me expandido falhou:', err.message);
+  }
+
+  const pageNames = pages.map(p => p.name).join(', ') || 'nenhuma';
   throw new Error(
-    'Nenhuma conta Instagram Business/Creator encontrada. Certifique-se de que sua conta está conectada a uma Página do Facebook.'
+    `Nenhuma conta Instagram Business vinculada encontrada. Páginas detectadas: [${pageNames}]. Verifique se o Instagram @fabriciomourateam está como conta profissional e vinculado à página.`
   );
 }
 
