@@ -161,22 +161,39 @@ async function getIGUserInfo(igUserId, token) {
 async function getPostInsights(mediaId, mediaType, token) {
   const isReel = mediaType === 'REELS' || mediaType === 'VIDEO';
   const metric = isReel
-    ? 'plays,reach,saved,shares,follows'
+    ? 'plays,reach,saved,shares'
     : 'impressions,reach,saved,shares';
+  const result = {};
+
+  // Métricas principais
   try {
     const r = await axios.get(`${FB_API}/${mediaId}/insights`, {
       params: { metric, access_token: token },
       timeout: 8000,
     });
-    const result = {};
     (r.data.data || []).forEach((item) => {
       result[item.name] = item.values?.[0]?.value ?? item.value ?? 0;
     });
-    return result;
   } catch {
-    // Some post types don't support all metrics — return empty object gracefully
-    return {};
+    // Insights indisponíveis para este post
   }
+
+  // follows (só Reels, chamada separada — pode falhar sem derrubar as outras)
+  if (isReel) {
+    try {
+      const r2 = await axios.get(`${FB_API}/${mediaId}/insights`, {
+        params: { metric: 'follows', access_token: token },
+        timeout: 5000,
+      });
+      (r2.data.data || []).forEach((item) => {
+        result[item.name] = item.values?.[0]?.value ?? item.value ?? 0;
+      });
+    } catch {
+      // follows não disponível para este reel (normal para posts antigos)
+    }
+  }
+
+  return result;
 }
 
 // ─── Resolve IG Business Account ID from token ──────────────────────────────
