@@ -824,17 +824,16 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
       )}
 
       {/* ── Lista de todos os posts ── */}
-      {sortedPosts.length > 0 && (
-        {/* CTA Templates */}
-        {analysis && (
-          <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
-              <Zap size={12} /> Templates de CTA — copie e use
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {[
-                { label: 'Save (início)', text: '💾 Salva esse post pra consultar depois — você vai precisar' },
-                { label: 'Save (final)', text: '↗️ Salva e manda pra alguém que precisa saber disso' },
+      {/* CTA Templates */}
+      {analysis && (
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
+            <Zap size={12} /> Templates de CTA — copie e use
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {[
+              { label: 'Save (início)', text: '💾 Salva esse post pra consultar depois — você vai precisar' },
+              { label: 'Save (final)', text: '↗️ Salva e manda pra alguém que precisa saber disso' },
                 { label: 'Share', text: '📲 Manda pra aquele amigo que vive errando nisso' },
                 { label: 'Comentário', text: '💬 Comenta "EU" que te mando o guia completo' },
                 { label: 'Save educativo', text: '📌 Guarda esse post — é o tipo de conteúdo que você vai querer rever' },
@@ -857,19 +856,20 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
           </div>
         )}
 
-        {/* Dica: Score antes de postar */}
-        {analysis && (
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
-            <AlertCircle size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-foreground">Antes de postar, use o Viral Score</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                A análise mostrou que seus posts não têm CTA de save/share efetivo. Vá na aba <strong>Avaliar</strong> e cole seu roteiro para verificar se o hook, CTA e emoção estão otimizados antes de publicar.
-              </p>
-            </div>
+      {/* Dica: Score antes de postar */}
+      {analysis && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Antes de postar, use o Viral Score</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              A análise mostrou que seus posts não têm CTA de save/share efetivo. Vá na aba <strong>Avaliar</strong> e cole seu roteiro para verificar se o hook, CTA e emoção estão otimizados antes de publicar.
+            </p>
           </div>
-        )}
+        </div>
+      )}
 
+      {sortedPosts.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <BarChart3 size={16} className="text-muted-foreground" />
