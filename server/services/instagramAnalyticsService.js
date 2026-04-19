@@ -121,7 +121,7 @@ Inclua 3-5 padrões e 3-5 ações. Use números reais dos dados para embasar cad
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
+    max_tokens: 4000,
     system:
       'Você é um especialista em crescimento no Instagram. Responde SEMPRE com JSON válido e absolutamente nada mais — sem markdown, sem texto fora do JSON.',
     messages: [{ role: 'user', content: prompt }],
@@ -130,7 +130,24 @@ Inclua 3-5 padrões e 3-5 ações. Use números reais dos dados para embasar cad
   const text = (response.content[0]?.text || '').trim();
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('Resposta inválida do modelo ao analisar performance');
-  const aiInsights = JSON.parse(match[0]);
+
+  let aiInsights;
+  try {
+    aiInsights = JSON.parse(match[0]);
+  } catch (parseErr) {
+    // Tenta consertar JSON malformado: remove trailing commas, control chars
+    let fixed = match[0]
+      .replace(/,\s*([}\]])/g, '$1')           // trailing commas
+      .replace(/[\x00-\x1F\x7F]/g, ' ')        // control characters
+      .replace(/\n/g, '\\n')                    // newlines inside strings
+      .replace(/\t/g, '\\t');                   // tabs inside strings
+    try {
+      aiInsights = JSON.parse(fixed);
+    } catch {
+      console.error('[Instagram/Analyze] JSON inválido:', match[0].substring(0, 500));
+      throw new Error('A IA retornou JSON inválido. Tente novamente.');
+    }
+  }
 
   return {
     aiInsights,
