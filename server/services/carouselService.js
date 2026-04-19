@@ -792,8 +792,9 @@ ${buildViralStructure({ numSlides, dominantEmotion: dominantEmotion || 'medo de 
 1. O bloco <style>...</style> INTEIRO — copie caractere por caractere
 2. A estrutura HTML de cada slide (tags, classes, hierarquia de divs)
 3. Todos os atributos "style" inline de TODOS os elementos — posição (top, left, right, bottom), transform, tamanhos, margens, cores de fundo
-4. SLIDE DE CAPA: preserve a posição e estilo de TODOS os elementos (.profile-badge, .avatar-circle, .profile-name, .profile-handle, .verified-badge, .cover-title, .swipe-hint, .follow-pill, .follow-banner)
-5. SLIDES INTERNOS: preserve EXATAMENTE a posição e estilo de:
+4. FONTES: mantenha EXATAMENTE o font-family, font-size, font-weight, line-height, letter-spacing de cada elemento. NÃO mude nenhum tamanho de letra nem fonte.
+5. SLIDE DE CAPA: preserve a posição e estilo de TODOS os elementos (.profile-badge, .avatar-circle, .profile-name, .profile-handle, .verified-badge, .cover-title, .swipe-hint, .follow-pill, .follow-banner)
+6. SLIDES INTERNOS: preserve EXATAMENTE a posição e estilo de:
    - .slide-footer / .footer-name-pill / .footer-handle-pill (badges inferiores com nome/handle)
    - .top-header / header com numeração
    - .subtitle-accent / bullets decorativos
