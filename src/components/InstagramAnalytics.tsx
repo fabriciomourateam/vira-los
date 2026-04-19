@@ -10,6 +10,8 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface Props {
   onCreateReels: (idea: { title: string; hook: string }) => void;
+  onCreateCarousel?: (topic: string, instructions: string) => void;
+  onCreateScript?: (script: string, topic: string) => void;
 }
 
 interface IGStatus {
@@ -207,10 +209,12 @@ const PostCard = ({
   </div>
 );
 
-export default function InstagramAnalytics({ onCreateReels }: Props) {
+export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, onCreateScript }: Props) {
   const [status, setStatus] = useState<IGStatus | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [posts, setPosts] = useState<IGPost[]>([]);
+
+  const [checkedActions, setCheckedActions] = useState<Record<number, boolean>>({});
 
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [loadingConnect, setLoadingConnect] = useState(false);
@@ -560,6 +564,59 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
         </div>
       )}
 
+      {/* ── Comparativo antes/depois ── */}
+      {analysis && (() => {
+        const prevRaw = localStorage.getItem('ig_prev_analysis');
+        const prev = prevRaw ? JSON.parse(prevRaw) : null;
+        const current = {
+          date: analysis.generatedAt,
+          avgEng: analysis.stats.avgEngagement,
+          avgSaves: posts.length ? posts.reduce((s, p) => s + p.saves, 0) / posts.length : 0,
+          avgShares: posts.length ? posts.reduce((s, p) => s + (p.shares || 0), 0) / posts.length : 0,
+        };
+
+        // Salva análise atual como "anterior" para próxima comparação
+        if (!prev || prev.date !== current.date) {
+          if (prev) localStorage.setItem('ig_prev_analysis', JSON.stringify(current));
+          else localStorage.setItem('ig_prev_analysis', JSON.stringify(current));
+        }
+
+        if (prev && prev.date !== current.date) {
+          const diff = (curr: number, old: number) => {
+            const d = curr - old;
+            return d > 0 ? `+${d.toFixed(1)}` : d.toFixed(1);
+          };
+          return (
+            <div className="bg-card border border-border rounded-2xl p-4 space-y-2">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
+                <TrendingUp size={12} /> Evolução desde última análise
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Engajamento</p>
+                  <p className={`text-sm font-bold ${current.avgEng >= prev.avgEng ? 'text-green-500' : 'text-red-500'}`}>
+                    {diff(current.avgEng, prev.avgEng)}%
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Saves médio</p>
+                  <p className={`text-sm font-bold ${current.avgSaves >= prev.avgSaves ? 'text-green-500' : 'text-red-500'}`}>
+                    {diff(current.avgSaves, prev.avgSaves)}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Shares médio</p>
+                  <p className={`text-sm font-bold ${current.avgShares >= prev.avgShares ? 'text-green-500' : 'text-red-500'}`}>
+                    {diff(current.avgShares, prev.avgShares)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       {/* ── IA Insights ── */}
       {loadingAnalysis && !analysis && (
         <div className="flex items-center gap-2 text-muted-foreground py-6 justify-center">
@@ -596,6 +653,30 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
                   <Video size={12} /> Oportunidade de Reels
                 </p>
                 <p className="text-sm text-foreground">{analysis.aiInsights.reelsOpportunity}</p>
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {onCreateCarousel && (
+                    <button
+                      onClick={() => onCreateCarousel(
+                        'Oportunidade de Reels',
+                        analysis.aiInsights.reelsOpportunity || ''
+                      )}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors"
+                    >
+                      <Layers size={11} /> Gerar Carrossel
+                    </button>
+                  )}
+                  {onCreateScript && (
+                    <button
+                      onClick={() => onCreateScript(
+                        analysis.aiInsights.reelsOpportunity || '',
+                        'Reels baseado em análise de performance'
+                      )}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+                    >
+                      <Sparkles size={11} /> Gerar Roteiro
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -627,11 +708,20 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
             </div>
           )}
 
-          {/* Ações prioritárias */}
+          {/* Ações prioritárias — checklist */}
           {analysis.aiInsights.actionPriority.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                Ações prioritárias
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  Checklist semanal — {Object.values(checkedActions).filter(Boolean).length}/{analysis.aiInsights.actionPriority.length} feitas
+                </p>
+                {Object.values(checkedActions).filter(Boolean).length > 0 && (
+                  <button
+                    onClick={() => setCheckedActions({})}
+                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >Resetar</button>
+                )}
+              </div>
               </p>
               <div className="space-y-2">
                 {analysis.aiInsights.actionPriority.map((a, i) => (
@@ -639,10 +729,37 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
                     key={i}
                     className="flex items-start gap-3 bg-secondary/40 rounded-lg px-4 py-3"
                   >
-                    <ArrowRight size={14} className="text-purple-400 flex-shrink-0 mt-0.5" />
+                    <button
+                      onClick={() => setCheckedActions(prev => ({ ...prev, [i]: !prev[i] }))}
+                      className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors mt-0.5 ${
+                        checkedActions[i]
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-border hover:border-purple-400'
+                      }`}
+                    >
+                      {checkedActions[i] && <CheckCircle2 size={12} />}
+                    </button>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">{a.action}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">{a.why}</p>
+                      <div className="flex gap-1.5 mt-2 flex-wrap">
+                        {onCreateCarousel && (
+                          <button
+                            onClick={() => onCreateCarousel(a.action, a.why)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 active:bg-purple-500 text-white text-[10px] font-semibold transition-colors"
+                          >
+                            <Layers size={10} /> Gerar Carrossel
+                          </button>
+                        )}
+                        {onCreateScript && (
+                          <button
+                            onClick={() => onCreateScript(a.action, a.action)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-500 text-white text-[10px] font-semibold transition-colors"
+                          >
+                            <Sparkles size={10} /> Gerar Roteiro
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <span
                       className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${urgencyBadge(
@@ -709,6 +826,51 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
 
       {/* ── Lista de todos os posts ── */}
       {sortedPosts.length > 0 && (
+        {/* CTA Templates */}
+        {analysis && (
+          <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
+              <Zap size={12} /> Templates de CTA — copie e use
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { label: 'Save (início)', text: '💾 Salva esse post pra consultar depois — você vai precisar' },
+                { label: 'Save (final)', text: '↗️ Salva e manda pra alguém que precisa saber disso' },
+                { label: 'Share', text: '📲 Manda pra aquele amigo que vive errando nisso' },
+                { label: 'Comentário', text: '💬 Comenta "EU" que te mando o guia completo' },
+                { label: 'Save educativo', text: '📌 Guarda esse post — é o tipo de conteúdo que você vai querer rever' },
+                { label: 'Share + Save', text: '🔥 Salva pra você + compartilha pra ajudar alguém' },
+              ].map((cta, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    navigator.clipboard.writeText(cta.text);
+                    toast.success('CTA copiado!');
+                  }}
+                  className="text-left bg-secondary/50 hover:bg-secondary active:bg-secondary rounded-lg px-3 py-2 transition-colors group"
+                >
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase">{cta.label}</p>
+                  <p className="text-xs text-foreground mt-0.5">{cta.text}</p>
+                  <p className="text-[9px] text-purple-400 opacity-0 group-hover:opacity-100 mt-1 transition-opacity">Clique para copiar</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dica: Score antes de postar */}
+        {analysis && (
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Antes de postar, use o Viral Score</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                A análise mostrou que seus posts não têm CTA de save/share efetivo. Vá na aba <strong>Avaliar</strong> e cole seu roteiro para verificar se o hook, CTA e emoção estão otimizados antes de publicar.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <BarChart3 size={16} className="text-muted-foreground" />

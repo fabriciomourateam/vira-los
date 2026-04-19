@@ -979,6 +979,20 @@ export default function ViralOS() {
               toast.success('Post carregado no Criar!');
               setTimeout(() => setCarouselPrefill(null), 500);
             }}
+            onCreateCarousel={(topic, instructions) => {
+              setCarouselPrefill({ topic, script: instructions });
+              setActiveTab('criar');
+              toast.success('Tema carregado no Criar — preencha e gere!');
+              setTimeout(() => setCarouselPrefill(null), 500);
+            }}
+            onCreateScript={(script, topic) => {
+              setState(prev => ({
+                ...prev,
+                inputs: { ...prev.inputs, '3.1.a': script },
+              }));
+              setActiveTab('metodo');
+              toast.success('Roteiro carregado no Método!');
+            }}
           />
         )}
 
