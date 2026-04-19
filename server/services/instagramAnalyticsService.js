@@ -12,6 +12,14 @@ function avg(arr) {
   return arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
 }
 
+function sanitizeText(s) {
+  if (!s) return '';
+  // Remove lone surrogates and other invalid unicode that break JSON
+  return s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+          .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+
 // ─── Main Analysis ────────────────────────────────────────────────────────────
 
 async function analyzeWithAI(posts, igAccount) {
@@ -47,7 +55,7 @@ async function analyzeWithAI(posts, igAccount) {
     `${i + 1}. [${p.mediaType}] Eng: ${p.engagementRate}% | ` +
     `Saves: ${p.saves} | Shares: ${p.shares} | Reach: ${p.reach} | ` +
     `${new Date(p.timestamp).toLocaleDateString('pt-BR')} | ` +
-    `"${(p.caption || '').substring(0, 100)}"`;
+    `"${sanitizeText((p.caption || '').substring(0, 100))}"`;
 
   const prompt = `Você é um especialista em crescimento no Instagram para o nicho de fitness, nutrição esportiva e hormônios estéticos.
 

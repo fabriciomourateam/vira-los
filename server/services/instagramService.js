@@ -249,12 +249,15 @@ async function syncPosts(token, igUserId) {
   for (const post of rawPosts) {
     const insights = await getPostInsights(post.id, post.media_type, token);
 
-    const reach    = Math.max(insights.reach || 0, 1);
+    const rawReach = insights.reach || 0;
     const likes    = post.like_count    || 0;
     const comments = post.comments_count || 0;
     const saves    = insights.saved     || 0;
     const shares   = insights.shares    || 0;
     const views    = insights.plays     || insights.impressions || 0;
+
+    // Se reach=0 (insights indisponível), estima com base em likes*10 ou views
+    const reach = rawReach > 0 ? rawReach : Math.max(views, likes * 10, 1);
 
     // Weighted engagement: likes + comments×2 + saves×3 + shares×2
     const rawEng         = likes + comments * 2 + saves * 3 + shares * 2;
