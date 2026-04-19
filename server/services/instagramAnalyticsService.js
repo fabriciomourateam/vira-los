@@ -50,49 +50,74 @@ async function analyzeWithAI(posts, igAccount) {
   // ── Build prompt ──────────────────────────────────────────────────────────
   const top10   = [...posts].sort((a, b) => b.engagementRate - a.engagementRate).slice(0, 10);
   const bottom5 = [...posts].sort((a, b) => a.engagementRate - b.engagementRate).slice(0, 5);
+  const topSaved = [...posts].sort((a, b) => b.saves - a.saves).slice(0, 5);
+  const topShared = [...posts].sort((a, b) => (b.shares || 0) - (a.shares || 0)).slice(0, 5);
+  const topFollows = [...posts].filter(p => (p.follows || 0) > 0).sort((a, b) => b.follows - a.follows).slice(0, 5);
+
+  const avgShareRate = avg(posts.map(p => p.shares ? (p.shares / Math.max(p.reach, 1)) * 100 : 0));
 
   const fmt = (p, i) =>
     `${i + 1}. [${p.mediaType}] Eng: ${p.engagementRate}% | ` +
     `Likes: ${p.likes} | Saves: ${p.saves} | Shares: ${p.shares} | ` +
-    `Follows: ${p.follows || 0} | Reach: ${p.reach} | ` +
+    `Comments: ${p.comments} | Follows: ${p.follows || 0} | Reach: ${p.reach} | ` +
     `${new Date(p.timestamp).toLocaleDateString('pt-BR')} | ` +
-    `"${sanitizeText((p.caption || '').substring(0, 100))}"`;
+    `"${sanitizeText((p.caption || '').substring(0, 120))}"`;
 
-  const prompt = `Você é um especialista em crescimento no Instagram para o nicho de fitness, nutrição esportiva e hormônios estéticos.
+  const prompt = `Você é um estrategista de crescimento no Instagram especializado em analisar dados reais para recomendar ações concretas.
 
 CONTA: @${igAccount.username || 'criador'} — ${(igAccount.followersCount || 0).toLocaleString('pt-BR')} seguidores
 
-ESTATÍSTICAS GERAIS (${posts.length} posts analisados):
-• Engajamento médio geral: ${avgEngAll.toFixed(2)}%
-• Reels: ${avgReelsEng.toFixed(2)}% eng médio (${reels.length} posts)
-• Carrosseis: ${avgCarouselEng.toFixed(2)}% eng médio (${carousels.length} posts)
-• Imagens: ${avgImagesEng.toFixed(2)}% eng médio (${images.length} posts)
+━━━ ESTATÍSTICAS GERAIS (${posts.length} posts analisados) ━━━
+• Engajamento médio: ${avgEngAll.toFixed(2)}%
 • Save rate médio: ${avgSaveRate.toFixed(2)}%
+• Share rate médio: ${avgShareRate.toFixed(2)}%
+• Reels: ${avgReelsEng.toFixed(2)}% eng (${reels.length} posts)
+• Carrosseis: ${avgCarouselEng.toFixed(2)}% eng (${carousels.length} posts)
+• Imagens: ${avgImagesEng.toFixed(2)}% eng (${images.length} posts)
 
-TOP 10 POSTS — maior engajamento:
+━━━ TOP 10 — Maior engajamento ━━━
 ${top10.map(fmt).join('\n')}
 
-5 POSTS DE MENOR ENGAJAMENTO:
+━━━ TOP 5 — Mais salvos (indica conteúdo de valor) ━━━
+${topSaved.map(fmt).join('\n')}
+
+━━━ TOP 5 — Mais compartilhados (indica potencial viral) ━━━
+${topShared.map(fmt).join('\n')}
+
+${topFollows.length > 0 ? `━━━ TOP — Posts que mais trouxeram seguidores ━━━\n${topFollows.map(fmt).join('\n')}\n` : ''}━━━ 5 — Menor engajamento (identificar o que evitar) ━━━
 ${bottom5.map(fmt).join('\n')}
 
-Com base nesses dados reais, forneça uma análise estratégica profunda e específica para este perfil.
+━━━ CARROSSEIS CANDIDATOS A VIRAR REELS ━━━
+${reelCandidates.length > 0
+  ? reelCandidates.map(fmt).join('\n')
+  : 'Nenhum carrossel com save rate acima da média'}
+
+HIERARQUIA DE SINAIS (do mais forte ao mais fraco):
+1. Saves (salvamentos) = conteúdo de valor que as pessoas querem rever
+2. Shares (compartilhamentos) = potencial viral, o algoritmo prioriza
+3. Comentários = engajamento profundo, gera conversa
+4. Follows = prova que o conteúdo converte em seguidores
+5. Likes = sinal fraco, todo mundo curte sem pensar
+
+Analise os dados acima usando essa hierarquia. Identifique QUAIS TEMAS e FORMATOS geram mais saves e shares (não likes).
 RESPONDA APENAS com JSON válido — nenhum texto antes ou depois:
 
 {
-  "summary": "análise geral em 2-3 frases diretas sobre o padrão dominante de performance desta conta",
+  "summary": "2-3 frases sobre o padrão dominante. Foque em saves e shares, não em likes.",
   "topFormat": "Reels|Carrossel|Imagem",
-  "topFormatReason": "1 frase explicando por quê este formato performa melhor nos dados apresentados",
-  "hookPattern": "padrão identificado nos hooks/temas dos posts com maior engajamento — seja específico com os dados",
-  "bestPostingInsight": "insight acionável sobre frequência, tipo de conteúdo ou abordagem baseado nos dados",
+  "topFormatReason": "por quê este formato gera mais saves/shares nos dados",
+  "hookPattern": "padrão nos hooks dos posts mais salvos e compartilhados — cite exemplos concretos dos dados",
+  "bestPostingInsight": "insight acionável sobre frequência, tipo de conteúdo ou abordagem",
+  "reelsOpportunity": "quais carrosséis/posts deveriam virar Reels e por quê (com base nos saves/shares)",
   "patterns": [
-    { "title": "Nome do padrão identificado", "description": "explicação em 1 frase com dados concretos", "impact": "alto|médio|baixo" }
+    { "title": "Nome do padrão", "description": "explicação com dados concretos dos posts", "impact": "alto|médio|baixo" }
   ],
   "actionPriority": [
-    { "action": "Ação específica e mensurável", "why": "por que esta ação vai melhorar a performance — conectado aos dados", "urgency": "alta|média|baixa" }
+    { "action": "Ação específica e mensurável", "why": "conectado aos dados de saves/shares", "urgency": "alta|média|baixa" }
   ]
 }
 
-Inclua 3-5 padrões e 3-5 ações prioritárias. Use números dos dados para embasar cada observação.`;
+Inclua 3-5 padrões e 3-5 ações. Use números reais dos dados para embasar cada observação. Priorize saves e shares sobre likes.`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',

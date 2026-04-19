@@ -259,12 +259,14 @@ async function syncPosts(token, igUserId) {
     // Se reach=0 (insights indisponível), estima com base em likes*10 ou views
     const reach = rawReach > 0 ? rawReach : Math.max(views, likes * 10, 1);
 
-    // Weighted engagement: likes + comments×2 + saves×3 + shares×2
-    const rawEng         = likes + comments * 2 + saves * 3 + shares * 2;
+    // Weighted engagement: saves×4 + shares×3 + comments×2 + likes×1
+    const rawEng         = likes + comments * 2 + saves * 4 + shares * 3;
     const engagementRate = (rawEng / reach) * 100;
     const saveRate       = (saves / reach) * 100;
-    // High save rate + comments = strong reel candidate
-    const reelCandidateScore = saveRate * 0.5 + ((comments / reach) * 100 * 0.5);
+    const shareRate      = (shares / reach) * 100;
+    const commentRate    = (comments / reach) * 100;
+    // Reel candidate: save rate (40%) + share rate (30%) + comment rate (30%)
+    const reelCandidateScore = saveRate * 0.4 + shareRate * 0.3 + commentRate * 0.3;
 
     // Normalise media type — the API returns "VIDEO" for both regular videos and Reels
     let mediaType = post.media_type;

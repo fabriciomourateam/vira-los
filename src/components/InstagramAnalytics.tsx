@@ -46,6 +46,7 @@ interface AIInsights {
   topFormatReason: string;
   patterns: { title: string; description: string; impact: 'alto' | 'médio' | 'baixo' }[];
   bestPostingInsight: string;
+  reelsOpportunity?: string;
   actionPriority: { action: string; why: string; urgency: 'alta' | 'média' | 'baixa' }[];
   hookPattern: string;
 }
@@ -589,6 +590,14 @@ export default function InstagramAnalytics({ onCreateReels }: Props) {
               </p>
               <p className="text-sm text-foreground">{analysis.aiInsights.bestPostingInsight}</p>
             </div>
+            {analysis.aiInsights.reelsOpportunity && (
+              <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 space-y-1">
+                <p className="text-xs text-purple-400 font-medium uppercase tracking-wide flex items-center gap-1.5">
+                  <Video size={12} /> Oportunidade de Reels
+                </p>
+                <p className="text-sm text-foreground">{analysis.aiInsights.reelsOpportunity}</p>
+              </div>
+            )}
           </div>
 
           {/* Padrões */}
