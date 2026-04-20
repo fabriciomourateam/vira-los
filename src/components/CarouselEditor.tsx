@@ -58,6 +58,7 @@ interface OverlayConfig {
 interface BgImageConfig {
   position: string;   // CSS background-position, ex: 'center top'
   brightness: number; // 0–200, padrão 100
+  scale?: number;     // 1.0 = 100% (cover exato), >1.0 = zoom in para panning livre
 }
 
 interface FollowBannerConfig {
@@ -455,6 +456,12 @@ function rebuildSlideOuterHtml(
       const pos = bgImageConfig.position.trim();
       const isDragPos = pos.includes('calc(');
 
+      // Parse X/Y position values (slider gives 0-100, 50 = center)
+      const posParts = pos.split(/\s+/);
+      const posX = parseFloat(posParts[0]) || 50;
+      const posY = parseFloat(posParts[1] ?? posParts[0]) || 50;
+      const scale = bgImageConfig.scale ?? 1.0;
+
       // Remove conflicting inline properties before setting new ones
       s = s.replace(/inset\s*:\s*[^;]+;?/i, '').trim();
       s = s.replace(/transform\s*:[^;]+;?/i, '').trim();
@@ -463,19 +470,23 @@ function rebuildSlideOuterHtml(
       s = s.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?/i, '').trim();
 
       if (isDragPos) {
-        // Drag mode: use background-position directly with calc() values
-        s += `; background-size: cover; background-position: ${pos};`
+        // Drag mode: position uses calc() values — apply directly
+        s += `; inset: 0; background-size: cover; background-position: ${pos};`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
-      } else {
-        // Slider mode: expand + translate approach
-        const posParts = pos.split(/\s+/);
-        const posX = parseFloat(posParts[0]) || 50;
-        const posY = parseFloat(posParts[1] ?? posParts[0]) || 50;
-        const maxT = 11.5;
+      } else if (scale > 1.005) {
+        // Zoom > 100%: scale()+translate() — panning works for ANY image aspect ratio.
+        // scale(S) makes the element S× bigger; translate() pans within the (S-1)/2 excess.
+        // maxT = (S-1)/(2×S) × 100 ensures slider extreme reaches exactly the clip edge.
+        const maxT = ((scale - 1) / (2 * scale)) * 100;
         const tx = ((50 - posX) / 50) * maxT;
         const ty = ((50 - posY) / 50) * maxT;
-        s += `; inset: -15%; background-size: cover; background-position: center;`
-           + ` transform: translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
+        s += `; inset: 0; background-size: cover; background-position: center;`
+           + ` transform: scale(${scale.toFixed(3)}) translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
+           + ` filter: brightness(${bgImageConfig.brightness}%);`;
+      } else {
+        // Zoom 100%, slider mode: use background-position directly.
+        // Works for images with natural excess (e.g. landscape in portrait container).
+        s += `; inset: 0; background-size: cover; background-position: ${posX}% ${posY}%;`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
       }
     }
@@ -2201,7 +2212,16 @@ export default function CarouselEditor({
 
   const sel = selectedIndex !== null ? slides[selectedIndex] : null;
   const selTexts = selectedIndex !== null ? (editedTexts[selectedIndex] ?? sel?.texts ?? []) : [];
-  const selBg = selectedIndex !== null ? (editedBgUrls[selectedIndex] ?? '') : '';
+  // selBg: prefer the user-edited URL; if not set, extract from the original slide HTML
+  const selBg = selectedIndex !== null
+    ? (editedBgUrls[selectedIndex] !== undefined
+        ? editedBgUrls[selectedIndex]
+        : (() => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(sel?.outerHtml ?? '', 'text/html');
+            return extractBgImageUrl(doc.body.firstElementChild ?? doc.body) ?? '';
+          })())
+    : '';
 
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -2907,13 +2927,36 @@ export default function CarouselEditor({
                           const posX = parsePosNum(parts[0] ?? 'center');
                           const posY = parsePosNum(parts[1] ?? 'center');
                           const setPosXY = (x: number, y: number) => setBg({ position: `${x}% ${y}%` });
+                          const scaleVal = bgCfg.scale ?? 1.0;
+                          const scalePct = Math.round(scaleVal * 100);
+                          const panEnabled = scaleVal > 1.005;
 
                           return (
                             <div className="space-y-2 pt-2 border-t border-border">
                               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Posição da imagem</p>
 
-                              {/* Slider X — horizontal */}
+                              {/* Zoom da imagem */}
                               <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">🔍 Zoom</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{scalePct}%</span>
+                                </div>
+                                <input type="range" min={100} max={200} step={5} value={scalePct}
+                                  onChange={e => setBg({ scale: Number(e.target.value) / 100 })}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>100% (original)</span><span>200%</span>
+                                </div>
+                                {!panEnabled && (
+                                  <p className="text-[10px] text-amber-400/80">
+                                    Aumente o zoom para mover a imagem livremente
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Slider X — horizontal */}
+                              <div className={`space-y-1 ${!panEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                                 <div className="flex items-center justify-between">
                                   <label className="text-[11px] text-muted-foreground">← Horizontal →</label>
                                   <span className="text-[11px] font-mono text-muted-foreground">{posX}%</span>
@@ -2928,7 +2971,7 @@ export default function CarouselEditor({
                               </div>
 
                               {/* Slider Y — vertical */}
-                              <div className="space-y-1">
+                              <div className={`space-y-1 ${!panEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                                 <div className="flex items-center justify-between">
                                   <label className="text-[11px] text-muted-foreground">↑ Vertical ↓</label>
                                   <span className="text-[11px] font-mono text-muted-foreground">{posY}%</span>
