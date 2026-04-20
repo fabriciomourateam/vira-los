@@ -817,13 +817,22 @@ function buildDragScript(displayScale: number): string {
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
-    // For img elements, make absolute if not already
+    // For img/photo-card elements, make absolute if not already — preserve size
     if(!isAbs&&(el.tagName==='IMG'||el.classList.contains('photo-card'))){
+      var curW=el.offsetWidth;
+      var curH=el.offsetHeight;
+      var curTop=el.offsetTop;
+      var curLeft=el.offsetLeft;
       el.style.position='absolute';
-      el.style.top=el.offsetTop+'px';
-      el.style.left=el.offsetLeft+'px';
+      el.style.width=curW+'px';
+      el.style.height=curH+'px';
+      el.style.maxWidth='none';
+      el.style.maxHeight='none';
+      el.style.top=curTop+'px';
+      el.style.left=curLeft+'px';
       el.style.right='';
       el.style.bottom='';
+      el.style.margin='0';
       isAbs=true;
     }
     // For .bg elements, pan background-position by dragging
