@@ -56,6 +56,7 @@ interface OverlayConfig {
   softness?: number;     // 0–100: blend entre curva e linear (0=curva pura, 100=linear)
   midLight?: number;     // 0–100: quanto a faixa do MEIO é mais clara (0=escuro igual fim, 100=transparente)
   curveExp?: number;     // 0–100: 0=t³(12% no meio), 50=t²(25%), 100=t¹(50%) — controla intensidade da curva
+  halfPage?: boolean;    // true → gradiente só na metade (bottom: 50-100%, top: 0-50%)
 }
 
 interface BgImageConfig {
@@ -103,7 +104,21 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
   const hi = opacity.toFixed(2);
   const lo = (opacity * 0.5).toFixed(2);
   switch (direction) {
-    case 'to top':    return `linear-gradient(to top, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 55%, rgba(${c},0) 100%)`;
+    case 'to top': {
+      // Gradiente suave com 16 stops — espelho do 'to bottom'
+      // halfPage=true: cobre só os primeiros 50% (topo), transparente na metade inferior
+      const endPct  = cfg.halfPage ? 50 : 100;
+      const STPS    = 16;
+      const tStops: string[] = [`rgba(${c},${hi}) 0%`];
+      for (let i = 1; i <= STPS; i++) {
+        const t  = i / STPS;
+        const p  = t * endPct;
+        const op = opacity * Math.max(0, 1 - t * t);   // ease-out: escuro→transparente
+        tStops.push(`rgba(${c},${op.toFixed(3)}) ${p.toFixed(1)}%`);
+      }
+      if (cfg.halfPage) tStops.push(`rgba(${c},0) 100%`);
+      return `linear-gradient(to top, ${tStops.join(', ')})`;
+    }
     case 'to right':  return `linear-gradient(to right, rgba(${c},${hi}) 0%, rgba(${c},${lo}) 55%, rgba(${c},0) 100%)`;
     case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
     case 'none':      return 'rgba(0,0,0,0)';
@@ -124,6 +139,8 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
       // curveExp: 0→exponent=3 (t³,12%), 50→exponent=2 (t²,25%), 100→exponent=1 (t¹,50%)
       const curveExp01 = (cfg.curveExp ?? 50) / 100;
       const exponent   = 3 - 2 * curveExp01;   // 3.0 … 1.0
+      // halfPage: gradiente só na metade inferior → força startAt ≥ 50
+      const effectiveStart = cfg.halfPage ? Math.max(startAt, 50) : startAt;
 
       const STOPS = 16;
       const stops: string[] = [];
@@ -132,12 +149,12 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
         const pct = (i / STOPS) * 100;
 
         let op: number;
-        if (pct <= startAt) {
+        if (pct <= effectiveStart) {
           // Faixa plana no topo (antes do gradiente começar)
           op = topOp01;
         } else {
-          // t2 = progresso 0→1 dentro da faixa de transição (startAt → 100%)
-          const t2 = (pct - startAt) / (100 - startAt);
+          // t2 = progresso 0→1 dentro da faixa de transição (effectiveStart → 100%)
+          const t2 = (pct - effectiveStart) / (100 - effectiveStart);
 
           // Curva potencial controlada por curveExp; blend com linear via softness
           const curve  = Math.pow(t2, exponent);
@@ -3334,6 +3351,21 @@ export default function CarouselEditor({
                                 ))}
                               </div>
                             </div>
+
+                            {/* Toggle Meia tela — só para to bottom / to top */}
+                            {(ov.direction === 'to bottom' || ov.direction === 'to top') && (
+                              <button
+                                type="button"
+                                onClick={() => setOv({ halfPage: !ov.halfPage })}
+                                className={`w-full px-3 py-1.5 rounded-md text-[11px] font-semibold border transition-colors ${
+                                  ov.halfPage
+                                    ? 'bg-purple-600 border-purple-500 text-white'
+                                    : 'bg-muted border-border text-muted-foreground hover:text-foreground'
+                                }`}
+                              >
+                                {ov.halfPage ? '½ Tela ✓ — sombra só na metade' : '½ Tela — restringir à metade da página'}
+                              </button>
+                            )}
 
                             {/* Começa em (só para 'to bottom') */}
                             {ov.direction === 'to bottom' && (
