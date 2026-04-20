@@ -786,6 +786,10 @@ function buildDragScript(displayScale: number): string {
     if(slideEl){
       var fallbackBg=slideEl.querySelector('.bg, .slide-bg');
       if(fallbackBg) return {el:fallbackBg,sel:'.bg'};
+      // No .bg child — use slide container itself if it has background-image
+      if(slideEl.style.backgroundImage || window.getComputedStyle(slideEl).backgroundImage!=='none'){
+        return {el:slideEl,sel:'.bg'};
+      }
     }
     return null;
   }
@@ -2015,13 +2019,13 @@ export default function CarouselEditor({
     });
   }, [selectedIndex]);
 
-  const handleElementMoved = useCallback((data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null; width?: string; height?: string; bgPosition?: string }) => {
+  const handleElementMoved = useCallback((data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null; width?: string; height?: string; bgPosition?: string; bgTranslateX?: number; bgTranslateY?: number }) => {
     if (selectedIndex === null) return;
 
     // Background pan: salva translate offset do drag
     if (data.mode === 'bgpan') {
-      const dx = (data as any).bgTranslateX ?? 0;
-      const dy = (data as any).bgTranslateY ?? 0;
+      const dx = data.bgTranslateX ?? 0;
+      const dy = data.bgTranslateY ?? 0;
       setBgImageConfigs(prev => {
         const cur = prev[selectedIndex] ?? { position: '50% 50%', brightness: 100 };
         return { ...prev, [selectedIndex]: { ...cur, dragOffsetX: dx, dragOffsetY: dy } };
