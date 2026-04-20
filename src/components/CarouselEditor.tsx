@@ -2808,9 +2808,9 @@ export default function CarouselEditor({
                           </button>
                         )}
 
-                        {/* Corte da imagem (clip-path) */}
-                        {typeof imgTarget === 'number' && selectedIndex !== null && (() => {
-                          const overrideKey = `img@${imgTarget}`;
+                        {/* Corte da imagem (clip-path) — inline images e fundo */}
+                        {selectedIndex !== null && (() => {
+                          const overrideKey = typeof imgTarget === 'number' ? `img@${imgTarget}` : '.bg@0';
                           const clip = elementOverrides[selectedIndex]?.[overrideKey] ?? {};
                           const setClip = (side: 'clipTop' | 'clipRight' | 'clipBottom' | 'clipLeft', val: number) => {
                             setElementOverrides(prev => ({
@@ -2824,7 +2824,9 @@ export default function CarouselEditor({
                           const hasClip = (clip.clipTop || 0) + (clip.clipRight || 0) + (clip.clipBottom || 0) + (clip.clipLeft || 0) > 0;
                           return (
                             <div className="space-y-2 pt-2 border-t border-border">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Corte da imagem</p>
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                Corte da imagem {imgTarget === 'bg' ? '(fundo)' : ''}
+                              </p>
                               {[
                                 { key: 'clipTop' as const, label: 'Corte topo' },
                                 { key: 'clipBottom' as const, label: 'Corte base' },
