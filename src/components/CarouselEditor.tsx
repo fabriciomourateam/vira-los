@@ -57,6 +57,7 @@ interface OverlayConfig {
   midLight?: number;     // 0–100: quanto a faixa do MEIO é mais clara (0=escuro igual fim, 100=transparente)
   curveExp?: number;     // 0–100: 0=t³(12% no meio), 50=t²(25%), 100=t¹(50%) — controla intensidade da curva
   halfPage?: boolean;    // true → gradiente só na metade (bottom: 50-100%, top: 0-50%)
+  solidFrom?: number;    // 0–100% da página: a partir daqui o gradiente fica flat/escuro; antes = fade suave
 }
 
 interface BgImageConfig {
@@ -146,6 +147,12 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
       const exponent = Math.log(midFrac) / Math.log(0.5);  // ex: 0.25→2, 0.5→1, 0.99→0.015
       // halfPage: gradiente só na metade inferior → força startAt ≥ 50
       const effectiveStart = cfg.halfPage ? Math.max(startAt, 50) : startAt;
+      // solidFrom: se definido, delimita onde o gradiente vira escuro sólido.
+      // Tudo entre solidFrom e 100% fica no opacity máximo (flat).
+      // A zona de transição vai de effectiveStart → solidFrom.
+      const transitionEnd = (cfg.solidFrom !== undefined && cfg.solidFrom > effectiveStart && cfg.solidFrom < 100)
+        ? cfg.solidFrom
+        : 100;
 
       const STOPS = 16;
       const stops: string[] = [];
@@ -157,9 +164,12 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
         if (pct <= effectiveStart) {
           // Faixa plana no topo (antes do gradiente começar)
           op = topOp01;
+        } else if (pct >= transitionEnd) {
+          // Faixa sólida escura (solidFrom → 100%)
+          op = opacity;
         } else {
-          // t2 = progresso 0→1 dentro da faixa de transição (effectiveStart → 100%)
-          const t2 = (pct - effectiveStart) / (100 - effectiveStart);
+          // t2 = progresso 0→1 dentro da faixa de transição (effectiveStart → transitionEnd)
+          const t2 = (pct - effectiveStart) / (transitionEnd - effectiveStart);
 
           // Curva potencial controlada por curveExp; blend com linear via softness
           const curve  = Math.pow(t2, exponent);
@@ -3385,6 +3395,29 @@ export default function CarouselEditor({
                                 />
                                 <div className="flex justify-between text-[10px] text-muted-foreground/50">
                                   <span>Topo</span><span>Meio</span><span>Base</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Escuro a partir de (solidFrom) — só para 'to bottom' */}
+                            {ov.direction === 'to bottom' && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">Escuro a partir de</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">
+                                    {ov.solidFrom !== undefined && ov.solidFrom < 100 ? `${ov.solidFrom}%` : '–'}
+                                  </span>
+                                </div>
+                                <input type="range" min={55} max={100} step={1}
+                                  value={ov.solidFrom !== undefined ? ov.solidFrom : 100}
+                                  onChange={e => {
+                                    const v = Number(e.target.value);
+                                    setOv({ solidFrom: v >= 100 ? undefined : v });
+                                  }}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>55% (sobe mais)</span><span>— (gradiente total)</span>
                                 </div>
                               </div>
                             )}
