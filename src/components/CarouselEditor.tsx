@@ -53,6 +53,7 @@ interface OverlayConfig {
   color: string;         // ex: '0,0,0' ou '80,0,120'
   startAt?: number;      // 0–100% — onde o gradiente começa (só para 'to bottom')
   topOpacity?: number;   // 0–1 — opacidade no topo (default 0 = transparente)
+  softness?: number;     // 0–100: 0 = abrupto (15% band), 100 = suave (transição contínua)
 }
 
 interface BgImageConfig {
@@ -105,10 +106,21 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
     case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
     case 'none':      return 'rgba(0,0,0,0)';
     default: {
-      // Gradiente estilo Leo Baltazar: topo levemente escuro, banda de 20%, preto no rodapé
+      // Gradiente 'to bottom' com suavidade ajustável
+      // softness=0 → banda estreita (15%) = abrupto estilo Leo Baltazar
+      // softness=100 → transição contínua do startAt até 100%
       const topOp = (cfg.topOpacity ?? 0).toFixed(2);
-      const transitionEnd = Math.min(97, startAt + 15);
+      const softness = cfg.softness ?? 0;
+      const maxBand = Math.max(20, 100 - startAt);
+      const band = Math.round(15 + (softness / 100) * (maxBand - 15));
+      const transitionEnd = Math.min(98, startAt + band);
       const midOpacity = (opacity * 0.93).toFixed(2);
+      // Para gradiente suave, adiciona ponto intermediário para curva mais elegante
+      if (softness > 30) {
+        const midPoint = Math.round(startAt + band * 0.45);
+        const midOp2 = (opacity * 0.45).toFixed(2);
+        return `linear-gradient(to bottom, rgba(${c},${topOp}) 0%, rgba(${c},${topOp}) ${startAt}%, rgba(${c},${midOp2}) ${midPoint}%, rgba(${c},${midOpacity}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
+      }
       return `linear-gradient(to bottom, rgba(${c},${topOp}) 0%, rgba(${c},${topOp}) ${startAt}%, rgba(${c},${midOpacity}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
     }
   }
@@ -3295,6 +3307,23 @@ export default function CarouselEditor({
                                 />
                                 <div className="flex justify-between text-[10px] text-muted-foreground/50">
                                   <span>Topo</span><span>Meio</span><span>Base</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Suavidade da transição (só para 'to bottom') */}
+                            {ov.direction === 'to bottom' && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">Suavidade da transição</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{ov.softness ?? 0}%</span>
+                                </div>
+                                <input type="range" min={0} max={100} step={5} value={ov.softness ?? 0}
+                                  onChange={e => setOv({ softness: Number(e.target.value) })}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Abrupto</span><span>Contínuo</span>
                                 </div>
                               </div>
                             )}
