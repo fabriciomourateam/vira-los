@@ -293,6 +293,14 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [photoUploading, setPhotoUploading] = useState(false);
   const [showPersonalization, setShowPersonalization] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Modo Antes/Depois ──────────────────────────────────────────────────────
+  const [beforeAfterMode, setBeforeAfterMode] = useState(false);
+  const [baAluno,    setBaAluno]    = useState('');
+  const [baPeriodo,  setBaPeriodo]  = useState('');
+  const [baResultado,setBaResultado]= useState('');
+  const [baStats,    setBaStats]    = useState('');
+  const [baCta,      setBaCta]      = useState('');
   const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Responsive preview: mede largura do container ──
@@ -414,7 +422,13 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   }
 
   async function handleGenerate() {
-    if (!config.topic.trim()) {
+    // Validação: modo normal exige topic; modo antes/depois exige resultado
+    if (beforeAfterMode) {
+      if (!baResultado.trim()) {
+        toast.error('Informe o resultado do aluno (ex: -8kg em 3 meses)');
+        return;
+      }
+    } else if (!config.topic.trim()) {
       toast.error('Informe o tema do carrossel');
       return;
     }
@@ -422,6 +436,51 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     setResult(null);
     setCurrentSlide(0);
     try {
+      // ── Antes/Depois: monta topic + instructions + roteiro fortes ──────────
+      let finalConfig = { ...config };
+      if (beforeAfterMode) {
+        const nomeAluno = baAluno.trim() || 'meu aluno';
+        const periodo   = baPeriodo.trim()   || 'poucos meses';
+        const resultado = baResultado.trim();
+        const stats     = baStats.trim();
+        const cta       = baCta.trim() || 'Quer o mesmo resultado? Me chama no direct.';
+
+        finalConfig = {
+          ...config,
+          topic: `Transformação de ${nomeAluno}: ${resultado}${periodo ? ` em ${periodo}` : ''}`,
+          instructions: `
+MODO ANTES/DEPOIS — siga EXATAMENTE esta estrutura de slides:
+
+Slide 1 — CAPA (.clean-cover):
+  Fundo escuro com gradiente. Título impactante baseado em: "${resultado}${periodo ? ` em ${periodo}` : ''}".
+  Crie um gancho forte que faça o seguidor parar o scroll.
+
+Slide 2 — ANTES/DEPOIS (.clean-split) — OBRIGATÓRIO:
+  Use a classe .clean-split com split-photos lado a lado.
+  Painel esquerdo: label "ANTES", painel direito: label "DEPOIS" (classe "after").
+  split-eyebrow: "Resultado real"
+  split-title: "${resultado}" (1-2 palavras em <span class="hl">destaque</span>)
+  split-stats: "${stats || `${periodo ? periodo : 'resultado comprovado'}`}"
+
+Slides 3 a N-1 — COMO FOI FEITO (.clean-content):
+  Distribua o processo: treino, alimentação, mentalidade, consistência.
+  Use dados reais e concretos. Linguagem direta, sem enrolação.
+  Cada slide = 1 ponto específico do que o aluno mudou.
+
+Último slide — CTA (.clean-cta):
+  "${cta}"
+  Botão: "Fale comigo" ou "Siga @${(config.instagramHandle||'seucanal').replace('@','')}"
+
+DADOS DO ALUNO:
+- Nome: ${nomeAluno}
+- Período: ${periodo}
+- Resultado: ${resultado}
+${stats ? `- Stats: ${stats}` : ''}
+`.trim(),
+          roteiro: '',  // limpa roteiro manual — as instruções já guiam a IA
+        };
+      }
+
       // Se um template foi selecionado, busca o HTML dele para enviar ao backend
       let templateHtml = '';
       if (selectedTemplateId) {
@@ -437,7 +496,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
       const res = await fetch(`${API}/api/carousel/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...config, templateHtml }),
+        body: JSON.stringify({ ...finalConfig, templateHtml }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
@@ -726,6 +785,119 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
             </p>
           )}
         </div>
+
+        {/* ── Toggle Antes/Depois ───────────────────────────────────── */}
+        <div className={`rounded-xl border-2 transition-colors overflow-hidden ${beforeAfterMode ? 'border-orange-500/60 bg-orange-500/5' : 'border-border'}`}>
+          <button
+            type="button"
+            onClick={() => setBeforeAfterMode(p => !p)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🏆</span>
+              <div>
+                <span className="text-sm font-semibold text-foreground">Carrossel de Resultado (Antes/Depois)</span>
+                <p className="text-[11px] text-muted-foreground leading-tight">Fotos lado a lado + estrutura de transformação</p>
+              </div>
+            </div>
+            <div className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 ${beforeAfterMode ? 'bg-orange-500' : 'bg-muted'}`}>
+              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${beforeAfterMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </div>
+          </button>
+
+          {beforeAfterMode && (
+            <div className="px-4 pb-4 space-y-3 border-t border-orange-500/20">
+              <p className="text-[11px] text-orange-400 pt-3 flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3 flex-shrink-0" />
+                A IA vai gerar o slide de comparação side-by-side (.clean-split) + estrutura completa de transformação.
+                Após gerar, faça upload das fotos reais nos painéis Antes/Depois.
+              </p>
+
+              {/* Nome do aluno */}
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                  Nome do aluno
+                  <span className="normal-case font-normal ml-1">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={baAluno}
+                  onChange={e => setBaAluno(e.target.value)}
+                  placeholder="Ex: João, Maria, Carlos…"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                />
+              </div>
+
+              {/* Resultado + Período */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                    Resultado <span className="text-orange-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={baResultado}
+                    onChange={e => setBaResultado(e.target.value)}
+                    placeholder="Ex: de 35% gordura a físico de competição"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                    Período
+                  </label>
+                  <input
+                    type="text"
+                    value={baPeriodo}
+                    onChange={e => setBaPeriodo(e.target.value)}
+                    placeholder="Ex: 6 meses, 12 semanas"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                  />
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                  Stats / números
+                  <span className="normal-case font-normal ml-1">(aparecem no slide comparativo)</span>
+                </label>
+                <input
+                  type="text"
+                  value={baStats}
+                  onChange={e => setBaStats(e.target.value)}
+                  placeholder="Ex: -8kg · +12% massa magra · 3x/semana"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                />
+              </div>
+
+              {/* CTA */}
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                  CTA do último slide
+                  <span className="normal-case font-normal ml-1">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={baCta}
+                  onChange={e => setBaCta(e.target.value)}
+                  placeholder="Ex: Quer o mesmo resultado? Me chama no direct."
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Tema — oculto quando modo Antes/Depois ativo */}
+        {beforeAfterMode && (
+          <div className="rounded-lg bg-orange-500/5 border border-orange-500/20 px-3 py-2">
+            <p className="text-[11px] text-orange-400 flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3 flex-shrink-0" />
+              Tema gerado automaticamente a partir dos dados acima — não é necessário preencher o campo Tema.
+            </p>
+          </div>
+        )}
 
         {/* ── Personalização (colapsável) ─────────────────────────────── */}
         <div className="rounded-lg border border-border overflow-hidden">
@@ -1032,6 +1204,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           >
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Gerando carrossel…</>
+            ) : beforeAfterMode ? (
+              <><span className="text-base">🏆</span> Gerar Carrossel Antes/Depois</>
             ) : selectedTemplateId ? (
               <><LayoutTemplate className="w-4 h-4" /> Gerar com Modelo</>
             ) : (
