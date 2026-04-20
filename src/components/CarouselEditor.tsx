@@ -473,16 +473,18 @@ function rebuildSlideOuterHtml(
         // Drag mode: position uses calc() values — apply directly
         s += `; inset: 0; background-size: cover; background-position: ${pos};`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
-      } else {
-        // Slider mode: always apply a minimum 15% scale so panning works for ANY
-        // image aspect ratio without gaps — 1.15 is barely perceptible on a full-slide bg.
-        // User-set zoom (scale) is honored if larger.
-        const effectiveScale = Math.max(scale, 1.15);
-        const maxT = ((effectiveScale - 1) / (2 * effectiveScale)) * 100;
+      } else if (scale > 1.005) {
+        // Zoom extra: scale()+translate() para panning livre
+        const maxT = ((scale - 1) / (2 * scale)) * 100;
         const tx = ((50 - posX) / 50) * maxT;
         const ty = ((50 - posY) / 50) * maxT;
         s += `; inset: 0; background-size: cover; background-position: center;`
-           + ` transform: scale(${effectiveScale.toFixed(3)}) translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
+           + ` transform: scale(${scale.toFixed(3)}) translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
+           + ` filter: brightness(${bgImageConfig.brightness}%);`;
+      } else {
+        // Sem zoom: background-position direto. Funciona quando a imagem tem
+        // excesso natural após cover. Pode mostrar fundo se não houver excesso.
+        s += `; inset: 0; background-size: cover; background-position: ${posX}% ${posY}%;`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
       }
     }
