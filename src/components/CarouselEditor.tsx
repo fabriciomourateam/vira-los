@@ -733,6 +733,11 @@ function buildDragScript(displayScale: number): string {
   function findEl(t){
     // Check resize handle first
     if(t.classList&&t.classList.contains('resize-handle')) return null;
+    // If clicking on .overlay, redirect to .bg (overlay sits on top and blocks .bg)
+    if(t.classList&&(t.classList.contains('overlay'))){
+      var bgEl=t.parentElement&&t.parentElement.querySelector('.bg, .slide-bg');
+      if(bgEl) return {el:bgEl,sel:'.bg'};
+    }
     for(var i=0;i<SELS.length;i++){
       var el=t.closest(SELS[i]);
       if(el) return {el:el,sel:SELS[i]};
