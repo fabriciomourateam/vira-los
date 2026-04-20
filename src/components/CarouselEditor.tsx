@@ -107,21 +107,50 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
     case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
     case 'none':      return 'rgba(0,0,0,0)';
     default: {
-      // Gradiente 'to bottom' com suavidade e claridade do meio ajustáveis
-      // softness: largura da faixa de transição (0=estreita/abrupto, 100=larga/suave)
-      // midLight: quão claro é o ponto médio da transição (0=igual ao fim, 100=transparente)
-      const topOp  = (cfg.topOpacity ?? 0).toFixed(2);
-      const soft   = cfg.softness ?? 0;
-      const midLt  = cfg.midLight  ?? 0;   // 0 = comportamento atual, >0 = meio mais claro
-      const maxBand = Math.max(20, 100 - startAt);
-      const band = Math.round(15 + (soft / 100) * (maxBand - 15));
-      const transitionEnd = Math.min(98, startAt + band);
-      const midPoint = Math.round(startAt + band * 0.45);
-      // midOp: opacidade no ponto médio — quanto maior midLight, mais transparente
-      const midOp = (opacity * (1 - midLt / 100)).toFixed(2);
-      const nearEnd = (opacity * 0.93).toFixed(2);
-      // Sempre usa 5 stops para controle preciso da curva
-      return `linear-gradient(to bottom, rgba(${c},${topOp}) 0%, rgba(${c},${topOp}) ${startAt}%, rgba(${c},${midOp}) ${midPoint}%, rgba(${c},${nearEnd}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
+      // Gradiente 'to bottom' com curva suave — 16 paradas calculadas matematicamente
+      // Elimina as "divisões" visíveis que surgem com poucos stops e transições lineares.
+      //
+      // softness (0–100): controla a curva de aceleração
+      //   0  → ease-in cúbico (t³): começa devagar, escurece rápido no final
+      //   100 → quase linear (t): escurecimento uniforme ao longo da faixa
+      //
+      // midLight (0–95): claridade do ponto médio da transição (efeito "dip")
+      //   0  → curva monotônica (sem dip)
+      //   95 → ponto médio quase transparente antes de escurecer no rodapé
+      const topOp01   = cfg.topOpacity ?? 0;
+      const soft01    = (cfg.softness ?? 0) / 100;
+      const midLt01   = (cfg.midLight  ?? 0) / 100;
+
+      const STOPS = 16;
+      const stops: string[] = [];
+
+      for (let i = 0; i <= STOPS; i++) {
+        const pct = (i / STOPS) * 100;
+
+        let op: number;
+        if (pct <= startAt) {
+          // Faixa plana no topo (antes do gradiente começar)
+          op = topOp01;
+        } else {
+          // t2 = progresso 0→1 dentro da faixa de transição (startAt → 100%)
+          const t2 = (pct - startAt) / (100 - startAt);
+
+          // Curva de aceleração: blend entre t³ (ease-in, soft=0) e t (linear, soft=1)
+          // t³ começa quase zero → transição parte do ponto de início sem arestas
+          const smooth = (1 - soft01) * t2 * t2 * t2 + soft01 * t2;
+
+          // Efeito midLight: curva em sino (4t²(1-t)²) cria "dip" no meio
+          // É proporcional a quanto o smooth cresceu naquele ponto
+          const bell  = 4 * t2 * t2 * (1 - t2) * (1 - t2);
+          const combined = Math.max(0, smooth * (1 - midLt01 * bell));
+
+          op = topOp01 + (opacity - topOp01) * combined;
+        }
+
+        stops.push(`rgba(${c},${op.toFixed(3)}) ${pct.toFixed(2)}%`);
+      }
+
+      return `linear-gradient(to bottom, ${stops.join(', ')})`;
     }
   }
 }
