@@ -497,11 +497,14 @@ function rebuildSlideOuterHtml(
       const hasDrag = dragX !== 0 || dragY !== 0;
 
       if (hasDrag) {
-        // Drag mode: translate físico, sem clamp, funciona para qualquer aspecto de imagem.
-        // Scale extra (zoom) é aplicado junto quando definido — translate está em px pré-scale.
-        const scaleStr = scale > 1.005 ? `scale(${scale.toFixed(3)}) ` : '';
-        s += `; inset: 0; background-size: cover; background-position: center;`
-           + ` transform: ${scaleStr}translate(${dragX.toFixed(1)}px, ${dragY.toFixed(1)}px);`
+        // Pan via background-position calc() — move image within element, no black bands.
+        // For images taller/wider than container: full panning range.
+        // For same-aspect images: browser clamps naturally (no movement, but no black either).
+        // Zoom (scale) applied separately via transform when active.
+        const scaleTransform = scale > 1.005 ? ` transform: scale(${scale.toFixed(3)});` : '';
+        s += `; inset: 0; background-size: cover;`
+           + ` background-position: calc(50% + ${dragX.toFixed(1)}px) calc(50% + ${dragY.toFixed(1)}px);`
+           + `${scaleTransform}`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
       } else if (scale > 1.005) {
         // Zoom extra: scale()+translate() para panning livre
@@ -878,13 +881,13 @@ function buildDragScript(displayScale: number): string {
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
-    // For .bg elements, pan via transform:translate — works for any image aspect ratio
+    // For .bg elements, pan via background-position — no black bands for taller images
     if(found.sel==='.bg'||el.classList.contains('bg')||el.classList.contains('slide-bg')){
-      // Extract current translate offset (if already dragged before)
-      var curTr=el.style.transform||'';
-      var trMatch=curTr.match(/translate\s*\(\s*([-\d.]+)px\s*,\s*([-\d.]+)px\s*\)/);
-      var origTx=trMatch?parseFloat(trMatch[1]):0;
-      var origTy=trMatch?parseFloat(trMatch[2]):0;
+      // Extract current background-position offset (if already panned before)
+      var curBgPos=el.style.backgroundPosition||'';
+      var bgPosMatch=curBgPos.match(/calc\(50% \+ ([-\d.]+)px\)\s+calc\(50% \+ ([-\d.]+)px\)/);
+      var origTx=bgPosMatch?parseFloat(bgPosMatch[1]):0;
+      var origTy=bgPosMatch?parseFloat(bgPosMatch[2]):0;
       dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'bgpan',startX:cx,startY:cy,origTx:origTx,origTy:origTy};
       dragMoved=false;
       window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
@@ -939,11 +942,9 @@ function buildDragScript(displayScale: number): string {
     var dy=cy-dragging.startY;
     if(Math.abs(dx)>2||Math.abs(dy)>2) dragMoved=true;
     if(dragging.mode==='bgpan'){
-      // Pan via transform:translate — no browser clamping, works for any image aspect ratio
+      // Pan via background-position — moves image within element, no black bands for taller images
       var nx=dragging.origTx+dx, ny=dragging.origTy+dy;
-      // Preserve any existing scale() in the transform, replace only the translate part
-      var baseTr=(dragging.el.style.transform||'').replace(/translate\s*\([^)]*\)/g,'').replace(/translate3d\s*\([^)]*\)/g,'').trim();
-      dragging.el.style.transform=(baseTr+' translate('+nx+'px,'+ny+'px)').trim();
+      dragging.el.style.backgroundPosition='calc(50% + '+nx+'px) calc(50% + '+ny+'px)';
       return;
     }
     if(dragging.mode==='abs'){
@@ -973,9 +974,9 @@ function buildDragScript(displayScale: number): string {
       var payload={type:'elementMoved',selector:dragging.sel,elemIdx:dragging.elemIdx,mode:dragging.mode,ctIdx:ctIdx};
       if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
       else if(dragging.mode==='bgpan'){
-        // Extract final translate offset
-        var finalTr=dragging.el.style.transform||'';
-        var finalMatch=finalTr.match(/translate\s*\(\s*([-\d.]+)px\s*,\s*([-\d.]+)px\s*\)/);
+        // Extract final background-position offset
+        var finalBgPos=dragging.el.style.backgroundPosition||'';
+        var finalMatch=finalBgPos.match(/calc\(50% \+ ([-\d.]+)px\)\s+calc\(50% \+ ([-\d.]+)px\)/);
         payload.bgTranslateX=finalMatch?parseFloat(finalMatch[1]):0;
         payload.bgTranslateY=finalMatch?parseFloat(finalMatch[2]):0;
         payload.mode='bgpan';
