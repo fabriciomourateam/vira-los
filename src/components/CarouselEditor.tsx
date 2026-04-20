@@ -817,6 +817,22 @@ function buildDragScript(displayScale: number): string {
       el.style.bottom='';
       isAbs=true;
     }
+    // For .bg elements, use background-position pan instead of moving
+    if(found.sel==='.bg'||el.classList.contains('bg')||el.classList.contains('slide-bg')){
+      var bgPos=el.style.backgroundPosition||'50% 50%';
+      var bgParts=bgPos.split(/\\s+/);
+      var bgX=parseFloat(bgParts[0])||50;
+      var bgY=parseFloat(bgParts[1])||50;
+      // Expand the element for more pan room
+      el.style.inset='-30%';
+      el.style.width='160%';
+      el.style.height='160%';
+      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'bgpan',startX:cx,startY:cy,origBgX:bgX,origBgY:bgY};
+      dragMoved=false;
+      window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
+      return true;
+    }
+
     if(isAbs){
       var origTop, origLeft;
       if(el.style.top && el.style.top!=='auto'){
@@ -864,6 +880,11 @@ function buildDragScript(displayScale: number): string {
     var dx=cx-dragging.startX;
     var dy=cy-dragging.startY;
     if(Math.abs(dx)>2||Math.abs(dy)>2) dragMoved=true;
+    if(dragging.mode==='bgpan'){
+      // Pan: move background via transform translate (more freedom than background-position)
+      dragging.el.style.transform='translate('+dx+'px,'+dy+'px)';
+      return;
+    }
     if(dragging.mode==='abs'){
       dragging.el.style.left=(dragging.origLeft+dx)+'px';
       dragging.el.style.top=(dragging.origTop+dy)+'px';
@@ -890,6 +911,7 @@ function buildDragScript(displayScale: number): string {
       var ctIdx=dragging.el.getAttribute('data-ct-idx');
       var payload={type:'elementMoved',selector:dragging.sel,elemIdx:dragging.elemIdx,mode:dragging.mode,ctIdx:ctIdx};
       if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
+      else if(dragging.mode==='bgpan'){payload.transform=dragging.el.style.transform;payload.mode='translate';}
       else{payload.transform=dragging.el.style.transform;}
       window.parent.postMessage(payload,'*');
     }
