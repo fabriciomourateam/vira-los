@@ -372,10 +372,19 @@ function rebuildSlideOuterHtml(
   bgImageConfig?: BgImageConfig,
   followBannerConfig?: FollowBannerConfig,
   globalFont?: string,
+  slideBgColor?: string,
 ): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
   const el = doc.body.firstElementChild!;
+
+  // Apply slide background color override
+  if (slideBgColor) {
+    let rootStyle = el.getAttribute('style') || '';
+    rootStyle = rootStyle.replace(/background\s*:\s*[^;]+;?/gi, '').replace(/background-color\s*:\s*[^;]+;?/gi, '').trim();
+    rootStyle = `${rootStyle}; background-color: ${slideBgColor};`.replace(/^;\s*/, '');
+    el.setAttribute('style', rootStyle);
+  }
 
   const classGroups: Record<string, Element[]> = {};
   for (const { selector } of TEXT_SELECTORS) {
@@ -1241,6 +1250,7 @@ export default function CarouselEditor({
   const [elementOverrides, setElementOverrides] = useState<Record<number, Record<string, ElementOverride>>>({});
   const [overlayConfigs, setOverlayConfigs] = useState<Record<number, OverlayConfig>>({});
   const [bgImageConfigs, setBgImageConfigs] = useState<Record<number, BgImageConfig>>({});
+  const [slideBgColors, setSlideBgColors] = useState<Record<number, string>>({});
   const [followBannerConfigs, setFollowBannerConfigs] = useState<Record<number, FollowBannerConfig>>({});
   const [badgeVisible, setBadgeVisible] = useState<Record<number, boolean>>({});
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -1617,21 +1627,26 @@ export default function CarouselEditor({
 
   function moveSlide(from: number, to: number) {
     if (to < 0 || to >= slides.length) return;
+    const count = slides.length;
     setSlides(prev => {
       const next = [...prev]; const [m] = next.splice(from, 1);
       next.splice(to, 0, m);
       return next.map((s, i) => ({ ...s, index: i }));
     });
-    setEditedTexts(prev => {
-      const arr = slides.map((_, i) => prev[i] ?? []);
+    function reorder<T>(prev: Record<number, T>): Record<number, T> {
+      const arr: (T | undefined)[] = [];
+      for (let i = 0; i < count; i++) arr.push(prev[i]);
       const [m] = arr.splice(from, 1); arr.splice(to, 0, m);
-      return Object.fromEntries(arr.map((v, i) => [i, v]));
-    });
-    setEditedBgUrls(prev => {
-      const arr = slides.map((_, i) => prev[i] ?? '');
-      const [m] = arr.splice(from, 1); arr.splice(to, 0, m);
-      return Object.fromEntries(arr.map((v, i) => [i, v]).filter(([, v]) => v !== ''));
-    });
+      const result: Record<number, T> = {};
+      arr.forEach((v, i) => { if (v !== undefined) result[i] = v; });
+      return result;
+    }
+    setEditedTexts(reorder);
+    setEditedBgUrls(reorder);
+    setElementOverrides(reorder);
+    setOverlayConfigs(reorder);
+    setBgImageConfigs(reorder);
+    setBadgeVisible(reorder);
     setSelectedIndex(to);
   }
 
@@ -1803,24 +1818,30 @@ export default function CarouselEditor({
 
   function removeSlide(idx: number) {
     if (slides.length <= 1) return;
+    const count = slides.length;
     setSlides(prev => {
       const next = prev.filter((_, i) => i !== idx);
       return next.map((s, i) => ({ ...s, index: i }));
     });
-    // Rebuild editedTexts and editedBgUrls with new indices
-    setEditedTexts(prev => {
-      const arr = slides.map((_, i) => prev[i] ?? []);
+    // Helper to re-index a Record<number, T> after removing idx
+    function reindex<T>(prev: Record<number, T>): Record<number, T> {
+      const arr: T[] = [];
+      for (let i = 0; i < count; i++) if (prev[i] !== undefined) arr.push(prev[i]);
+      else arr.push(undefined as T);
       arr.splice(idx, 1);
-      return Object.fromEntries(arr.map((v, i) => [i, v]));
-    });
-    setEditedBgUrls(prev => {
-      const arr = slides.map((_, i) => prev[i] ?? '');
-      arr.splice(idx, 1);
-      return Object.fromEntries(arr.map((v, i) => [i, v]).filter(([, v]) => v !== ''));
-    });
+      const result: Record<number, T> = {};
+      arr.forEach((v, i) => { if (v !== undefined) result[i] = v; });
+      return result;
+    }
+    setEditedTexts(reindex);
+    setEditedBgUrls(reindex);
+    setElementOverrides(reindex);
+    setOverlayConfigs(reindex);
+    setBgImageConfigs(reindex);
+    setBadgeVisible(reindex);
     setSelectedIndex(prev => {
       if (prev === null) return null;
-      if (prev >= slides.length - 1) return Math.max(0, slides.length - 2);
+      if (prev >= count - 1) return Math.max(0, count - 2);
       if (prev > idx) return prev - 1;
       return prev;
     });
@@ -2079,13 +2100,13 @@ export default function CarouselEditor({
       bgImageConfigs[s.index],
       followBannerConfigs[s.index],
       globalFont || undefined,
+      slideBgColors[s.index],
     ));
-    // Inject global font override into <head> CSS to cover elements not processed above
     const fontOverrideCss = globalFont
       ? `<style>*:not(.verified-badge):not(.verified-badge *){font-family:'${globalFont}',sans-serif!important}</style>`
       : '';
     return `<!DOCTYPE html><html><head>${head}${fontOverrideCss}</head><body>\n${built.join('\n')}\n</body></html>`;
-  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, globalFont]);
+  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, globalFont, slideBgColors]);
 
   // ── Persistência: avisa o pai sempre que o HTML reconstruído mudar ───────────
 
@@ -2114,6 +2135,7 @@ export default function CarouselEditor({
       bgImageConfigs[idx],
       followBannerConfigs[idx],
       globalFont || undefined,
+      slideBgColors[idx],
     );
   }
 
@@ -2824,6 +2846,29 @@ export default function CarouselEditor({
                           </button>
                         )}
                       </div>
+
+                      {/* Cor de fundo do slide */}
+                      {selectedIndex !== null && (
+                        <div className="pt-2 border-t border-border">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cor de fundo</span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={slideBgColors[selectedIndex] || '#1a1a1a'}
+                                onChange={e => setSlideBgColors(prev => ({ ...prev, [selectedIndex]: e.target.value }))}
+                                className="w-7 h-7 rounded cursor-pointer border border-border"
+                              />
+                              {slideBgColors[selectedIndex] && (
+                                <button
+                                  onClick={() => setSlideBgColors(prev => { const n = { ...prev }; delete n[selectedIndex]; return n; })}
+                                  className="text-[10px] text-red-400 hover:text-red-300"
+                                >Reset</button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Imagem de fundo */}
                       <div className="pt-2 border-t border-border">
