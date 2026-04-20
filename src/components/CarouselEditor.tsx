@@ -1797,10 +1797,10 @@ export default function CarouselEditor({
         const parser = new DOMParser();
         const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
         const el = doc.body.firstElementChild!;
-        const imgs = Array.from(el.querySelectorAll('img')).filter(img => {
-          const src = img.getAttribute('src') || '';
-          return src && !src.includes('svg') && !src.includes('badge');
-        });
+        // Usa o array completo (sem filtro) para garantir que imgIdx coincide com
+        // o índice original do querySelector — o seletor de botões usa (img, i) no
+        // array completo e guarda esse i como idx, então precisamos do array completo aqui também.
+        const imgs = Array.from(el.querySelectorAll('img'));
         if (imgs[imgIdx]) imgs[imgIdx].setAttribute('src', url);
         return { ...s, outerHtml: el.outerHTML };
       }));

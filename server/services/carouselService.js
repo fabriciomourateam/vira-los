@@ -744,6 +744,62 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       text-align: center; z-index: 2;
       font-size: 22px; color: rgba(255,255,255,0.5);
     }
+
+    /* ── SLIDE ANTES/DEPOIS (split screen vertical) ── */
+    .clean-split {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      background: #0f0f0f;
+      font-family: '${fontFamily}', sans-serif;
+      display: flex; flex-direction: column;
+      page-break-after: always;
+    }
+    .clean-split .split-photos {
+      display: flex; flex: 1 1 auto; gap: 0; overflow: hidden;
+    }
+    .clean-split .split-panel {
+      flex: 1; position: relative; overflow: hidden;
+    }
+    .clean-split .split-panel + .split-panel {
+      border-left: 4px solid #0f0f0f;
+    }
+    .clean-split .split-img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .clean-split .split-label {
+      position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); color: white; backdrop-filter: blur(4px);
+      padding: 12px 40px; border-radius: 60px;
+      font-size: 30px; font-weight: 900; letter-spacing: 3px; white-space: nowrap;
+    }
+    .clean-split .split-label.after {
+      background: ${primaryColor};
+    }
+    .clean-split .split-divider {
+      position: absolute; top: 0; bottom: 0; left: 50%;
+      width: 4px; background: #0f0f0f; transform: translateX(-50%);
+      z-index: 2;
+    }
+    .clean-split .split-content {
+      padding: 44px 64px 110px; background: #0f0f0f;
+      display: flex; flex-direction: column; gap: 16px; flex-shrink: 0;
+    }
+    .clean-split .split-eyebrow {
+      font-size: 24px; font-weight: 700; letter-spacing: 3px;
+      color: ${primaryColor}; text-transform: uppercase;
+    }
+    .clean-split .split-title {
+      font-size: 58px; font-weight: 900; line-height: 1.1; color: white;
+    }
+    .clean-split .split-title .hl { color: ${primaryColor}; }
+    .clean-split .split-stats {
+      font-size: 30px; font-weight: 600; color: rgba(255,255,255,0.65);
+    }
+    .clean-split .split-footer {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 28px 56px; background: transparent;
+    }
   </style>`;
 }
 
@@ -918,6 +974,30 @@ SLIDES 3 a ${numSlides - 1} — CONTEÚDO (.clean-content):
   <div class="content-body">[texto de apoio — até 30 palavras]</div>
   <div class="photo-card"><img src="FOTO_N" alt="${topic}" /></div>
   <div class="slide-footer">
+    <span class="footer-name-pill">${displayName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+    <span class="footer-handle-pill">${handleAt}</span>
+    <span class="footer-swipe">Arrasta para o lado ›</span>
+  </div>
+</div>
+
+SLIDE OPCIONAL — ANTES/DEPOIS (.clean-split) — use quando o tema envolver transformação, resultado de aluno, comparação visual:
+<div class="clean-split">
+  <div class="split-photos">
+    <div class="split-panel">
+      <img src="FOTO_ANTES" alt="Antes" class="split-img" />
+      <div class="split-label">ANTES</div>
+    </div>
+    <div class="split-panel">
+      <img src="FOTO_DEPOIS" alt="Depois" class="split-img" />
+      <div class="split-label after">DEPOIS</div>
+    </div>
+  </div>
+  <div class="split-content">
+    <div class="split-eyebrow">Resultado real</div>
+    <div class="split-title">[conquista em destaque — até 8 palavras — 1-2 em <span class="hl">destaque</span>]</div>
+    <div class="split-stats">[dado concreto, ex: -8kg · 12 semanas · 3x/semana]</div>
+  </div>
+  <div class="split-footer">
     <span class="footer-name-pill">${displayName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
     <span class="footer-handle-pill">${handleAt}</span>
     <span class="footer-swipe">Arrasta para o lado ›</span>
