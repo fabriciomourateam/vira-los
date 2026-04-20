@@ -293,6 +293,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [photoUploading, setPhotoUploading] = useState(false);
   const [showPersonalization, setShowPersonalization] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const htmlImportRef  = useRef<HTMLInputElement>(null);
+  const [importingHtml, setImportingHtml] = useState(false);
 
   // ── Modo Antes/Depois ──────────────────────────────────────────────────────
   const [beforeAfterMode, setBeforeAfterMode] = useState(false);
@@ -419,6 +421,55 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
       setPhotoUploading(false);
     };
     reader.readAsDataURL(file);
+  }
+
+  // ── Importar HTML externo como modelo ─────────────────────────────────────
+  async function handleHtmlImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.html') && !file.name.endsWith('.htm')) {
+      toast.error('Selecione um arquivo .html');
+      if (htmlImportRef.current) htmlImportRef.current.value = '';
+      return;
+    }
+
+    const modelName = window.prompt(
+      'Nome para o modelo:',
+      file.name.replace(/\.(html|htm)$/i, '').replace(/[-_]/g, ' '),
+    );
+    if (!modelName?.trim()) {
+      if (htmlImportRef.current) htmlImportRef.current.value = '';
+      return;
+    }
+
+    setImportingHtml(true);
+    try {
+      const html = await file.text();
+      const res = await fetch(`${API}/api/carousel/save-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html,
+          name: modelName.trim(),
+          numSlides: (html.match(/clean-cover|clean-content|clean-cta|clean-split/g) || []).length,
+          legenda: '',
+          config: { ...config },
+          bgColor:      config.bgColor      || '#1a1a1a',
+          primaryColor: config.primaryColor || '#B078FF',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar modelo');
+      await fetch(`${API}/api/carousel/saved`).then(r => r.json()).then(saved => {
+        setSavedCarousels(Array.isArray(saved) ? saved : []);
+      });
+      toast.success(`Modelo "${modelName.trim()}" importado!`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setImportingHtml(false);
+      if (htmlImportRef.current) htmlImportRef.current.value = '';
+    }
   }
 
   async function handleGenerate() {
@@ -1446,7 +1497,29 @@ ${stats ? `- Stats: ${stats}` : ''}
         )}
       </AnimatePresence>
 
+      {/* ── Input oculto para importar HTML ── */}
+      <input
+        ref={htmlImportRef}
+        type="file"
+        accept=".html,.htm"
+        className="hidden"
+        onChange={handleHtmlImport}
+      />
+
       {/* ── Carrosseis Salvos ── */}
+      {savedCarousels.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border p-6 text-center space-y-3">
+          <p className="text-sm text-muted-foreground">Nenhum carrossel salvo ainda.</p>
+          <button
+            type="button"
+            onClick={() => htmlImportRef.current?.click()}
+            disabled={importingHtml}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            {importingHtml ? <><Loader2 className="w-4 h-4 animate-spin" /> Importando…</> : <><UploadCloud className="w-4 h-4" /> Importar HTML como Modelo</>}
+          </button>
+        </div>
+      )}
       {savedCarousels.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -1458,6 +1531,18 @@ ${stats ? `- Stats: ${stats}` : ''}
                 <LayoutTemplate className="w-3 h-3" /> inclui modelos
               </span>
             )}
+            {/* Botão importar HTML */}
+            <button
+              type="button"
+              onClick={() => htmlImportRef.current?.click()}
+              disabled={importingHtml}
+              title="Importar arquivo .html como modelo"
+              className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-dashed border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-xs font-semibold transition-colors disabled:opacity-50"
+            >
+              {importingHtml
+                ? <><Loader2 className="w-3 h-3 animate-spin" /> Importando…</>
+                : <><UploadCloud className="w-3.5 h-3.5" /> Importar HTML</>}
+            </button>
             {savedCarousels.some(c => c.archived) && (
               <button
                 onClick={() => setShowArchived(v => !v)}
