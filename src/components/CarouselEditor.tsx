@@ -371,6 +371,7 @@ function rebuildSlideOuterHtml(
   showBadge?: boolean,
   bgImageConfig?: BgImageConfig,
   followBannerConfig?: FollowBannerConfig,
+  globalFont?: string,
 ): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
@@ -418,10 +419,11 @@ function rebuildSlideOuterHtml(
         newStyle = newStyle.replace(TEXT_ALIGN_REGEX, '').replace(/\s{2,}/g, ' ').trim();
         newStyle = `${newStyle}; text-align: ${tb.textAlign};`.replace(/^;\s*/, '');
       }
-      // Apply font-family override
-      if (tb.fontFamily) {
+      // Apply font-family override (globalFont takes precedence over per-block font)
+      const effectiveFont = globalFont || tb.fontFamily;
+      if (effectiveFont) {
         newStyle = newStyle.replace(FONT_FAMILY_REGEX, '').replace(/\s{2,}/g, ' ').trim();
-        newStyle = `${newStyle}; font-family: '${tb.fontFamily}', sans-serif;`.replace(/^;\s*/, '');
+        newStyle = `${newStyle}; font-family: '${effectiveFont}', sans-serif;`.replace(/^;\s*/, '');
       }
       // Apply font-weight override
       if (tb.fontWeight !== undefined) {
@@ -752,10 +754,14 @@ function buildDragScript(displayScale: number): string {
   function findEl(t){
     // Check resize handle first
     if(t.classList&&t.classList.contains('resize-handle')) return null;
-    // If clicking on .overlay, redirect to .bg (overlay sits on top and blocks .bg)
-    if(t.classList&&(t.classList.contains('overlay'))){
+    // If clicking on .overlay / .slide-overlay, redirect to .bg (overlay sits on top)
+    if(t.classList&&(t.classList.contains('overlay')||t.classList.contains('slide-overlay'))){
       var bgEl=t.parentElement&&t.parentElement.querySelector('.bg, .slide-bg');
       if(bgEl) return {el:bgEl,sel:'.bg'};
+    }
+    // Also redirect if target is .bg itself or .slide-bg
+    if(t.classList&&(t.classList.contains('bg')||t.classList.contains('slide-bg'))){
+      return {el:t,sel:'.bg'};
     }
     for(var i=0;i<SELS.length;i++){
       var el=t.closest(SELS[i]);
@@ -987,12 +993,13 @@ function buildDragScript(displayScale: number): string {
 </script>`;
 }
 
-function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited, selectedIndex }: {
+function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited, selectedIndex, globalFont }: {
   slideHtml: string;
   head: string;
   onElementMoved: (data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => void;
   onTextEdited: (selector: string, innerHTML: string) => void;
   selectedIndex: number;
+  globalFont?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -1014,7 +1021,10 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited
   const scale = displayW / 1080;
   const displayH = Math.round(1350 * scale);
   const dragScript = buildDragScript(scale);
-  const srcDoc = `<!DOCTYPE html><html><head>${head}${dragScript}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
+  const fontOverride = globalFont
+    ? `<style>*:not(.verified-badge):not(.verified-badge *){font-family:'${globalFont}',sans-serif!important}</style>`
+    : '';
+  const srcDoc = `<!DOCTYPE html><html><head>${head}${fontOverride}${dragScript}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
 
   // Encaminha mouseup/mousemove do pai para o iframe (fix: drag sai do iframe)
   // Lê iframeRef.current DENTRO das funções para sempre usar o iframe atual
@@ -1212,6 +1222,7 @@ export default function CarouselEditor({
   onScreenshotsUpdated, onTemplateSaved, onHtmlUpdated,
 }: CarouselEditorProps) {
   const [head, setHead] = useState('');
+  const [globalFont, setGlobalFont] = useState<string>('');
   const [slides, setSlides] = useState<EditableSlide[]>([]);
   const [editedTexts, setEditedTexts] = useState<Record<number, TextBlock[]>>({});
   const [editedBgUrls, setEditedBgUrls] = useState<Record<number, string>>({});
@@ -2055,9 +2066,14 @@ export default function CarouselEditor({
       badgeVisible[s.index],
       bgImageConfigs[s.index],
       followBannerConfigs[s.index],
+      globalFont || undefined,
     ));
-    return `<!DOCTYPE html><html><head>${head}</head><body>\n${built.join('\n')}\n</body></html>`;
-  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs]);
+    // Inject global font override into <head> CSS to cover elements not processed above
+    const fontOverrideCss = globalFont
+      ? `<style>*:not(.verified-badge):not(.verified-badge *){font-family:'${globalFont}',sans-serif!important}</style>`
+      : '';
+    return `<!DOCTYPE html><html><head>${head}${fontOverrideCss}</head><body>\n${built.join('\n')}\n</body></html>`;
+  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, globalFont]);
 
   // ── Persistência: avisa o pai sempre que o HTML reconstruído mudar ───────────
 
@@ -2085,6 +2101,7 @@ export default function CarouselEditor({
       badgeVisible[idx],
       bgImageConfigs[idx],
       followBannerConfigs[idx],
+      globalFont || undefined,
     );
   }
 
@@ -2249,6 +2266,24 @@ export default function CarouselEditor({
             <span className="text-sm font-bold">Editor de Carrossel</span>
             <span className="text-xs text-muted-foreground">{slides.length} slides</span>
           </div>
+        </div>
+        {/* Fonte global — altera todos os slides ao mesmo tempo */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap">Fonte global:</span>
+          <select
+            value={globalFont}
+            onChange={e => setGlobalFont(e.target.value)}
+            className="rounded-lg border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex-1 min-w-0"
+            style={globalFont ? { fontFamily: `'${globalFont}', sans-serif` } : {}}
+          >
+            <option value="">— fonte original —</option>
+            {FONT_OPTIONS.map(f => (
+              <option key={f} value={f} style={{ fontFamily: `'${f}', sans-serif` }}>{f}</option>
+            ))}
+          </select>
+          {globalFont && (
+            <button onClick={() => setGlobalFont('')} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Restaurar fonte original">✕</button>
+          )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button onClick={() => { if(canUndo){const e=new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true});window.dispatchEvent(e);}}} disabled={!canUndo}
@@ -3305,6 +3340,7 @@ export default function CarouselEditor({
                       onElementMoved={handleElementMoved}
                       onTextEdited={handleInlineTextEdit}
                       selectedIndex={selectedIndex}
+                      globalFont={globalFont || undefined}
                     />
 
                     {/* Mostrar overrides aplicados */}
