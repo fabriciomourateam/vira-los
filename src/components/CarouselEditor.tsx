@@ -38,7 +38,9 @@ interface ElementOverride {
   left?: string;
   right?: string;
   bottom?: string;
-  transform?: string;  // para elementos em flow (translate)
+  width?: string;
+  height?: string;
+  transform?: string;
 }
 
 interface OverlayConfig {
@@ -526,6 +528,8 @@ function rebuildSlideOuterHtml(
         if (styles.right  !== undefined) node.style.right  = styles.right;
         if (styles.bottom !== undefined) node.style.bottom = styles.bottom;
         if (styles.transform !== undefined) node.style.transform = styles.transform;
+        if (styles.width !== undefined) { node.style.width = styles.width; node.style.maxWidth = 'none'; }
+        if (styles.height !== undefined) { node.style.height = styles.height; node.style.maxHeight = 'none'; }
       }
     }
   }
@@ -685,8 +689,8 @@ function SlidePreview({ slideHtml, head }: { slideHtml: string; head: string }) 
 const DRAGGABLE_SELECTORS = [
   // Absolutos (clean layout)
   '.profile-badge', '.cover-title', '.swipe-hint', '.cta-footer',
-  // Imagens
-  '.photo-card', '.top-photo-wrap', '.bg',
+  // Imagens (inline + cards)
+  '.photo-card', '.top-photo-wrap', '.bg', 'img',
   // Footer / header
   '.slide-footer', '.top-header',
   // Texto (editorial + clean)
@@ -701,18 +705,23 @@ function buildDragScript(displayScale: number): string {
   const sels = JSON.stringify(DRAGGABLE_SELECTORS);
   return `<style>
   * { -webkit-user-select:none!important; user-select:none!important; }
+  .resize-handle { position:absolute; width:20px; height:20px; background:#B078FF; border:2px solid #fff; border-radius:3px; z-index:9999; cursor:nwse-resize; touch-action:none; }
+  .resize-handle.tl { top:-10px; left:-10px; cursor:nwse-resize; }
+  .resize-handle.tr { top:-10px; right:-10px; cursor:nesw-resize; }
+  .resize-handle.bl { bottom:-10px; left:-10px; cursor:nesw-resize; }
+  .resize-handle.br { bottom:-10px; right:-10px; cursor:nwse-resize; }
   </style>
   <script>
 (function(){
-  var SCALE=${displayScale.toFixed(6)};
   var SELS=${sels};
-  var dragging=null, selected=null;
+  var dragging=null, resizing=null, selected=null;
 
-  // Bloqueia completamente qualquer seleção de texto/área
   document.addEventListener('selectstart', function(e){ e.preventDefault(); });
   document.addEventListener('dragstart',   function(e){ e.preventDefault(); });
 
   function findEl(t){
+    // Check resize handle first
+    if(t.classList&&t.classList.contains('resize-handle')) return null;
     for(var i=0;i<SELS.length;i++){
       var el=t.closest(SELS[i]);
       if(el) return {el:el,sel:SELS[i]};
@@ -731,24 +740,77 @@ function buildDragScript(displayScale: number): string {
     return m ? {x:parseFloat(m[1]),y:parseFloat(m[2])} : {x:0,y:0};
   }
 
+  // Resize handles management
+  var currentHandles=[];
+  function removeHandles(){
+    currentHandles.forEach(function(h){h.remove();});
+    currentHandles=[];
+  }
+  function addHandles(el){
+    removeHandles();
+    if(el.tagName!=='IMG'&&!el.classList.contains('photo-card')&&!el.classList.contains('top-photo-wrap')) return;
+    // Make sure element is positioned
+    var cs=window.getComputedStyle(el);
+    if(cs.position==='static'){
+      el.style.position='absolute';
+      el.style.top=el.offsetTop+'px';
+      el.style.left=el.offsetLeft+'px';
+    }
+    var parent=el.parentElement;
+    if(parent&&window.getComputedStyle(parent).position==='static') parent.style.position='relative';
+    ['br'].forEach(function(corner){
+      var h=document.createElement('div');
+      h.className='resize-handle '+corner;
+      h.setAttribute('data-corner',corner);
+      el.style.position=el.style.position||'absolute';
+      if(el.tagName==='IMG'){
+        // For img, wrap or position handle relative to img
+        var rect=el.getBoundingClientRect();
+        var pRect=el.offsetParent?el.offsetParent.getBoundingClientRect():{top:0,left:0};
+        h.style.position='absolute';
+        h.style.top=(el.offsetTop+el.offsetHeight-10)+'px';
+        h.style.left=(el.offsetLeft+el.offsetWidth-10)+'px';
+        (el.offsetParent||document.body).appendChild(h);
+      } else {
+        el.appendChild(h);
+      }
+      currentHandles.push(h);
+    });
+  }
+
   var dragMoved=false;
 
   function startDrag(cx,cy,target){
     if(target&&target.isContentEditable) return false;
+    // Resize handle?
+    if(target.classList&&target.classList.contains('resize-handle')&&selected){
+      var origW=selected.offsetWidth||parseInt(selected.style.width)||200;
+      var origH=selected.offsetHeight||parseInt(selected.style.height)||200;
+      resizing={el:selected,startX:cx,startY:cy,origW:origW,origH:origH,corner:target.getAttribute('data-corner')};
+      return true;
+    }
     var found=findEl(target);
     if(!found) return false;
     document.body.style.userSelect='none';
     document.body.style.webkitUserSelect='none';
     var el=found.el;
     var cs=window.getComputedStyle(el);
-    if(selected) highlight(selected,false);
+    if(selected&&selected!==el) highlight(selected,false);
     selected=el; highlight(el,true);
-    // Índice do elemento entre todos os que têm o mesmo seletor (para override único)
+    addHandles(el);
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
+    // For img elements, make absolute if not already
+    if(!isAbs&&(el.tagName==='IMG'||el.classList.contains('photo-card'))){
+      el.style.position='absolute';
+      el.style.top=el.offsetTop+'px';
+      el.style.left=el.offsetLeft+'px';
+      el.style.right='';
+      el.style.bottom='';
+      isAbs=true;
+    }
     if(isAbs){
-      // Se o elemento usa bottom/right, converte para top/left antes de arrastar
       var origTop, origLeft;
       if(el.style.top && el.style.top!=='auto'){
         origTop=parseFloat(el.style.top)||0;
@@ -774,6 +836,23 @@ function buildDragScript(displayScale: number): string {
   }
 
   function moveDrag(cx,cy){
+    if(resizing){
+      var dx=cx-resizing.startX;
+      var dy=cy-resizing.startY;
+      var newW=Math.max(40,resizing.origW+dx);
+      var ratio=resizing.origH/resizing.origW;
+      var newH=Math.round(newW*ratio);
+      resizing.el.style.width=newW+'px';
+      resizing.el.style.height=newH+'px';
+      resizing.el.style.maxWidth='none';
+      resizing.el.style.maxHeight='none';
+      // Update handle position
+      if(currentHandles.length&&resizing.el.tagName==='IMG'){
+        currentHandles[0].style.top=(resizing.el.offsetTop+newH-10)+'px';
+        currentHandles[0].style.left=(resizing.el.offsetLeft+newW-10)+'px';
+      }
+      return;
+    }
     if(!dragging) return;
     var dx=cx-dragging.startX;
     var dy=cy-dragging.startY;
@@ -791,8 +870,15 @@ function buildDragScript(displayScale: number): string {
   function endDrag(){
     document.body.style.userSelect='';
     document.body.style.webkitUserSelect='';
+    if(resizing){
+      var payload={type:'elementResized',selector:resizing.el.tagName==='IMG'?'img':('.'+resizing.el.className.trim().split(/\\s+/)[0]),
+        width:resizing.el.style.width,height:resizing.el.style.height,
+        top:resizing.el.style.top,left:resizing.el.style.left};
+      window.parent.postMessage(payload,'*');
+      resizing=null;
+      return;
+    }
     if(!dragging) return;
-    // Só notifica o pai se o elemento realmente foi movido (não apenas clicado)
     if(dragMoved){
       var ctIdx=dragging.el.getAttribute('data-ct-idx');
       var payload={type:'elementMoved',selector:dragging.sel,elemIdx:dragging.elemIdx,mode:dragging.mode,ctIdx:ctIdx};
@@ -803,7 +889,6 @@ function buildDragScript(displayScale: number): string {
     dragging=null;
   }
 
-  // Edição inline: duplo clique → contentEditable
   var TEXT_EDIT_SELS=['.title','.subtitle','.subtitle-accent','.narrative-text','.content-title','.content-body','.cta-title','.cover-title','.custom-text','.follow-pill','.footer-name-pill'];
   document.addEventListener('dblclick',function(e){
     var textEl=null;
@@ -904,6 +989,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited
     function handleMsg(e: MessageEvent) {
       if (!e.data) return;
       if (e.data.type === 'elementMoved') onElementMoved(e.data);
+      if (e.data.type === 'elementResized') onElementMoved({ ...e.data, type: 'elementMoved', mode: 'abs' });
       if (e.data.type === 'textEdited') onTextEdited(e.data.selector, e.data.innerHTML);
     }
     window.addEventListener('message', handleMsg);
@@ -1883,7 +1969,7 @@ export default function CarouselEditor({
       if (selectedIndex === null) return prev;
       const overrideKey = `${data.selector}@${data.elemIdx ?? 0}`;
       const override: ElementOverride = data.mode === 'abs'
-        ? { left: data.left, top: data.top }
+        ? { left: data.left, top: data.top, ...(data.width ? { width: data.width, height: data.height } : {}) }
         : { transform: data.transform };
       return {
         ...prev,
