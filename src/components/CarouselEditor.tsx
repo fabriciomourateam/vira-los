@@ -754,9 +754,14 @@ function buildDragScript(displayScale: number): string {
   function findEl(t){
     // Check resize handle first
     if(t.classList&&t.classList.contains('resize-handle')) return null;
-    // If clicking on .overlay / .slide-overlay, redirect to .bg (overlay sits on top)
+    // If clicking on .overlay / .slide-overlay, redirect to .bg
     if(t.classList&&(t.classList.contains('overlay')||t.classList.contains('slide-overlay'))){
-      var bgEl=t.parentElement&&t.parentElement.querySelector('.bg, .slide-bg');
+      var parent=t.parentElement;
+      var bgEl=null;
+      while(parent&&!bgEl){
+        bgEl=parent.querySelector('.bg, .slide-bg');
+        parent=parent.parentElement;
+      }
       if(bgEl) return {el:bgEl,sel:'.bg'};
     }
     // Also redirect if target is .bg itself or .slide-bg
@@ -766,6 +771,12 @@ function buildDragScript(displayScale: number): string {
     for(var i=0;i<SELS.length;i++){
       var el=t.closest(SELS[i]);
       if(el) return {el:el,sel:SELS[i]};
+    }
+    // Last resort: if clicked inside a slide but not on any draggable, try to find .bg
+    var slideEl=t.closest('.slide,.slide-editorial,.clean-cover,.clean-content,.clean-cta');
+    if(slideEl){
+      var fallbackBg=slideEl.querySelector('.bg, .slide-bg');
+      if(fallbackBg) return {el:fallbackBg,sel:'.bg'};
     }
     return null;
   }
@@ -836,8 +847,9 @@ function buildDragScript(displayScale: number): string {
     document.body.style.webkitUserSelect='none';
     var el=found.el;
     var cs=window.getComputedStyle(el);
-    if(selected&&selected!==el) highlight(selected,false);
+    if(selected&&selected!==el){ highlight(selected,false); removeHandles(); }
     selected=el; highlight(el,true);
+    addHandles(el);
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
@@ -996,7 +1008,7 @@ function buildDragScript(displayScale: number): string {
 function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited, selectedIndex, globalFont }: {
   slideHtml: string;
   head: string;
-  onElementMoved: (data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => void;
+  onElementMoved: (data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null; width?: string; height?: string; bgPosition?: string }) => void;
   onTextEdited: (selector: string, innerHTML: string) => void;
   selectedIndex: number;
   globalFont?: string;
