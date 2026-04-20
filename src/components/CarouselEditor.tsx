@@ -3032,23 +3032,39 @@ export default function CarouselEditor({
                         {selBg && (() => {
                           const bgCfg: BgImageConfig = bgImageConfigs[selectedIndex] ?? { position: 'center center', brightness: 100 };
                           const setBg = (patch: Partial<BgImageConfig>) =>
-                            // Quando slider de posição muda, zera o drag offset para não conflitar
                             setBgImageConfigs(prev => ({
                               ...prev,
-                              [selectedIndex]: { ...bgCfg, dragOffsetX: 0, dragOffsetY: 0, ...patch },
+                              [selectedIndex]: { ...bgCfg, ...patch },
                             }));
 
-                          // Converte posição CSS para X/Y em %
+                          // Max pan em px para os sliders (mapeia 0–100% → -MAX…+MAX px)
+                          const MAX_PAN_PX = 400;
+
+                          // Deriva posX/posY a partir dos dragOffsets (se existirem) ou da string position
                           const keywordToNum = (k: string) =>
                             k === 'left' || k === 'top' ? 0 : k === 'right' || k === 'bottom' ? 100 : 50;
                           const parsePosNum = (v: string): number => {
                             if (v.endsWith('%')) return parseInt(v);
                             return keywordToNum(v);
                           };
+                          const hasDragOffset = bgCfg.dragOffsetX !== undefined || bgCfg.dragOffsetY !== undefined;
                           const parts = bgCfg.position.trim().split(/\s+/);
-                          const posX = parsePosNum(parts[0] ?? 'center');
-                          const posY = parsePosNum(parts[1] ?? 'center');
-                          const setPosXY = (x: number, y: number) => setBg({ position: `${x}% ${y}%` });
+                          const posX = hasDragOffset
+                            ? Math.round(((bgCfg.dragOffsetX ?? 0) / MAX_PAN_PX) * 50 + 50)
+                            : parsePosNum(parts[0] ?? 'center');
+                          const posY = hasDragOffset
+                            ? Math.round(((bgCfg.dragOffsetY ?? 0) / MAX_PAN_PX) * 50 + 50)
+                            : parsePosNum(parts[1] ?? 'center');
+
+                          // Sliders agora usam translate (dragOffset) — funciona para qualquer aspect ratio
+                          const setPosXY = (x: number, y: number) => {
+                            const dx = ((x - 50) / 50) * MAX_PAN_PX;
+                            const dy = ((y - 50) / 50) * MAX_PAN_PX;
+                            setBgImageConfigs(prev => ({
+                              ...prev,
+                              [selectedIndex]: { ...bgCfg, position: `${x}% ${y}%`, dragOffsetX: dx, dragOffsetY: dy },
+                            }));
+                          };
                           const scaleVal = bgCfg.scale ?? 1.0;
                           const scalePct = Math.round(scaleVal * 100);
 
