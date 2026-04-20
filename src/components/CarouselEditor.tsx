@@ -845,6 +845,10 @@ function buildDragScript(displayScale: number): string {
   function findEl(t){
     // Check resize handle first
     if(t.classList&&t.classList.contains('resize-handle')) return null;
+    // img.split-img — antes/depois panels: drag via object-position
+    if(t.tagName==='IMG'&&t.classList.contains('split-img')){
+      return {el:t,sel:'img.split-img'};
+    }
     // If clicking on .overlay / .slide-overlay, redirect to .bg
     if(t.classList&&(t.classList.contains('overlay')||t.classList.contains('slide-overlay'))){
       var parent=t.parentElement;
@@ -864,7 +868,7 @@ function buildDragScript(displayScale: number): string {
       if(el) return {el:el,sel:SELS[i]};
     }
     // Last resort: if clicked inside a slide but not on any draggable, try to find .bg
-    var slideEl=t.closest('.slide,.slide-editorial,.clean-cover,.clean-content,.clean-cta');
+    var slideEl=t.closest('.slide,.slide-editorial,.clean-cover,.clean-content,.clean-cta,.clean-split');
     if(slideEl){
       var fallbackBg=slideEl.querySelector('.bg, .slide-bg');
       if(fallbackBg) return {el:fallbackBg,sel:'.bg'};
@@ -896,6 +900,7 @@ function buildDragScript(displayScale: number): string {
   function addHandles(el){
     removeHandles();
     if(el.tagName!=='IMG'&&!el.classList.contains('photo-card')&&!el.classList.contains('top-photo-wrap')) return;
+    if(el.classList.contains('split-img')) return; // painel split — só arraste, sem resize
     // Make sure element is positioned
     var cs=window.getComputedStyle(el);
     if(cs.position==='static'){
@@ -948,6 +953,19 @@ function buildDragScript(displayScale: number): string {
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
+    // img.split-img: pan via object-position (antes/depois panels)
+    if(el.tagName==='IMG'&&el.classList.contains('split-img')){
+      var curObjPos=el.style.objectPosition||'';
+      var opRx=/calc\\(50% ([+\\-]) ([\\d.]+)px\\)/g;
+      var pm,opVals=[];
+      while((pm=opRx.exec(curObjPos))!==null) opVals.push((pm[1]==='-'?-1:1)*parseFloat(pm[2]));
+      var origTx=opVals.length>=1?opVals[0]:0;
+      var origTy=opVals.length>=2?opVals[1]:0;
+      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'imgpan',startX:cx,startY:cy,origTx:origTx,origTy:origTy,_curX:origTx,_curY:origTy};
+      dragMoved=false;
+      window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
+      return true;
+    }
     // For .bg elements, pan via background-position — no black bands for taller images
     if(found.sel==='.bg'||el.classList.contains('bg')||el.classList.contains('slide-bg')){
       // Parse current background-position: handles "calc(50% + Npx)" AND "calc(50% - Npx)"
@@ -1021,6 +1039,15 @@ function buildDragScript(displayScale: number): string {
       dragging.el.style.backgroundPosition=bpx+' '+bpy;
       return;
     }
+    if(dragging.mode==='imgpan'){
+      // Pan via object-position — moves image content inside <img> with object-fit:cover
+      var nx=dragging.origTx+dx, ny=dragging.origTy+dy;
+      dragging._curX=nx; dragging._curY=ny;
+      var opx=nx>=0?'calc(50% + '+nx.toFixed(1)+'px)':'calc(50% - '+(-nx).toFixed(1)+'px)';
+      var opy=ny>=0?'calc(50% + '+ny.toFixed(1)+'px)':'calc(50% - '+(-ny).toFixed(1)+'px)';
+      dragging.el.style.objectPosition=opx+' '+opy;
+      return;
+    }
     if(dragging.mode==='abs'){
       dragging.el.style.left=(dragging.origLeft+dx)+'px';
       dragging.el.style.top=(dragging.origTop+dy)+'px';
@@ -1052,6 +1079,12 @@ function buildDragScript(displayScale: number): string {
         payload.bgTranslateX=dragging._curX!==undefined?dragging._curX:0;
         payload.bgTranslateY=dragging._curY!==undefined?dragging._curY:0;
         payload.mode='bgpan';
+      }
+      else if(dragging.mode==='imgpan'){
+        payload.imgTranslateX=dragging._curX!==undefined?dragging._curX:0;
+        payload.imgTranslateY=dragging._curY!==undefined?dragging._curY:0;
+        payload.imgElemIdx=dragging.elemIdx;
+        payload.mode='imgpan';
       }
       else{payload.transform=dragging.el.style.transform;}
       window.parent.postMessage(payload,'*');
@@ -1527,6 +1560,16 @@ export default function CarouselEditor({
   const [imgSearchLoading, setImgSearchLoading] = useState(false);
   const [imgSearchPage, setImgSearchPage] = useState(1);
   const [imgTarget, setImgTarget] = useState<'bg' | number>('bg');
+  // Posição local dos sliders para img.split-img (objeto = {x,y} em px offset de 50%)
+  const [inlineImgPos, setInlineImgPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Sincroniza inlineImgPos ao trocar a imagem alvo (lê object-position do outerHtml)
+  useEffect(() => {
+    if (typeof imgTarget === 'number' && selectedIndex !== null) {
+      setInlineImgPos(getInlineImgOffset(selectedIndex, imgTarget));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imgTarget, selectedIndex]);
 
   // Tecla Delete/Backspace deleta o bloco de texto focado
   useEffect(() => {
@@ -1806,6 +1849,44 @@ export default function CarouselEditor({
       }));
     }
     toast.success('Imagem aplicada');
+  }
+
+  // ── Posição de img.split-img via object-position ──────────────────────────────
+
+  /** Lê o offset calc(50% ± Npx) atual de um img.split-img no outerHtml */
+  function getInlineImgOffset(slideIdx: number, imgIdx: number): { x: number; y: number } {
+    const slide = slides[slideIdx];
+    if (!slide) return { x: 0, y: 0 };
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
+    const el = doc.body.firstElementChild;
+    if (!el) return { x: 0, y: 0 };
+    const imgs = Array.from(el.querySelectorAll('img.split-img')) as HTMLElement[];
+    const img = imgs[imgIdx];
+    if (!img) return { x: 0, y: 0 };
+    const style = img.getAttribute('style') || '';
+    const m = /object-position\s*:\s*calc\(50%\s*([+-])\s*([\d.]+)px\)\s+calc\(50%\s*([+-])\s*([\d.]+)px\)/i.exec(style);
+    if (m) return { x: (m[1] === '-' ? -1 : 1) * parseFloat(m[2]), y: (m[3] === '-' ? -1 : 1) * parseFloat(m[4]) };
+    return { x: 0, y: 0 };
+  }
+
+  /** Aplica object-position: calc(50% ± Xpx) calc(50% ± Ypx) a um img.split-img */
+  function applyInlineImgObjectPos(slideIdx: number, imgIdx: number, dx: number, dy: number) {
+    setSlides(prev => prev.map((s, i) => {
+      if (i !== slideIdx) return s;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
+      const el = doc.body.firstElementChild!;
+      const imgs = Array.from(el.querySelectorAll('img.split-img')) as HTMLElement[];
+      const img = imgs[imgIdx];
+      if (img) {
+        let style = (img.getAttribute('style') || '').replace(/object-position\s*:[^;]+;?/gi, '').trim().replace(/;$/, '');
+        const opx = dx >= 0 ? `calc(50% + ${dx.toFixed(1)}px)` : `calc(50% - ${(-dx).toFixed(1)}px)`;
+        const opy = dy >= 0 ? `calc(50% + ${dy.toFixed(1)}px)` : `calc(50% - ${(-dy).toFixed(1)}px)`;
+        img.setAttribute('style', `${style}${style ? '; ' : ''}object-position: ${opx} ${opy};`);
+      }
+      return { ...s, outerHtml: el.outerHTML };
+    }));
   }
 
   // ── Regenerar slide individual ────────────────────────────────────────────────
@@ -2104,7 +2185,7 @@ export default function CarouselEditor({
     });
   }, [selectedIndex]);
 
-  const handleElementMoved = useCallback((data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null; width?: string; height?: string; bgPosition?: string; bgTranslateX?: number; bgTranslateY?: number }) => {
+  const handleElementMoved = useCallback((data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null; width?: string; height?: string; bgPosition?: string; bgTranslateX?: number; bgTranslateY?: number; imgTranslateX?: number; imgTranslateY?: number; imgElemIdx?: number }) => {
     if (selectedIndex === null) return;
 
     // Background pan: salva translate offset do drag
@@ -2115,6 +2196,16 @@ export default function CarouselEditor({
         const cur = prev[selectedIndex] ?? { position: '50% 50%', brightness: 100 };
         return { ...prev, [selectedIndex]: { ...cur, dragOffsetX: dx, dragOffsetY: dy } };
       });
+      return;
+    }
+
+    // Inline img.split-img pan: salva object-position no outerHtml
+    if (data.mode === 'imgpan') {
+      const dx = data.imgTranslateX ?? 0;
+      const dy = data.imgTranslateY ?? 0;
+      const idx = data.imgElemIdx ?? 0;
+      applyInlineImgObjectPos(selectedIndex, idx, dx, dy);
+      setInlineImgPos({ x: dx, y: dy });
       return;
     }
 
@@ -2973,7 +3064,17 @@ export default function CarouselEditor({
                           const doc = parser.parseFromString(`<body>${sel?.outerHtml ?? ''}</body>`, 'text/html');
                           const el = doc.body.firstElementChild;
                           const inlineImgs = el ? Array.from(el.querySelectorAll('img'))
-                            .map((img, i) => ({ idx: i, src: img.getAttribute('src') || '', label: img.closest('.photo-card') ? `Card ${i+1}` : img.closest('.top-photo-wrap') ? `Topo ${i+1}` : `Img ${i+1}` }))
+                            .map((img, i) => {
+                              let label = `Img ${i+1}`;
+                              if (img.closest('.photo-card')) label = `Card ${i+1}`;
+                              else if (img.closest('.top-photo-wrap')) label = `Topo ${i+1}`;
+                              else if (img.classList.contains('split-img')) {
+                                const panels = Array.from(el.querySelectorAll('.split-panel'));
+                                const panelIdx = panels.indexOf(img.closest('.split-panel') as Element);
+                                label = panelIdx === 0 ? '📷 Antes' : '📷 Depois';
+                              }
+                              return { idx: i, src: img.getAttribute('src') || '', label };
+                            })
                             .filter(img => img.src && !img.src.includes('svg') && !img.src.includes('badge')) : [];
                           if (inlineImgs.length === 0) return null;
                           return (
@@ -3220,6 +3321,81 @@ export default function CarouselEditor({
                               {bgImageConfigs[selectedIndex] && (
                                 <button onClick={() => setBgImageConfigs(prev => { const n = {...prev}; delete n[selectedIndex]; return n; })}
                                   className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+                                  Restaurar padrão
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Posição de img.split-img (Antes/Depois) */}
+                        {typeof imgTarget === 'number' && selectedIndex !== null && (() => {
+                          // Verifica se o imgTarget aponta para um img.split-img
+                          const parser = new DOMParser();
+                          const doc = parser.parseFromString(`<body>${sel?.outerHtml ?? ''}</body>`, 'text/html');
+                          const elDoc = doc.body.firstElementChild;
+                          const allImgs = elDoc ? Array.from(elDoc.querySelectorAll('img')) : [];
+                          const targetImg = allImgs[imgTarget] as HTMLElement | undefined;
+                          if (!targetImg || !targetImg.classList.contains('split-img')) return null;
+
+                          const splitImgs = elDoc ? Array.from(elDoc.querySelectorAll('img.split-img')) : [];
+                          const splitIdx = splitImgs.indexOf(targetImg as Element);
+                          const MAX_PAN = 300;
+                          const toSlider = (v: number) => Math.round((v / MAX_PAN) * 50 + 50);
+                          const fromSlider = (s: number) => ((s - 50) / 50) * MAX_PAN;
+
+                          return (
+                            <div className="space-y-2 pt-2 border-t border-border">
+                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                Posição — {splitIdx === 0 ? 'Antes' : 'Depois'}
+                              </p>
+
+                              {/* Slider X */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">← Horizontal →</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{toSlider(inlineImgPos.x)}%</span>
+                                </div>
+                                <input type="range" min={0} max={100} value={toSlider(inlineImgPos.x)}
+                                  onChange={e => {
+                                    const nx = fromSlider(Number(e.target.value));
+                                    setInlineImgPos(p => ({ ...p, x: nx }));
+                                    applyInlineImgObjectPos(selectedIndex, splitIdx, nx, inlineImgPos.y);
+                                  }}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Esquerda</span><span>Centro</span><span>Direita</span>
+                                </div>
+                              </div>
+
+                              {/* Slider Y */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">↑ Vertical ↓</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{toSlider(inlineImgPos.y)}%</span>
+                                </div>
+                                <input type="range" min={0} max={100} value={toSlider(inlineImgPos.y)}
+                                  onChange={e => {
+                                    const ny = fromSlider(Number(e.target.value));
+                                    setInlineImgPos(p => ({ ...p, y: ny }));
+                                    applyInlineImgObjectPos(selectedIndex, splitIdx, inlineImgPos.x, ny);
+                                  }}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Topo</span><span>Centro</span><span>Base</span>
+                                </div>
+                              </div>
+
+                              {(inlineImgPos.x !== 0 || inlineImgPos.y !== 0) && (
+                                <button
+                                  onClick={() => {
+                                    setInlineImgPos({ x: 0, y: 0 });
+                                    applyInlineImgObjectPos(selectedIndex, splitIdx, 0, 0);
+                                  }}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                                >
                                   Restaurar padrão
                                 </button>
                               )}
