@@ -3229,7 +3229,7 @@ export default function CarouselEditor({
                                 <ChevronDown className={`w-3 h-3 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['gradient'] ? '-rotate-90' : 'rotate-0'}`} />
                                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                                   Gradiente
-                                </p>
+                                </span>
                                 {ov.direction !== 'none' && (
                                   <div className="ml-auto w-10 h-4 rounded border border-border shrink-0"
                                     style={{ background: buildOverlayStyle(ov) }} />
