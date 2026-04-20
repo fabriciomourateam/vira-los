@@ -452,18 +452,8 @@ function rebuildSlideOuterHtml(
         : `${s} background-image: url('${newBgUrl}');`;
     }
     if (bgImageConfig) {
-      // Parse X/Y position values (slider gives 0-100, 50 = center)
-      const posParts = bgImageConfig.position.trim().split(/\s+/);
-      const posX = parseFloat(posParts[0]) || 50;
-      const posY = parseFloat(posParts[1] ?? posParts[0]) || 50;
-
-      // Strategy: expand the .bg element 15% beyond each container edge via inset:-15%,
-      // then use transform:translate() to pan. This guarantees visible movement regardless
-      // of image/container aspect ratio (unlike background-position which needs "excess" image).
-      // At posX=50 posY=50 the image looks identical to the original (centered, no visual change).
-      const maxT = 11.5; // % of expanded element ≈ 15% visual pan range
-      const tx = ((50 - posX) / 50) * maxT;  // posX=0 → shift right (show left side)
-      const ty = ((50 - posY) / 50) * maxT;  // posY=0 → shift down (show top)
+      const pos = bgImageConfig.position.trim();
+      const isDragPos = pos.includes('calc(');
 
       // Remove conflicting inline properties before setting new ones
       s = s.replace(/inset\s*:\s*[^;]+;?/i, '').trim();
@@ -471,9 +461,23 @@ function rebuildSlideOuterHtml(
       s = s.replace(/background-position\s*:\s*[^;]+;?/i, '').trim();
       s = s.replace(/background-size\s*:\s*[^;]+;?/i, '').trim();
       s = s.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?/i, '').trim();
-      s += `; inset: -15%; background-size: cover; background-position: center;`
-         + ` transform: translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
-         + ` filter: brightness(${bgImageConfig.brightness}%);`;
+
+      if (isDragPos) {
+        // Drag mode: use background-position directly with calc() values
+        s += `; background-size: cover; background-position: ${pos};`
+           + ` filter: brightness(${bgImageConfig.brightness}%);`;
+      } else {
+        // Slider mode: expand + translate approach
+        const posParts = pos.split(/\s+/);
+        const posX = parseFloat(posParts[0]) || 50;
+        const posY = parseFloat(posParts[1] ?? posParts[0]) || 50;
+        const maxT = 11.5;
+        const tx = ((50 - posX) / 50) * maxT;
+        const ty = ((50 - posY) / 50) * maxT;
+        s += `; inset: -15%; background-size: cover; background-position: center;`
+           + ` transform: translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
+           + ` filter: brightness(${bgImageConfig.brightness}%);`;
+      }
     }
     target.setAttribute('style', s);
   }
@@ -817,17 +821,12 @@ function buildDragScript(displayScale: number): string {
       el.style.bottom='';
       isAbs=true;
     }
-    // For .bg elements, use background-position pan instead of moving
+    // For .bg elements, pan background-position by dragging
     if(found.sel==='.bg'||el.classList.contains('bg')||el.classList.contains('slide-bg')){
-      var bgPos=el.style.backgroundPosition||'50% 50%';
-      var bgParts=bgPos.split(/\\s+/);
-      var bgX=parseFloat(bgParts[0])||50;
-      var bgY=parseFloat(bgParts[1])||50;
-      // Expand the element for more pan room
-      el.style.inset='-30%';
-      el.style.width='160%';
-      el.style.height='160%';
-      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'bgpan',startX:cx,startY:cy,origBgX:bgX,origBgY:bgY};
+      var bgPos=window.getComputedStyle(el).backgroundPosition||'50% 50%';
+      // Convert to px offsets from current computed position
+      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'bgpan',startX:cx,startY:cy,
+        origBgPos:bgPos,startBgX:0,startBgY:0};
       dragMoved=false;
       window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
       return true;
@@ -881,8 +880,11 @@ function buildDragScript(displayScale: number): string {
     var dy=cy-dragging.startY;
     if(Math.abs(dx)>2||Math.abs(dy)>2) dragMoved=true;
     if(dragging.mode==='bgpan'){
-      // Pan: move background via transform translate (more freedom than background-position)
-      dragging.el.style.transform='translate('+dx+'px,'+dy+'px)';
+      // Pan background-position with calc() offset from original position
+      var origPos=dragging.origBgPos||'50% 50%';
+      var parts=origPos.trim().split(/\\s+/);
+      var origX=parts[0]||'50%', origY=parts[1]||'50%';
+      dragging.el.style.backgroundPosition='calc('+origX+' + '+dx+'px) calc('+origY+' + '+dy+'px)';
       return;
     }
     if(dragging.mode==='abs'){
@@ -911,7 +913,7 @@ function buildDragScript(displayScale: number): string {
       var ctIdx=dragging.el.getAttribute('data-ct-idx');
       var payload={type:'elementMoved',selector:dragging.sel,elemIdx:dragging.elemIdx,mode:dragging.mode,ctIdx:ctIdx};
       if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
-      else if(dragging.mode==='bgpan'){payload.transform=dragging.el.style.transform;payload.mode='translate';}
+      else if(dragging.mode==='bgpan'){payload.bgPosition=dragging.el.style.backgroundPosition;payload.mode='bgpan';}
       else{payload.transform=dragging.el.style.transform;}
       window.parent.postMessage(payload,'*');
     }
@@ -1946,8 +1948,17 @@ export default function CarouselEditor({
     });
   }, [selectedIndex]);
 
-  const handleElementMoved = useCallback((data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null }) => {
+  const handleElementMoved = useCallback((data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null; width?: string; height?: string; bgPosition?: string }) => {
     if (selectedIndex === null) return;
+
+    // Background pan: salva background-position no bgImageConfigs
+    if (data.mode === 'bgpan' && data.bgPosition) {
+      setBgImageConfigs(prev => ({
+        ...prev,
+        [selectedIndex]: { ...(prev[selectedIndex] ?? { position: '50% 50%', brightness: 100 }), position: data.bgPosition! },
+      }));
+      return;
+    }
 
     // Blocos custom-text NOVOS (injetados) identificam-se por data-ct-idx
     // Salva posição em DOIS lugares para máxima resiliência:
