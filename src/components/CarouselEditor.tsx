@@ -56,9 +56,11 @@ interface OverlayConfig {
 }
 
 interface BgImageConfig {
-  position: string;   // CSS background-position, ex: 'center top'
-  brightness: number; // 0–200, padrão 100
-  scale?: number;     // 1.0 = 100% (cover exato), >1.0 = zoom in para panning livre
+  position: string;    // CSS background-position para sliders (X% Y%), ex: '50% 30%'
+  brightness: number;  // 0–200, padrão 100
+  scale?: number;      // 1.0 = 100% (cover exato), >1.0 = zoom extra
+  dragOffsetX?: number; // px offset do drag (translate horizontal)
+  dragOffsetY?: number; // px offset do drag (translate vertical)
 }
 
 interface FollowBannerConfig {
@@ -453,10 +455,8 @@ function rebuildSlideOuterHtml(
         : `${s} background-image: url('${newBgUrl}');`;
     }
     if (bgImageConfig) {
-      const pos = bgImageConfig.position.trim();
-      const isDragPos = pos.includes('calc(');
-
       // Parse X/Y position values (slider gives 0-100, 50 = center)
+      const pos = bgImageConfig.position.trim();
       const posParts = pos.split(/\s+/);
       const posX = parseFloat(posParts[0]) || 50;
       const posY = parseFloat(posParts[1] ?? posParts[0]) || 50;
@@ -469,9 +469,16 @@ function rebuildSlideOuterHtml(
       s = s.replace(/background-size\s*:\s*[^;]+;?/i, '').trim();
       s = s.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?/i, '').trim();
 
-      if (isDragPos) {
-        // Drag mode: position uses calc() values — apply directly
-        s += `; inset: 0; background-size: cover; background-position: ${pos};`
+      const dragX = bgImageConfig.dragOffsetX ?? 0;
+      const dragY = bgImageConfig.dragOffsetY ?? 0;
+      const hasDrag = dragX !== 0 || dragY !== 0;
+
+      if (hasDrag) {
+        // Drag mode: translate físico, sem clamp, funciona para qualquer aspecto de imagem.
+        // Scale extra (zoom) é aplicado junto quando definido — translate está em px pré-scale.
+        const scaleStr = scale > 1.005 ? `scale(${scale.toFixed(3)}) ` : '';
+        s += `; inset: 0; background-size: cover; background-position: center;`
+           + ` transform: ${scaleStr}translate(${dragX.toFixed(1)}px, ${dragY.toFixed(1)}px);`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
       } else if (scale > 1.005) {
         // Zoom extra: scale()+translate() para panning livre
@@ -828,12 +835,14 @@ function buildDragScript(displayScale: number): string {
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
-    // For .bg elements, pan background-position by dragging
+    // For .bg elements, pan via transform:translate — works for any image aspect ratio
     if(found.sel==='.bg'||el.classList.contains('bg')||el.classList.contains('slide-bg')){
-      var bgPos=window.getComputedStyle(el).backgroundPosition||'50% 50%';
-      // Convert to px offsets from current computed position
-      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'bgpan',startX:cx,startY:cy,
-        origBgPos:bgPos,startBgX:0,startBgY:0};
+      // Extract current translate offset (if already dragged before)
+      var curTr=el.style.transform||'';
+      var trMatch=curTr.match(/translate\s*\(\s*([-\d.]+)px\s*,\s*([-\d.]+)px\s*\)/);
+      var origTx=trMatch?parseFloat(trMatch[1]):0;
+      var origTy=trMatch?parseFloat(trMatch[2]):0;
+      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'bgpan',startX:cx,startY:cy,origTx:origTx,origTy:origTy};
       dragMoved=false;
       window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
       return true;
@@ -887,11 +896,11 @@ function buildDragScript(displayScale: number): string {
     var dy=cy-dragging.startY;
     if(Math.abs(dx)>2||Math.abs(dy)>2) dragMoved=true;
     if(dragging.mode==='bgpan'){
-      // Pan background-position with calc() offset from original position
-      var origPos=dragging.origBgPos||'50% 50%';
-      var parts=origPos.trim().split(/\\s+/);
-      var origX=parts[0]||'50%', origY=parts[1]||'50%';
-      dragging.el.style.backgroundPosition='calc('+origX+' + '+dx+'px) calc('+origY+' + '+dy+'px)';
+      // Pan via transform:translate — no browser clamping, works for any image aspect ratio
+      var nx=dragging.origTx+dx, ny=dragging.origTy+dy;
+      // Preserve any existing scale() in the transform, replace only the translate part
+      var baseTr=(dragging.el.style.transform||'').replace(/translate\s*\([^)]*\)/g,'').replace(/translate3d\s*\([^)]*\)/g,'').trim();
+      dragging.el.style.transform=(baseTr+' translate('+nx+'px,'+ny+'px)').trim();
       return;
     }
     if(dragging.mode==='abs'){
@@ -920,7 +929,14 @@ function buildDragScript(displayScale: number): string {
       var ctIdx=dragging.el.getAttribute('data-ct-idx');
       var payload={type:'elementMoved',selector:dragging.sel,elemIdx:dragging.elemIdx,mode:dragging.mode,ctIdx:ctIdx};
       if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
-      else if(dragging.mode==='bgpan'){payload.bgPosition=dragging.el.style.backgroundPosition;payload.mode='bgpan';}
+      else if(dragging.mode==='bgpan'){
+        // Extract final translate offset
+        var finalTr=dragging.el.style.transform||'';
+        var finalMatch=finalTr.match(/translate\s*\(\s*([-\d.]+)px\s*,\s*([-\d.]+)px\s*\)/);
+        payload.bgTranslateX=finalMatch?parseFloat(finalMatch[1]):0;
+        payload.bgTranslateY=finalMatch?parseFloat(finalMatch[2]):0;
+        payload.mode='bgpan';
+      }
       else{payload.transform=dragging.el.style.transform;}
       window.parent.postMessage(payload,'*');
     }
@@ -1958,12 +1974,14 @@ export default function CarouselEditor({
   const handleElementMoved = useCallback((data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null; width?: string; height?: string; bgPosition?: string }) => {
     if (selectedIndex === null) return;
 
-    // Background pan: salva background-position no bgImageConfigs
-    if (data.mode === 'bgpan' && data.bgPosition) {
-      setBgImageConfigs(prev => ({
-        ...prev,
-        [selectedIndex]: { ...(prev[selectedIndex] ?? { position: '50% 50%', brightness: 100 }), position: data.bgPosition! },
-      }));
+    // Background pan: salva translate offset do drag
+    if (data.mode === 'bgpan') {
+      const dx = (data as any).bgTranslateX ?? 0;
+      const dy = (data as any).bgTranslateY ?? 0;
+      setBgImageConfigs(prev => {
+        const cur = prev[selectedIndex] ?? { position: '50% 50%', brightness: 100 };
+        return { ...prev, [selectedIndex]: { ...cur, dragOffsetX: dx, dragOffsetY: dy } };
+      });
       return;
     }
 
@@ -2924,7 +2942,11 @@ export default function CarouselEditor({
                         {selBg && (() => {
                           const bgCfg: BgImageConfig = bgImageConfigs[selectedIndex] ?? { position: 'center center', brightness: 100 };
                           const setBg = (patch: Partial<BgImageConfig>) =>
-                            setBgImageConfigs(prev => ({ ...prev, [selectedIndex]: { ...bgCfg, ...patch } }));
+                            // Quando slider de posição muda, zera o drag offset para não conflitar
+                            setBgImageConfigs(prev => ({
+                              ...prev,
+                              [selectedIndex]: { ...bgCfg, dragOffsetX: 0, dragOffsetY: 0, ...patch },
+                            }));
 
                           // Converte posição CSS para X/Y em %
                           const keywordToNum = (k: string) =>
