@@ -136,9 +136,14 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
       const topOp01   = cfg.topOpacity ?? 0;
       const soft01    = (cfg.softness  ?? 0) / 100;
       const midLt01   = (cfg.midLight  ?? 0) / 100;
-      // curveExp: 0→exponent=3 (t³,12%), 50→exponent=2 (t²,25%), 100→exponent=1 (t¹,50%)
-      const curveExp01 = (cfg.curveExp ?? 50) / 100;
-      const exponent   = 3 - 2 * curveExp01;   // 3.0 … 1.0
+      // curveExp 0–100 = % de opacidade no ponto médio da faixa de transição
+      //   0  → ponto médio transparente (curva muito suave, ex: t^6)
+      //  25  → ponto médio com 25% (≈ t², comportamento anterior padrão)
+      //  50  → ponto médio com 50% (curva linear)
+      //  99  → ponto médio com 99% (escuro desde o início da faixa, mantém gradiente suave)
+      // Deriva o expoente via log: 0.5^n = fração → n = log(fração)/log(0.5)
+      const midFrac  = Math.max(0.5, Math.min(99.5, cfg.curveExp ?? 25)) / 100;
+      const exponent = Math.log(midFrac) / Math.log(0.5);  // ex: 0.25→2, 0.5→1, 0.99→0.015
       // halfPage: gradiente só na metade inferior → força startAt ≥ 50
       const effectiveStart = cfg.halfPage ? Math.max(startAt, 50) : startAt;
 
@@ -3384,25 +3389,22 @@ export default function CarouselEditor({
                               </div>
                             )}
 
-                            {/* Escurecimento no meio (curveExp) — só para 'to bottom' */}
-                            {ov.direction === 'to bottom' && (() => {
-                              const midPct = Math.round(Math.pow(0.5, 3 - 2 * ((ov.curveExp ?? 50) / 100)) * 100);
-                              return (
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-[11px] text-muted-foreground">Escurecimento no meio</label>
-                                    <span className="text-[11px] font-mono text-muted-foreground">~{midPct}%</span>
-                                  </div>
-                                  <input type="range" min={0} max={100} step={5} value={ov.curveExp ?? 50}
-                                    onChange={e => setOv({ curveExp: Number(e.target.value) })}
-                                    className="w-full accent-purple-500"
-                                  />
-                                  <div className="flex justify-between text-[10px] text-muted-foreground/50">
-                                    <span>Suave (12%)</span><span>Forte (50%)</span>
-                                  </div>
+                            {/* Escurecimento da faixa (curveExp) — só para 'to bottom' */}
+                            {ov.direction === 'to bottom' && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">Escurecimento da faixa</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{ov.curveExp ?? 25}%</span>
                                 </div>
-                              );
-                            })()}
+                                <input type="range" min={0} max={99} step={1} value={ov.curveExp ?? 25}
+                                  onChange={e => setOv({ curveExp: Number(e.target.value) })}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Claro (0%)</span><span>Escuro (99%)</span>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Suavidade da transição (só para 'to bottom') */}
                             {ov.direction === 'to bottom' && (
