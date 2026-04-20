@@ -473,20 +473,16 @@ function rebuildSlideOuterHtml(
         // Drag mode: position uses calc() values — apply directly
         s += `; inset: 0; background-size: cover; background-position: ${pos};`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
-      } else if (scale > 1.005) {
-        // Zoom > 100%: scale()+translate() — panning works for ANY image aspect ratio.
-        // scale(S) makes the element S× bigger; translate() pans within the (S-1)/2 excess.
-        // maxT = (S-1)/(2×S) × 100 ensures slider extreme reaches exactly the clip edge.
-        const maxT = ((scale - 1) / (2 * scale)) * 100;
+      } else {
+        // Slider mode: always apply a minimum 15% scale so panning works for ANY
+        // image aspect ratio without gaps — 1.15 is barely perceptible on a full-slide bg.
+        // User-set zoom (scale) is honored if larger.
+        const effectiveScale = Math.max(scale, 1.15);
+        const maxT = ((effectiveScale - 1) / (2 * effectiveScale)) * 100;
         const tx = ((50 - posX) / 50) * maxT;
         const ty = ((50 - posY) / 50) * maxT;
         s += `; inset: 0; background-size: cover; background-position: center;`
-           + ` transform: scale(${scale.toFixed(3)}) translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
-           + ` filter: brightness(${bgImageConfig.brightness}%);`;
-      } else {
-        // Zoom 100%, slider mode: use background-position directly.
-        // Works for images with natural excess (e.g. landscape in portrait container).
-        s += `; inset: 0; background-size: cover; background-position: ${posX}% ${posY}%;`
+           + ` transform: scale(${effectiveScale.toFixed(3)}) translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%);`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
       }
     }
@@ -1318,7 +1314,7 @@ export default function CarouselEditor({
   // ── Blocos e seções colapsáveis ───────────────────────────────────────────────
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    texts: true, image: true, banner: true, gradient: true,
+    texts: true, image: true, banner: true, gradient: true, crop: true,
   });
   function toggleSection(key: string) {
     setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -2859,7 +2855,7 @@ export default function CarouselEditor({
                           </button>
                         )}
 
-                        {/* Corte da imagem (clip-path) — inline images e fundo */}
+                        {/* Corte da imagem (clip-path) — inline images e fundo — colapsável */}
                         {selectedIndex !== null && (() => {
                           const overrideKey = typeof imgTarget === 'number' ? `img@${imgTarget}` : '.bg@0';
                           const clip = elementOverrides[selectedIndex]?.[overrideKey] ?? {};
@@ -2874,37 +2870,49 @@ export default function CarouselEditor({
                           };
                           const hasClip = (clip.clipTop || 0) + (clip.clipRight || 0) + (clip.clipBottom || 0) + (clip.clipLeft || 0) > 0;
                           return (
-                            <div className="space-y-2 pt-2 border-t border-border">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                Corte da imagem {imgTarget === 'bg' ? '(fundo)' : ''}
-                              </p>
-                              {[
-                                { key: 'clipTop' as const, label: 'Corte topo' },
-                                { key: 'clipBottom' as const, label: 'Corte base' },
-                                { key: 'clipLeft' as const, label: 'Corte esquerda' },
-                                { key: 'clipRight' as const, label: 'Corte direita' },
-                              ].map(({ key, label }) => (
-                                <div key={key} className="space-y-0.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[11px] text-muted-foreground">{label}</span>
-                                    <span className="text-[11px] font-mono text-muted-foreground">{clip[key] || 0}%</span>
-                                  </div>
-                                  <input
-                                    type="range" min={0} max={45} step={1}
-                                    value={clip[key] || 0}
-                                    onChange={e => setClip(key, Number(e.target.value))}
-                                    className="w-full accent-purple-500"
-                                  />
+                            <div className="pt-2 border-t border-border">
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-1.5 mb-2 text-left"
+                                onClick={() => toggleSection('crop')}
+                              >
+                                <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['crop'] ? '-rotate-90' : 'rotate-0'}`} />
+                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                                  Corte da imagem {imgTarget === 'bg' ? '(fundo)' : ''}
+                                  {hasClip && <span className="ml-1 px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 text-[10px] font-bold">ativo</span>}
+                                </span>
+                              </button>
+                              {!collapsedSections['crop'] && (
+                                <div className="space-y-2">
+                                  {[
+                                    { key: 'clipTop' as const, label: 'Corte topo' },
+                                    { key: 'clipBottom' as const, label: 'Corte base' },
+                                    { key: 'clipLeft' as const, label: 'Corte esquerda' },
+                                    { key: 'clipRight' as const, label: 'Corte direita' },
+                                  ].map(({ key, label }) => (
+                                    <div key={key} className="space-y-0.5">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[11px] text-muted-foreground">{label}</span>
+                                        <span className="text-[11px] font-mono text-muted-foreground">{clip[key] || 0}%</span>
+                                      </div>
+                                      <input
+                                        type="range" min={0} max={45} step={1}
+                                        value={clip[key] || 0}
+                                        onChange={e => setClip(key, Number(e.target.value))}
+                                        className="w-full accent-purple-500"
+                                      />
+                                    </div>
+                                  ))}
+                                  {hasClip && (
+                                    <button
+                                      onClick={() => setElementOverrides(prev => ({
+                                        ...prev,
+                                        [selectedIndex]: { ...(prev[selectedIndex] ?? {}), [overrideKey]: { ...(prev[selectedIndex]?.[overrideKey] ?? {}), clipTop: 0, clipRight: 0, clipBottom: 0, clipLeft: 0 } },
+                                      }))}
+                                      className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                                    >Remover corte</button>
+                                  )}
                                 </div>
-                              ))}
-                              {hasClip && (
-                                <button
-                                  onClick={() => setElementOverrides(prev => ({
-                                    ...prev,
-                                    [selectedIndex]: { ...(prev[selectedIndex] ?? {}), [overrideKey]: { ...(prev[selectedIndex]?.[overrideKey] ?? {}), clipTop: 0, clipRight: 0, clipBottom: 0, clipLeft: 0 } },
-                                  }))}
-                                  className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
-                                >Remover corte</button>
                               )}
                             </div>
                           );
@@ -2929,7 +2937,6 @@ export default function CarouselEditor({
                           const setPosXY = (x: number, y: number) => setBg({ position: `${x}% ${y}%` });
                           const scaleVal = bgCfg.scale ?? 1.0;
                           const scalePct = Math.round(scaleVal * 100);
-                          const panEnabled = scaleVal > 1.005;
 
                           return (
                             <div className="space-y-2 pt-2 border-t border-border">
@@ -2938,7 +2945,7 @@ export default function CarouselEditor({
                               {/* Zoom da imagem */}
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <label className="text-[11px] text-muted-foreground">🔍 Zoom</label>
+                                  <label className="text-[11px] text-muted-foreground">🔍 Zoom extra</label>
                                   <span className="text-[11px] font-mono text-muted-foreground">{scalePct}%</span>
                                 </div>
                                 <input type="range" min={100} max={200} step={5} value={scalePct}
@@ -2946,17 +2953,12 @@ export default function CarouselEditor({
                                   className="w-full accent-purple-500"
                                 />
                                 <div className="flex justify-between text-[10px] text-muted-foreground/50">
-                                  <span>100% (original)</span><span>200%</span>
+                                  <span>Normal</span><span>200%</span>
                                 </div>
-                                {!panEnabled && (
-                                  <p className="text-[10px] text-amber-400/80">
-                                    Aumente o zoom para mover a imagem livremente
-                                  </p>
-                                )}
                               </div>
 
                               {/* Slider X — horizontal */}
-                              <div className={`space-y-1 ${!panEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                              <div className="space-y-1">
                                 <div className="flex items-center justify-between">
                                   <label className="text-[11px] text-muted-foreground">← Horizontal →</label>
                                   <span className="text-[11px] font-mono text-muted-foreground">{posX}%</span>
@@ -2971,7 +2973,7 @@ export default function CarouselEditor({
                               </div>
 
                               {/* Slider Y — vertical */}
-                              <div className={`space-y-1 ${!panEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                              <div className="space-y-1">
                                 <div className="flex items-center justify-between">
                                   <label className="text-[11px] text-muted-foreground">↑ Vertical ↓</label>
                                   <span className="text-[11px] font-mono text-muted-foreground">{posY}%</span>
