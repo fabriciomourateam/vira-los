@@ -531,11 +531,14 @@ function rebuildSlideOuterHtml(
         targetNodes = Array.from(el.querySelectorAll(key)) as HTMLElement[];
       }
       for (const node of targetNodes) {
+        if (styles.transform !== undefined) {
+          const existing = (node.style.transform || '').replace(/translate\([^)]+\)/g, '').trim();
+          node.style.transform = (existing + ' ' + styles.transform).trim();
+        }
         if (styles.left  !== undefined) { node.style.left  = styles.left;  if (node.style.right)  node.style.right  = ''; }
         if (styles.top   !== undefined) { node.style.top   = styles.top;   if (node.style.bottom) node.style.bottom = ''; }
         if (styles.right  !== undefined) node.style.right  = styles.right;
         if (styles.bottom !== undefined) node.style.bottom = styles.bottom;
-        if (styles.transform !== undefined) node.style.transform = styles.transform;
         if (styles.width !== undefined) { node.style.width = styles.width; node.style.maxWidth = 'none'; }
         if (styles.height !== undefined) { node.style.height = styles.height; node.style.maxHeight = 'none'; }
         if (styles.clipTop !== undefined || styles.clipRight !== undefined || styles.clipBottom !== undefined || styles.clipLeft !== undefined) {
@@ -813,28 +816,9 @@ function buildDragScript(displayScale: number): string {
     var cs=window.getComputedStyle(el);
     if(selected&&selected!==el) highlight(selected,false);
     selected=el; highlight(el,true);
-    addHandles(el);
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
-    // For img/photo-card elements, make absolute if not already — preserve size
-    if(!isAbs&&(el.tagName==='IMG'||el.classList.contains('photo-card'))){
-      var curW=el.offsetWidth;
-      var curH=el.offsetHeight;
-      var curTop=el.offsetTop;
-      var curLeft=el.offsetLeft;
-      el.style.position='absolute';
-      el.style.width=curW+'px';
-      el.style.height=curH+'px';
-      el.style.maxWidth='none';
-      el.style.maxHeight='none';
-      el.style.top=curTop+'px';
-      el.style.left=curLeft+'px';
-      el.style.right='';
-      el.style.bottom='';
-      el.style.margin='0';
-      isAbs=true;
-    }
     // For .bg elements, pan background-position by dragging
     if(found.sel==='.bg'||el.classList.contains('bg')||el.classList.contains('slide-bg')){
       var bgPos=window.getComputedStyle(el).backgroundPosition||'50% 50%';
