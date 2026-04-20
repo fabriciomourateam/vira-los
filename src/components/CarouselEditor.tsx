@@ -53,8 +53,9 @@ interface OverlayConfig {
   color: string;         // ex: '0,0,0' ou '80,0,120'
   startAt?: number;      // 0–100% — onde o gradiente começa (só para 'to bottom')
   topOpacity?: number;   // 0–1 — opacidade no topo (default 0 = transparente)
-  softness?: number;     // 0–100: 0 = abrupto (15% band), 100 = suave (transição contínua)
+  softness?: number;     // 0–100: blend entre curva e linear (0=curva pura, 100=linear)
   midLight?: number;     // 0–100: quanto a faixa do MEIO é mais clara (0=escuro igual fim, 100=transparente)
+  curveExp?: number;     // 0–100: 0=t³(12% no meio), 50=t²(25%), 100=t¹(50%) — controla intensidade da curva
 }
 
 interface BgImageConfig {
@@ -118,8 +119,11 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
       //   0  → curva monotônica (sem dip)
       //   95 → ponto médio quase transparente antes de escurecer no rodapé
       const topOp01   = cfg.topOpacity ?? 0;
-      const soft01    = (cfg.softness ?? 0) / 100;
+      const soft01    = (cfg.softness  ?? 0) / 100;
       const midLt01   = (cfg.midLight  ?? 0) / 100;
+      // curveExp: 0→exponent=3 (t³,12%), 50→exponent=2 (t²,25%), 100→exponent=1 (t¹,50%)
+      const curveExp01 = (cfg.curveExp ?? 50) / 100;
+      const exponent   = 3 - 2 * curveExp01;   // 3.0 … 1.0
 
       const STOPS = 16;
       const stops: string[] = [];
@@ -135,14 +139,12 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
           // t2 = progresso 0→1 dentro da faixa de transição (startAt → 100%)
           const t2 = (pct - startAt) / (100 - startAt);
 
-          // Curva de aceleração: blend entre t² (ease-in quadrático, soft=0) e t (linear, soft=1)
-          // t² é mais intenso que t³ no meio da faixa (25% vs 12.5% na metade)
-          // mantendo a derivada inicial suave (sem aresta no ponto de início)
-          const smooth = (1 - soft01) * t2 * t2 + soft01 * t2;
+          // Curva potencial controlada por curveExp; blend com linear via softness
+          const curve  = Math.pow(t2, exponent);
+          const smooth = (1 - soft01) * curve + soft01 * t2;
 
           // Efeito midLight: curva em sino (4t²(1-t)²) cria "dip" no meio
-          // É proporcional a quanto o smooth cresceu naquele ponto
-          const bell  = 4 * t2 * t2 * (1 - t2) * (1 - t2);
+          const bell    = 4 * t2 * t2 * (1 - t2) * (1 - t2);
           const combined = Math.max(0, smooth * (1 - midLt01 * bell));
 
           op = topOp01 + (opacity - topOp01) * combined;
@@ -3349,6 +3351,26 @@ export default function CarouselEditor({
                                 </div>
                               </div>
                             )}
+
+                            {/* Escurecimento no meio (curveExp) — só para 'to bottom' */}
+                            {ov.direction === 'to bottom' && (() => {
+                              const midPct = Math.round(Math.pow(0.5, 3 - 2 * ((ov.curveExp ?? 50) / 100)) * 100);
+                              return (
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[11px] text-muted-foreground">Escurecimento no meio</label>
+                                    <span className="text-[11px] font-mono text-muted-foreground">~{midPct}%</span>
+                                  </div>
+                                  <input type="range" min={0} max={100} step={5} value={ov.curveExp ?? 50}
+                                    onChange={e => setOv({ curveExp: Number(e.target.value) })}
+                                    className="w-full accent-purple-500"
+                                  />
+                                  <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                    <span>Suave (12%)</span><span>Forte (50%)</span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
                             {/* Suavidade da transição (só para 'to bottom') */}
                             {ov.direction === 'to bottom' && (
