@@ -2297,73 +2297,73 @@ export default function CarouselEditor({
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
       {/* ── Cabeçalho ── */}
-      <div className="px-3 sm:px-5 py-3 border-b border-border space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Edit3 className="w-4 h-4 text-purple-500" />
-            <span className="text-sm font-bold">Editor de Carrossel</span>
-            <span className="text-xs text-muted-foreground">{slides.length} slides</span>
+      <div className="px-3 sm:px-4 py-2.5 border-b border-border">
+        {/* Linha 1: Título + Undo/Redo + Salvar */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Edit3 className="w-4 h-4 text-purple-500 shrink-0" />
+            <span className="text-sm font-bold truncate">{slides.length} slides</span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={() => { if(canUndo){const e=new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true});window.dispatchEvent(e);}}} disabled={!canUndo}
+              title="Desfazer" className="p-1.5 rounded-lg bg-secondary hover:bg-border disabled:opacity-30 transition-colors">
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => { if(canRedo){const e=new KeyboardEvent('keydown',{key:'y',ctrlKey:true,bubbles:true});window.dispatchEvent(e);}}} disabled={!canRedo}
+              title="Refazer" className="p-1.5 rounded-lg bg-secondary hover:bg-border disabled:opacity-30 transition-colors">
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={handleSaveEdits} disabled={saveLoading}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors">
+              {saveLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+              Salvar
+            </button>
           </div>
         </div>
-        {/* Fonte global — altera todos os slides ao mesmo tempo */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap">Fonte global:</span>
+        {/* Linha 2: Fonte global */}
+        <div className="flex items-center gap-1.5 mt-2">
           <select
             value={globalFont}
             onChange={e => setGlobalFont(e.target.value)}
-            className="rounded-lg border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex-1 min-w-0"
+            className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex-1 min-w-0"
             style={globalFont ? { fontFamily: `'${globalFont}', sans-serif` } : {}}
           >
-            <option value="">— fonte original —</option>
+            <option value="">Fonte original</option>
             {FONT_OPTIONS.map(f => (
               <option key={f} value={f} style={{ fontFamily: `'${f}', sans-serif` }}>{f}</option>
             ))}
           </select>
           {globalFont && (
-            <button onClick={() => setGlobalFont('')} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Restaurar fonte original">✕</button>
+            <button onClick={() => setGlobalFont('')} className="text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Restaurar fonte">
+              <X className="w-3 h-3" />
+            </button>
           )}
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <button onClick={() => { if(canUndo){const e=new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true});window.dispatchEvent(e);}}} disabled={!canUndo}
-            title="Desfazer (Ctrl+Z)"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border disabled:opacity-40 text-foreground text-xs font-semibold transition-colors">
-            <Undo2 className="w-3 h-3" />
-          </button>
-          <button onClick={() => { if(canRedo){const e=new KeyboardEvent('keydown',{key:'y',ctrlKey:true,bubbles:true});window.dispatchEvent(e);}}} disabled={!canRedo}
-            title="Refazer (Ctrl+Y)"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border disabled:opacity-40 text-foreground text-xs font-semibold transition-colors">
-            <Redo2 className="w-3 h-3" />
-          </button>
-          <button onClick={handleSaveEdits} disabled={saveLoading}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors"
-            title="Salvar edições no servidor">
-            {saveLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-            Salvar
-          </button>
-          <button onClick={handleDownloadHtml}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-border active:bg-border text-foreground text-xs font-semibold transition-colors">
-            <Download className="w-3 h-3" /> HTML
-          </button>
-          <button onClick={handleRegenerateScreenshots} disabled={screenshotLoading}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 active:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors">
-            {screenshotLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-            PNGs
-          </button>
-          <button onClick={handleDownloadJpegs} disabled={screenshotLoading}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors"
-            title="Gera screenshots e baixa como JPEG">
-            <Download className="w-3 h-3" /> JPEGs
-          </button>
-          <div className="flex items-center gap-1.5 w-full sm:w-auto mt-1 sm:mt-0">
-            <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)}
-              placeholder="Nome do modelo…"
-              className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/50 flex-1 sm:w-32 sm:flex-none" />
-            <button onClick={handleSaveTemplate} disabled={templateLoading}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors shrink-0">
-              {templateLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <BookmarkPlus className="w-3 h-3" />}
-              Salvar Modelo
+          {/* Ações secundárias */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={handleDownloadHtml} title="Baixar HTML"
+              className="p-1.5 rounded-lg bg-secondary hover:bg-border transition-colors">
+              <Download className="w-3 h-3" />
+            </button>
+            <button onClick={handleRegenerateScreenshots} disabled={screenshotLoading} title="Gerar PNGs"
+              className="p-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white transition-colors">
+              {screenshotLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+            </button>
+            <button onClick={handleDownloadJpegs} disabled={screenshotLoading} title="Baixar JPEGs"
+              className="p-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white transition-colors">
+              <Download className="w-3 h-3" />
             </button>
           </div>
+        </div>
+        {/* Linha 3: Salvar modelo */}
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)}
+            placeholder="Nome do modelo…"
+            className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex-1 min-w-0" />
+          <button onClick={handleSaveTemplate} disabled={templateLoading}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors shrink-0">
+            {templateLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <BookmarkPlus className="w-3 h-3" />}
+            Modelo
+          </button>
         </div>
       </div>
 
