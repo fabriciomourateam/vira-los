@@ -755,7 +755,9 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       page-break-after: always;
     }
     .clean-split .split-photos {
-      display: flex; flex: 1 1 auto; gap: 0; overflow: hidden;
+      /* Altura fixa: 840 px = 62% do slide (1350 px).
+         flex-shrink:0 impede que o conteúdo de baixo comprima as fotos. */
+      display: flex; height: 840px; flex-shrink: 0; gap: 0; overflow: hidden;
     }
     .clean-split .split-panel {
       flex: 1; position: relative; overflow: hidden;
@@ -781,8 +783,10 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       z-index: 2;
     }
     .clean-split .split-content {
-      padding: 44px 64px 110px; background: #0f0f0f;
-      display: flex; flex-direction: column; gap: 16px; flex-shrink: 0;
+      /* Ocupa os 510 px restantes (1350 - 840) */
+      flex: 1; overflow: hidden;
+      padding: 32px 64px 100px; background: #0f0f0f;
+      display: flex; flex-direction: column; gap: 12px;
     }
     .clean-split .split-eyebrow {
       font-size: 24px; font-weight: 700; letter-spacing: 3px;
