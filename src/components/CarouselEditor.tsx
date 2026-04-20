@@ -54,6 +54,7 @@ interface OverlayConfig {
   startAt?: number;      // 0–100% — onde o gradiente começa (só para 'to bottom')
   topOpacity?: number;   // 0–1 — opacidade no topo (default 0 = transparente)
   softness?: number;     // 0–100: 0 = abrupto (15% band), 100 = suave (transição contínua)
+  midLight?: number;     // 0–100: quanto a faixa do MEIO é mais clara (0=escuro igual fim, 100=transparente)
 }
 
 interface BgImageConfig {
@@ -106,22 +107,21 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
     case 'radial':    return `radial-gradient(ellipse at center, rgba(${c},${(opacity*0.1).toFixed(2)}) 0%, rgba(${c},${hi}) 100%)`;
     case 'none':      return 'rgba(0,0,0,0)';
     default: {
-      // Gradiente 'to bottom' com suavidade ajustável
-      // softness=0 → banda estreita (15%) = abrupto estilo Leo Baltazar
-      // softness=100 → transição contínua do startAt até 100%
-      const topOp = (cfg.topOpacity ?? 0).toFixed(2);
-      const softness = cfg.softness ?? 0;
+      // Gradiente 'to bottom' com suavidade e claridade do meio ajustáveis
+      // softness: largura da faixa de transição (0=estreita/abrupto, 100=larga/suave)
+      // midLight: quão claro é o ponto médio da transição (0=igual ao fim, 100=transparente)
+      const topOp  = (cfg.topOpacity ?? 0).toFixed(2);
+      const soft   = cfg.softness ?? 0;
+      const midLt  = cfg.midLight  ?? 0;   // 0 = comportamento atual, >0 = meio mais claro
       const maxBand = Math.max(20, 100 - startAt);
-      const band = Math.round(15 + (softness / 100) * (maxBand - 15));
+      const band = Math.round(15 + (soft / 100) * (maxBand - 15));
       const transitionEnd = Math.min(98, startAt + band);
-      const midOpacity = (opacity * 0.93).toFixed(2);
-      // Para gradiente suave, adiciona ponto intermediário para curva mais elegante
-      if (softness > 30) {
-        const midPoint = Math.round(startAt + band * 0.45);
-        const midOp2 = (opacity * 0.45).toFixed(2);
-        return `linear-gradient(to bottom, rgba(${c},${topOp}) 0%, rgba(${c},${topOp}) ${startAt}%, rgba(${c},${midOp2}) ${midPoint}%, rgba(${c},${midOpacity}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
-      }
-      return `linear-gradient(to bottom, rgba(${c},${topOp}) 0%, rgba(${c},${topOp}) ${startAt}%, rgba(${c},${midOpacity}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
+      const midPoint = Math.round(startAt + band * 0.45);
+      // midOp: opacidade no ponto médio — quanto maior midLight, mais transparente
+      const midOp = (opacity * (1 - midLt / 100)).toFixed(2);
+      const nearEnd = (opacity * 0.93).toFixed(2);
+      // Sempre usa 5 stops para controle preciso da curva
+      return `linear-gradient(to bottom, rgba(${c},${topOp}) 0%, rgba(${c},${topOp}) ${startAt}%, rgba(${c},${midOp}) ${midPoint}%, rgba(${c},${nearEnd}) ${transitionEnd}%, rgba(${c},${hi}) 100%)`;
     }
   }
 }
@@ -3325,6 +3325,23 @@ export default function CarouselEditor({
                                 />
                                 <div className="flex justify-between text-[10px] text-muted-foreground/50">
                                   <span>Abrupto</span><span>Contínuo</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Claridade do meio (só para 'to bottom') */}
+                            {ov.direction === 'to bottom' && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] text-muted-foreground">Claridade do meio</label>
+                                  <span className="text-[11px] font-mono text-muted-foreground">{ov.midLight ?? 0}%</span>
+                                </div>
+                                <input type="range" min={0} max={95} step={5} value={ov.midLight ?? 0}
+                                  onChange={e => setOv({ midLight: Number(e.target.value) })}
+                                  className="w-full accent-purple-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                  <span>Escuro</span><span>Claro</span>
                                 </div>
                               </div>
                             )}
