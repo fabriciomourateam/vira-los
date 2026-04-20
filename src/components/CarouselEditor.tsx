@@ -41,6 +41,10 @@ interface ElementOverride {
   width?: string;
   height?: string;
   transform?: string;
+  clipTop?: number;
+  clipRight?: number;
+  clipBottom?: number;
+  clipLeft?: number;
 }
 
 interface OverlayConfig {
@@ -530,6 +534,9 @@ function rebuildSlideOuterHtml(
         if (styles.transform !== undefined) node.style.transform = styles.transform;
         if (styles.width !== undefined) { node.style.width = styles.width; node.style.maxWidth = 'none'; }
         if (styles.height !== undefined) { node.style.height = styles.height; node.style.maxHeight = 'none'; }
+        if (styles.clipTop !== undefined || styles.clipRight !== undefined || styles.clipBottom !== undefined || styles.clipLeft !== undefined) {
+          node.style.clipPath = `inset(${styles.clipTop || 0}% ${styles.clipRight || 0}% ${styles.clipBottom || 0}% ${styles.clipLeft || 0}%)`;
+        }
       }
     }
   }
@@ -2800,6 +2807,55 @@ export default function CarouselEditor({
                             Remover imagem
                           </button>
                         )}
+
+                        {/* Corte da imagem (clip-path) */}
+                        {typeof imgTarget === 'number' && selectedIndex !== null && (() => {
+                          const overrideKey = `img@${imgTarget}`;
+                          const clip = elementOverrides[selectedIndex]?.[overrideKey] ?? {};
+                          const setClip = (side: 'clipTop' | 'clipRight' | 'clipBottom' | 'clipLeft', val: number) => {
+                            setElementOverrides(prev => ({
+                              ...prev,
+                              [selectedIndex]: {
+                                ...(prev[selectedIndex] ?? {}),
+                                [overrideKey]: { ...(prev[selectedIndex]?.[overrideKey] ?? {}), [side]: val },
+                              },
+                            }));
+                          };
+                          const hasClip = (clip.clipTop || 0) + (clip.clipRight || 0) + (clip.clipBottom || 0) + (clip.clipLeft || 0) > 0;
+                          return (
+                            <div className="space-y-2 pt-2 border-t border-border">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Corte da imagem</p>
+                              {[
+                                { key: 'clipTop' as const, label: 'Corte topo' },
+                                { key: 'clipBottom' as const, label: 'Corte base' },
+                                { key: 'clipLeft' as const, label: 'Corte esquerda' },
+                                { key: 'clipRight' as const, label: 'Corte direita' },
+                              ].map(({ key, label }) => (
+                                <div key={key} className="space-y-0.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] text-muted-foreground">{label}</span>
+                                    <span className="text-[11px] font-mono text-muted-foreground">{clip[key] || 0}%</span>
+                                  </div>
+                                  <input
+                                    type="range" min={0} max={45} step={1}
+                                    value={clip[key] || 0}
+                                    onChange={e => setClip(key, Number(e.target.value))}
+                                    className="w-full accent-purple-500"
+                                  />
+                                </div>
+                              ))}
+                              {hasClip && (
+                                <button
+                                  onClick={() => setElementOverrides(prev => ({
+                                    ...prev,
+                                    [selectedIndex]: { ...(prev[selectedIndex] ?? {}), [overrideKey]: { ...(prev[selectedIndex]?.[overrideKey] ?? {}), clipTop: 0, clipRight: 0, clipBottom: 0, clipLeft: 0 } },
+                                  }))}
+                                  className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                                >Remover corte</button>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Posicionamento da imagem */}
                         {selBg && (() => {
