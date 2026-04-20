@@ -135,9 +135,10 @@ function buildOverlayStyle(cfg: OverlayConfig): string {
           // t2 = progresso 0→1 dentro da faixa de transição (startAt → 100%)
           const t2 = (pct - startAt) / (100 - startAt);
 
-          // Curva de aceleração: blend entre t³ (ease-in, soft=0) e t (linear, soft=1)
-          // t³ começa quase zero → transição parte do ponto de início sem arestas
-          const smooth = (1 - soft01) * t2 * t2 * t2 + soft01 * t2;
+          // Curva de aceleração: blend entre t² (ease-in quadrático, soft=0) e t (linear, soft=1)
+          // t² é mais intenso que t³ no meio da faixa (25% vs 12.5% na metade)
+          // mantendo a derivada inicial suave (sem aresta no ponto de início)
+          const smooth = (1 - soft01) * t2 * t2 + soft01 * t2;
 
           // Efeito midLight: curva em sino (4t²(1-t)²) cria "dip" no meio
           // É proporcional a quanto o smooth cresceu naquele ponto
