@@ -1532,7 +1532,7 @@ export default function CarouselEditor({
         const el = doc.body.firstElementChild!;
         const imgs = Array.from(el.querySelectorAll('img')).filter(img => {
           const src = img.getAttribute('src') || '';
-          return src && !src.startsWith('data:');
+          return src && !src.includes('svg') && !src.includes('badge');
         });
         if (imgs[imgIdx]) imgs[imgIdx].setAttribute('src', url);
         return { ...s, outerHtml: el.outerHTML };
@@ -2639,7 +2639,7 @@ export default function CarouselEditor({
                           const el = doc.body.firstElementChild;
                           const inlineImgs = el ? Array.from(el.querySelectorAll('img'))
                             .map((img, i) => ({ idx: i, src: img.getAttribute('src') || '', label: img.closest('.photo-card') ? `Card ${i+1}` : img.closest('.top-photo-wrap') ? `Topo ${i+1}` : `Img ${i+1}` }))
-                            .filter(img => img.src && !img.src.startsWith('data:') && !img.src.includes('svg') && !img.src.includes('badge')) : [];
+                            .filter(img => img.src && !img.src.includes('svg') && !img.src.includes('badge')) : [];
                           if (inlineImgs.length === 0) return null;
                           return (
                             <div className="flex gap-1 flex-wrap">
