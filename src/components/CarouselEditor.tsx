@@ -502,8 +502,11 @@ function rebuildSlideOuterHtml(
         // For same-aspect images: browser clamps naturally (no movement, but no black either).
         // Zoom (scale) applied separately via transform when active.
         const scaleTransform = scale > 1.005 ? ` transform: scale(${scale.toFixed(3)});` : '';
+        // Use explicit sign operators — "calc(50% + -N)" can cause browser normalisation bugs
+        const bpx = dragX >= 0 ? `calc(50% + ${dragX.toFixed(1)}px)` : `calc(50% - ${(-dragX).toFixed(1)}px)`;
+        const bpy = dragY >= 0 ? `calc(50% + ${dragY.toFixed(1)}px)` : `calc(50% - ${(-dragY).toFixed(1)}px)`;
         s += `; inset: 0; background-size: cover;`
-           + ` background-position: calc(50% + ${dragX.toFixed(1)}px) calc(50% + ${dragY.toFixed(1)}px);`
+           + ` background-position: ${bpx} ${bpy};`
            + `${scaleTransform}`
            + ` filter: brightness(${bgImageConfig.brightness}%);`;
       } else if (scale > 1.005) {
@@ -883,12 +886,15 @@ function buildDragScript(displayScale: number): string {
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
     // For .bg elements, pan via background-position — no black bands for taller images
     if(found.sel==='.bg'||el.classList.contains('bg')||el.classList.contains('slide-bg')){
-      // Extract current background-position offset (if already panned before)
+      // Parse current background-position: handles "calc(50% + Npx)" AND "calc(50% - Npx)"
+      // (browser normalises calc(50% + -N) → calc(50% - N), so we need the [-] branch)
       var curBgPos=el.style.backgroundPosition||'';
-      var bgPosMatch=curBgPos.match(/calc\(50% \+ ([-\d.]+)px\)\s+calc\(50% \+ ([-\d.]+)px\)/);
-      var origTx=bgPosMatch?parseFloat(bgPosMatch[1]):0;
-      var origTy=bgPosMatch?parseFloat(bgPosMatch[2]):0;
-      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'bgpan',startX:cx,startY:cy,origTx:origTx,origTy:origTy};
+      var bgRx=/calc\(50% ([+\\-]) ([\\d.]+)px\)/g;
+      var bm, bgVals=[];
+      while((bm=bgRx.exec(curBgPos))!==null) bgVals.push((bm[1]==='-'?-1:1)*parseFloat(bm[2]));
+      var origTx=bgVals.length>=1?bgVals[0]:0;
+      var origTy=bgVals.length>=2?bgVals[1]:0;
+      dragging={el:el,sel:found.sel,elemIdx:elemIdx,mode:'bgpan',startX:cx,startY:cy,origTx:origTx,origTy:origTy,_curX:origTx,_curY:origTy};
       dragMoved=false;
       window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
       return true;
@@ -944,7 +950,11 @@ function buildDragScript(displayScale: number): string {
     if(dragging.mode==='bgpan'){
       // Pan via background-position — moves image within element, no black bands for taller images
       var nx=dragging.origTx+dx, ny=dragging.origTy+dy;
-      dragging.el.style.backgroundPosition='calc(50% + '+nx+'px) calc(50% + '+ny+'px)';
+      dragging._curX=nx; dragging._curY=ny;
+      // Use explicit sign operator to avoid browser normalising "calc(50% + -N)" → "calc(50% - N)"
+      var bpx=nx>=0?'calc(50% + '+nx.toFixed(1)+'px)':'calc(50% - '+(-nx).toFixed(1)+'px)';
+      var bpy=ny>=0?'calc(50% + '+ny.toFixed(1)+'px)':'calc(50% - '+(-ny).toFixed(1)+'px)';
+      dragging.el.style.backgroundPosition=bpx+' '+bpy;
       return;
     }
     if(dragging.mode==='abs'){
@@ -974,11 +984,9 @@ function buildDragScript(displayScale: number): string {
       var payload={type:'elementMoved',selector:dragging.sel,elemIdx:dragging.elemIdx,mode:dragging.mode,ctIdx:ctIdx};
       if(dragging.mode==='abs'){payload.left=dragging.el.style.left;payload.top=dragging.el.style.top;}
       else if(dragging.mode==='bgpan'){
-        // Extract final background-position offset
-        var finalBgPos=dragging.el.style.backgroundPosition||'';
-        var finalMatch=finalBgPos.match(/calc\(50% \+ ([-\d.]+)px\)\s+calc\(50% \+ ([-\d.]+)px\)/);
-        payload.bgTranslateX=finalMatch?parseFloat(finalMatch[1]):0;
-        payload.bgTranslateY=finalMatch?parseFloat(finalMatch[2]):0;
+        // Read final offset from dragging object (set during moveDrag) — avoids CSS parsing
+        payload.bgTranslateX=dragging._curX!==undefined?dragging._curX:0;
+        payload.bgTranslateY=dragging._curY!==undefined?dragging._curY:0;
         payload.mode='bgpan';
       }
       else{payload.transform=dragging.el.style.transform;}
