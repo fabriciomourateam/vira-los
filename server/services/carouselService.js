@@ -765,7 +765,8 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
     .clean-split .split-panel + .split-panel {
       border-left: 4px solid #0f0f0f;
     }
-    .clean-split .split-img {
+    .clean-split .split-img,
+    .clean-split .split-panel img {
       width: 100%; height: 100%; object-fit: cover; display: block;
     }
     .clean-split .split-label {

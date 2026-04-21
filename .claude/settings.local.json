@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"generate-caption\" /c/Users/fhbom/vira-los/server/routes/*.js)"
+    ]
+  }
+}

@@ -845,9 +845,10 @@ function buildDragScript(displayScale: number): string {
   function findEl(t){
     // Check resize handle first
     if(t.classList&&t.classList.contains('resize-handle')) return null;
-    // img.split-img — antes/depois panels: drag via object-position
-    if(t.tagName==='IMG'&&t.classList.contains('split-img')){
-      return {el:t,sel:'img.split-img'};
+    // img inside .split-panel — antes/depois panels: drag via object-position
+    // Match ANY img inside a .split-panel (don't rely on class="split-img" being present)
+    if(t.tagName==='IMG'&&t.closest&&t.closest('.split-panel')){
+      return {el:t,sel:'.split-panel img'};
     }
     // If clicking on .overlay / .slide-overlay, redirect to .bg
     if(t.classList&&(t.classList.contains('overlay')||t.classList.contains('slide-overlay'))){
@@ -900,25 +901,19 @@ function buildDragScript(displayScale: number): string {
   function addHandles(el){
     removeHandles();
     if(el.tagName!=='IMG'&&!el.classList.contains('photo-card')&&!el.classList.contains('top-photo-wrap')) return;
-    if(el.classList.contains('split-img')) return; // painel split — só arraste, sem resize
-    // Make sure element is positioned
-    var cs=window.getComputedStyle(el);
-    if(cs.position==='static'){
-      el.style.position='absolute';
-      el.style.top=el.offsetTop+'px';
-      el.style.left=el.offsetLeft+'px';
-    }
+    if(el.closest&&el.closest('.split-panel')) return; // painel split — só arraste, sem resize
+    // NEVER force position:absolute here — it pulls elements out of flex/grid containers
+    // and makes them appear zoomed. Elements that are already absolute keep their abs mode;
+    // static elements are moved via translate (handled in startDrag via isAbs check).
+    // Only ensure the parent is relative so handles position correctly.
     var parent=el.parentElement;
     if(parent&&window.getComputedStyle(parent).position==='static') parent.style.position='relative';
     ['br'].forEach(function(corner){
       var h=document.createElement('div');
       h.className='resize-handle '+corner;
       h.setAttribute('data-corner',corner);
-      el.style.position=el.style.position||'absolute';
       if(el.tagName==='IMG'){
-        // For img, wrap or position handle relative to img
-        var rect=el.getBoundingClientRect();
-        var pRect=el.offsetParent?el.offsetParent.getBoundingClientRect():{top:0,left:0};
+        // Position handle relative to img's offsetParent (img stays in flow)
         h.style.position='absolute';
         h.style.top=(el.offsetTop+el.offsetHeight-10)+'px';
         h.style.left=(el.offsetLeft+el.offsetWidth-10)+'px';
@@ -952,8 +947,9 @@ function buildDragScript(displayScale: number): string {
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
-    // img.split-img: pan via object-position (antes/depois panels)
-    if(el.tagName==='IMG'&&el.classList.contains('split-img')){
+    // img inside .split-panel: pan via object-position (antes/depois panels)
+    if(el.tagName==='IMG'&&el.closest&&el.closest('.split-panel')){
+      el.style.objectFit='cover'; // garante object-fit:cover mesmo sem a classe split-img
       var curObjPos=el.style.objectPosition||'';
       var opRx=/calc\\(50% ([+\\-]) ([\\d.]+)px\\)/g;
       var pm,opVals=[];
@@ -1852,7 +1848,7 @@ export default function CarouselEditor({
 
   // ── Posição de img.split-img via object-position ──────────────────────────────
 
-  /** Lê o offset calc(50% ± Npx) atual de um img.split-img no outerHtml */
+  /** Lê o offset calc(50% ± Npx) atual de uma img dentro de .split-panel no outerHtml */
   function getInlineImgOffset(slideIdx: number, imgIdx: number): { x: number; y: number } {
     const slide = slides[slideIdx];
     if (!slide) return { x: 0, y: 0 };
@@ -1860,7 +1856,8 @@ export default function CarouselEditor({
     const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
     const el = doc.body.firstElementChild;
     if (!el) return { x: 0, y: 0 };
-    const imgs = Array.from(el.querySelectorAll('img.split-img')) as HTMLElement[];
+    // Use .split-panel img to find split images regardless of whether split-img class is present
+    const imgs = Array.from(el.querySelectorAll('.split-panel img')) as HTMLElement[];
     const img = imgs[imgIdx];
     if (!img) return { x: 0, y: 0 };
     const style = img.getAttribute('style') || '';
@@ -1869,20 +1866,26 @@ export default function CarouselEditor({
     return { x: 0, y: 0 };
   }
 
-  /** Aplica object-position: calc(50% ± Xpx) calc(50% ± Ypx) a um img.split-img */
+  /** Aplica object-position: calc(50% ± Xpx) calc(50% ± Ypx) a img dentro de .split-panel */
   function applyInlineImgObjectPos(slideIdx: number, imgIdx: number, dx: number, dy: number) {
     setSlides(prev => prev.map((s, i) => {
       if (i !== slideIdx) return s;
       const parser = new DOMParser();
       const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
       const el = doc.body.firstElementChild!;
-      const imgs = Array.from(el.querySelectorAll('img.split-img')) as HTMLElement[];
+      // Match by .split-panel img so it works even when split-img class is absent
+      const imgs = Array.from(el.querySelectorAll('.split-panel img')) as HTMLElement[];
       const img = imgs[imgIdx];
       if (img) {
-        let style = (img.getAttribute('style') || '').replace(/object-position\s*:[^;]+;?/gi, '').trim().replace(/;$/, '');
+        // Remove existing object-position (and object-fit to re-add it cleanly)
+        let style = (img.getAttribute('style') || '')
+          .replace(/object-position\s*:[^;]+;?/gi, '')
+          .replace(/object-fit\s*:[^;]+;?/gi, '')
+          .trim().replace(/;$/, '');
         const opx = dx >= 0 ? `calc(50% + ${dx.toFixed(1)}px)` : `calc(50% - ${(-dx).toFixed(1)}px)`;
         const opy = dy >= 0 ? `calc(50% + ${dy.toFixed(1)}px)` : `calc(50% - ${(-dy).toFixed(1)}px)`;
-        img.setAttribute('style', `${style}${style ? '; ' : ''}object-position: ${opx} ${opy};`);
+        // Always write object-fit:cover inline so panning works even without CSS class
+        img.setAttribute('style', `${style}${style ? '; ' : ''}object-fit: cover; object-position: ${opx} ${opy};`);
       }
       return { ...s, outerHtml: el.outerHTML };
     }));
@@ -3102,7 +3105,7 @@ export default function CarouselEditor({
                               let label = `Img ${i+1}`;
                               if (img.closest('.photo-card')) label = `Card ${i+1}`;
                               else if (img.closest('.top-photo-wrap')) label = `Topo ${i+1}`;
-                              else if (img.classList.contains('split-img')) {
+                              else if (img.closest('.split-panel')) {
                                 const panels = Array.from(el.querySelectorAll('.split-panel'));
                                 const panelIdx = panels.indexOf(img.closest('.split-panel') as Element);
                                 label = panelIdx === 0 ? '📷 Antes' : '📷 Depois';
@@ -3370,9 +3373,9 @@ export default function CarouselEditor({
                           const elDoc = doc.body.firstElementChild;
                           const allImgs = elDoc ? Array.from(elDoc.querySelectorAll('img')) : [];
                           const targetImg = allImgs[imgTarget] as HTMLElement | undefined;
-                          if (!targetImg || !targetImg.classList.contains('split-img')) return null;
+                          if (!targetImg || !targetImg.closest('.split-panel')) return null;
 
-                          const splitImgs = elDoc ? Array.from(elDoc.querySelectorAll('img.split-img')) : [];
+                          const splitImgs = elDoc ? Array.from(elDoc.querySelectorAll('.split-panel img')) : [];
                           const splitIdx = splitImgs.indexOf(targetImg as Element);
                           const MAX_PAN = 300;
                           const toSlider = (v: number) => Math.round((v / MAX_PAN) * 50 + 50);
