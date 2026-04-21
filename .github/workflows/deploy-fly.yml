@@ -3,8 +3,6 @@ name: Deploy Backend to Fly.io
 on:
   push:
     branches: [main]
-    paths:
-      - 'server/**'
 
 jobs:
   deploy:
@@ -15,7 +13,7 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - run: flyctl deploy --remote-only --config server/fly.toml --dockerfile server/Dockerfile
+      - run: flyctl deploy --remote-only
         working-directory: ./server
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
