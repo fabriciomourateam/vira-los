@@ -45,7 +45,7 @@ async function scrapeInstagram(hashtags = []) {
   if (!hasApify()) return [];
   const items = await runApifySync('apify/instagram-hashtag-scraper', {
     hashtags: hashtags.slice(0, 5),
-    resultsLimit: 15,
+    resultsLimit: 40,
     resultsType: 'posts',
   });
   return items
@@ -117,7 +117,7 @@ async function scrapeTikTok(hashtags = []) {
     });
   }
 
-  return results.sort((a, b) => b.engagement - a.engagement).slice(0, 25);
+  return results.sort((a, b) => b.engagement - a.engagement).slice(0, 50);
 }
 
 // ─── 3. Google Trends — endpoint público gratuito ─────────────────────────────
@@ -169,7 +169,7 @@ async function scrapeGoogleTrends(keywords = []) {
     } catch {}
   }
 
-  return [...rising].slice(0, 25);
+  return [...rising].slice(0, 50);
 }
 
 // ─── 4. Reddit — API pública gratuita (sem auth) ──────────────────────────────
@@ -183,7 +183,7 @@ async function scrapeReddit(subreddits = []) {
   for (const sub of subreddits.slice(0, 5)) {
     try {
       const res = await axios.get(`https://www.reddit.com/r/${sub}/top/.json`, {
-        params: { t: 'week', limit: 20 },
+        params: { t: 'week', limit: 50 },
         headers,
         timeout: 15000,
       });
@@ -206,7 +206,7 @@ async function scrapeReddit(subreddits = []) {
     // Pequeno delay para não rate-limitar
     await new Promise(r => setTimeout(r, 1500));
   }
-  return results.sort((a, b) => b.engagement - a.engagement).slice(0, 25);
+  return results.sort((a, b) => b.engagement - a.engagement).slice(0, 50);
 }
 
 module.exports = { scrapeInstagram, scrapeTikTok, scrapeGoogleTrends, scrapeReddit, hasApify };
