@@ -7,10 +7,14 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-// Em produção aceita qualquer origem (Vercel gera URLs dinâmicas)
-// Em dev restringe ao localhost
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Aumenta timeout do servidor para 5 minutos (Playwright + Claude pode demorar)
+const server = require('http').createServer(app);
+server.timeout = 300000;
+server.keepAliveTimeout = 300000;
+server.headersTimeout = 310000;
 
 // Serve arquivos de upload estaticamente (para Instagram consumir a URL pública)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -42,7 +46,7 @@ app.get('/api/health', (_req, res) =>
 require('./services/schedulerService').start();
 
 // ── Inicia Servidor ───────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`\n🚀 ViralOS Server rodando em http://localhost:${PORT}`);
   console.log(`   → API:     http://localhost:${PORT}/api/health`);
   console.log(`   → Uploads: http://localhost:${PORT}/uploads/\n`);

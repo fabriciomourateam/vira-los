@@ -14,10 +14,19 @@ primary_region = "gru"
   auto_stop_machines = false
   auto_start_machines = true
   min_machines_running = 1
+
   [http_service.concurrency]
     type = "requests"
     hard_limit = 25
     soft_limit = 20
+
+  [http_service.checks]
+    [http_service.checks.health]
+      grace_period = "30s"
+      interval = "30s"
+      method = "GET"
+      path = "/api/health"
+      timeout = "5s"
 
 [mounts]
   source = "data"
