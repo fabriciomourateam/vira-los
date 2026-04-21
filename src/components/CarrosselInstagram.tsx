@@ -544,11 +544,15 @@ ${stats ? `- Stats: ${stats}` : ''}
         }
       }
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180000); // 3 min
       const res = await fetch(`${API}/api/carousel/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...finalConfig, templateHtml }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
       setResult(data);
