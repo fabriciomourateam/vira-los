@@ -33,8 +33,8 @@ async function generateIdeas(scrapedData, config) {
   if (instagram.length > 0) {
     sections.push(
       `INSTAGRAM — posts de maior engajamento por hashtag:\n` +
-      instagram.slice(0, 12).map(p =>
-        `  • "${sanitizeText(p.title.substring(0, 120))}" — ${p.likes.toLocaleString()} curtidas, ${p.comments} comentários`
+      instagram.slice(0, 20).map(p =>
+        `  • "${sanitizeText((p.title || p.caption || '').substring(0, 120))}" — ${(p.likes || 0).toLocaleString()} curtidas, ${p.comments || 0} comentários`
       ).join('\n')
     );
   }
@@ -126,7 +126,7 @@ RESPONDA APENAS com um array JSON válido. Nenhum texto antes ou depois.
     model: 'claude-sonnet-4-6',
     max_tokens: 8000,
     system: 'Você é um estrategista de conteúdo viral especializado em Instagram. Responde SEMPRE com JSON válido e absolutamente nada mais — sem markdown, sem texto explicativo.',
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{ role: 'user', content: sanitizeText(prompt) }],
   });
 
   const text = (response.content[0]?.text || '').trim();
@@ -137,12 +137,22 @@ RESPONDA APENAS com um array JSON válido. Nenhum texto antes ou depois.
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch (parseErr) {
-    // JSON truncado (max_tokens atingido) — tenta recuperar os objetos completos já gerados
-    const partialMatch = jsonMatch[0].match(/(\{[\s\S]*?\}(?=\s*,\s*\{|\s*\]))/g);
-    if (!partialMatch || partialMatch.length === 0) throw new Error('JSON inválido na resposta do modelo.');
-    parsed = partialMatch.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
-    if (parsed.length === 0) throw new Error('Nenhuma ideia pôde ser extraída da resposta.');
-    console.warn(`[Ideas] JSON truncado — recuperadas ${parsed.length} ideias de ${partialMatch.length} fragmentos`);
+    // Tenta limpar JSON malformado antes de re-tentar
+    let fixed = jsonMatch[0]
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/[\x00-\x1F\x7F]/g, ' ')
+      .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t');
+    try {
+      parsed = JSON.parse(fixed);
+    } catch {
+      // JSON truncado (max_tokens atingido) — tenta recuperar os objetos completos já gerados
+      const partialMatch = jsonMatch[0].match(/(\{[\s\S]*?\}(?=\s*,\s*\{|\s*\]))/g);
+      if (!partialMatch || partialMatch.length === 0) throw new Error('JSON inválido na resposta do modelo. Tente novamente.');
+      parsed = partialMatch.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
+      if (parsed.length === 0) throw new Error('Nenhuma ideia pôde ser extraída da resposta.');
+      console.warn(`[Ideas] JSON truncado — recuperadas ${parsed.length} ideias de ${partialMatch.length} fragmentos`);
+    }
   }
 
   return parsed;
