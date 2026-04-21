@@ -139,6 +139,13 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [ideas, setIdeas] = useState<ContentIdea[]>([]);
+  const [ideasSort, setIdeasSort] = useState<'score' | 'original' | 'format'>('score');
+
+  const sortedIdeas = [...ideas].sort((a, b) => {
+    if (ideasSort === 'score') return (b.viralScore || 0) - (a.viralScore || 0);
+    if (ideasSort === 'format') return (a.format || '').localeCompare(b.format || '');
+    return 0;
+  });
   const [scrapedData, setScrapedData] = useState<ScrapedData | null>(null);
   const [generatingIdeas, setGeneratingIdeas] = useState(false);
   const [collapsedSources, setCollapsedSources] = useState<Record<string, boolean>>({});
@@ -655,14 +662,25 @@ export default function IdeasGenerator({ onCreateCarousel }: Props) {
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   {ideas.length} ideias geradas
                 </h3>
-                <button onClick={async () => { await fetch(`${API}/api/ideas/discovered`, { method: 'DELETE' }); setIdeas([]); }}
-                  className="text-[11px] text-muted-foreground hover:text-red-400 transition-colors flex items-center gap-1">
-                  <Trash2 className="w-3 h-3" /> Limpar
-                </button>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={ideasSort}
+                    onChange={e => setIdeasSort(e.target.value as any)}
+                    className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] focus:outline-none"
+                  >
+                    <option value="score">Maior potencial</option>
+                    <option value="original">Ordem original</option>
+                    <option value="format">Por formato</option>
+                  </select>
+                  <button onClick={async () => { await fetch(`${API}/api/ideas/discovered`, { method: 'DELETE' }); setIdeas([]); }}
+                    className="text-[11px] text-muted-foreground hover:text-red-400 transition-colors flex items-center gap-1">
+                    <Trash2 className="w-3 h-3" /> Limpar
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                {ideas.map(idea => (
+                {sortedIdeas.map(idea => (
                   <IdeaCard
                     key={idea.id}
                     idea={idea}
