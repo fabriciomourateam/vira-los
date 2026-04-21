@@ -813,7 +813,7 @@ const DRAGGABLE_SELECTORS = [
   // Absolutos (clean layout)
   '.profile-badge', '.cover-title', '.swipe-hint', '.cta-footer',
   // Imagens (inline + cards)
-  '.photo-card', '.top-photo-wrap', '.bg', 'img',
+  '.photo-card', '.top-photo-wrap', '.bg',
   // Footer / header
   '.slide-footer', '.top-header',
   // Texto (editorial + clean)
@@ -949,7 +949,6 @@ function buildDragScript(displayScale: number): string {
     var cs=window.getComputedStyle(el);
     if(selected&&selected!==el){ highlight(selected,false); removeHandles(); }
     selected=el; highlight(el,true);
-    addHandles(el);
     var allWithSel=Array.from(document.querySelectorAll(found.sel));
     var elemIdx=allWithSel.indexOf(el);
     var isAbs=cs.position==='absolute'||cs.position==='fixed';
