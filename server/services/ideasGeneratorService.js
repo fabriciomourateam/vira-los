@@ -7,6 +7,13 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+function sanitizeText(s) {
+  if (!s) return '';
+  return s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+          .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+
 // ─── Gerador de Ideias ────────────────────────────────────────────────────────
 
 async function generateIdeas(scrapedData, config) {
@@ -27,7 +34,7 @@ async function generateIdeas(scrapedData, config) {
     sections.push(
       `INSTAGRAM — posts de maior engajamento por hashtag:\n` +
       instagram.slice(0, 12).map(p =>
-        `  • "${p.title.substring(0, 120)}" — ${p.likes.toLocaleString()} curtidas, ${p.comments} comentários`
+        `  • "${sanitizeText(p.title.substring(0, 120))}" — ${p.likes.toLocaleString()} curtidas, ${p.comments} comentários`
       ).join('\n')
     );
   }
@@ -39,14 +46,14 @@ async function generateIdeas(scrapedData, config) {
     if (ccItems.length > 0) {
       sections.push(
         `TIKTOK TRENDING (Creative Center Brasil):\n` +
-        ccItems.slice(0, 12).map(p => `  • ${p.title}`).join('\n')
+        ccItems.slice(0, 12).map(p => `  • ${sanitizeText(p.title)}`).join('\n')
       );
     }
     if (fullItems.length > 0) {
       sections.push(
         `TIKTOK — vídeos mais engajados:\n` +
         fullItems.slice(0, 10).map(p =>
-          `  • "${p.title.substring(0, 120)}" — ${(p.likes || 0).toLocaleString()} likes`
+          `  • "${sanitizeText(p.title.substring(0, 120))}" — ${(p.likes || 0).toLocaleString()} likes`
         ).join('\n')
       );
     }
@@ -56,7 +63,7 @@ async function generateIdeas(scrapedData, config) {
     sections.push(
       `REDDIT — perguntas e dores reais da audiência (top posts da semana):\n` +
       reddit.slice(0, 12).map(p =>
-        `  • [r/${p.subreddit}] "${p.title}" — ${p.score} upvotes, ${p.comments} comentários`
+        `  • [r/${p.subreddit}] "${sanitizeText(p.title)}" — ${p.score} upvotes, ${p.comments} comentários`
       ).join('\n')
     );
   }
