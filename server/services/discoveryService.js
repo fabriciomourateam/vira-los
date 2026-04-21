@@ -130,10 +130,11 @@ async function scrapeGoogleTrends(keywords = []) {
     const res = await axios.get('https://trends.google.com/trends/api/dailytrends', {
       params: { hl: 'pt-BR', tz: 180, geo: 'BR', ns: 15 },
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        Accept: 'application/json, text/plain, */*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8',
       },
-      timeout: 12000,
+      timeout: 15000,
     });
     // O response começa com ")]}'\n" — precisa remover antes de parsear
     const raw = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
@@ -175,12 +176,16 @@ async function scrapeGoogleTrends(keywords = []) {
 
 async function scrapeReddit(subreddits = []) {
   const results = [];
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json',
+  };
   for (const sub of subreddits.slice(0, 5)) {
     try {
       const res = await axios.get(`https://www.reddit.com/r/${sub}/top/.json`, {
         params: { t: 'week', limit: 20 },
-        headers: { 'User-Agent': 'ViralOS/1.0 content-research (free)' },
-        timeout: 12000,
+        headers,
+        timeout: 15000,
       });
       for (const { data: p } of (res.data?.data?.children || [])) {
         if (p.score > 30 && !p.over_18) {
@@ -199,7 +204,7 @@ async function scrapeReddit(subreddits = []) {
       console.warn(`[Discovery] Reddit r/${sub}: ${err.message}`);
     }
     // Pequeno delay para não rate-limitar
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 1500));
   }
   return results.sort((a, b) => b.engagement - a.engagement).slice(0, 25);
 }
