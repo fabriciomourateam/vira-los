@@ -2135,6 +2135,35 @@ export default function CarouselEditor({
     });
   }
 
+  function addImageBlock(si: number) {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const dataUrl = ev.target?.result as string;
+        setSlides(prev => prev.map((s, i) => {
+          if (i !== si) return s;
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
+          const el = doc.body.firstElementChild!;
+          const img = doc.createElement('img');
+          img.setAttribute('src', dataUrl);
+          img.setAttribute('style', 'position:absolute; z-index:5; top:200px; left:100px; width:400px; height:auto; border-radius:16px; object-fit:cover;');
+          img.className = 'photo-card';
+          el.appendChild(img);
+          return { ...s, outerHtml: el.outerHTML, html: el.innerHTML };
+        }));
+        toast.success('Imagem adicionada — arraste no modo Visual para posicionar');
+      };
+      reader.readAsDataURL(file);
+    };
+    fileInput.click();
+  }
+
   // Insere rodapé de perfil (nome + handle + badge) diretamente no outerHtml do slide
   function insertProfileFooter(si: number) {
     const creatorName = (config as any)?.creatorName || 'Fabricio Moura';
@@ -3004,12 +3033,18 @@ export default function CarouselEditor({
                       )}
 
                       {/* Botões adicionar */}
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <button
                           onClick={() => addTextBlock(selectedIndex)}
                           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-purple-500/40 hover:border-purple-500 bg-purple-500/5 hover:bg-purple-500/10 text-purple-400 text-xs font-semibold transition-colors"
                         >
-                          <Plus className="w-3.5 h-3.5" /> Caixa de texto
+                          <Plus className="w-3.5 h-3.5" /> Texto
+                        </button>
+                        <button
+                          onClick={() => addImageBlock(selectedIndex)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-emerald-500/40 hover:border-emerald-500 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 text-xs font-semibold transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Imagem
                         </button>
                         {!sel?.outerHtml.includes('slide-footer') && (
                           <button
