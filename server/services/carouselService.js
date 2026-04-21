@@ -1045,22 +1045,32 @@ Siga @${handle} para mais conteúdo sobre ${niche}.
 
 // ─── Passo 5: Screenshots com Playwright (lógica DPR do gist) ────────────────
 
-async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, folderName) {
+// ─── Browser pool: reutiliza instância entre requisições ─────────────────────
+let _browserInstance = null;
+let _browserLaunchPromise = null;
+
+async function getBrowser() {
+  if (_browserInstance) {
+    try { await _browserInstance.version(); return _browserInstance; } catch (_) { _browserInstance = null; }
+  }
+  if (_browserLaunchPromise) return _browserLaunchPromise;
   let chromium;
-  try {
-    ({ chromium } = require('playwright'));
-  } catch (_) {
+  try { ({ chromium } = require('playwright')); } catch (_) { return null; }
+  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+  _browserLaunchPromise = chromium.launch({
+    headless: true, executablePath,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  }).then(b => { _browserInstance = b; _browserLaunchPromise = null; return b; })
+    .catch(e => { _browserLaunchPromise = null; throw e; });
+  return _browserLaunchPromise;
+}
+
+async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, folderName) {
+  const browser = await getBrowser();
+  if (!browser) {
     console.warn('[CarouselService] Playwright não disponível — pulando screenshots');
     return [];
   }
-
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
-
-  const browser = await chromium.launch({
-    headless: true,
-    executablePath,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  });
 
   const context = await browser.newContext({
     viewport: { width: 1080, height: 1350 },
@@ -1080,7 +1090,7 @@ async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, f
         img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
       )
     ));
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(400);
 
     // Verificar DPR e viewport CSS real (conforme gist)
     const cssW = await page.evaluate(() => window.innerWidth);
@@ -1131,7 +1141,7 @@ async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, f
         }
       }, scale);
 
-      await page.waitForTimeout(350);
+      await page.waitForTimeout(150);
 
       // Screenshot com clip no tamanho do viewport CSS (conforme gist)
       await page.screenshot({
@@ -1167,7 +1177,7 @@ async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, f
     return screenshots;
 
   } finally {
-    await browser.close();
+    await context.close(); // fecha só o contexto, mantém browser vivo para próxima geração
   }
 }
 
