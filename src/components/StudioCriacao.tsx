@@ -519,10 +519,10 @@ export default function StudioCriacao({ initialContext, onClearContext }: Props)
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-120px)] gap-0 bg-[#0f0f13] rounded-xl border border-white/5 overflow-hidden">
+    <div className="flex h-[calc(100vh-160px)] bg-[#0f0f13] rounded-xl border border-white/5 overflow-hidden">
 
       {/* ── Sidebar: histórico de conversas ── */}
-      <aside className="w-56 shrink-0 flex flex-col border-r border-white/5 bg-[#0a0a0e]">
+      <aside className="w-52 shrink-0 flex flex-col border-r border-white/5 bg-[#0a0a0e]">
         <div className="p-3 border-b border-white/5">
           <button
             onClick={newConversation}
@@ -581,39 +581,40 @@ export default function StudioCriacao({ initialContext, onClearContext }: Props)
       </aside>
 
       {/* ── Área principal: chat ── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* Toolbar: formato + brand kit */}
-        <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-[#0f0f13] flex-wrap">
-          {/* Seletor de formato */}
-          <div className="flex items-center gap-1">
+        <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#0f0f13]">
+          {/* Seletor de formato — ícones com tooltip */}
+          <div className="flex items-center gap-0.5">
             {FORMATS.map(f => {
               const Icon = f.icon;
+              const active = format === f.id;
               return (
                 <button
                   key={f.id}
                   onClick={() => setFormat(f.id)}
                   title={`${f.label} · ${f.desc}`}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    format === f.id
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                    active
                       ? 'bg-violet-600 text-white'
                       : 'text-white/40 hover:text-white/70 hover:bg-white/5'
                   }`}
                 >
-                  <Icon className="w-3 h-3" />
-                  {f.label}
+                  <Icon className="w-3 h-3 shrink-0" />
+                  <span className="hidden sm:inline">{f.label}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="h-4 w-px bg-white/10 mx-1" />
+          <div className="h-4 w-px bg-white/10 mx-1 shrink-0" />
 
           {/* Seletor de Brand Kit */}
           <select
             value={selectedBrandKitId}
             onChange={e => setSelectedBrandKitId(e.target.value)}
-            className="text-xs bg-white/5 border border-white/10 text-white/70 rounded-lg px-2 py-1.5 focus:outline-none focus:border-violet-500"
+            className="text-xs bg-white/5 border border-white/10 text-white/70 rounded-lg px-2 py-1.5 focus:outline-none focus:border-violet-500 max-w-[140px] shrink-0"
           >
             <option value="">Sem brand kit</option>
             {brandKits.map(k => (
@@ -624,12 +625,13 @@ export default function StudioCriacao({ initialContext, onClearContext }: Props)
           {/* Toggle preview */}
           <button
             onClick={() => setShowPreview(v => !v)}
-            className={`ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+            title={showPreview ? 'Ocultar preview' : 'Mostrar preview'}
+            className={`ml-auto shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
               showPreview ? 'text-violet-300 bg-violet-500/10' : 'text-white/40 hover:text-white/60'
             }`}
           >
             {showPreview ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-            Preview
+            <span className="hidden sm:inline">Preview</span>
           </button>
         </div>
 

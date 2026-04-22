@@ -929,7 +929,7 @@ export default function ViralOS() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8">
+      <main className={activeTab === 'studio' ? 'px-3 sm:px-4 pt-4' : 'max-w-3xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8'}>
 
         {/* ── DESCOBRIR ── */}
         {activeTab === 'descobrir' && (
