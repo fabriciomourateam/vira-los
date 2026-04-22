@@ -641,7 +641,7 @@ export default function StudioCriacao({ initialContext, onClearContext }: Props)
           <div className="flex-1 flex flex-col min-w-0">
 
             {/* Mensagens */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
 
               {/* Badge de contexto */}
               {ctx.type !== 'blank' && messages.length === 0 && (
