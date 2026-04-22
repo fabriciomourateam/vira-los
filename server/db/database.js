@@ -250,6 +250,35 @@ const saveCarousel    = (c) => { const db = readDb('carousels'); db.push({ ...c,
 const updateCarousel  = (id, data) => { const db = readDb('carousels').map((c) => c.id === id ? { ...c, ...data } : c); writeDb('carousels', db); };
 const deleteCarousel  = (id) => writeDb('carousels', readDb('carousels').filter((c) => c.id !== id));
 
+// ── Brand Kits ────────────────────────────────────────────────────────────────
+const getAllBrandKits  = () => readDb('brand_kits').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const getBrandKit     = (id) => readDb('brand_kits').find((k) => k.id === id) || null;
+const createBrandKit  = (k) => { const db = readDb('brand_kits'); db.push({ ...k, created_at: now(), updated_at: now() }); writeDb('brand_kits', db); return k; };
+const updateBrandKit  = (id, data) => { const db = readDb('brand_kits').map((k) => k.id === id ? { ...k, ...data, updated_at: now() } : k); writeDb('brand_kits', db); };
+const deleteBrandKit  = (id) => writeDb('brand_kits', readDb('brand_kits').filter((k) => k.id !== id));
+
+// ── Studio Conversations ──────────────────────────────────────────────────────
+const getAllStudioConversations = () => readDb('studio_conversations').sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+const getStudioConversation    = (id) => readDb('studio_conversations').find((c) => c.id === id) || null;
+const createStudioConversation = (c) => { const db = readDb('studio_conversations'); db.push({ ...c, created_at: now(), updated_at: now() }); writeDb('studio_conversations', db); return c; };
+const updateStudioConversation = (id, data) => { const db = readDb('studio_conversations').map((c) => c.id === id ? { ...c, ...data, updated_at: now() } : c); writeDb('studio_conversations', db); };
+const deleteStudioConversation = (id) => {
+  writeDb('studio_conversations', readDb('studio_conversations').filter((c) => c.id !== id));
+  writeDb('studio_messages', readDb('studio_messages').filter((m) => m.conversation_id !== id));
+};
+
+// ── Studio Messages ───────────────────────────────────────────────────────────
+const getStudioMessages       = (conv_id) => readDb('studio_messages').filter((m) => m.conversation_id === conv_id).sort((a, b) => a.created_at.localeCompare(b.created_at));
+const createStudioMessage     = (m) => { const db = readDb('studio_messages'); db.push({ ...m, created_at: now() }); writeDb('studio_messages', db); return m; };
+const updateStudioMessage     = (id, data) => { const db = readDb('studio_messages').map((m) => m.id === id ? { ...m, ...data } : m); writeDb('studio_messages', db); };
+
+// ── Studio Posts (galeria) ────────────────────────────────────────────────────
+const getAllStudioPosts  = () => readDb('studio_posts').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const getStudioPost     = (id) => readDb('studio_posts').find((p) => p.id === id) || null;
+const createStudioPost  = (p) => { const db = readDb('studio_posts'); db.push({ ...p, created_at: now(), updated_at: now() }); writeDb('studio_posts', db); return p; };
+const updateStudioPost  = (id, data) => { const db = readDb('studio_posts').map((p) => p.id === id ? { ...p, ...data, updated_at: now() } : p); writeDb('studio_posts', db); };
+const deleteStudioPost  = (id) => writeDb('studio_posts', readDb('studio_posts').filter((p) => p.id !== id));
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -262,6 +291,12 @@ module.exports = {
   getSavedSlides, saveSlide, deleteSavedSlide,
   getCarouselConfig, setCarouselConfig,
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
+  // Brand Kits
+  getAllBrandKits, getBrandKit, createBrandKit, updateBrandKit, deleteBrandKit,
+  // Studio
+  getAllStudioConversations, getStudioConversation, createStudioConversation, updateStudioConversation, deleteStudioConversation,
+  getStudioMessages, createStudioMessage, updateStudioMessage,
+  getAllStudioPosts, getStudioPost, createStudioPost, updateStudioPost, deleteStudioPost,
   getInstagramToken, setInstagramToken, clearInstagramToken,
   getInstagramPosts, saveInstagramPosts,
   getInstagramAnalysis, saveInstagramAnalysis,

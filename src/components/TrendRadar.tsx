@@ -39,6 +39,7 @@ interface RadarResult {
 interface TrendRadarProps {
   onUseAsCarrossel?: (titulo: string) => void;
   onUseAsScript?: (hook: string) => void;
+  onOpenStudio?: (op: Oportunidade) => void;
 }
 
 // ─── Niches pré-definidos ──────────────────────────────────────────────────────
@@ -105,10 +106,12 @@ function OportunidadeCard({
   op,
   onUseAsCarrossel,
   onUseAsScript,
+  onOpenStudio,
 }: {
   op: Oportunidade;
   onUseAsCarrossel?: (titulo: string) => void;
   onUseAsScript?: (hook: string) => void;
+  onOpenStudio?: (op: Oportunidade) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -169,6 +172,14 @@ function OportunidadeCard({
               <Video size={12} /> Usar Hook
             </button>
           )}
+          {onOpenStudio && (
+            <button
+              onClick={() => { onOpenStudio(op); }}
+              className="flex items-center gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
+            >
+              ✦ Studio
+            </button>
+          )}
           <button
             onClick={() => setExpanded(e => !e)}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground ml-auto transition-colors"
@@ -227,7 +238,7 @@ function OportunidadeCard({
 
 // ─── Componente principal ──────────────────────────────────────────────────────
 
-export default function TrendRadar({ onUseAsCarrossel, onUseAsScript }: TrendRadarProps) {
+export default function TrendRadar({ onUseAsCarrossel, onUseAsScript, onOpenStudio }: TrendRadarProps) {
   const [niche, setNiche]         = useState('');
   const [loading, setLoading]     = useState(false);
   const [result, setResult]       = useState<RadarResult | null>(null);
@@ -393,6 +404,7 @@ export default function TrendRadar({ onUseAsCarrossel, onUseAsScript }: TrendRad
                     op={op}
                     onUseAsCarrossel={onUseAsCarrossel}
                     onUseAsScript={onUseAsScript}
+                    onOpenStudio={onOpenStudio}
                   />
                 ))}
               </div>

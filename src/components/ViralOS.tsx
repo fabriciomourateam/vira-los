@@ -29,6 +29,8 @@ import {
   Sparkles,
   Loader2,
   Instagram,
+  Wand2,
+  Palette,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -44,17 +46,20 @@ import ViralScore from './ViralScore';
 import ProfileSettings from './ProfileSettings';
 import IdeasGenerator from './IdeasGenerator';
 import InstagramAnalytics from './InstagramAnalytics';
+import StudioCriacao, { StudioContext, ContentIdea, Oportunidade } from './StudioCriacao';
+import BrandKits from './BrandKits';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'agendar' | 'analytics';
+type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'studio' | 'avaliar' | 'agendar' | 'analytics';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'metodo',    label: 'Método',    icon: Zap },
   { id: 'descobrir', label: 'Descobrir', icon: Search },
   { id: 'ideias',    label: 'Ideias',    icon: Sparkles },
   { id: 'criar',     label: 'Criar',     icon: Layers },
+  { id: 'studio',    label: 'Studio',    icon: Wand2 },
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
   { id: 'agendar',   label: 'Agendar',   icon: Calendar },
   { id: 'analytics', label: 'Analytics', icon: Instagram },
@@ -613,8 +618,10 @@ export default function ViralOS() {
   const [metodoSubTab,    setMetodoSubTab]    = useState<'roteiro' | 'produtos'>('roteiro');
   const [descobrirSubTab, setDescobrirSubTab] = useState<'pesquisa' | 'radar' | 'agente'>('pesquisa');
   const [avaliarSubTab,   setAvaliarSubTab]   = useState<'analisador' | 'score' | 'metricas'>('analisador');
+  const [studioSubTab,    setStudioSubTab]    = useState<'studio' | 'brandkits'>('studio');
   const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
   const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
+  const [studioContext, setStudioContext] = useState<StudioContext | null>(null);
   const [state, setState] = useState<AppState>(initialState);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -798,6 +805,18 @@ export default function ViralOS() {
     setTimeout(() => setCarouselPrefill(null), 500);
   };
 
+  const handleOpenStudioFromIdea = (idea: ContentIdea) => {
+    setStudioContext({ type: 'idea', data: idea });
+    setActiveTab('studio');
+    toast.success('Ideia carregada no Studio!');
+  };
+
+  const handleOpenStudioFromTrend = (trend: Oportunidade) => {
+    setStudioContext({ type: 'trend', data: trend });
+    setActiveTab('studio');
+    toast.success('Trend carregado no Studio!');
+  };
+
   async function handleAIRoteiro(targetId: string) {
     if (!aiRoteiro.tema.trim()) {
       toast.error('Informe o tema do roteiro');
@@ -925,7 +944,7 @@ export default function ViralOS() {
               onChange={(id) => setDescobrirSubTab(id as typeof descobrirSubTab)}
             />
             {descobrirSubTab === 'pesquisa' && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
-            {descobrirSubTab === 'radar'    && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} />}
+            {descobrirSubTab === 'radar'    && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} onOpenStudio={handleOpenStudioFromTrend} />}
             {descobrirSubTab === 'agente'   && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
           </>
         )}
@@ -937,12 +956,34 @@ export default function ViralOS() {
               setCarouselPrefill({ topic, script });
               setActiveTab('criar');
             }}
+            onOpenStudio={handleOpenStudioFromIdea}
           />
         )}
 
         {/* ── CRIAR ── */}
         {activeTab === 'criar' && (
           <CarrosselInstagram prefillScript={carouselPrefill?.script} prefillTopic={carouselPrefill?.topic} />
+        )}
+
+        {/* ── STUDIO ── */}
+        {activeTab === 'studio' && (
+          <>
+            <SubTabBar
+              tabs={[
+                { id: 'studio',     label: 'Studio de Criação', icon: Wand2 },
+                { id: 'brandkits',  label: 'Brand Kits',        icon: Palette },
+              ]}
+              active={studioSubTab}
+              onChange={(id) => setStudioSubTab(id as typeof studioSubTab)}
+            />
+            {studioSubTab === 'studio' && (
+              <StudioCriacao
+                initialContext={studioContext || undefined}
+                onClearContext={() => setStudioContext(null)}
+              />
+            )}
+            {studioSubTab === 'brandkits' && <BrandKits />}
+          </>
         )}
 
         {/* ── AVALIAR ── */}

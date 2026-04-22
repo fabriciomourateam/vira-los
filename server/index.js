@@ -36,6 +36,8 @@ app.use('/api/trend-radar',     require('./routes/trendRadar'));
 app.use('/api/story-sequence',  require('./routes/storySequence'));
 app.use('/api/ideas',           require('./routes/ideas'));
 app.use('/api/instagram',       require('./routes/instagram'));
+app.use('/api/studio',          require('./routes/studio'));
+app.use('/api/brand-kits',      require('./routes/brandKits'));
 
 // Health check
 app.get('/api/health', (_req, res) =>
