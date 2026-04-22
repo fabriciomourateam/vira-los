@@ -363,6 +363,7 @@ export default function BrandKits() {
   }
 
   return (
+    <div className="min-h-[calc(100vh-160px)] bg-[#0f0f13] rounded-xl border border-white/5 p-6">
     <div className="space-y-4 max-w-2xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
@@ -482,6 +483,7 @@ export default function BrandKits() {
           ))}
         </div>
       )}
+    </div>
     </div>
   );
 }
