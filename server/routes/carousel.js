@@ -227,6 +227,52 @@ router.get('/check', async (req, res) => {
   res.json({ vars, unsplash: { ok: unsplashOk, error: unsplashError } });
 });
 
+// ─── Proxy de imagens externas (resolve CORS para html-to-image no browser) ───
+
+router.get('/proxy-image', async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url obrigatória' });
+  try {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 10000,
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    const contentType = response.headers['content-type'] || 'image/jpeg';
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.send(Buffer.from(response.data));
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar imagem' });
+  }
+});
+
+// ─── Salvar screenshots gerados no cliente ────────────────────────────────────
+
+router.post('/save-screenshots', (req, res) => {
+  const { folderName, screenshots } = req.body; // screenshots: [{slideNum, dataUrl}]
+  if (!folderName || !Array.isArray(screenshots)) return res.status(400).json({ error: 'folderName e screenshots obrigatórios' });
+
+  const folderPath = path.join(OUTPUT_DIR, folderName);
+  fs.mkdirSync(folderPath, { recursive: true });
+
+  const saved = [];
+  for (const { slideNum, dataUrl } of screenshots) {
+    try {
+      const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64, 'base64');
+      const num = String(slideNum + 1).padStart(2, '0');
+      const filename = `slide_${num}.png`;
+      fs.writeFileSync(path.join(folderPath, filename), buffer);
+      saved.push(filename);
+    } catch (e) {
+      console.warn('[SaveScreenshots] Erro no slide', slideNum, e.message);
+    }
+  }
+  res.json({ ok: true, screenshots: saved });
+});
+
 // ─── Busca Unsplash inline ────────────────────────────────────────────────────
 
 router.get('/unsplash-search', async (req, res) => {

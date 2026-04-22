@@ -1319,13 +1319,8 @@ async function generateCarousel(config) {
   fs.writeFileSync(htmlFilePath, html, 'utf8');
   fs.writeFileSync(path.join(outputDir, 'legenda.txt'), legenda, 'utf8');
 
-  // Passo 5: Screenshots com Playwright (graceful fallback se não disponível)
-  let screenshots = [];
-  try {
-    screenshots = await takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, folderName);
-  } catch (err) {
-    console.warn('[CarouselService] Screenshots falhou:', err.message);
-  }
+  // Screenshots gerados no cliente (browser) via html-to-image — sem Playwright no servidor
+  const screenshots = [];
 
   return {
     html,

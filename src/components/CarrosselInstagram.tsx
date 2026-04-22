@@ -472,6 +472,82 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     }
   }
 
+  // ── Gera screenshots no browser via html-to-image ────────────────────────────
+  async function generateAndSaveScreenshots(html: string, folderName: string): Promise<string[]> {
+    const { toPng } = await import('html-to-image');
+
+    const proxyUrl = (url: string) => `${API}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
+    const proxied = html
+      .replace(/src="(https?:\/\/[^"]+)"/g, (_, u) => `src="${proxyUrl(u)}"`)
+      .replace(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g, (_, u) => `url("${proxyUrl(u)}")`);
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(proxied, 'text/html');
+
+    // Injeta estilos do carrossel no documento principal temporariamente
+    const injected: HTMLElement[] = [];
+    doc.querySelectorAll('style').forEach(s => {
+      const el = document.createElement('style');
+      el.textContent = s.textContent;
+      document.head.appendChild(el);
+      injected.push(el);
+    });
+    doc.querySelectorAll('link[rel="stylesheet"]').forEach(l => {
+      const el = document.createElement('link');
+      el.setAttribute('rel', 'stylesheet');
+      el.setAttribute('href', (l as HTMLLinkElement).href);
+      document.head.appendChild(el);
+      injected.push(el);
+    });
+
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
+    document.body.appendChild(container);
+
+    const dataUrls: string[] = [];
+
+    try {
+      await document.fonts.ready;
+      const slides = Array.from(doc.body.children) as HTMLElement[];
+
+      for (const slideEl of slides) {
+        container.innerHTML = '';
+        container.appendChild(slideEl.cloneNode(true));
+        const slide = container.firstElementChild as HTMLElement;
+        slide.style.width = '1080px';
+        slide.style.height = '1350px';
+        slide.style.overflow = 'hidden';
+
+        // Aguarda imagens carregarem
+        await Promise.all(
+          Array.from(container.querySelectorAll('img')).map(img =>
+            img.complete ? Promise.resolve() : new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r(); })
+          )
+        );
+        await new Promise(r => setTimeout(r, 200));
+
+        const dataUrl = await toPng(slide, { width: 1080, height: 1350, pixelRatio: 1 });
+        dataUrls.push(dataUrl);
+      }
+
+      // Salva no servidor para o histórico
+      if (dataUrls.length > 0) {
+        const payload = dataUrls.map((dataUrl, slideNum) => ({ slideNum, dataUrl }));
+        const saved = await fetch(`${API}/api/carousel/save-screenshots`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderName, screenshots: payload }),
+        }).then(r => r.json()).catch(() => ({ screenshots: [] }));
+
+        return saved.screenshots || [];
+      }
+    } finally {
+      injected.forEach(el => el.remove());
+      container.remove();
+    }
+    return [];
+  }
+
   async function handleGenerate() {
     // Validação: modo normal exige topic; modo antes/depois exige resultado
     if (beforeAfterMode) {
@@ -556,30 +632,32 @@ ${stats ? `- Stats: ${stats}` : ''}
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
       setResult(data);
+      toast.success(`${data.numSlides} slides gerados! Gerando imagens…`);
 
-      // Salva no histórico do servidor
+      // Gera screenshots no browser (sem Playwright no servidor)
       const carouselId = `c_${Date.now()}`;
-      fetch(`${API}/api/carousel/saved`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: carouselId,
-          topic: data.topic,
-          folderName: data.folderName,
-          numSlides: data.numSlides,
-          screenshots: data.screenshots,
-          legenda: data.legenda,
-          config: { ...config },
-        }),
+      generateAndSaveScreenshots(data.html, data.folderName).then(screenshots => {
+        // Atualiza resultado com os screenshots gerados
+        setResult(prev => prev ? { ...prev, screenshots } : prev);
+
+        // Salva no histórico do servidor com screenshots
+        return fetch(`${API}/api/carousel/saved`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: carouselId,
+            topic: data.topic,
+            folderName: data.folderName,
+            numSlides: data.numSlides,
+            screenshots,
+            legenda: data.legenda,
+            config: { ...config },
+          }),
+        });
       }).then(() => fetch(`${API}/api/carousel/saved`).then(r => r.json()))
         .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
+        .then(() => toast.success('Imagens prontas para download!'))
         .catch(() => {});
-
-      const pngCount = data.screenshots?.length || 0;
-      toast.success(pngCount > 0
-        ? `${data.numSlides} slides gerados com ${pngCount} PNGs!`
-        : `Carrossel gerado (HTML). Screenshots indisponíveis no servidor.`
-      );
     } catch (err: any) {
       toast.error(err.message);
     } finally {
