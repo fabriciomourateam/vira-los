@@ -844,7 +844,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   });
-  // Clique em imagens abre input de URL
+  // Clique em imagens <img> abre prompt de URL
   document.querySelectorAll('img').forEach(function(img){
     if(img.getAttribute('data-no-edit')) return;
     img.style.cursor='pointer';
@@ -854,29 +854,52 @@ document.addEventListener('DOMContentLoaded', function() {
       var url=window.prompt('URL da nova imagem:',img.src||'');
       if(url&&url.trim()){img.src=url.trim();}
     });
-    // Fundo via background-image
-    var p=img.parentElement;
-    if(p&&p.style&&p.style.backgroundImage){
-      p.style.cursor='pointer';
-      p.title='Clique para trocar imagem de fundo';
-      p.addEventListener('click',function(e){
-        if(e.target!==p) return;
-        var cur=p.style.backgroundImage.replace(/url\\(['"]?|['"]?\\)/g,'');
-        var url=window.prompt('URL da nova imagem:',cur||'');
-        if(url&&url.trim()){p.style.backgroundImage="url('"+url.trim()+"')";}
-      });
-    }
   });
-  // Também para divs com background-image
-  document.querySelectorAll('.slide-bg,.bg,.clean-cta .bg').forEach(function(el){
-    el.style.cursor='pointer';
-    el.title='Clique para trocar imagem de fundo';
-    el.addEventListener('click',function(e){
+  // Botão flutuante "🖼️" para trocar background-image (funciona mesmo com overlay por cima)
+  function addBgBtn(bgEl, parentEl) {
+    var btn=document.createElement('button');
+    btn.textContent='🖼️';
+    btn.title='Trocar imagem de fundo';
+    btn.setAttribute('data-no-edit','1');
+    btn.style.cssText='position:absolute;top:10px;left:10px;z-index:9999;background:rgba(0,0,0,0.75);color:white;border:2px solid rgba(255,255,255,0.3);border-radius:8px;padding:8px 14px;font-size:20px;cursor:pointer;line-height:1;';
+    btn.addEventListener('mouseenter',function(){btn.style.background='rgba(176,120,255,0.85)';});
+    btn.addEventListener('mouseleave',function(){btn.style.background='rgba(0,0,0,0.75)';});
+    btn.addEventListener('click',function(e){
       e.stopPropagation();
-      var cur=el.style.backgroundImage.replace(/url\\(['"]?|['"]?\\)/g,'');
-      var url=window.prompt('URL da nova imagem:',cur||'');
-      if(url&&url.trim()){el.style.backgroundImage="url('"+url.trim()+"')";}
+      var cur=bgEl.style.backgroundImage.replace(/url\\(['"]?|['"]?\\)/g,'');
+      var url=window.prompt('Cole a URL da nova imagem de fundo:',cur||'');
+      if(url&&url.trim()){bgEl.style.backgroundImage="url('"+url.trim()+"')";}
     });
+    parentEl.style.position='relative';
+    parentEl.appendChild(btn);
+  }
+  // Slides com .slide-bg (capa editorial + CTA editorial)
+  document.querySelectorAll('.slide-bg').forEach(function(bg){
+    var parent=bg.closest('.slide')||bg.parentElement;
+    if(parent) addBgBtn(bg,parent);
+  });
+  // Slides clean: .bg dentro de .clean-cover ou .clean-cta
+  document.querySelectorAll('.clean-cover .bg, .clean-cta .bg').forEach(function(bg){
+    var parent=bg.closest('.clean-cover,.clean-cta')||bg.parentElement;
+    if(parent) addBgBtn(bg,parent);
+  });
+  // Foto no topo (.top-photo-wrap img) e photo-card
+  document.querySelectorAll('.top-photo-wrap img, .photo-card img, .split-panel img').forEach(function(img){
+    img.style.cursor='pointer';
+    var btn=document.createElement('button');
+    btn.textContent='🖼️';
+    btn.title='Trocar imagem';
+    btn.setAttribute('data-no-edit','1');
+    btn.style.cssText='position:absolute;bottom:10px;right:10px;z-index:9999;background:rgba(0,0,0,0.75);color:white;border:2px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 10px;font-size:18px;cursor:pointer;line-height:1;';
+    btn.addEventListener('mouseenter',function(){btn.style.background='rgba(176,120,255,0.85)';});
+    btn.addEventListener('mouseleave',function(){btn.style.background='rgba(0,0,0,0.75)';});
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var url=window.prompt('Cole a URL da nova imagem:',img.src||'');
+      if(url&&url.trim()){img.src=url.trim();}
+    });
+    var wrap=img.parentElement;
+    if(wrap){wrap.style.position='relative';wrap.appendChild(btn);}
   });
 });
 <\/script>`;
