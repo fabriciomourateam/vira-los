@@ -2497,18 +2497,21 @@ export default function CarouselEditor({
     finally { setTemplateLoading(false); }
   }
 
-  // ── Salvar edições (HTML no servidor, sem regerar screenshots) ────────────────
+  // ── Salvar edições ────────────────────────────────────────────────────────────
+  // Estratégia: salva o HTML imediatamente (< 200 ms) e libera o botão.
+  // Screenshots são regenerados em segundo plano para não bloquear o fluxo.
 
   const [saveLoading, setSaveLoading] = useState(false);
+  const [thumbLoading, setThumbLoading] = useState(false);
 
   async function handleSaveEdits() {
     setSaveLoading(true);
     try {
       const modifiedHtml = rebuildHtml();
 
-      // 1. Salva HTML editado no servidor
-      const res = await fetch(`${API}/api/carousel/screenshots`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      // 1. Persiste HTML no servidor (rápido — apenas escrita de arquivo)
+      const res = await fetch(`${API}/api/carousel/save-html`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
       if (!res.ok) {
@@ -2516,11 +2519,22 @@ export default function CarouselEditor({
         throw new Error(data.error || 'Erro ao salvar HTML');
       }
 
-      // 2. Gera screenshots no cliente (html-to-image) e faz upload slide-a-slide
-      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
-      if (screenshots.length) onScreenshotsUpdated(screenshots);
+      toast.success('Salvo! Atualizando miniaturas…');
 
-      toast.success('Salvo com screenshots atualizados!');
+      // 2. Screenshots em segundo plano — não bloqueia o botão
+      setThumbLoading(true);
+      generateAndSaveScreenshots(API, modifiedHtml, folderName)
+        .then(screenshots => {
+          if (screenshots.length) onScreenshotsUpdated(screenshots);
+          toast.success('Miniaturas atualizadas!');
+        })
+        .catch(err => {
+          console.warn('[SaveEdits/thumbs]', err);
+          // falha nas miniaturas não é crítica — o HTML já foi salvo
+          toast.info('Edições salvas. Miniaturas não puderam ser atualizadas.');
+        })
+        .finally(() => setThumbLoading(false));
+
     } catch (err: any) { toast.error(err.message); }
     finally { setSaveLoading(false); }
   }
@@ -2581,8 +2595,12 @@ export default function CarouselEditor({
             </button>
             <button onClick={handleSaveEdits} disabled={saveLoading}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors">
-              {saveLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-              Salvar
+              {saveLoading
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : thumbLoading
+                  ? <Loader2 className="w-3 h-3 animate-spin opacity-60" />
+                  : <Save className="w-3 h-3" />}
+              {thumbLoading && !saveLoading ? 'Salvando…' : 'Salvar'}
             </button>
           </div>
         </div>
