@@ -824,6 +824,59 @@ document.addEventListener('DOMContentLoaded', function() {
     '.footer-left span','.footer-right','.footer-name-pill',
     '.footer-handle-pill','.follow-banner'
   ];
+  // ── Toolbar flutuante de tamanho de fonte ──
+  var toolbar=document.createElement('div');
+  toolbar.setAttribute('data-no-edit','1');
+  toolbar.style.cssText='display:none;position:fixed;z-index:99999;background:#1e1e2e;border:1px solid rgba(176,120,255,0.5);border-radius:10px;padding:6px 10px;gap:6px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,0.6);pointer-events:all;';
+  toolbar.innerHTML='<span style="color:rgba(255,255,255,0.5);font-size:11px;font-family:sans-serif;margin-right:2px;">Fonte</span>'
+    +'<button data-no-edit="1" id="tb-minus" style="background:#333;color:white;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;font-family:sans-serif;">−</button>'
+    +'<span id="tb-size" style="color:white;font-size:13px;font-family:monospace;min-width:36px;text-align:center;">–</span>'
+    +'<button data-no-edit="1" id="tb-plus" style="background:#333;color:white;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;font-family:sans-serif;">+</button>'
+    +'<div style="width:1px;height:20px;background:rgba(255,255,255,0.15);margin:0 2px;"></div>'
+    +'<button data-no-edit="1" id="tb-bold" style="background:#333;color:white;border:none;border-radius:6px;width:28px;height:28px;font-size:14px;font-weight:900;cursor:pointer;font-family:sans-serif;">B</button>';
+  document.body.appendChild(toolbar);
+  var activeEl=null;
+  function getFs(el){
+    var s=el.style.fontSize||window.getComputedStyle(el).fontSize||'30px';
+    return parseInt(s)||30;
+  }
+  function showToolbar(el){
+    activeEl=el;
+    var rect=el.getBoundingClientRect();
+    toolbar.style.display='flex';
+    var top=rect.top-46;
+    if(top<4) top=rect.bottom+4;
+    toolbar.style.top=Math.max(4,top)+'px';
+    toolbar.style.left=Math.max(4,rect.left)+'px';
+    document.getElementById('tb-size').textContent=getFs(el)+'px';
+    var fw=parseInt(el.style.fontWeight||window.getComputedStyle(el).fontWeight||'400');
+    document.getElementById('tb-bold').style.background=fw>=700?'rgba(176,120,255,0.7)':'#333';
+  }
+  function hideToolbar(e){
+    if(e&&(e.relatedTarget===toolbar||toolbar.contains(e.relatedTarget))) return;
+    toolbar.style.display='none'; activeEl=null;
+  }
+  toolbar.addEventListener('mouseleave',function(e){ if(!activeEl) toolbar.style.display='none'; });
+  document.getElementById('tb-minus').addEventListener('click',function(e){
+    e.stopPropagation(); if(!activeEl) return;
+    var s=Math.max(10,getFs(activeEl)-2);
+    activeEl.style.fontSize=s+'px';
+    document.getElementById('tb-size').textContent=s+'px';
+  });
+  document.getElementById('tb-plus').addEventListener('click',function(e){
+    e.stopPropagation(); if(!activeEl) return;
+    var s=getFs(activeEl)+2;
+    activeEl.style.fontSize=s+'px';
+    document.getElementById('tb-size').textContent=s+'px';
+  });
+  document.getElementById('tb-bold').addEventListener('click',function(e){
+    e.stopPropagation(); if(!activeEl) return;
+    var fw=parseInt(activeEl.style.fontWeight||window.getComputedStyle(activeEl).fontWeight||'400');
+    var next=fw>=700?400:700;
+    activeEl.style.fontWeight=next;
+    document.getElementById('tb-bold').style.background=next>=700?'rgba(176,120,255,0.7)':'#333';
+  });
+
   SELS.forEach(function(sel){
     document.querySelectorAll(sel).forEach(function(el){
       if(el.closest('[contenteditable]')) return;
@@ -835,10 +888,12 @@ document.addEventListener('DOMContentLoaded', function() {
       el.addEventListener('focus',function(){
         el.style.outline='2px solid rgba(176,120,255,0.9)';
         el.style.background='rgba(176,120,255,0.07)';
+        showToolbar(el);
       });
-      el.addEventListener('blur',function(){
+      el.addEventListener('blur',function(e){
         el.style.outline='2px dashed rgba(176,120,255,0.45)';
         el.style.background='';
+        hideToolbar(e);
       });
       el.addEventListener('keydown',function(e){
         if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();}
