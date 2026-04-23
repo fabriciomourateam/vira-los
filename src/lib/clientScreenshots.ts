@@ -1,100 +1,18 @@
 /**
- * Gera screenshots dos slides de um carrossel no próprio browser via html-to-image
+ * Gera screenshots dos slides de um carrossel no próprio browser via html2canvas-pro
  * e faz upload slide-a-slide para o servidor.
  *
  * Arquitetura:
+ * - html2canvas-pro percorre o DOM e desenha direto no canvas (drawImage/fillText),
+ *   evitando a armadilha do html-to-image com SVG foreignObject — em que o Chrome
+ *   bloqueia recursos internos quando a SVG é carregada como img data-URL.
  * - Zero dependência de Playwright/Chromium no servidor.
  * - Upload individual por slide (evita 413 no body parser).
- * - Timeout em fonts.ready (evita travar no Safari iOS).
- * - Pré-embute todas as imagens como data URLs antes do toPng, pra eliminar
- *   fetches internos do html-to-image (que falham silenciosamente e abortam
- *   o SVG foreignObject inteiro).
+ * - Proxy CORS de imagens externas via /api/carousel/proxy-image.
  */
 
-// PNG 1x1 transparente — fallback quando uma imagem falha ao carregar.
 const TRANSPARENT_PIXEL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-
-async function urlToDataUrl(url: string): Promise<string> {
-  const res = await fetch(url, { credentials: 'omit', cache: 'force-cache' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const blob = await res.blob();
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('FileReader falhou'));
-    reader.readAsDataURL(blob);
-  });
-}
-
-/** Substitui todas as url(https://...) em um texto CSS por data URLs. */
-async function inlineUrlsInCss(cssText: string, cache: Map<string, string>): Promise<string> {
-  const urlRegex = /url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g;
-  const urls = [...cssText.matchAll(urlRegex)].map((m) => m[1]);
-  const unique = [...new Set(urls)];
-  await Promise.all(
-    unique.map(async (u) => {
-      if (cache.has(u)) return;
-      try {
-        cache.set(u, await urlToDataUrl(u));
-      } catch {
-        cache.set(u, TRANSPARENT_PIXEL);
-      }
-    }),
-  );
-  return cssText.replace(urlRegex, (_, u) => `url("${cache.get(u) || TRANSPARENT_PIXEL}")`);
-}
-
-/** Pré-embute `<img src=...>` como data URL, com cache e fallback transparente. */
-async function preEmbedImages(root: HTMLElement, cache: Map<string, string>) {
-  const imgs = Array.from(root.querySelectorAll('img'));
-  await Promise.all(
-    imgs.map(async (img) => {
-      const src = img.getAttribute('src') || '';
-      if (!src || src.startsWith('data:')) return;
-      if (cache.has(src)) {
-        img.setAttribute('src', cache.get(src)!);
-        return;
-      }
-      try {
-        const dataUrl = await urlToDataUrl(src);
-        cache.set(src, dataUrl);
-        img.setAttribute('src', dataUrl);
-      } catch {
-        cache.set(src, TRANSPARENT_PIXEL);
-        img.setAttribute('src', TRANSPARENT_PIXEL);
-      }
-    }),
-  );
-}
-
-/** Pré-embute `background-image: url(...)` inline, usando o mesmo cache. */
-async function preEmbedBackgrounds(root: HTMLElement, cache: Map<string, string>) {
-  const elements = Array.from(root.querySelectorAll<HTMLElement>('[style*="url("]'));
-  await Promise.all(
-    elements.map(async (el) => {
-      const style = el.getAttribute('style') || '';
-      const matches = [...style.matchAll(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g)];
-      if (matches.length === 0) return;
-      let newStyle = style;
-      for (const m of matches) {
-        const url = m[1];
-        let dataUrl = cache.get(url);
-        if (!dataUrl) {
-          try {
-            dataUrl = await urlToDataUrl(url);
-            cache.set(url, dataUrl);
-          } catch {
-            dataUrl = TRANSPARENT_PIXEL;
-            cache.set(url, dataUrl);
-          }
-        }
-        newStyle = newStyle.replace(m[0], `url("${dataUrl}")`);
-      }
-      el.setAttribute('style', newStyle);
-    }),
-  );
-}
 
 export async function generateAndSaveScreenshots(
   api: string,
@@ -102,9 +20,12 @@ export async function generateAndSaveScreenshots(
   folderName: string,
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
-  const { toPng } = await import('html-to-image');
+  const { default: html2canvas } = await import('html2canvas-pro');
 
-  const proxyUrl = (url: string) => `${api}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
+  // Proxy: URLs remotas passam pelo nosso backend (que retorna CORS liberado),
+  // senão o canvas fica tainted ao baixar.
+  const proxyUrl = (url: string) =>
+    `${api}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
   const proxied = html
     .replace(/src="(https?:\/\/[^"]+)"/g, (_, u) => `src="${proxyUrl(u)}"`)
     .replace(/src='(https?:\/\/[^']+)'/g, (_, u) => `src="${proxyUrl(u)}"`)
@@ -113,35 +34,32 @@ export async function generateAndSaveScreenshots(
   const parser = new DOMParser();
   const doc = parser.parseFromString(proxied, 'text/html');
 
+  // Injeta só os <style> inline (sem @import de fontes remotas, que causam CORS).
+  const injected: HTMLElement[] = [];
+  doc.querySelectorAll('style').forEach((s) => {
+    const cleaned = (s.textContent || '').replace(
+      /@import\s+url\(['"]?https?:\/\/[^'")\s]+['"]?\)\s*;?/g,
+      '',
+    );
+    const el = document.createElement('style');
+    el.textContent = cleaned;
+    document.head.appendChild(el);
+    injected.push(el);
+  });
+
   const container = document.createElement('div');
   container.style.cssText =
     'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
   document.body.appendChild(container);
 
   const savedFiles: string[] = [];
-  const imageCache = new Map<string, string>(); // url → dataUrl (compartilhado entre slides)
-  const injected: HTMLElement[] = [];
 
   try {
-    // Injeta <style> inline após pré-embutir todas as url(...) como data URL.
-    // Externos (Google Fonts) NÃO são injetados — causam cross-origin.
-    const styles = Array.from(doc.querySelectorAll('style'));
-    for (const s of styles) {
-      let text = (s.textContent || '').replace(
-        /@import\s+url\(['"]?https?:\/\/[^'")\s]+['"]?\)\s*;?/g,
-        '',
-      );
-      text = await inlineUrlsInCss(text, imageCache);
-      const el = document.createElement('style');
-      el.textContent = text;
-      document.head.appendChild(el);
-      injected.push(el);
-    }
-
     await Promise.race([
       document.fonts.ready,
       new Promise((r) => setTimeout(r, 3000)),
     ]);
+
     const slides = Array.from(doc.body.children) as HTMLElement[];
 
     for (let i = 0; i < slides.length; i++) {
@@ -153,12 +71,7 @@ export async function generateAndSaveScreenshots(
       slide.style.overflow = 'hidden';
       slide.querySelectorAll('link[rel="stylesheet"]').forEach((el) => el.remove());
 
-      // Pré-embute imagens e backgrounds como data URLs — elimina fetches
-      // internos do html-to-image (principal causa de falha no toPng).
-      await preEmbedImages(slide, imageCache);
-      await preEmbedBackgrounds(slide, imageCache);
-
-      // Aguarda imagens (agora data URLs) concluírem o decode.
+      // Garante que imagens carregaram (html2canvas usa drawImage e quer imgs prontas).
       await Promise.all(
         Array.from(container.querySelectorAll('img')).map((img) => {
           if (img.complete && img.naturalWidth > 0) return Promise.resolve();
@@ -169,7 +82,7 @@ export async function generateAndSaveScreenshots(
               img.src = TRANSPARENT_PIXEL;
               done();
             };
-            setTimeout(done, 3000);
+            setTimeout(done, 5000);
           });
         }),
       );
@@ -177,39 +90,20 @@ export async function generateAndSaveScreenshots(
 
       let dataUrl: string;
       try {
-        dataUrl = await toPng(slide, {
+        const canvas = await html2canvas(slide, {
           width: 1080,
           height: 1350,
-          pixelRatio: 1,
-          skipFonts: true,
-          imagePlaceholder: TRANSPARENT_PIXEL,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: null,
+          logging: false,
+          imageTimeout: 10000,
         });
+        dataUrl = canvas.toDataURL('image/png');
       } catch (err: any) {
-        if (err instanceof Error) throw err;
-        const target = err?.target;
-        const tag = target?.tagName || err?.type || 'desconhecido';
-        const rawSrc = target?.src || target?.href?.baseVal || '';
-        const srcPreview = String(rawSrc).startsWith('data:')
-          ? `data:...(${String(rawSrc).length} bytes)`
-          : String(rawSrc).slice(0, 140);
-        // Log de diagnóstico: todos os srcs que sobraram como URL remota
-        const remoteImgs = Array.from(slide.querySelectorAll('img'))
-          .map((im) => im.src)
-          .filter((s) => !s.startsWith('data:'));
-        const remoteBgs = Array.from(slide.querySelectorAll<HTMLElement>('[style*="url("]'))
-          .map((el) => el.getAttribute('style') || '')
-          .map((st) => st.match(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/)?.[1])
-          .filter(Boolean);
-        console.error('[Screenshots] toPng failed', {
-          slide: i + 1,
-          targetTag: tag,
-          targetSrc: srcPreview,
-          remoteImgs,
-          remoteBgs,
-        });
-        throw new Error(
-          `html-to-image falhou no slide ${i + 1} (${tag}${srcPreview ? ': ' + srcPreview : ''})`,
-        );
+        const msg = err?.message || err?.type || 'erro desconhecido';
+        console.error('[Screenshots] html2canvas failed', { slide: i + 1, err });
+        throw new Error(`html2canvas falhou no slide ${i + 1}: ${msg}`);
       }
 
       const res = await fetch(`${api}/api/carousel/save-screenshots`, {
