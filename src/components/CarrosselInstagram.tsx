@@ -33,6 +33,7 @@ interface CarouselConfig {
 }
 
 interface CarouselResult {
+  id?: string;
   html: string;
   legenda: string;
   topic: string;
@@ -476,7 +477,11 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   }
 
   // ── Gera screenshots no browser via html-to-image ────────────────────────────
-  async function generateAndSaveScreenshots(html: string, folderName: string): Promise<string[]> {
+  async function generateAndSaveScreenshots(
+    html: string,
+    folderName: string,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<string[]> {
     const { toPng } = await import('html-to-image');
 
     const proxyUrl = (url: string) => `${API}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
@@ -507,48 +512,56 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
     container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
     document.body.appendChild(container);
 
-    const dataUrls: string[] = [];
+    const savedFiles: string[] = [];
 
     try {
-      await document.fonts.ready;
+      // Timeout em fonts.ready: Safari iOS pode travar indefinidamente
+      await Promise.race([
+        document.fonts.ready,
+        new Promise(r => setTimeout(r, 3000)),
+      ]);
       const slides = Array.from(doc.body.children) as HTMLElement[];
 
-      for (const slideEl of slides) {
+      for (let i = 0; i < slides.length; i++) {
         container.innerHTML = '';
-        container.appendChild(slideEl.cloneNode(true));
+        container.appendChild(slides[i].cloneNode(true));
         const slide = container.firstElementChild as HTMLElement;
         slide.style.width = '1080px';
         slide.style.height = '1350px';
         slide.style.overflow = 'hidden';
 
-        // Aguarda imagens carregarem
+        // Aguarda imagens carregarem (com timeout individual de 5s por imagem)
         await Promise.all(
-          Array.from(container.querySelectorAll('img')).map(img =>
-            img.complete ? Promise.resolve() : new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r(); })
-          )
+          Array.from(container.querySelectorAll('img')).map(img => {
+            if (img.complete) return Promise.resolve();
+            return new Promise<void>(r => {
+              const done = () => r();
+              img.onload = done;
+              img.onerror = done;
+              setTimeout(done, 5000);
+            });
+          })
         );
         await new Promise(r => setTimeout(r, 200));
 
         const dataUrl = await toPng(slide, { width: 1080, height: 1350, pixelRatio: 1 });
-        dataUrls.push(dataUrl);
-      }
 
-      // Salva no servidor para o histórico
-      if (dataUrls.length > 0) {
-        const payload = dataUrls.map((dataUrl, slideNum) => ({ slideNum, dataUrl }));
-        const saved = await fetch(`${API}/api/carousel/save-screenshots`, {
+        // Upload individual — evita estourar limite do body parser e dá tolerância a falhas
+        const res = await fetch(`${API}/api/carousel/save-screenshots`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderName, screenshots: payload }),
-        }).then(r => r.json()).catch(() => ({ screenshots: [] }));
-
-        return saved.screenshots || [];
+          body: JSON.stringify({ folderName, screenshots: [{ slideNum: i, dataUrl }] }),
+        });
+        if (!res.ok) throw new Error(`Falha ao salvar slide ${i + 1} (HTTP ${res.status})`);
+        const json = await res.json();
+        if (Array.isArray(json.screenshots)) savedFiles.push(...json.screenshots);
+        onProgress?.(i + 1, slides.length);
       }
     } finally {
       injected.forEach(el => el.remove());
       container.remove();
     }
-    return [];
+    return savedFiles;
   }
 
   async function handleGenerate() {
@@ -634,17 +647,15 @@ ${stats ? `- Stats: ${stats}` : ''}
       clearTimeout(timeout);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
-      setResult(data);
-      toast.success(`${data.numSlides} slides gerados! Gerando imagens…`);
 
-      // Gera screenshots no browser (sem Playwright no servidor)
       const carouselId = `c_${Date.now()}`;
-      generateAndSaveScreenshots(data.html, data.folderName).then(screenshots => {
-        // Atualiza resultado com os screenshots gerados
-        setResult(prev => prev ? { ...prev, screenshots } : prev);
+      setResult({ ...data, id: carouselId, screenshots: [] });
+      toast.success(`${data.numSlides} slides gerados! Salvando no histórico…`);
 
-        // Salva no histórico do servidor com screenshots
-        return fetch(`${API}/api/carousel/saved`, {
+      // 1) Grava metadata imediatamente com screenshots vazios — garante que o
+      //    carrossel apareça na lista mesmo se a geração de imagens falhar.
+      try {
+        const saveRes = await fetch(`${API}/api/carousel/saved`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -652,15 +663,48 @@ ${stats ? `- Stats: ${stats}` : ''}
             topic: data.topic,
             folderName: data.folderName,
             numSlides: data.numSlides,
-            screenshots,
+            screenshots: [],
             legenda: data.legenda,
             config: { ...config },
           }),
         });
-      }).then(() => fetch(`${API}/api/carousel/saved`).then(r => r.json()))
-        .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
-        .then(() => toast.success('Imagens prontas para download!'))
-        .catch(() => {});
+        if (!saveRes.ok) throw new Error(`HTTP ${saveRes.status}`);
+        const saved = await fetch(`${API}/api/carousel/saved`).then(r => r.json());
+        setSavedCarousels(Array.isArray(saved) ? saved : []);
+      } catch (e: any) {
+        console.error('[SaveCarousel]', e);
+        toast.error(`Não foi possível salvar no histórico: ${e.message || e}`);
+      }
+
+      // 2) Gera screenshots no browser e atualiza o registro via PATCH.
+      //    Se falhar, o registro já está salvo (sem preview) e o usuário pode
+      //    re-tentar depois.
+      try {
+        toast.success('Gerando imagens dos slides…');
+        const screenshots = await generateAndSaveScreenshots(
+          data.html,
+          data.folderName,
+          (done, total) => {
+            if (done < total) {
+              setResult(prev => prev ? { ...prev, screenshots: Array(done).fill('') } : prev);
+            }
+          },
+        );
+        setResult(prev => prev ? { ...prev, screenshots } : prev);
+
+        await fetch(`${API}/api/carousel/saved/${carouselId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshots }),
+        });
+
+        const saved = await fetch(`${API}/api/carousel/saved`).then(r => r.json());
+        setSavedCarousels(Array.isArray(saved) ? saved : []);
+        toast.success('Imagens prontas para download!');
+      } catch (e: any) {
+        console.error('[Screenshots]', e);
+        toast.error(`Erro ao gerar imagens: ${e.message || e}. Carrossel salvo sem preview.`);
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -930,11 +974,13 @@ document.addEventListener('DOMContentLoaded', function() {
         toast.success('Slide salvo! Gerando imagens…');
         const screenshots = await generateAndSaveScreenshots(newHtml, result.folderName);
         setResult(prev => prev ? { ...prev, html: newHtml, screenshots } : prev);
-        await fetch(`${API}/api/carousel/saved/${result.folderName}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ screenshots }),
-        }).catch(() => {});
+        if (result.id) {
+          await fetch(`${API}/api/carousel/saved/${result.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ screenshots }),
+          }).catch((e) => console.error('[PatchScreenshots]', e));
+        }
         toast.success('Imagens atualizadas!');
         setInlineEditMode(false);
       } else {
