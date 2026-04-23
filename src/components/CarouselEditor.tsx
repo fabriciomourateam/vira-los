@@ -7,6 +7,8 @@ import {
   Undo2, Redo2, Search, Copy, Sparkles, ChevronDown, Library, Bookmark, X,
 } from 'lucide-react';
 
+import { generateAndSaveScreenshots } from '@/lib/clientScreenshots';
+
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -2353,27 +2355,24 @@ export default function CarouselEditor({
   // ── JPEG download ─────────────────────────────────────────────────────────────
 
   async function handleDownloadJpegs() {
-    const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    // Se tiver screenshots do servidor, baixa como JPEG
-    // Caso contrário, gera screenshot primeiro
     toast.info('Gerando screenshots antes de baixar…');
     setScreenshotLoading(true);
     try {
       const modifiedHtml = rebuildHtml();
-      const res = await fetch(`${SERVER_URL}/api/carousel/screenshots`, {
+      // Salva HTML atualizado no servidor (endpoint não gera screenshots mais)
+      await fetch(`${API}/api/carousel/screenshots`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      onScreenshotsUpdated(data.screenshots ?? []);
-      // Download each as JPEG
-      for (let i = 0; i < (data.screenshots ?? []).length; i++) {
-        const url = `${SERVER_URL}/output/${folderName}/${data.screenshots[i]}`;
+      // Gera screenshots no cliente e faz upload slide-a-slide
+      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
+      onScreenshotsUpdated(screenshots);
+      for (let i = 0; i < screenshots.length; i++) {
+        const url = `${API}/output/${folderName}/${screenshots[i]}`;
         await downloadAsJpeg(url, `slide_${String(i + 1).padStart(2, '0')}.jpg`);
-        await new Promise(r => setTimeout(r, 150)); // small delay between downloads
+        await new Promise(r => setTimeout(r, 150));
       }
-      toast.success(`${data.screenshots.length} JPEGs baixados!`);
+      toast.success(`${screenshots.length} JPEGs baixados!`);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -2405,14 +2404,14 @@ export default function CarouselEditor({
   async function handleRegenerateScreenshots() {
     setScreenshotLoading(true);
     try {
-      const res = await fetch(`${API}/api/carousel/screenshots`, {
+      const modifiedHtml = rebuildHtml();
+      await fetch(`${API}/api/carousel/screenshots`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: rebuildHtml(), folderName }),
+        body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro');
-      onScreenshotsUpdated(data.screenshots ?? []);
-      toast.success(`${data.screenshots?.length ?? 0} screenshots atualizados!`);
+      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
+      onScreenshotsUpdated(screenshots);
+      toast.success(`${screenshots.length} screenshots atualizados!`);
     } catch (err: any) { toast.error(err.message); }
     finally { setScreenshotLoading(false); }
   }
@@ -2423,17 +2422,31 @@ export default function CarouselEditor({
     const name = templateName.trim() || topic;
     setTemplateLoading(true);
     try {
+      const modifiedHtml = rebuildHtml();
       const res = await fetch(`${API}/api/carousel/save-template`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          html: rebuildHtml(), folderName, name,
+          html: modifiedHtml, name,
           numSlides: numSlides ?? slides.length,
           legenda: legenda ?? '', config: config ?? {},
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro');
-      toast.success(`Modelo "${name}" salvo!`);
+      toast.success(`Modelo "${name}" salvo! Gerando capa…`);
+
+      try {
+        const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, data.folderName);
+        await fetch(`${API}/api/carousel/saved/${data.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshots }),
+        });
+        toast.success('Capa do modelo gerada!');
+      } catch (e: any) {
+        console.error('[SaveTemplate/Screenshots]', e);
+        toast.error(`Modelo salvo, capa falhou: ${e.message || e}`);
+      }
       onTemplateSaved?.();
     } catch (err: any) { toast.error(err.message); }
     finally { setTemplateLoading(false); }
@@ -2448,18 +2461,19 @@ export default function CarouselEditor({
     try {
       const modifiedHtml = rebuildHtml();
 
-      // 1. Salva HTML + regera screenshots de uma vez (o endpoint /screenshots já salva o HTML)
+      // 1. Salva HTML editado no servidor
       const res = await fetch(`${API}/api/carousel/screenshots`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
-
-      // 2. Atualiza os screenshots no componente pai (atualiza thumbnails na lista)
-      if (data.screenshots?.length) {
-        onScreenshotsUpdated(data.screenshots);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Erro ao salvar HTML');
       }
+
+      // 2. Gera screenshots no cliente (html-to-image) e faz upload slide-a-slide
+      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
+      if (screenshots.length) onScreenshotsUpdated(screenshots);
 
       toast.success('Salvo com screenshots atualizados!');
     } catch (err: any) { toast.error(err.message); }

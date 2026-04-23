@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const multer = require('multer');
-const { generateCarousel, takeScreenshots, OUTPUT_DIR, regenerateSlide } = require('../services/carouselService');
+const { generateCarousel, OUTPUT_DIR, regenerateSlide } = require('../services/carouselService');
 const db = require('../db/database');
 
 const router = express.Router();
@@ -107,10 +107,10 @@ router.put('/save-html', (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Regenerar screenshots a partir de HTML editado ──────────────────────────
+// ─── Salvar HTML editado (screenshots são gerados no cliente via html-to-image) ─
 
 router.post('/screenshots', async (req, res) => {
-  const { html, folderName, bgColor = '#1a1a1a', primaryColor = '#B078FF' } = req.body;
+  const { html, folderName } = req.body;
   if (!html || !folderName) return res.status(400).json({ error: 'html e folderName obrigatórios' });
 
   const folderPath = path.join(OUTPUT_DIR, folderName);
@@ -118,27 +118,20 @@ router.post('/screenshots', async (req, res) => {
     fs.mkdirSync(folderPath, { recursive: true });
   }
 
-  // Salva HTML editado no disco
   const htmlFilePath = path.join(folderPath, 'carrossel.html');
   fs.writeFileSync(htmlFilePath, html, 'utf8');
 
-  try {
-    const screenshots = await takeScreenshots(htmlFilePath, folderPath, bgColor, primaryColor, folderName);
-    res.json({ screenshots });
-  } catch (err) {
-    console.error('[Carousel/Screenshots]', err.message);
-    res.status(500).json({ error: err.message });
-  }
+  // Retorna vazio — cliente gera screenshots via html-to-image e faz upload
+  // separado em /save-screenshots.
+  res.json({ ok: true, screenshots: [] });
 });
 
 // ─── Salvar carrossel editado como modelo ─────────────────────────────────────
 
 router.post('/save-template', async (req, res) => {
-  const { html, folderName, name, numSlides, legenda, config,
-          bgColor = '#1a1a1a', primaryColor = '#B078FF' } = req.body;
+  const { html, name, numSlides, legenda, config } = req.body;
   if (!html || !name) return res.status(400).json({ error: 'html e name obrigatórios' });
 
-  // Cria pasta própria para o template
   const slug = name.toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-').substring(0, 40).replace(/-$/, '');
@@ -150,26 +143,21 @@ router.post('/save-template', async (req, res) => {
   fs.writeFileSync(htmlFilePath, html, 'utf8');
   if (legenda) fs.writeFileSync(path.join(folderPath, 'legenda.txt'), legenda, 'utf8');
 
-  let screenshots = [];
-  try {
-    screenshots = await takeScreenshots(htmlFilePath, folderPath, bgColor, primaryColor, templateFolder);
-  } catch (err) {
-    console.warn('[Carousel/SaveTemplate] Screenshots falhou:', err.message);
-  }
-
+  // Screenshots vêm do cliente via html-to-image. Registra template sem PNGs;
+  // cliente faz PATCH depois com os arquivos gerados.
   const templateId = `t_${Date.now()}`;
   db.saveCarousel({
     id: templateId,
     topic: name,
     folderName: templateFolder,
     numSlides: numSlides || 0,
-    screenshots,
+    screenshots: [],
     legenda: legenda || '',
     config: config || {},
     isTemplate: true,
   });
 
-  res.json({ ok: true, id: templateId, folderName: templateFolder, screenshots });
+  res.json({ ok: true, id: templateId, folderName: templateFolder, screenshots: [] });
 });
 
 // ─── Carrosseis salvos (histórico + templates) ────────────────────────────────

@@ -9,6 +9,7 @@ import {
   Archive, ArchiveRestore, Save,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
+import { generateAndSaveScreenshots as libGenerateScreenshots } from '@/lib/clientScreenshots';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -459,16 +460,27 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           numSlides: (html.match(/clean-cover|clean-content|clean-cta|clean-split/g) || []).length,
           legenda: '',
           config: { ...config },
-          bgColor:      config.bgColor      || '#1a1a1a',
-          primaryColor: config.primaryColor || '#B078FF',
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar modelo');
-      await fetch(`${API}/api/carousel/saved`).then(r => r.json()).then(saved => {
-        setSavedCarousels(Array.isArray(saved) ? saved : []);
-      });
-      toast.success(`Modelo "${modelName.trim()}" importado!`);
+      refreshSavedCarousels();
+      toast.success(`Modelo importado! Gerando capa…`);
+
+      // Gera screenshots no cliente e faz PATCH do template com elas
+      try {
+        const screenshots = await generateAndSaveScreenshots(html, data.folderName);
+        await fetch(`${API}/api/carousel/saved/${data.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshots }),
+        });
+        refreshSavedCarousels();
+        toast.success(`Modelo "${modelName.trim()}" pronto com capa!`);
+      } catch (e: any) {
+        console.error('[ImportHtml/Screenshots]', e);
+        toast.error(`Modelo salvo, mas falhou ao gerar capa: ${e.message || e}`);
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -478,91 +490,12 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   }
 
   // ── Gera screenshots no browser via html-to-image ────────────────────────────
-  async function generateAndSaveScreenshots(
+  function generateAndSaveScreenshots(
     html: string,
     folderName: string,
     onProgress?: (done: number, total: number) => void,
   ): Promise<string[]> {
-    const { toPng } = await import('html-to-image');
-
-    const proxyUrl = (url: string) => `${API}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
-    const proxied = html
-      .replace(/src="(https?:\/\/[^"]+)"/g, (_, u) => `src="${proxyUrl(u)}"`)
-      .replace(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g, (_, u) => `url("${proxyUrl(u)}")`);
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(proxied, 'text/html');
-
-    // Injeta estilos do carrossel no documento principal temporariamente
-    const injected: HTMLElement[] = [];
-    doc.querySelectorAll('style').forEach(s => {
-      const el = document.createElement('style');
-      el.textContent = s.textContent;
-      document.head.appendChild(el);
-      injected.push(el);
-    });
-    doc.querySelectorAll('link[rel="stylesheet"]').forEach(l => {
-      const el = document.createElement('link');
-      el.setAttribute('rel', 'stylesheet');
-      el.setAttribute('href', (l as HTMLLinkElement).href);
-      document.head.appendChild(el);
-      injected.push(el);
-    });
-
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
-    document.body.appendChild(container);
-
-    const savedFiles: string[] = [];
-
-    try {
-      // Timeout em fonts.ready: Safari iOS pode travar indefinidamente
-      await Promise.race([
-        document.fonts.ready,
-        new Promise(r => setTimeout(r, 3000)),
-      ]);
-      const slides = Array.from(doc.body.children) as HTMLElement[];
-
-      for (let i = 0; i < slides.length; i++) {
-        container.innerHTML = '';
-        container.appendChild(slides[i].cloneNode(true));
-        const slide = container.firstElementChild as HTMLElement;
-        slide.style.width = '1080px';
-        slide.style.height = '1350px';
-        slide.style.overflow = 'hidden';
-
-        // Aguarda imagens carregarem (com timeout individual de 5s por imagem)
-        await Promise.all(
-          Array.from(container.querySelectorAll('img')).map(img => {
-            if (img.complete) return Promise.resolve();
-            return new Promise<void>(r => {
-              const done = () => r();
-              img.onload = done;
-              img.onerror = done;
-              setTimeout(done, 5000);
-            });
-          })
-        );
-        await new Promise(r => setTimeout(r, 200));
-
-        const dataUrl = await toPng(slide, { width: 1080, height: 1350, pixelRatio: 1 });
-
-        // Upload individual — evita estourar limite do body parser e dá tolerância a falhas
-        const res = await fetch(`${API}/api/carousel/save-screenshots`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderName, screenshots: [{ slideNum: i, dataUrl }] }),
-        });
-        if (!res.ok) throw new Error(`Falha ao salvar slide ${i + 1} (HTTP ${res.status})`);
-        const json = await res.json();
-        if (Array.isArray(json.screenshots)) savedFiles.push(...json.screenshots);
-        onProgress?.(i + 1, slides.length);
-      }
-    } finally {
-      injected.forEach(el => el.remove());
-      container.remove();
-    }
-    return savedFiles;
+    return libGenerateScreenshots(API, html, folderName, onProgress);
   }
 
   async function handleGenerate() {
@@ -1955,7 +1888,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <LayoutTemplate className="w-2.5 h-2.5" /> Modelo
                       </div>
                     )}
-                    {/* Desktop: overlay on hover */}
+                    {/* Desktop: overlay on hover — só renderiza quando há thumb,
+                        senão sobrepõe o botão "Regenerar capa" */}
+                    {thumb && (
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all items-center justify-center gap-2 opacity-0 group-hover:opacity-100 hidden sm:flex">
                       {saved.isTemplate ? (
                         <button
@@ -1973,7 +1908,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         </button>
                       )}
                     </div>
-                    {/* Mobile: always-visible bottom gradient + button */}
+                    )}
+                    {/* Mobile: always-visible bottom gradient + button — idem */}
+                    {thumb && (
                     <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-6 pb-2 px-2 flex justify-center sm:hidden">
                       {saved.isTemplate ? (
                         <button
@@ -1991,6 +1928,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </button>
                       )}
                     </div>
+                    )}
                   </div>
                   <div className="p-3 space-y-1.5">
                     <p className="text-xs font-semibold text-foreground line-clamp-2">{saved.topic}</p>
