@@ -9,10 +9,100 @@
  * - Zero dependência de Playwright/Chromium no servidor.
  * - Upload individual por slide (evita 413 no body parser).
  * - Proxy CORS de imagens externas via /api/carousel/proxy-image.
+ *
+ * Notas sobre limitações do html2canvas-pro:
+ * - Não suporta CSS `filter: brightness()` — substitui por overlay rgba antes de renderizar.
+ * - background-image carregado via CSS é assíncrono — pré-carrega via Image() antes do canvas.
  */
 
 const TRANSPARENT_PIXEL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+/**
+ * html2canvas-pro não suporta filter:brightness(). Antes de renderizar cada slide,
+ * percorre os elementos .bg/.slide-bg e:
+ * 1. Lê o brightness do inline style OU do computed style (CSS class).
+ * 2. Insere um overlay div rgba equivalente (html2canvas renderiza divs normalmente).
+ * 3. Remove o filter do inline style para evitar interferência.
+ */
+function applyBrightnessOverlays(container: HTMLElement): void {
+  const bgEls = Array.from(container.querySelectorAll('.bg, .slide-bg')) as HTMLElement[];
+  for (const el of bgEls) {
+    const inlineStyle = el.getAttribute('style') || '';
+
+    // Prioridade: inline style (aplicado pelo editor)
+    const inlineMatch = inlineStyle.match(/filter\s*:\s*brightness\(\s*(\d+(?:\.\d+)?)\s*%\s*\)/i);
+
+    // Fallback: computed style (CSS class, ex.: .clean-cta .bg { filter: brightness(0.3) })
+    let factor: number;
+    if (inlineMatch) {
+      factor = parseFloat(inlineMatch[1]) / 100; // "30%" → 0.30
+    } else {
+      try {
+        const computed = window.getComputedStyle(el);
+        const cf = computed.getPropertyValue('filter') || '';
+        const cm = cf.match(/brightness\(\s*(\d+(?:\.\d+)?)\s*\)/);
+        factor = cm ? parseFloat(cm[1]) : 1.0; // computed já é decimal (0.3 = 30%)
+      } catch {
+        factor = 1.0;
+      }
+    }
+
+    if (Math.abs(factor - 1.0) < 0.02) continue; // ~100% — sem ajuste necessário
+
+    // Insere overlay imediatamente após o elemento .bg (z-index idêntico = acima por DOM order)
+    const alpha = factor < 1.0
+      ? Math.min(1, 1 - factor)          // escurecer
+      : 0;                                // clarear ainda não implementado (não usado nos templates)
+    if (alpha > 0.01) {
+      const overlay = document.createElement('div');
+      overlay.setAttribute(
+        'style',
+        `position:absolute;inset:0;z-index:0;background:rgba(0,0,0,${alpha.toFixed(4)});pointer-events:none;`,
+      );
+      el.insertAdjacentElement('afterend', overlay);
+    }
+
+    // Remove o filter do inline style (o overlay assumiu o papel)
+    if (inlineMatch) {
+      el.setAttribute(
+        'style',
+        inlineStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?\s*/i, '').trim(),
+      );
+    }
+  }
+}
+
+/**
+ * Pré-carrega todas as imagens de background-image (CSS inline) do container.
+ * html2canvas pede drawImage logo que inicia — sem este pré-load a imagem pode
+ * ainda não ter chegado e o fundo fica em branco.
+ */
+async function preloadBackgroundImages(container: HTMLElement): Promise<void> {
+  const BG_URL_RE = /background-image\s*:\s*url\(\s*["']?([^"')]+)["']?\s*\)/i;
+  const allEls = Array.from(container.querySelectorAll('[style]')) as HTMLElement[];
+  const urls: string[] = [];
+  for (const el of allEls) {
+    const s = el.getAttribute('style') || '';
+    const m = s.match(BG_URL_RE);
+    if (m && m[1] && !m[1].startsWith('data:')) urls.push(m[1]);
+  }
+  if (urls.length === 0) return;
+
+  await Promise.all(
+    urls.map(
+      url =>
+        new Promise<void>(resolve => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => resolve();
+          img.onerror = () => resolve(); // não bloqueia em erro; html2canvas tentará de novo
+          setTimeout(resolve, 12000);    // timeout generoso para proxies
+          img.src = url;
+        }),
+    ),
+  );
+}
 
 export async function generateAndSaveScreenshots(
   api: string,
@@ -71,7 +161,18 @@ export async function generateAndSaveScreenshots(
       slide.style.overflow = 'hidden';
       slide.querySelectorAll('link[rel="stylesheet"]').forEach((el) => el.remove());
 
-      // Garante que imagens carregaram (html2canvas usa drawImage e quer imgs prontas).
+      // ── Pré-processamento antes do html2canvas ────────────────────────────────
+
+      // 1. Pré-carrega imagens de fundo CSS (background-image) — evita fundo branco
+      //    por imagem ainda não carregada quando html2canvas começa a renderizar.
+      await preloadBackgroundImages(container);
+
+      // 2. Converte filter:brightness() → overlay div rgba
+      //    html2canvas-pro não suporta CSS filter; esta conversão garante que
+      //    o escurecimento do fundo apareça corretamente no PNG gerado.
+      applyBrightnessOverlays(container);
+
+      // Garante que imagens <img> carregaram (html2canvas usa drawImage e quer imgs prontas).
       await Promise.all(
         Array.from(container.querySelectorAll('img')).map((img) => {
           if (img.complete && img.naturalWidth > 0) return Promise.resolve();
@@ -79,14 +180,15 @@ export async function generateAndSaveScreenshots(
             const done = () => r();
             img.onload = done;
             img.onerror = () => {
+              console.warn('[Screenshots] Img failed to load:', img.src);
               img.src = TRANSPARENT_PIXEL;
               done();
             };
-            setTimeout(done, 5000);
+            setTimeout(done, 8000);
           });
         }),
       );
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 150));
 
       let dataUrl: string;
       try {
@@ -97,7 +199,7 @@ export async function generateAndSaveScreenshots(
           allowTaint: false,
           backgroundColor: null,
           logging: false,
-          imageTimeout: 10000,
+          imageTimeout: 15000,
         });
         dataUrl = canvas.toDataURL('image/png');
       } catch (err: any) {

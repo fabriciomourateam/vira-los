@@ -6,6 +6,7 @@ primary_region = 'ams'
 [env]
   PORT = "8080"
   NODE_ENV = "production"
+  SERVER_URL = "https://vira-los.fly.dev"
 
 [http_service]
   internal_port = 8080
