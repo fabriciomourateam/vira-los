@@ -2027,9 +2027,33 @@ export default function CarouselEditor({
 
   // ── Edição de texto ──────────────────────────────────────────────────────────
 
+  /**
+   * Constrói um array de TextBlocks para o slide `si` mesclando:
+   * - editedTexts[si] (edições do usuário, índices que existem)
+   * - slides[si].texts (originais) para preencher lacunas / índices novos
+   *
+   * Isso garante que `b[bi]` NUNCA seja undefined, mesmo quando:
+   * - O slide foi regenerado e ganhou mais blocos de texto
+   * - editedTexts[si] ainda não existia
+   * Sem isso, `{ ...undefined, prop }` cria TextBlocks sem className, quebrando
+   * todo o código que chama `.split()` na className.
+   */
+  function mergeTexts(prev: Record<number, TextBlock[]>, si: number): TextBlock[] {
+    const orig = slides[si]?.texts ?? [];
+    const edited = prev[si];
+    if (!edited) return [...orig];
+    // Para cada índice original, use a versão editada se existir; caso contrário o original.
+    // Isso também preserva eventuais blocos adicionados pelo usuário (custom-text) além do range original.
+    const merged = orig.map((o, i) => edited[i] ?? o);
+    // Mantém blocos extras adicionados pelo usuário que não existem no original
+    if (edited.length > orig.length) merged.push(...edited.slice(orig.length));
+    return merged;
+  }
+
   function updateText(si: number, bi: number, val: string) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       b[bi] = { ...b[bi], text: val };
       return { ...prev, [si]: b };
     });
@@ -2037,7 +2061,8 @@ export default function CarouselEditor({
 
   function updateRichHtml(si: number, bi: number, html: string) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       b[bi] = { ...b[bi], richHtml: html };
       return { ...prev, [si]: b };
     });
@@ -2045,7 +2070,8 @@ export default function CarouselEditor({
 
   function updateTextAlign(si: number, bi: number, align: TextBlock['textAlign']) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       b[bi] = { ...b[bi], textAlign: align };
       return { ...prev, [si]: b };
     });
@@ -2053,7 +2079,8 @@ export default function CarouselEditor({
 
   function toggleTextTransform(si: number, bi: number) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       const current = b[bi].textTransform;
       // Cycle: undefined (original) → none → uppercase → none
       b[bi] = { ...b[bi], textTransform: current === 'none' ? 'uppercase' : 'none' };
@@ -2063,7 +2090,8 @@ export default function CarouselEditor({
 
   function updateFontSize(si: number, bi: number, delta: number) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       const curr = b[bi]?.fontSize ?? (b[bi]?.isMain ? 48 : 28);
       b[bi] = { ...b[bi], fontSize: Math.max(8, Math.min(200, curr + delta)) };
       return { ...prev, [si]: b };
@@ -2072,7 +2100,8 @@ export default function CarouselEditor({
 
   function updateTextColor(si: number, bi: number, color: string) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       b[bi] = { ...b[bi], color };
       return { ...prev, [si]: b };
     });
@@ -2080,7 +2109,8 @@ export default function CarouselEditor({
 
   function updateFontFamily(si: number, bi: number, fontFamily: string) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       b[bi] = { ...b[bi], fontFamily: fontFamily || undefined };
       return { ...prev, [si]: b };
     });
@@ -2088,7 +2118,8 @@ export default function CarouselEditor({
 
   function updateFontWeight(si: number, bi: number, fontWeight: number | undefined) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       b[bi] = { ...b[bi], fontWeight };
       return { ...prev, [si]: b };
     });
@@ -2096,7 +2127,8 @@ export default function CarouselEditor({
 
   function addWordHighlight(si: number, bi: number, word: string, color: string) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       b[bi] = { ...b[bi], highlights: [...(b[bi].highlights ?? []), { word, color }] };
       return { ...prev, [si]: b };
     });
@@ -2104,7 +2136,8 @@ export default function CarouselEditor({
 
   function removeWordHighlight(si: number, bi: number, hi: number) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       b[bi] = { ...b[bi], highlights: (b[bi].highlights ?? []).filter((_, i) => i !== hi) };
       return { ...prev, [si]: b };
     });
@@ -2112,7 +2145,8 @@ export default function CarouselEditor({
 
   function updateWordHighlightColor(si: number, bi: number, hi: number, color: string) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       const hls = [...(b[bi].highlights ?? [])];
       hls[hi] = { ...hls[hi], color };
       b[bi] = { ...b[bi], highlights: hls };
@@ -2122,7 +2156,8 @@ export default function CarouselEditor({
 
   function updateWordHighlightWord(si: number, bi: number, hi: number, word: string) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
+      if (!b[bi]) return prev;
       const hls = [...(b[bi].highlights ?? [])];
       hls[hi] = { ...hls[hi], word };
       b[bi] = { ...b[bi], highlights: hls };
@@ -2132,7 +2167,7 @@ export default function CarouselEditor({
 
   function addTextBlock(si: number) {
     setEditedTexts(prev => {
-      const b = [...(prev[si] ?? slides[si]?.texts ?? [])];
+      const b = mergeTexts(prev, si);
       b.push({
         className: 'custom-text',
         text: 'Novo texto',
