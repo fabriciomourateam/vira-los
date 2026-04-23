@@ -31,6 +31,14 @@ interface CarouselConfig {
   dominantEmotion: string;
   roteiro: string;
   layoutStyle: 'editorial' | 'clean';
+  titleFontSize: number;       // 0 = auto, otherwise px
+  bodyFontSize: number;        // 0 = auto, otherwise px
+  bannerFontSize: number;      // 0 = auto, otherwise px
+  titleFontWeight: number;     // 0 = auto (900), or 300/400/500/600/700/800/900
+  bodyFontWeight: number;      // 0 = auto (400), or 300/400/500/600/700/800/900
+  titleTextTransform: string;  // '' = auto, 'uppercase', 'none'
+  titleFontFamily: string;     // '' = global fontFamily, or specific override
+  bodyFontFamily: string;      // '' = global fontFamily, or specific override
 }
 
 interface CarouselResult {
@@ -220,6 +228,14 @@ const DEFAULT_CONFIG: CarouselConfig = {
   dominantEmotion: 'medo de perder',
   roteiro: '',
   layoutStyle: 'editorial',
+  titleFontSize: 0,
+  bodyFontSize: 0,
+  bannerFontSize: 0,
+  titleFontWeight: 0,
+  bodyFontWeight: 0,
+  titleTextTransform: '',
+  titleFontFamily: '',
+  bodyFontFamily: '',
 };
 
 // ─── Prévia de cores ──────────────────────────────────────────────────────────
@@ -1420,6 +1436,188 @@ document.addEventListener('DOMContentLoaded', function() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Tamanhos de Fonte */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-3">
+                  <Type className="w-3.5 h-3.5" /> Tamanhos de Fonte
+                  <span className="normal-case font-normal text-[10px] ml-1">(0 = automático — IA escolhe)</span>
+                </label>
+                <div className="space-y-3">
+                  {/* Título */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-muted-foreground">Títulos dos slides</span>
+                      <span className="text-xs font-mono font-bold text-foreground">
+                        {config.titleFontSize === 0 ? 'Auto' : `${config.titleFontSize}px`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range" min={0} max={100} step={2}
+                        value={config.titleFontSize}
+                        onChange={e => set('titleFontSize', Number(e.target.value))}
+                        className="flex-1 accent-purple-500"
+                      />
+                      {config.titleFontSize !== 0 && (
+                        <button type="button" onClick={() => set('titleFontSize', 0)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-border">
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Padrão: 66px (Clean) / 38px (Editorial)</p>
+                  </div>
+                  {/* Corpo */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-muted-foreground">Corpo do texto</span>
+                      <span className="text-xs font-mono font-bold text-foreground">
+                        {config.bodyFontSize === 0 ? 'Auto' : `${config.bodyFontSize}px`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range" min={0} max={60} step={2}
+                        value={config.bodyFontSize}
+                        onChange={e => set('bodyFontSize', Number(e.target.value))}
+                        className="flex-1 accent-purple-500"
+                      />
+                      {config.bodyFontSize !== 0 && (
+                        <button type="button" onClick={() => set('bodyFontSize', 0)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-border">
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Padrão: 30px (Clean) / 28px (Editorial)</p>
+                  </div>
+                  {/* Banner */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-muted-foreground">Banner "Me siga"</span>
+                      <span className="text-xs font-mono font-bold text-foreground">
+                        {config.bannerFontSize === 0 ? 'Auto' : `${config.bannerFontSize}px`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range" min={0} max={50} step={2}
+                        value={config.bannerFontSize}
+                        onChange={e => set('bannerFontSize', Number(e.target.value))}
+                        className="flex-1 accent-purple-500"
+                      />
+                      {config.bannerFontSize !== 0 && (
+                        <button type="button" onClick={() => set('bannerFontSize', 0)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-border">
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Padrão: 27px</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Peso e Estilo da Fonte */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-3">
+                  <Type className="w-3.5 h-3.5" /> Peso e Estilo
+                </label>
+                <div className="space-y-4">
+
+                  {/* Peso dos Títulos */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs text-muted-foreground">Peso dos títulos</span>
+                      <span className="text-xs font-mono font-bold text-foreground">
+                        {config.titleFontWeight === 0 ? 'Auto (900)' : String(config.titleFontWeight)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {([0, 300, 400, 500, 600, 700, 800, 900] as const).map(w => (
+                        <button
+                          key={w} type="button"
+                          onClick={() => set('titleFontWeight', w)}
+                          className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors ${config.titleFontWeight === w ? 'bg-purple-600 border-purple-600 text-white' : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40'}`}
+                          style={{ fontWeight: w === 0 ? undefined : w }}
+                        >
+                          {w === 0 ? 'Auto' : w === 300 ? 'Light' : w === 400 ? 'Regular' : w === 500 ? 'Medium' : w === 600 ? 'Semi' : w === 700 ? 'Bold' : w === 800 ? 'Extra' : 'Black'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Peso do Corpo */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs text-muted-foreground">Peso do corpo</span>
+                      <span className="text-xs font-mono font-bold text-foreground">
+                        {config.bodyFontWeight === 0 ? 'Auto (400)' : String(config.bodyFontWeight)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {([0, 300, 400, 500, 600, 700, 800, 900] as const).map(w => (
+                        <button
+                          key={w} type="button"
+                          onClick={() => set('bodyFontWeight', w)}
+                          className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors ${config.bodyFontWeight === w ? 'bg-purple-600 border-purple-600 text-white' : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40'}`}
+                          style={{ fontWeight: w === 0 ? undefined : w }}
+                        >
+                          {w === 0 ? 'Auto' : w === 300 ? 'Light' : w === 400 ? 'Regular' : w === 500 ? 'Medium' : w === 600 ? 'Semi' : w === 700 ? 'Bold' : w === 800 ? 'Extra' : 'Black'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Caixa dos Títulos */}
+                  <div>
+                    <span className="text-xs text-muted-foreground block mb-1.5">Caixa dos títulos</span>
+                    <div className="flex gap-2">
+                      {([
+                        { v: '',          l: 'Auto' },
+                        { v: 'uppercase', l: 'MAIÚSCULAS' },
+                        { v: 'none',      l: 'normal' },
+                      ] as const).map(({ v, l }) => (
+                        <button
+                          key={v} type="button"
+                          onClick={() => set('titleTextTransform', v)}
+                          className={`flex-1 py-1.5 rounded text-[11px] font-semibold border transition-colors ${config.titleTextTransform === v ? 'bg-purple-600 border-purple-600 text-white' : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40'}`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Fonte dos Títulos */}
+                  <div>
+                    <span className="text-xs text-muted-foreground block mb-1">Fonte dos títulos</span>
+                    <select
+                      value={config.titleFontFamily}
+                      onChange={e => set('titleFontFamily', e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    >
+                      <option value="">Igual à fonte global</option>
+                      {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Fonte do Corpo */}
+                  <div>
+                    <span className="text-xs text-muted-foreground block mb-1">Fonte do corpo</span>
+                    <select
+                      value={config.bodyFontFamily}
+                      onChange={e => set('bodyFontFamily', e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    >
+                      <option value="">Igual à fonte global</option>
+                      {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+
                 </div>
               </div>
 

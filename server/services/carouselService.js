@@ -244,7 +244,12 @@ const ALL_FONTS_URL =
   '&family=Syne:wght@400;500;600;700;800' +
   '&display=swap';
 
-function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
+function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily, titleFontSize = 0, bodyFontSize = 0, bannerFontSize = 0, titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
+  const titleFF = titleFontFamily || fontFamily;
+  const bodyFF  = bodyFontFamily  || fontFamily;
+  const titleFW = titleFontWeight > 0 ? titleFontWeight : 900;
+  const bodyFW  = bodyFontWeight  > 0 ? bodyFontWeight  : 400;
+  const titleTT = titleTextTransform || 'uppercase';
   return `
   <link href="${ALL_FONTS_URL}" rel="stylesheet">
   <style>
@@ -314,8 +319,9 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
 
     /* ── TIPOGRAFIA CAPA/CTA ── */
     .title {
-      font-size: 56px; font-weight: 900; line-height: 1.1;
-      letter-spacing: -1px; text-transform: uppercase;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 56}px; font-weight: ${titleFW}; line-height: 1.1;
+      font-family: '${titleFF}', sans-serif;
+      letter-spacing: -1px; text-transform: ${titleTT};
       text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
     }
     .title .highlight { color: ${primaryColor}; }
@@ -352,13 +358,14 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily }) {
 
     /* Texto principal — GRANDE, 36-42px */
     .slide-editorial .narrative-text {
-      font-family: '${fontFamily}', sans-serif;
-      font-size: 38px; font-weight: 400; line-height: 1.45; color: #ffffff;
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 38}px; font-weight: ${titleFW}; line-height: 1.45; color: #ffffff;
     }
 
     /* Texto secundário — menor, 26-30px */
     .slide-editorial .narrative-text.secondary {
-      font-size: 28px; font-weight: 400; line-height: 1.5;
+      font-family: '${bodyFF}', sans-serif;
+      font-size: ${bodyFontSize > 0 ? bodyFontSize : 28}px; font-weight: ${bodyFW}; line-height: 1.5;
     }
 
     /* Destaques inline */
@@ -482,13 +489,15 @@ REGRAS DE ESCRITA:
 // ─── Prompt HTML layout "Editorial" ──────────────────────────────────────────
 
 function buildHTMLPrompt({ topic, instructions, niche, primaryColor, accentColor, bgColor, fontFamily,
-  instagramHandle, profilePhotoUrl, numSlides, contentTone, dominantEmotion, redditTrends, unsplashImages, roteiro }) {
+  instagramHandle, profilePhotoUrl, numSlides, contentTone, dominantEmotion, redditTrends, unsplashImages, roteiro,
+  titleFontSize = 0, bodyFontSize = 0, bannerFontSize = 0,
+  titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
   const monthYear = currentMonthYear();
   const totalContent = numSlides - 2;
-  const cssTemplate = buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily });
+  const cssTemplate = buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily, titleFontSize, bodyFontSize, bannerFontSize, titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily });
 
   const trendsSection = (!roteiro?.trim() && redditTrends.length)
     ? `\nTendências do Reddit sobre "${niche}" esta semana:\n${redditTrends.map((t, i) =>
@@ -508,6 +517,19 @@ function buildHTMLPrompt({ topic, instructions, niche, primaryColor, accentColor
     ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
+  const typographyLines = [
+    titleFontSize > 0    ? `Tamanho títulos: ${titleFontSize}px`                                        : '',
+    bodyFontSize  > 0    ? `Tamanho corpo: ${bodyFontSize}px`                                           : '',
+    titleFontWeight > 0  ? `Peso dos títulos: ${titleFontWeight}`                                       : '',
+    bodyFontWeight  > 0  ? `Peso do corpo: ${bodyFontWeight}`                                           : '',
+    titleTextTransform   ? `Caixa dos títulos: ${titleTextTransform}`                                   : '',
+    titleFontFamily      ? `Fonte dos títulos: ${titleFontFamily}`                                      : '',
+    bodyFontFamily       ? `Fonte do corpo: ${bodyFontFamily}`                                          : '',
+  ].filter(Boolean);
+  const fontSizeNote = typographyLines.length
+    ? `\n━━━ TIPOGRAFIA DEFINIDA PELO CRIADOR — USE NO CSS ━━━\n${typographyLines.join('\n')}\nEssas configurações já estão aplicadas no CSS template abaixo. Não as altere.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
   return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo editorial/investigativo.
 
 Tema: "${topic}"
@@ -519,6 +541,7 @@ ${instructionsSection}
 ${trendsSection}
 ${imagesSection}
 ${roteiroSection}
+${fontSizeNote}
 
 ━━━ REGRAS ABSOLUTAS ━━━
 - Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
@@ -558,7 +581,12 @@ Gere o HTML completo agora (apenas HTML, nada mais):`;
 
 // ─── CSS template layout "Clean" (estilo Fabricio Moura) ─────────────────────
 
-function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
+function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bodyFontSize = 0, bannerFontSize = 0, titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
+  const titleFF = titleFontFamily || fontFamily;
+  const bodyFF  = bodyFontFamily  || fontFamily;
+  const titleFW = titleFontWeight > 0 ? titleFontWeight : 900;
+  const bodyFW  = bodyFontWeight  > 0 ? bodyFontWeight  : 400;
+  const titleTT = titleTextTransform || 'none';
   return `
   <link href="${ALL_FONTS_URL}" rel="stylesheet">
   <style>
@@ -618,8 +646,9 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
     /* Título centralizado abaixo do badge */
     .clean-cover .cover-title {
       position: absolute; bottom: 130px; left: 60px; right: 60px; z-index: 2;
-      font-size: 68px; font-weight: 900; line-height: 1.1; color: white;
-      text-align: center;
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 68}px; font-weight: ${titleFW}; line-height: 1.1; color: white;
+      text-align: center; text-transform: ${titleTT};
     }
     .clean-cover .cover-title .hl { color: ${primaryColor}; }
     .clean-cover .swipe-hint {
@@ -640,12 +669,14 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       page-break-after: always;
     }
     .clean-content .content-title {
-      font-size: 66px; font-weight: 900; line-height: 1.08;
-      color: #ffffff; margin-bottom: 32px;
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 66}px; font-weight: ${titleFW}; line-height: 1.08;
+      color: #ffffff; margin-bottom: 32px; text-transform: ${titleTT};
     }
     .clean-content .content-title .hl { color: ${primaryColor}; }
     .clean-content .content-body {
-      font-size: 30px; font-weight: 400; line-height: 1.55;
+      font-family: '${bodyFF}', sans-serif;
+      font-size: ${bodyFontSize > 0 ? bodyFontSize : 30}px; font-weight: ${bodyFW}; line-height: 1.55;
       color: rgba(255,255,255,0.68);
     }
     .clean-content .photo-card {
@@ -703,7 +734,7 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       background: #FF7B8B; width: 100%;
       padding: 22px 64px;
       display: flex; align-items: center; gap: 18px; flex-shrink: 0;
-      font-size: 27px; font-weight: 700; color: white;
+      font-size: ${bannerFontSize > 0 ? bannerFontSize : 27}px; font-weight: 700; color: white;
     }
     .follow-banner svg { width: 36px; height: 36px; fill: white; flex-shrink: 0; }
 
@@ -729,7 +760,9 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       padding: 80px 72px; text-align: center; gap: 48px;
     }
     .clean-cta .cta-title {
-      font-size: 70px; font-weight: 900; line-height: 1.08; color: white;
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 70}px; font-weight: ${titleFW}; line-height: 1.08; color: white;
+      text-transform: ${titleTT};
     }
     .clean-cta .cta-title .hl { color: ${primaryColor}; }
     .clean-cta .follow-pill {
@@ -794,7 +827,9 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily }) {
       color: ${primaryColor}; text-transform: uppercase;
     }
     .clean-split .split-title {
-      font-size: 58px; font-weight: 900; line-height: 1.1; color: white;
+      font-family: '${titleFF}', sans-serif;
+      font-size: 58px; font-weight: ${titleFW}; line-height: 1.1; color: white;
+      text-transform: ${titleTT};
     }
     .clean-split .split-title .hl { color: ${primaryColor}; }
     .clean-split .split-stats {
@@ -885,7 +920,9 @@ ${cleanedHtml}`;
 // ─── Prompt HTML layout "Clean" ───────────────────────────────────────────────
 
 function buildCleanHTMLPrompt({ topic, instructions, niche, primaryColor, fontFamily,
-  instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro }) {
+  instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro,
+  titleFontSize = 0, bodyFontSize = 0, bannerFontSize = 0,
+  titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
 
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const handleAt = `@${handle}`;
@@ -894,7 +931,7 @@ function buildCleanHTMLPrompt({ topic, instructions, niche, primaryColor, fontFa
          .replace(/\b\w/g, c => c.toUpperCase())
     || handle;
   const totalContent = numSlides - 2;
-  const cssTemplate = buildCleanCSSTemplate({ primaryColor, fontFamily });
+  const cssTemplate = buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize, bodyFontSize, bannerFontSize, titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily });
 
   const validImages = unsplashImages.filter(img => img.url);
   const imagesSection = validImages.length
@@ -913,6 +950,19 @@ function buildCleanHTMLPrompt({ topic, instructions, niche, primaryColor, fontFa
   // Avatar: Claude gera apenas as iniciais; a foto é injetada em pós-processamento
   const avatarContent = handle.slice(0, 2).toUpperCase();
 
+  const typographyLines = [
+    titleFontSize > 0    ? `Tamanho títulos: ${titleFontSize}px`  : '',
+    bodyFontSize  > 0    ? `Tamanho corpo: ${bodyFontSize}px`     : '',
+    titleFontWeight > 0  ? `Peso dos títulos: ${titleFontWeight}` : '',
+    bodyFontWeight  > 0  ? `Peso do corpo: ${bodyFontWeight}`     : '',
+    titleTextTransform   ? `Caixa dos títulos: ${titleTextTransform}` : '',
+    titleFontFamily      ? `Fonte dos títulos: ${titleFontFamily}`    : '',
+    bodyFontFamily       ? `Fonte do corpo: ${bodyFontFamily}`        : '',
+  ].filter(Boolean);
+  const fontSizeNote = typographyLines.length
+    ? `\n━━━ TIPOGRAFIA DEFINIDA PELO CRIADOR — USE NO CSS ━━━\n${typographyLines.join('\n')}\nEssas configurações já estão aplicadas no CSS template abaixo. Não as altere.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
   return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo limpo/minimalista.
 
 Tema: "${topic}"
@@ -924,6 +974,7 @@ Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
 ${instructionsSection}
 ${imagesSection}
 ${roteiroSection}
+${fontSizeNote}
 
 ━━━ REGRAS ABSOLUTAS ━━━
 - Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
@@ -1201,6 +1252,14 @@ async function generateCarousel(config) {
     roteiro = '',
     layoutStyle = 'editorial',
     templateHtml = '',   // HTML de modelo salvo para usar como base de layout
+    titleFontSize = 0,
+    bodyFontSize = 0,
+    bannerFontSize = 0,
+    titleFontWeight = 0,
+    bodyFontWeight = 0,
+    titleTextTransform = '',
+    titleFontFamily = '',
+    bodyFontFamily = '',
   } = config;
 
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
@@ -1246,12 +1305,16 @@ async function generateCarousel(config) {
       topic: topic.trim(), instructions: instructions.trim(), niche, primaryColor, fontFamily,
       instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, unsplashImages,
+      titleFontSize, bodyFontSize, bannerFontSize,
+      titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
     });
   } else {
     htmlPrompt = buildHTMLPrompt({
       topic: topic.trim(), instructions: instructions.trim(), niche, primaryColor, accentColor, bgColor,
       fontFamily, instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, redditTrends, unsplashImages,
+      titleFontSize, bodyFontSize, bannerFontSize,
+      titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
     });
   }
 
