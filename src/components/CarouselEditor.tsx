@@ -310,6 +310,10 @@ const TEXT_SELECTORS = [
   { selector: '.header-handle', isMain: false },
   { selector: '.slide-number', isMain: false },
   { selector: '.custom-text', isMain: true },
+  // clean-split (antes/depois)
+  { selector: '.split-title', isMain: true },
+  { selector: '.split-eyebrow', isMain: false },
+  { selector: '.split-stats', isMain: false },
 ];
 
 // Converte <br> → \n para exibir corretamente no textarea
@@ -424,7 +428,7 @@ function parseSlides(html: string): { slides: EditableSlide[]; head: string } {
   const doc = parser.parseFromString(html, 'text/html');
   const head = doc.head.innerHTML;
   const slideEls = Array.from(doc.querySelectorAll(
-    '.slide, .slide-editorial, .clean-cover, .clean-content, .clean-cta'
+    '.slide, .slide-editorial, .clean-cover, .clean-content, .clean-cta, .clean-split'
   ));
   const slides: EditableSlide[] = slideEls.map((el, index) => ({
     index,
