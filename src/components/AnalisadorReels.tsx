@@ -5,7 +5,9 @@ import {
   Link2, Play, CheckCircle2, XCircle, Loader2, Copy, Check,
   Mic, Eye, Layers, Video, ChevronDown, ChevronUp, AlertTriangle,
   Zap, FileText, Tv2, Sparkles, BookMarked, Gauge,
+  BookmarkPlus, Save, Trash2, Tv,
 } from 'lucide-react';
+import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -62,6 +64,14 @@ interface AnalyzerState {
   steps: AnalyzerStep[];
   result: AnalyzerResult | null;
   error: string | null;
+}
+
+interface SavedScript {
+  id: string;
+  title: string;
+  script: string;
+  created_at: string;
+  updated_at?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -203,6 +213,14 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: Analis
   const [storyError, setStoryError]       = useState<string | null>(null);
   const [instagramHandle, setInstagramHandle] = useState('');
 
+  // ─── Banco de roteiros ──────────────────────────────────────────────────────
+  const [savedScripts, setSavedScripts] = useState<SavedScript[]>([]);
+  const [expandedScriptId, setExpandedScriptId] = useState<string | null>(null);
+  const [scriptDrafts, setScriptDrafts] = useState<Record<string, { title: string; script: string }>>({});
+  const [savingScript, setSavingScript] = useState(false);
+  const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
+  const [teleprompterText, setTeleprompterText] = useState('');
+
   const eventSourceRef = useRef<EventSource | null>(null);
   const stepsEndRef    = useRef<HTMLDivElement | null>(null);
 
@@ -219,7 +237,93 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: Analis
         }
       })
       .catch(() => {});
+
+    // Carrega banco de roteiros
+    reloadScripts();
   }, []);
+
+  async function reloadScripts() {
+    try {
+      const r = await fetch(`${API}/api/reels-analyzer/scripts`);
+      const data = await r.json();
+      setSavedScripts(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('[ReelsScripts] reload', e);
+    }
+  }
+
+  async function saveCurrentReelScript() {
+    if (!result?.reelsScript?.trim()) {
+      toast.error('Nenhum roteiro de Reels disponível');
+      return;
+    }
+    const defaultTitle = result.reelInfo?.caption?.slice(0, 60) || `Roteiro ${new Date().toLocaleDateString('pt-BR')}`;
+    const title = window.prompt('Título do roteiro:', defaultTitle);
+    if (!title) return;
+    setSavingScript(true);
+    try {
+      const r = await fetch(`${API}/api/reels-analyzer/scripts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim(), script: result.reelsScript }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await reloadScripts();
+      toast.success('Roteiro salvo no banco!');
+    } catch (e: any) {
+      toast.error(`Falha ao salvar: ${e.message || e}`);
+    } finally {
+      setSavingScript(false);
+    }
+  }
+
+  function toggleScriptExpanded(s: SavedScript) {
+    if (expandedScriptId === s.id) {
+      setExpandedScriptId(null);
+      return;
+    }
+    setExpandedScriptId(s.id);
+    setScriptDrafts(prev => ({ ...prev, [s.id]: { title: s.title, script: s.script } }));
+  }
+
+  async function persistScriptEdit(id: string) {
+    const draft = scriptDrafts[id];
+    if (!draft) return;
+    try {
+      const r = await fetch(`${API}/api/reels-analyzer/scripts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await reloadScripts();
+      toast.success('Roteiro atualizado');
+    } catch (e: any) {
+      toast.error(`Falha ao atualizar: ${e.message || e}`);
+    }
+  }
+
+  async function removeScript(id: string) {
+    if (!window.confirm('Excluir este roteiro?')) return;
+    try {
+      const r = await fetch(`${API}/api/reels-analyzer/scripts/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (expandedScriptId === id) setExpandedScriptId(null);
+      await reloadScripts();
+      toast.success('Roteiro excluído');
+    } catch (e: any) {
+      toast.error(`Falha ao excluir: ${e.message || e}`);
+    }
+  }
+
+  function openTeleprompter(title: string, text: string) {
+    if (!text.trim()) {
+      toast.error('Roteiro vazio');
+      return;
+    }
+    setTeleprompterText(text);
+    setTeleprompter(prev => ({ ...prev, open: true, title, playing: false }));
+  }
 
   // Scroll automático nos steps
   useEffect(() => {
@@ -623,11 +727,26 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: Analis
 
                 {activeResultTab === 'reels' && (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         Roteiro de Reels — Meio de Funil Viral
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={saveCurrentReelScript}
+                          disabled={savingScript}
+                          className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {savingScript ? <Loader2 size={12} className="animate-spin" /> : <BookmarkPlus size={12} />}
+                          Salvar no banco
+                        </button>
+                        <button
+                          onClick={() => openTeleprompter(result.reelInfo?.caption?.slice(0, 60) || 'Roteiro Reels', result.reelsScript)}
+                          className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Tv size={12} />
+                          Teleprompter
+                        </button>
                         {onEvaluate && (
                           <button
                             onClick={() => onEvaluate(result.reelsScript, 'reels')}
@@ -783,6 +902,119 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: Analis
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ─── Banco de Roteiros ──────────────────────────────────────────── */}
+      <section className="rounded-2xl bg-card border border-border p-5 space-y-3" style={{ boxShadow: 'var(--shadow-card)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BookMarked size={16} className="text-emerald-500" />
+            <h2 className="font-bold text-sm uppercase tracking-wider">Banco de Roteiros</h2>
+            <span className="text-xs text-muted-foreground">({savedScripts.length})</span>
+          </div>
+          <p className="text-xs text-muted-foreground hidden sm:block">
+            Salve roteiros pra gravar depois. Clique num card pra editar ou abrir no teleprompter.
+          </p>
+        </div>
+
+        {savedScripts.length === 0 && (
+          <p className="text-xs text-muted-foreground py-3 text-center">
+            Nenhum roteiro salvo. Gere uma análise e clique em "Salvar no banco" no Roteiro Reels.
+          </p>
+        )}
+
+        <div className="space-y-2">
+          {savedScripts.map(s => {
+            const isOpen = expandedScriptId === s.id;
+            const draft = scriptDrafts[s.id] || { title: s.title, script: s.script };
+            return (
+              <div key={s.id} className="rounded-xl border border-border bg-secondary/30 overflow-hidden">
+                <button
+                  onClick={() => toggleScriptExpanded(s)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-secondary/50 transition-colors"
+                >
+                  {isOpen ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
+                  <span className="font-semibold text-sm truncate flex-1">{s.title}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {new Date(s.updated_at || s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                  </span>
+                </button>
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-3 pb-3 pt-2 space-y-2 border-t border-border">
+                        <input
+                          type="text"
+                          value={draft.title}
+                          onChange={e => setScriptDrafts(prev => ({ ...prev, [s.id]: { ...draft, title: e.target.value } }))}
+                          className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                          placeholder="Título"
+                        />
+                        <textarea
+                          value={draft.script}
+                          onChange={e => setScriptDrafts(prev => ({ ...prev, [s.id]: { ...draft, script: e.target.value } }))}
+                          rows={10}
+                          className="w-full bg-background border border-border rounded-lg px-2.5 py-2 text-sm font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-foreground/20 resize-y"
+                          placeholder="Roteiro"
+                        />
+                        <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              onClick={() => persistScriptEdit(s.id)}
+                              disabled={draft.title === s.title && draft.script === s.script}
+                              className="flex items-center gap-1.5 text-xs bg-foreground text-background font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-90 disabled:opacity-40"
+                            >
+                              <Save size={12} />
+                              Salvar
+                            </button>
+                            <button
+                              onClick={() => openTeleprompter(draft.title, draft.script)}
+                              className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              <Tv size={12} />
+                              Teleprompter
+                            </button>
+                            <CopyButton text={draft.script} />
+                          </div>
+                          <button
+                            onClick={() => removeScript(s.id)}
+                            className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-400 font-semibold px-2 py-1.5 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={12} />
+                            Excluir
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Teleprompter */}
+      <TeleprompterOverlay
+        open={teleprompter.open}
+        title={teleprompter.title}
+        text={teleprompterText}
+        speed={teleprompter.speed}
+        fontSize={teleprompter.fontSize}
+        countdownDuration={teleprompter.countdownDuration}
+        mirrored={teleprompter.mirrored}
+        playing={teleprompter.playing}
+        onClose={() => setTeleprompter(prev => ({ ...prev, open: false, playing: false }))}
+        onTogglePlaying={() => setTeleprompter(prev => ({ ...prev, playing: !prev.playing }))}
+        onSpeedChange={v => setTeleprompter(prev => ({ ...prev, speed: v }))}
+        onFontSizeChange={v => setTeleprompter(prev => ({ ...prev, fontSize: v }))}
+        onCountdownDurationChange={v => setTeleprompter(prev => ({ ...prev, countdownDuration: v }))}
+        onToggleMirror={() => setTeleprompter(prev => ({ ...prev, mirrored: !prev.mirrored }))}
+      />
     </div>
   );
 }

@@ -272,6 +272,12 @@ const getStudioMessages       = (conv_id) => readDb('studio_messages').filter((m
 const createStudioMessage     = (m) => { const db = readDb('studio_messages'); db.push({ ...m, created_at: now() }); writeDb('studio_messages', db); return m; };
 const updateStudioMessage     = (id, data) => { const db = readDb('studio_messages').map((m) => m.id === id ? { ...m, ...data } : m); writeDb('studio_messages', db); };
 
+// ── Reels Scripts (banco de roteiros salvos) ─────────────────────────────────
+const getAllReelsScripts = () => readDb('reels_scripts').sort((a, b) => (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at));
+const createReelsScript = (s) => { const db = readDb('reels_scripts'); db.push({ ...s, created_at: now(), updated_at: now() }); writeDb('reels_scripts', db); return s; };
+const updateReelsScript = (id, data) => { const db = readDb('reels_scripts').map((s) => s.id === id ? { ...s, ...data, updated_at: now() } : s); writeDb('reels_scripts', db); };
+const deleteReelsScript = (id) => writeDb('reels_scripts', readDb('reels_scripts').filter((s) => s.id !== id));
+
 // ── Studio Posts (galeria) ────────────────────────────────────────────────────
 const getAllStudioPosts  = () => readDb('studio_posts').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const getStudioPost     = (id) => readDb('studio_posts').find((p) => p.id === id) || null;
@@ -297,6 +303,8 @@ module.exports = {
   getAllStudioConversations, getStudioConversation, createStudioConversation, updateStudioConversation, deleteStudioConversation,
   getStudioMessages, createStudioMessage, updateStudioMessage,
   getAllStudioPosts, getStudioPost, createStudioPost, updateStudioPost, deleteStudioPost,
+  // Reels Scripts
+  getAllReelsScripts, createReelsScript, updateReelsScript, deleteReelsScript,
   getInstagramToken, setInstagramToken, clearInstagramToken,
   getInstagramPosts, saveInstagramPosts,
   getInstagramAnalysis, saveInstagramAnalysis,

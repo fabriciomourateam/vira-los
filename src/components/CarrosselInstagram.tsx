@@ -9,6 +9,7 @@ import {
   Archive, ArchiveRestore, Save,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
+import { generateAndSaveScreenshots as libGenerateScreenshots } from '@/lib/clientScreenshots';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -33,6 +34,7 @@ interface CarouselConfig {
 }
 
 interface CarouselResult {
+  id?: string;
   html: string;
   legenda: string;
   topic: string;
@@ -286,6 +288,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [copied, setCopied] = useState(false);
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  const [regeneratingCoverId, setRegeneratingCoverId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [inlineEditMode, setInlineEditMode] = useState(false);
   const [savingEdits, setSavingEdits] = useState(false);
@@ -457,16 +460,27 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
           numSlides: (html.match(/clean-cover|clean-content|clean-cta|clean-split/g) || []).length,
           legenda: '',
           config: { ...config },
-          bgColor:      config.bgColor      || '#1a1a1a',
-          primaryColor: config.primaryColor || '#B078FF',
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar modelo');
-      await fetch(`${API}/api/carousel/saved`).then(r => r.json()).then(saved => {
-        setSavedCarousels(Array.isArray(saved) ? saved : []);
-      });
-      toast.success(`Modelo "${modelName.trim()}" importado!`);
+      refreshSavedCarousels();
+      toast.success(`Modelo importado! Gerando capa…`);
+
+      // Gera screenshots no cliente e faz PATCH do template com elas
+      try {
+        const screenshots = await generateAndSaveScreenshots(html, data.folderName);
+        await fetch(`${API}/api/carousel/saved/${data.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshots }),
+        });
+        refreshSavedCarousels();
+        toast.success(`Modelo "${modelName.trim()}" pronto com capa!`);
+      } catch (e: any) {
+        console.error('[ImportHtml/Screenshots]', e);
+        toast.error(`Modelo salvo, mas falhou ao gerar capa: ${e.message || e}`);
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -476,79 +490,12 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   }
 
   // ── Gera screenshots no browser via html-to-image ────────────────────────────
-  async function generateAndSaveScreenshots(html: string, folderName: string): Promise<string[]> {
-    const { toPng } = await import('html-to-image');
-
-    const proxyUrl = (url: string) => `${API}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
-    const proxied = html
-      .replace(/src="(https?:\/\/[^"]+)"/g, (_, u) => `src="${proxyUrl(u)}"`)
-      .replace(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g, (_, u) => `url("${proxyUrl(u)}")`);
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(proxied, 'text/html');
-
-    // Injeta estilos do carrossel no documento principal temporariamente
-    const injected: HTMLElement[] = [];
-    doc.querySelectorAll('style').forEach(s => {
-      const el = document.createElement('style');
-      el.textContent = s.textContent;
-      document.head.appendChild(el);
-      injected.push(el);
-    });
-    doc.querySelectorAll('link[rel="stylesheet"]').forEach(l => {
-      const el = document.createElement('link');
-      el.setAttribute('rel', 'stylesheet');
-      el.setAttribute('href', (l as HTMLLinkElement).href);
-      document.head.appendChild(el);
-      injected.push(el);
-    });
-
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
-    document.body.appendChild(container);
-
-    const dataUrls: string[] = [];
-
-    try {
-      await document.fonts.ready;
-      const slides = Array.from(doc.body.children) as HTMLElement[];
-
-      for (const slideEl of slides) {
-        container.innerHTML = '';
-        container.appendChild(slideEl.cloneNode(true));
-        const slide = container.firstElementChild as HTMLElement;
-        slide.style.width = '1080px';
-        slide.style.height = '1350px';
-        slide.style.overflow = 'hidden';
-
-        // Aguarda imagens carregarem
-        await Promise.all(
-          Array.from(container.querySelectorAll('img')).map(img =>
-            img.complete ? Promise.resolve() : new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r(); })
-          )
-        );
-        await new Promise(r => setTimeout(r, 200));
-
-        const dataUrl = await toPng(slide, { width: 1080, height: 1350, pixelRatio: 1 });
-        dataUrls.push(dataUrl);
-      }
-
-      // Salva no servidor para o histórico
-      if (dataUrls.length > 0) {
-        const payload = dataUrls.map((dataUrl, slideNum) => ({ slideNum, dataUrl }));
-        const saved = await fetch(`${API}/api/carousel/save-screenshots`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderName, screenshots: payload }),
-        }).then(r => r.json()).catch(() => ({ screenshots: [] }));
-
-        return saved.screenshots || [];
-      }
-    } finally {
-      injected.forEach(el => el.remove());
-      container.remove();
-    }
-    return [];
+  function generateAndSaveScreenshots(
+    html: string,
+    folderName: string,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<string[]> {
+    return libGenerateScreenshots(API, html, folderName, onProgress);
   }
 
   async function handleGenerate() {
@@ -634,17 +581,15 @@ ${stats ? `- Stats: ${stats}` : ''}
       clearTimeout(timeout);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
-      setResult(data);
-      toast.success(`${data.numSlides} slides gerados! Gerando imagens…`);
 
-      // Gera screenshots no browser (sem Playwright no servidor)
       const carouselId = `c_${Date.now()}`;
-      generateAndSaveScreenshots(data.html, data.folderName).then(screenshots => {
-        // Atualiza resultado com os screenshots gerados
-        setResult(prev => prev ? { ...prev, screenshots } : prev);
+      setResult({ ...data, id: carouselId, screenshots: [] });
+      toast.success(`${data.numSlides} slides gerados! Salvando no histórico…`);
 
-        // Salva no histórico do servidor com screenshots
-        return fetch(`${API}/api/carousel/saved`, {
+      // 1) Grava metadata imediatamente com screenshots vazios — garante que o
+      //    carrossel apareça na lista mesmo se a geração de imagens falhar.
+      try {
+        const saveRes = await fetch(`${API}/api/carousel/saved`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -652,15 +597,48 @@ ${stats ? `- Stats: ${stats}` : ''}
             topic: data.topic,
             folderName: data.folderName,
             numSlides: data.numSlides,
-            screenshots,
+            screenshots: [],
             legenda: data.legenda,
             config: { ...config },
           }),
         });
-      }).then(() => fetch(`${API}/api/carousel/saved`).then(r => r.json()))
-        .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
-        .then(() => toast.success('Imagens prontas para download!'))
-        .catch(() => {});
+        if (!saveRes.ok) throw new Error(`HTTP ${saveRes.status}`);
+        const saved = await fetch(`${API}/api/carousel/saved`).then(r => r.json());
+        setSavedCarousels(Array.isArray(saved) ? saved : []);
+      } catch (e: any) {
+        console.error('[SaveCarousel]', e);
+        toast.error(`Não foi possível salvar no histórico: ${e.message || e}`);
+      }
+
+      // 2) Gera screenshots no browser e atualiza o registro via PATCH.
+      //    Se falhar, o registro já está salvo (sem preview) e o usuário pode
+      //    re-tentar depois.
+      try {
+        toast.success('Gerando imagens dos slides…');
+        const screenshots = await generateAndSaveScreenshots(
+          data.html,
+          data.folderName,
+          (done, total) => {
+            if (done < total) {
+              setResult(prev => prev ? { ...prev, screenshots: Array(done).fill('') } : prev);
+            }
+          },
+        );
+        setResult(prev => prev ? { ...prev, screenshots } : prev);
+
+        await fetch(`${API}/api/carousel/saved/${carouselId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshots }),
+        });
+
+        const saved = await fetch(`${API}/api/carousel/saved`).then(r => r.json());
+        setSavedCarousels(Array.isArray(saved) ? saved : []);
+        toast.success('Imagens prontas para download!');
+      } catch (e: any) {
+        console.error('[Screenshots]', e);
+        toast.error(`Erro ao gerar imagens: ${e.message || e}. Carrossel salvo sem preview.`);
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -762,6 +740,29 @@ ${stats ? `- Stats: ${stats}` : ''}
       .then(r => r.json())
       .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
       .catch(() => {});
+  }
+
+  async function handleRegenerateCover(saved: SavedCarousel) {
+    setRegeneratingCoverId(saved.id);
+    try {
+      const htmlRes = await fetch(`${API}/output/${saved.folderName}/carrossel.html`);
+      if (!htmlRes.ok) throw new Error(`HTML não encontrado (HTTP ${htmlRes.status})`);
+      const html = await htmlRes.text();
+      toast.success('Regerando imagens do carrossel…');
+      const screenshots = await generateAndSaveScreenshots(html, saved.folderName);
+      await fetch(`${API}/api/carousel/saved/${saved.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screenshots }),
+      });
+      refreshSavedCarousels();
+      toast.success('Capa regenerada!');
+    } catch (e: any) {
+      console.error('[RegenerateCover]', e);
+      toast.error(`Falha: ${e.message || e}`);
+    } finally {
+      setRegeneratingCoverId(null);
+    }
   }
 
   function handleLoadConfig(saved: SavedCarousel) {
@@ -953,11 +954,13 @@ document.addEventListener('DOMContentLoaded', function() {
         toast.success('Slide salvo! Gerando imagens…');
         const screenshots = await generateAndSaveScreenshots(newHtml, result.folderName);
         setResult(prev => prev ? { ...prev, html: newHtml, screenshots } : prev);
-        await fetch(`${API}/api/carousel/saved/${result.folderName}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ screenshots }),
-        }).catch(() => {});
+        if (result.id) {
+          await fetch(`${API}/api/carousel/saved/${result.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ screenshots }),
+          }).catch((e) => console.error('[PatchScreenshots]', e));
+        }
         toast.success('Imagens atualizadas!');
         setInlineEditMode(false);
       } else {
@@ -1887,8 +1890,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     {thumb ? (
                       <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                      <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-3">
                         <FolderOpen className="w-8 h-8 opacity-30" />
+                        <button
+                          onClick={() => handleRegenerateCover(saved)}
+                          disabled={regeneratingCoverId === saved.id}
+                          className="flex items-center gap-1.5 text-[11px] bg-foreground text-background font-bold px-2.5 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+                          title="Gerar screenshots a partir do HTML salvo"
+                        >
+                          {regeneratingCoverId === saved.id
+                            ? <><Loader2 className="w-3 h-3 animate-spin" /> Gerando…</>
+                            : <><RefreshCw className="w-3 h-3" /> Regenerar capa</>
+                          }
+                        </button>
                       </div>
                     )}
                     {/* Badge de modelo */}
@@ -1897,7 +1911,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <LayoutTemplate className="w-2.5 h-2.5" /> Modelo
                       </div>
                     )}
-                    {/* Desktop: overlay on hover */}
+                    {/* Desktop: overlay on hover — só renderiza quando há thumb,
+                        senão sobrepõe o botão "Regenerar capa" */}
+                    {thumb && (
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all items-center justify-center gap-2 opacity-0 group-hover:opacity-100 hidden sm:flex">
                       {saved.isTemplate ? (
                         <button
@@ -1915,7 +1931,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         </button>
                       )}
                     </div>
-                    {/* Mobile: always-visible bottom gradient + button */}
+                    )}
+                    {/* Mobile: always-visible bottom gradient + button — idem */}
+                    {thumb && (
                     <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-6 pb-2 px-2 flex justify-center sm:hidden">
                       {saved.isTemplate ? (
                         <button
@@ -1933,6 +1951,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </button>
                       )}
                     </div>
+                    )}
                   </div>
                   <div className="p-3 space-y-1.5">
                     <p className="text-xs font-semibold text-foreground line-clamp-2">{saved.topic}</p>
