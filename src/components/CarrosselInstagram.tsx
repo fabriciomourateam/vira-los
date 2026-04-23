@@ -6,7 +6,7 @@ import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
-  Archive, ArchiveRestore,
+  Archive, ArchiveRestore, Save,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 
@@ -287,6 +287,9 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [inlineEditMode, setInlineEditMode] = useState(false);
+  const [savingEdits, setSavingEdits] = useState(false);
+  const editIframeRef = useRef<HTMLIFrameElement>(null);
   const [editingSaved, setEditingSaved] = useState<SavedCarousel | null>(null);
   const [editingSavedHtml, setEditingSavedHtml] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
@@ -796,6 +799,152 @@ ${stats ? `- Stats: ${stats}` : ''}
 
   function handleLegendaChange(text: string) {
     setResult(prev => prev ? { ...prev, legenda: text } : prev);
+  }
+
+  // ── Edição inline no preview ──────────────────────────────────────────────
+
+  function getEditableSlideHtml(slideIndex: number): string {
+    if (!result) return '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(result.html, 'text/html');
+    const slides = Array.from(doc.body.children) as HTMLElement[];
+    const slide = slides[slideIndex];
+    if (!slide) return '';
+    const head = doc.head.innerHTML;
+
+    const editScript = `
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var SELS = [
+    '.title','.subtitle','.subtitle-accent','.narrative-text',
+    '.content-title','.content-body','.cover-title','.cta-title',
+    '.split-title','.split-stats','.split-eyebrow',
+    '.profile-name','.profile-handle','.swipe-hint',
+    '.footer-left span','.footer-right','.footer-name-pill',
+    '.footer-handle-pill','.follow-banner'
+  ];
+  SELS.forEach(function(sel){
+    document.querySelectorAll(sel).forEach(function(el){
+      if(el.closest('[contenteditable]')) return;
+      el.setAttribute('contenteditable','true');
+      el.style.cursor='text';
+      el.style.outline='2px dashed rgba(176,120,255,0.45)';
+      el.style.outlineOffset='3px';
+      el.style.borderRadius='4px';
+      el.addEventListener('focus',function(){
+        el.style.outline='2px solid rgba(176,120,255,0.9)';
+        el.style.background='rgba(176,120,255,0.07)';
+      });
+      el.addEventListener('blur',function(){
+        el.style.outline='2px dashed rgba(176,120,255,0.45)';
+        el.style.background='';
+      });
+      el.addEventListener('keydown',function(e){
+        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();}
+      });
+    });
+  });
+  // Clique em imagens abre input de URL
+  document.querySelectorAll('img').forEach(function(img){
+    if(img.getAttribute('data-no-edit')) return;
+    img.style.cursor='pointer';
+    img.title='Clique para trocar imagem';
+    img.addEventListener('click',function(e){
+      e.stopPropagation();
+      var url=window.prompt('URL da nova imagem:',img.src||'');
+      if(url&&url.trim()){img.src=url.trim();}
+    });
+    // Fundo via background-image
+    var p=img.parentElement;
+    if(p&&p.style&&p.style.backgroundImage){
+      p.style.cursor='pointer';
+      p.title='Clique para trocar imagem de fundo';
+      p.addEventListener('click',function(e){
+        if(e.target!==p) return;
+        var cur=p.style.backgroundImage.replace(/url\\(['"]?|['"]?\\)/g,'');
+        var url=window.prompt('URL da nova imagem:',cur||'');
+        if(url&&url.trim()){p.style.backgroundImage="url('"+url.trim()+"')";}
+      });
+    }
+  });
+  // Também para divs com background-image
+  document.querySelectorAll('.slide-bg,.bg,.clean-cta .bg').forEach(function(el){
+    el.style.cursor='pointer';
+    el.title='Clique para trocar imagem de fundo';
+    el.addEventListener('click',function(e){
+      e.stopPropagation();
+      var cur=el.style.backgroundImage.replace(/url\\(['"]?|['"]?\\)/g,'');
+      var url=window.prompt('URL da nova imagem:',cur||'');
+      if(url&&url.trim()){el.style.backgroundImage="url('"+url.trim()+"')";}
+    });
+  });
+});
+<\/script>`;
+
+    return `<!DOCTYPE html><html><head>${head}${editScript}</head><body style="margin:0;padding:0;overflow:hidden;">${slide.outerHTML}</body></html>`;
+  }
+
+  async function saveInlineEdits(andGenerateScreenshots = false) {
+    if (!result || !editIframeRef.current) return;
+    setSavingEdits(true);
+    try {
+      const iframeDoc = editIframeRef.current.contentDocument;
+      if (!iframeDoc) throw new Error('iframe não acessível');
+
+      const editedSlide = iframeDoc.body.querySelector(':scope > div') as HTMLElement;
+      if (!editedSlide) throw new Error('Slide não encontrado no iframe');
+
+      // Remove atributos de edição antes de salvar
+      editedSlide.querySelectorAll('[contenteditable]').forEach((el: any) => {
+        el.removeAttribute('contenteditable');
+        el.style.removeProperty('outline');
+        el.style.removeProperty('outline-offset');
+        el.style.removeProperty('cursor');
+        el.style.removeProperty('background');
+        el.style.removeProperty('border-radius');
+      });
+      editedSlide.querySelectorAll('[title]').forEach((el: any) => {
+        if (el.title === 'Clique para trocar imagem' || el.title === 'Clique para trocar imagem de fundo')
+          el.removeAttribute('title');
+      });
+
+      // Substitui o slide no HTML completo
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(result.html, 'text/html');
+      const slides = Array.from(doc.body.children);
+      if (slides[currentSlide]) {
+        slides[currentSlide].replaceWith(editedSlide.cloneNode(true));
+      }
+      const newHtml = doc.documentElement.outerHTML;
+
+      setResult(prev => prev ? { ...prev, html: newHtml } : prev);
+
+      // Salva no servidor
+      await fetch(`${API}/api/carousel/save-html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: newHtml, folderName: result.folderName }),
+      }).catch(() => {});
+
+      if (andGenerateScreenshots) {
+        toast.success('Slide salvo! Gerando imagens…');
+        const screenshots = await generateAndSaveScreenshots(newHtml, result.folderName);
+        setResult(prev => prev ? { ...prev, html: newHtml, screenshots } : prev);
+        await fetch(`${API}/api/carousel/saved/${result.folderName}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshots }),
+        }).catch(() => {});
+        toast.success('Imagens atualizadas!');
+        setInlineEditMode(false);
+      } else {
+        toast.success('Slide salvo!');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar');
+    } finally {
+      setSavingEdits(false);
+    }
   }
 
   // Slides para preview: PNGs se disponíveis, senão extrai do HTML
@@ -1391,14 +1540,30 @@ ${stats ? `- Stats: ${stats}` : ''}
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button
-                    onClick={() => setEditorOpen(o => !o)}
+                    onClick={() => {
+                      setInlineEditMode(o => !o);
+                      setEditorOpen(false);
+                    }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      editorOpen
+                      inlineEditMode
                         ? 'bg-purple-600 text-white hover:bg-purple-500'
                         : 'bg-secondary hover:bg-border text-foreground'
                     }`}
                   >
-                    <Edit3 className="w-3.5 h-3.5" /> Editar
+                    <Edit3 className="w-3.5 h-3.5" /> {inlineEditMode ? 'Fechar edição' : 'Editar inline'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditorOpen(o => !o);
+                      setInlineEditMode(false);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      editorOpen
+                        ? 'bg-blue-600 text-white hover:bg-blue-500'
+                        : 'bg-secondary hover:bg-border text-foreground'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" /> Editor avançado
                   </button>
                   <button
                     onClick={handleDownloadHTML}
@@ -1470,6 +1635,32 @@ ${stats ? `- Stats: ${stats}` : ''}
                   </div>
                 )}
 
+                {/* Barra de ações de edição inline */}
+                {inlineEditMode && (
+                  <div className="flex items-center gap-2 mb-3 p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 flex-wrap">
+                    <span className="text-xs text-purple-300 flex items-center gap-1.5 flex-1 min-w-0">
+                      <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Clique nos textos para editar • Clique nas imagens para trocar</span>
+                    </span>
+                    <button
+                      onClick={() => saveInlineEdits(false)}
+                      disabled={savingEdits}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors shrink-0"
+                    >
+                      {savingEdits ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Salvar slide
+                    </button>
+                    <button
+                      onClick={() => saveInlineEdits(true)}
+                      disabled={savingEdits}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors shrink-0"
+                    >
+                      {savingEdits ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      Salvar + imagens
+                    </button>
+                  </div>
+                )}
+
                 {/* Preview: PNG ou iframe — responsivo */}
                 <div
                   ref={previewContainerRef}
@@ -1478,10 +1669,28 @@ ${stats ? `- Stats: ${stats}` : ''}
                   onTouchEnd={e => handleTouchEnd(e, totalSlides)}
                 >
                   <div
-                    className="rounded-xl overflow-hidden border border-border shadow-lg w-full"
+                    className={`rounded-xl overflow-hidden shadow-lg w-full ${inlineEditMode ? 'border-2 border-purple-500/60' : 'border border-border'}`}
                     style={{ maxWidth: previewWidth }}
                   >
-                    {hasPNGs ? (
+                    {inlineEditMode ? (
+                      /* Modo edição inline — iframe interativo */
+                      <div style={{ position: 'relative', paddingBottom: '125%' }}>
+                        <iframe
+                          ref={editIframeRef}
+                          key={`edit-${currentSlide}-${result.html.length}`}
+                          srcDoc={getEditableSlideHtml(currentSlide)}
+                          sandbox="allow-scripts allow-same-origin"
+                          style={{
+                            position: 'absolute', top: 0, left: 0,
+                            width: '1080px', height: '1350px', border: 'none',
+                            transform: `scale(${previewWidth / 1080})`,
+                            transformOrigin: 'top left',
+                            pointerEvents: 'all',
+                          }}
+                          title={`Slide ${currentSlide + 1} (editando)`}
+                        />
+                      </div>
+                    ) : hasPNGs ? (
                       /* PNG real do servidor */
                       <div style={{ position: 'relative', paddingBottom: '125%' }}>
                         <img
