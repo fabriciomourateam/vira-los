@@ -6,13 +6,77 @@
  * - Zero dependência de Playwright/Chromium no servidor.
  * - Upload individual por slide (evita 413 no body parser).
  * - Timeout em fonts.ready (evita travar no Safari iOS).
- * - Timeout por imagem (evita travar por CORS/imagem lenta).
+ * - Pré-embute todas as imagens como data URLs antes do toPng, pra eliminar
+ *   fetches internos do html-to-image (que falham silenciosamente e abortam
+ *   o SVG foreignObject inteiro).
  */
 
-// PNG 1x1 transparente — fallback quando uma imagem falha ao carregar,
-// evita que html-to-image aborte o slide inteiro.
+// PNG 1x1 transparente — fallback quando uma imagem falha ao carregar.
 const TRANSPARENT_PIXEL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+async function urlToDataUrl(url: string): Promise<string> {
+  const res = await fetch(url, { credentials: 'omit', cache: 'force-cache' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('FileReader falhou'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Pré-embute `<img src=...>` como data URL, com cache e fallback transparente. */
+async function preEmbedImages(root: HTMLElement, cache: Map<string, string>) {
+  const imgs = Array.from(root.querySelectorAll('img'));
+  await Promise.all(
+    imgs.map(async (img) => {
+      const src = img.getAttribute('src') || '';
+      if (!src || src.startsWith('data:')) return;
+      if (cache.has(src)) {
+        img.setAttribute('src', cache.get(src)!);
+        return;
+      }
+      try {
+        const dataUrl = await urlToDataUrl(src);
+        cache.set(src, dataUrl);
+        img.setAttribute('src', dataUrl);
+      } catch {
+        cache.set(src, TRANSPARENT_PIXEL);
+        img.setAttribute('src', TRANSPARENT_PIXEL);
+      }
+    }),
+  );
+}
+
+/** Pré-embute `background-image: url(...)` inline, usando o mesmo cache. */
+async function preEmbedBackgrounds(root: HTMLElement, cache: Map<string, string>) {
+  const elements = Array.from(root.querySelectorAll<HTMLElement>('[style*="url("]'));
+  await Promise.all(
+    elements.map(async (el) => {
+      const style = el.getAttribute('style') || '';
+      const matches = [...style.matchAll(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g)];
+      if (matches.length === 0) return;
+      let newStyle = style;
+      for (const m of matches) {
+        const url = m[1];
+        let dataUrl = cache.get(url);
+        if (!dataUrl) {
+          try {
+            dataUrl = await urlToDataUrl(url);
+            cache.set(url, dataUrl);
+          } catch {
+            dataUrl = TRANSPARENT_PIXEL;
+            cache.set(url, dataUrl);
+          }
+        }
+        newStyle = newStyle.replace(m[0], `url("${dataUrl}")`);
+      }
+      el.setAttribute('style', newStyle);
+    }),
+  );
+}
 
 export async function generateAndSaveScreenshots(
   api: string,
@@ -31,12 +95,9 @@ export async function generateAndSaveScreenshots(
   const parser = new DOMParser();
   const doc = parser.parseFromString(proxied, 'text/html');
 
-  // Injeta só os <style> inline — NÃO injeta <link rel="stylesheet"> externos
-  // (ex: Google Fonts). Externos geram cross-origin no html-to-image quando ele
-  // tenta ler cssRules. Fontes já estão disponíveis no document principal.
+  // Injeta só os <style> inline — externos (Google Fonts) causam cross-origin.
   const injected: HTMLElement[] = [];
-  doc.querySelectorAll('style').forEach(s => {
-    // Remove @import de fontes remotas do próprio CSS inline (mesmo motivo).
+  doc.querySelectorAll('style').forEach((s) => {
     const cleaned = (s.textContent || '').replace(
       /@import\s+url\(['"]?https?:\/\/[^'")\s]+['"]?\)\s*;?/g,
       '',
@@ -48,15 +109,17 @@ export async function generateAndSaveScreenshots(
   });
 
   const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
+  container.style.cssText =
+    'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
   document.body.appendChild(container);
 
   const savedFiles: string[] = [];
+  const imageCache = new Map<string, string>(); // url → dataUrl (compartilhado entre slides)
 
   try {
     await Promise.race([
       document.fonts.ready,
-      new Promise(r => setTimeout(r, 3000)),
+      new Promise((r) => setTimeout(r, 3000)),
     ]);
     const slides = Array.from(doc.body.children) as HTMLElement[];
 
@@ -67,32 +130,29 @@ export async function generateAndSaveScreenshots(
       slide.style.width = '1080px';
       slide.style.height = '1350px';
       slide.style.overflow = 'hidden';
+      slide.querySelectorAll('link[rel="stylesheet"]').forEach((el) => el.remove());
 
-      // Remove qualquer <link rel="stylesheet"> que tenha ficado DENTRO do slide.
-      slide.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.remove());
+      // Pré-embute imagens e backgrounds como data URLs — elimina fetches
+      // internos do html-to-image (principal causa de falha no toPng).
+      await preEmbedImages(slide, imageCache);
+      await preEmbedBackgrounds(slide, imageCache);
 
-      // Aguarda imagens carregarem; se falhar, substitui por pixel transparente
-      // antes de chamar toPng (evita que o canvas fique tainted).
+      // Aguarda imagens (agora data URLs) concluírem o decode.
       await Promise.all(
-        Array.from(container.querySelectorAll('img')).map(img => {
+        Array.from(container.querySelectorAll('img')).map((img) => {
           if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-          return new Promise<void>(r => {
+          return new Promise<void>((r) => {
             const done = () => r();
             img.onload = done;
             img.onerror = () => {
               img.src = TRANSPARENT_PIXEL;
               done();
             };
-            setTimeout(() => {
-              if (!img.complete || img.naturalWidth === 0) {
-                img.src = TRANSPARENT_PIXEL;
-              }
-              done();
-            }, 5000);
+            setTimeout(done, 3000);
           });
-        })
+        }),
       );
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 100));
 
       let dataUrl: string;
       try {
@@ -104,10 +164,9 @@ export async function generateAndSaveScreenshots(
           imagePlaceholder: TRANSPARENT_PIXEL,
         });
       } catch (err: any) {
-        // html-to-image às vezes lança um Event nativo em vez de Error;
-        // converte pra Error com message legível.
         if (err instanceof Error) throw err;
-        const detail = err?.message || err?.target?.src || err?.type || 'erro desconhecido';
+        const detail =
+          err?.message || err?.target?.tagName || err?.type || 'erro desconhecido';
         throw new Error(`html-to-image falhou no slide ${i + 1}: ${detail}`);
       }
 
@@ -122,7 +181,7 @@ export async function generateAndSaveScreenshots(
       onProgress?.(i + 1, slides.length);
     }
   } finally {
-    injected.forEach(el => el.remove());
+    injected.forEach((el) => el.remove());
     container.remove();
   }
   return savedFiles;
