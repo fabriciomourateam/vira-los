@@ -60,6 +60,10 @@ router.post('/generate', async (req, res) => {
     fontFamily, instagramHandle, creatorName, profilePhotoUrl,
     numSlides, contentTone, dominantEmotion, roteiro, layoutStyle,
     templateHtml,
+    // Tipografia
+    titleFontSize, bodyFontSize, bannerFontSize,
+    titleFontWeight, bodyFontWeight, titleTextTransform,
+    titleFontFamily, bodyFontFamily,
   } = req.body;
 
   if (!topic || !String(topic).trim()) {
@@ -72,6 +76,9 @@ router.post('/generate', async (req, res) => {
       fontFamily, instagramHandle, creatorName, profilePhotoUrl,
       numSlides, contentTone, dominantEmotion, roteiro, layoutStyle,
       templateHtml,
+      titleFontSize, bodyFontSize, bannerFontSize,
+      titleFontWeight, bodyFontWeight, titleTextTransform,
+      titleFontFamily, bodyFontFamily,
     });
     res.json(result);
   } catch (err) {
