@@ -287,6 +287,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [copied, setCopied] = useState(false);
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  const [regeneratingCoverId, setRegeneratingCoverId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [inlineEditMode, setInlineEditMode] = useState(false);
   const [savingEdits, setSavingEdits] = useState(false);
@@ -806,6 +807,29 @@ ${stats ? `- Stats: ${stats}` : ''}
       .then(r => r.json())
       .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
       .catch(() => {});
+  }
+
+  async function handleRegenerateCover(saved: SavedCarousel) {
+    setRegeneratingCoverId(saved.id);
+    try {
+      const htmlRes = await fetch(`${API}/output/${saved.folderName}/carrossel.html`);
+      if (!htmlRes.ok) throw new Error(`HTML não encontrado (HTTP ${htmlRes.status})`);
+      const html = await htmlRes.text();
+      toast.success('Regerando imagens do carrossel…');
+      const screenshots = await generateAndSaveScreenshots(html, saved.folderName);
+      await fetch(`${API}/api/carousel/saved/${saved.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screenshots }),
+      });
+      refreshSavedCarousels();
+      toast.success('Capa regenerada!');
+    } catch (e: any) {
+      console.error('[RegenerateCover]', e);
+      toast.error(`Falha: ${e.message || e}`);
+    } finally {
+      setRegeneratingCoverId(null);
+    }
   }
 
   function handleLoadConfig(saved: SavedCarousel) {
@@ -1910,8 +1934,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     {thumb ? (
                       <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                      <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-3">
                         <FolderOpen className="w-8 h-8 opacity-30" />
+                        <button
+                          onClick={() => handleRegenerateCover(saved)}
+                          disabled={regeneratingCoverId === saved.id}
+                          className="flex items-center gap-1.5 text-[11px] bg-foreground text-background font-bold px-2.5 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+                          title="Gerar screenshots a partir do HTML salvo"
+                        >
+                          {regeneratingCoverId === saved.id
+                            ? <><Loader2 className="w-3 h-3 animate-spin" /> Gerando…</>
+                            : <><RefreshCw className="w-3 h-3" /> Regenerar capa</>
+                          }
+                        </button>
                       </div>
                     )}
                     {/* Badge de modelo */}

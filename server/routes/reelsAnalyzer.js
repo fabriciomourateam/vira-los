@@ -9,6 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const { analyzeReel, getState, sseClients } = require('../services/reelsAnalyzerService');
+const db = require('../db/database');
 
 // ─── SSE: stream de eventos em tempo real ─────────────────────────────────────
 
@@ -72,6 +73,35 @@ router.post('/start', async (req, res) => {
   });
 
   res.json({ ok: true, message: 'Análise iniciada. Monitore via /stream.' });
+});
+
+// ─── Banco de Roteiros Salvos ────────────────────────────────────────────────
+
+router.get('/scripts', (req, res) => {
+  res.json(db.getAllReelsScripts());
+});
+
+router.post('/scripts', (req, res) => {
+  const { title, script } = req.body;
+  if (!title || !script) return res.status(400).json({ error: 'title e script obrigatórios' });
+  const id = `rs_${Date.now()}`;
+  const saved = db.createReelsScript({ id, title, script });
+  res.json({ ok: true, id: saved.id });
+});
+
+router.patch('/scripts/:id', (req, res) => {
+  const { title, script } = req.body;
+  const update = {};
+  if (title !== undefined) update.title = title;
+  if (script !== undefined) update.script = script;
+  if (Object.keys(update).length === 0) return res.status(400).json({ error: 'Nada para atualizar' });
+  db.updateReelsScript(req.params.id, update);
+  res.json({ ok: true });
+});
+
+router.delete('/scripts/:id', (req, res) => {
+  db.deleteReelsScript(req.params.id);
+  res.json({ ok: true });
 });
 
 module.exports = router;
