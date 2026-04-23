@@ -74,7 +74,24 @@ export async function generateAndSaveScreenshots(
       );
       await new Promise(r => setTimeout(r, 200));
 
-      const dataUrl = await toPng(slide, { width: 1080, height: 1350, pixelRatio: 1 });
+      // skipFonts evita que html-to-image tente ler cssRules de stylesheets
+      // cross-origin (Google Fonts) — fontes já estão carregadas no document.
+      let dataUrl: string;
+      try {
+        dataUrl = await toPng(slide, {
+          width: 1080,
+          height: 1350,
+          pixelRatio: 1,
+          skipFonts: true,
+          cacheBust: true,
+        });
+      } catch (err: any) {
+        // html-to-image às vezes lança um Event nativo em vez de Error;
+        // converte pra Error com message legível.
+        if (err instanceof Error) throw err;
+        const detail = err?.message || err?.type || 'erro desconhecido';
+        throw new Error(`html-to-image falhou no slide ${i + 1}: ${detail}`);
+      }
 
       const res = await fetch(`${api}/api/carousel/save-screenshots`, {
         method: 'POST',
