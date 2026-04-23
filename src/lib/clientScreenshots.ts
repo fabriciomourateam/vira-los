@@ -9,6 +9,11 @@
  * - Timeout por imagem (evita travar por CORS/imagem lenta).
  */
 
+// PNG 1x1 transparente — fallback quando uma imagem falha ao carregar,
+// evita que html-to-image aborte o slide inteiro.
+const TRANSPARENT_PIXEL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
 export async function generateAndSaveScreenshots(
   api: string,
   html: string,
@@ -20,22 +25,24 @@ export async function generateAndSaveScreenshots(
   const proxyUrl = (url: string) => `${api}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
   const proxied = html
     .replace(/src="(https?:\/\/[^"]+)"/g, (_, u) => `src="${proxyUrl(u)}"`)
+    .replace(/src='(https?:\/\/[^']+)'/g, (_, u) => `src="${proxyUrl(u)}"`)
     .replace(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g, (_, u) => `url("${proxyUrl(u)}")`);
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(proxied, 'text/html');
 
+  // Injeta só os <style> inline — NÃO injeta <link rel="stylesheet"> externos
+  // (ex: Google Fonts). Externos geram cross-origin no html-to-image quando ele
+  // tenta ler cssRules. Fontes já estão disponíveis no document principal.
   const injected: HTMLElement[] = [];
   doc.querySelectorAll('style').forEach(s => {
+    // Remove @import de fontes remotas do próprio CSS inline (mesmo motivo).
+    const cleaned = (s.textContent || '').replace(
+      /@import\s+url\(['"]?https?:\/\/[^'")\s]+['"]?\)\s*;?/g,
+      '',
+    );
     const el = document.createElement('style');
-    el.textContent = s.textContent;
-    document.head.appendChild(el);
-    injected.push(el);
-  });
-  doc.querySelectorAll('link[rel="stylesheet"]').forEach(l => {
-    const el = document.createElement('link');
-    el.setAttribute('rel', 'stylesheet');
-    el.setAttribute('href', (l as HTMLLinkElement).href);
+    el.textContent = cleaned;
     document.head.appendChild(el);
     injected.push(el);
   });
@@ -61,21 +68,32 @@ export async function generateAndSaveScreenshots(
       slide.style.height = '1350px';
       slide.style.overflow = 'hidden';
 
+      // Remove qualquer <link rel="stylesheet"> que tenha ficado DENTRO do slide.
+      slide.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.remove());
+
+      // Aguarda imagens carregarem; se falhar, substitui por pixel transparente
+      // antes de chamar toPng (evita que o canvas fique tainted).
       await Promise.all(
         Array.from(container.querySelectorAll('img')).map(img => {
-          if (img.complete) return Promise.resolve();
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
           return new Promise<void>(r => {
             const done = () => r();
             img.onload = done;
-            img.onerror = done;
-            setTimeout(done, 5000);
+            img.onerror = () => {
+              img.src = TRANSPARENT_PIXEL;
+              done();
+            };
+            setTimeout(() => {
+              if (!img.complete || img.naturalWidth === 0) {
+                img.src = TRANSPARENT_PIXEL;
+              }
+              done();
+            }, 5000);
           });
         })
       );
       await new Promise(r => setTimeout(r, 200));
 
-      // skipFonts evita que html-to-image tente ler cssRules de stylesheets
-      // cross-origin (Google Fonts) — fontes já estão carregadas no document.
       let dataUrl: string;
       try {
         dataUrl = await toPng(slide, {
@@ -83,13 +101,13 @@ export async function generateAndSaveScreenshots(
           height: 1350,
           pixelRatio: 1,
           skipFonts: true,
-          cacheBust: true,
+          imagePlaceholder: TRANSPARENT_PIXEL,
         });
       } catch (err: any) {
         // html-to-image às vezes lança um Event nativo em vez de Error;
         // converte pra Error com message legível.
         if (err instanceof Error) throw err;
-        const detail = err?.message || err?.type || 'erro desconhecido';
+        const detail = err?.message || err?.target?.src || err?.type || 'erro desconhecido';
         throw new Error(`html-to-image falhou no slide ${i + 1}: ${detail}`);
       }
 
