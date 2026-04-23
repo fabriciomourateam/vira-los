@@ -715,7 +715,13 @@ function rebuildSlideOuterHtml(
     }
   }
 
-  return el.outerHTML;
+  // el.outerHTML re-escapa '&' → '&amp;' em valores de atributos (comportamento padrão do
+  // serializador HTML5). Isso quebra URLs com query params (ex.: Unsplash ?crop=entropy&cs=...).
+  // Decodificamos apenas dentro de style="..." e src="..." para não afetar conteúdo de texto.
+  return el.outerHTML.replace(
+    /(<[^>]+(?:style|src|href)="[^"]*?)&amp;([^"]*?")/g,
+    (_, before, after) => `${before}&${after}`,
+  );
 }
 
 // ─── JPEG download (client-side canvas conversion) ────────────────────────────
