@@ -27,6 +27,24 @@ async function urlToDataUrl(url: string): Promise<string> {
   });
 }
 
+/** Substitui todas as url(https://...) em um texto CSS por data URLs. */
+async function inlineUrlsInCss(cssText: string, cache: Map<string, string>): Promise<string> {
+  const urlRegex = /url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g;
+  const urls = [...cssText.matchAll(urlRegex)].map((m) => m[1]);
+  const unique = [...new Set(urls)];
+  await Promise.all(
+    unique.map(async (u) => {
+      if (cache.has(u)) return;
+      try {
+        cache.set(u, await urlToDataUrl(u));
+      } catch {
+        cache.set(u, TRANSPARENT_PIXEL);
+      }
+    }),
+  );
+  return cssText.replace(urlRegex, (_, u) => `url("${cache.get(u) || TRANSPARENT_PIXEL}")`);
+}
+
 /** Pré-embute `<img src=...>` como data URL, com cache e fallback transparente. */
 async function preEmbedImages(root: HTMLElement, cache: Map<string, string>) {
   const imgs = Array.from(root.querySelectorAll('img'));
@@ -95,19 +113,6 @@ export async function generateAndSaveScreenshots(
   const parser = new DOMParser();
   const doc = parser.parseFromString(proxied, 'text/html');
 
-  // Injeta só os <style> inline — externos (Google Fonts) causam cross-origin.
-  const injected: HTMLElement[] = [];
-  doc.querySelectorAll('style').forEach((s) => {
-    const cleaned = (s.textContent || '').replace(
-      /@import\s+url\(['"]?https?:\/\/[^'")\s]+['"]?\)\s*;?/g,
-      '',
-    );
-    const el = document.createElement('style');
-    el.textContent = cleaned;
-    document.head.appendChild(el);
-    injected.push(el);
-  });
-
   const container = document.createElement('div');
   container.style.cssText =
     'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
@@ -115,8 +120,24 @@ export async function generateAndSaveScreenshots(
 
   const savedFiles: string[] = [];
   const imageCache = new Map<string, string>(); // url → dataUrl (compartilhado entre slides)
+  const injected: HTMLElement[] = [];
 
   try {
+    // Injeta <style> inline após pré-embutir todas as url(...) como data URL.
+    // Externos (Google Fonts) NÃO são injetados — causam cross-origin.
+    const styles = Array.from(doc.querySelectorAll('style'));
+    for (const s of styles) {
+      let text = (s.textContent || '').replace(
+        /@import\s+url\(['"]?https?:\/\/[^'")\s]+['"]?\)\s*;?/g,
+        '',
+      );
+      text = await inlineUrlsInCss(text, imageCache);
+      const el = document.createElement('style');
+      el.textContent = text;
+      document.head.appendChild(el);
+      injected.push(el);
+    }
+
     await Promise.race([
       document.fonts.ready,
       new Promise((r) => setTimeout(r, 3000)),
@@ -165,9 +186,30 @@ export async function generateAndSaveScreenshots(
         });
       } catch (err: any) {
         if (err instanceof Error) throw err;
-        const detail =
-          err?.message || err?.target?.tagName || err?.type || 'erro desconhecido';
-        throw new Error(`html-to-image falhou no slide ${i + 1}: ${detail}`);
+        const target = err?.target;
+        const tag = target?.tagName || err?.type || 'desconhecido';
+        const rawSrc = target?.src || target?.href?.baseVal || '';
+        const srcPreview = String(rawSrc).startsWith('data:')
+          ? `data:...(${String(rawSrc).length} bytes)`
+          : String(rawSrc).slice(0, 140);
+        // Log de diagnóstico: todos os srcs que sobraram como URL remota
+        const remoteImgs = Array.from(slide.querySelectorAll('img'))
+          .map((im) => im.src)
+          .filter((s) => !s.startsWith('data:'));
+        const remoteBgs = Array.from(slide.querySelectorAll<HTMLElement>('[style*="url("]'))
+          .map((el) => el.getAttribute('style') || '')
+          .map((st) => st.match(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/)?.[1])
+          .filter(Boolean);
+        console.error('[Screenshots] toPng failed', {
+          slide: i + 1,
+          targetTag: tag,
+          targetSrc: srcPreview,
+          remoteImgs,
+          remoteBgs,
+        });
+        throw new Error(
+          `html-to-image falhou no slide ${i + 1} (${tag}${srcPreview ? ': ' + srcPreview : ''})`,
+        );
       }
 
       const res = await fetch(`${api}/api/carousel/save-screenshots`, {
