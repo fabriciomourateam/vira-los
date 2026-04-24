@@ -375,6 +375,12 @@ export async function generateAndSaveScreenshotsHiFi(
 ): Promise<string[]> {
   const { default: html2canvas } = await import('html2canvas-pro');
 
+  // DOMParser/outerHTML escapa '&' como '&amp;' em atributos inline, mas dentro
+  // de <style>...</style> fica '&'. Sem unificar, uma mesma URL vira duas na
+  // minha coleta — uma com '&amp;' (fetch falha) e outra com '&' (ok), e a
+  // substituição cobre só uma delas.
+  html = html.replace(/&amp;/g, '&');
+
   // ── Pré-embute TODAS as URLs externas como data URLs ─────────────────────
   // (tanto <img src> quanto url() de CSS, inline ou em <style>)
   const fetchAsDataUrl = async (url: string): Promise<string> => {
