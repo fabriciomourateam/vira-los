@@ -350,3 +350,116 @@ export async function generateAndSaveScreenshots(
   }
   return savedFiles;
 }
+
+/**
+ * Versão "alta fidelidade": renderiza cada slide num iframe isolado 1080x1350
+ * usando o head/styles originais do HTML. Evita contaminação de CSS da app
+ * (Tailwind, tema dark, etc) e entrega render idêntico ao que o usuário vê
+ * quando abre o arquivo .html baixado localmente.
+ */
+export async function generateAndSaveScreenshotsHiFi(
+  api: string,
+  html: string,
+  folderName: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<string[]> {
+  const { default: html2canvas } = await import('html2canvas-pro');
+
+  // Proxy de URLs externas — idem fluxo legado (evita canvas tainted).
+  const proxyUrl = (url: string) => `${api}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
+  const proxied = html
+    .replace(/src="(https?:\/\/[^"]+)"/g, (_, u) => `src="${proxyUrl(u)}"`)
+    .replace(/src='(https?:\/\/[^']+)'/g, (_, u) => `src="${proxyUrl(u)}"`)
+    .replace(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g, (_, u) => `url("${proxyUrl(u)}")`);
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(proxied, 'text/html');
+  const headHtml = doc.head.innerHTML;
+  const slides = Array.from(doc.body.children) as HTMLElement[];
+  const savedFiles: string[] = [];
+
+  for (let i = 0; i < slides.length; i++) {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText =
+      'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;border:0;';
+    // Sem sandbox — precisamos acessar contentDocument pro html2canvas
+    document.body.appendChild(iframe);
+
+    try {
+      const iframeHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">${headHtml}<style>html,body{margin:0;padding:0;width:1080px;height:1350px;overflow:hidden}</style></head><body>${slides[i].outerHTML}</body></html>`;
+      iframe.srcdoc = iframeHtml;
+
+      await new Promise<void>((resolve) => {
+        if (iframe.contentDocument?.readyState === 'complete') resolve();
+        else iframe.addEventListener('load', () => resolve(), { once: true });
+      });
+
+      const idoc = iframe.contentDocument!;
+      const iwin = iframe.contentWindow!;
+
+      // Aguarda fontes e imagens carregarem dentro do iframe
+      if ((idoc as any).fonts?.ready) {
+        await Promise.race([
+          (idoc as any).fonts.ready,
+          new Promise((r) => setTimeout(r, 3000)),
+        ]);
+      }
+      await Promise.all(
+        Array.from(idoc.images).map((img) => {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+          return new Promise<void>((r) => {
+            const done = () => r();
+            img.onload = done;
+            img.onerror = () => {
+              img.src = TRANSPARENT_PIXEL;
+              done();
+            };
+            setTimeout(done, 6000);
+          });
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 200));
+
+      let dataUrl: string;
+      try {
+        const canvas = await html2canvas(idoc.body as HTMLElement, {
+          width: 1080,
+          height: 1350,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: null,
+          logging: false,
+          imageTimeout: 10000,
+          windowWidth: 1080,
+          windowHeight: 1350,
+          scale: 1,
+          // Usa a window do iframe como contexto de computedStyle
+          // @ts-expect-error — opção runtime
+          foreignObjectRendering: false,
+          onclone: (clonedDoc) => {
+            // Garante que o clone tem as mesmas dimensões
+            clonedDoc.body.style.width = '1080px';
+            clonedDoc.body.style.height = '1350px';
+          },
+        });
+        dataUrl = canvas.toDataURL('image/png');
+      } catch (err: any) {
+        console.error('[ScreenshotsHiFi] html2canvas failed', { slide: i + 1, err, iwin });
+        throw new Error(`Falha ao renderizar slide ${i + 1}: ${err?.message || err}`);
+      }
+
+      const res = await fetch(`${api}/api/carousel/save-screenshots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderName, screenshots: [{ slideNum: i, dataUrl }] }),
+      });
+      if (!res.ok) throw new Error(`Falha ao salvar slide ${i + 1} (HTTP ${res.status})`);
+      const json = await res.json();
+      if (Array.isArray(json.screenshots)) savedFiles.push(...json.screenshots);
+      onProgress?.(i + 1, slides.length);
+    } finally {
+      iframe.remove();
+    }
+  }
+  return savedFiles;
+}

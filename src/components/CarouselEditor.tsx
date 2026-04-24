@@ -7,7 +7,7 @@ import {
   Undo2, Redo2, Search, Copy, Sparkles, ChevronDown, Library, Bookmark, X,
 } from 'lucide-react';
 
-import { generateAndSaveScreenshots } from '@/lib/clientScreenshots';
+import { generateAndSaveScreenshots, generateAndSaveScreenshotsHiFi } from '@/lib/clientScreenshots';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -2428,28 +2428,37 @@ export default function CarouselEditor({
   // ── PNG download (exatamente como está no editor) ───────────────────────────
 
   /**
-   * Abre um PNG em nova aba (comportamento ideal no mobile: long-press salva
-   * nas fotos; no desktop: Ctrl+S salva o arquivo).
+   * Baixa um arquivo do servidor usando blob URL + <a download>.
+   * Funciona em mobile e desktop sem cair no popup blocker.
    */
-  function openPngInNewTab(filename: string) {
+  async function downloadFileFromServer(filename: string) {
     const url = `${API}/output/${folderName}/${filename}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Falha ao baixar ${filename} (HTTP ${res.status})`);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = blobUrl;
     a.download = filename;
-    a.target = '_blank';
-    a.rel = 'noreferrer';
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   }
 
   /** Gera screenshots de todos os slides (a partir do estado atual do editor)
-   *  e devolve a lista de filenames salvos no servidor. */
+   *  usando a versão "hi-fi" que renderiza em iframe isolado 1080x1350 —
+   *  render idêntico ao HTML baixado. */
   async function regenerateAllToDisk(): Promise<string[]> {
     const modifiedHtml = rebuildHtml();
     await fetch(`${API}/api/carousel/screenshots`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ html: modifiedHtml, folderName }),
     });
-    const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
+    const screenshots = await generateAndSaveScreenshotsHiFi(API, modifiedHtml, folderName);
+    if (!screenshots.length) {
+      throw new Error('Nenhum screenshot foi gerado — verifique o console para erros do html2canvas');
+    }
     onScreenshotsUpdated(screenshots);
     return screenshots;
   }
@@ -2459,13 +2468,15 @@ export default function CarouselEditor({
     setScreenshotLoading(true);
     try {
       const screenshots = await regenerateAllToDisk();
+      toast.info(`${screenshots.length} PNGs gerados. Iniciando downloads…`);
       for (const filename of screenshots) {
-        openPngInNewTab(filename);
-        await new Promise(r => setTimeout(r, 200));
+        await downloadFileFromServer(filename);
+        await new Promise(r => setTimeout(r, 300));
       }
-      toast.success(`${screenshots.length} PNGs abertos em novas abas!`);
+      toast.success(`${screenshots.length} PNGs baixados!`);
     } catch (err: any) {
-      toast.error(err.message);
+      console.error('[DownloadPngs]', err);
+      toast.error(`Falha: ${err.message || err}`);
     } finally {
       setScreenshotLoading(false);
     }
@@ -2481,11 +2492,12 @@ export default function CarouselEditor({
     try {
       const screenshots = await regenerateAllToDisk();
       const filename = screenshots[selectedIndex];
-      if (!filename) throw new Error(`PNG do slide ${selectedIndex + 1} não encontrado`);
-      openPngInNewTab(filename);
-      toast.success(`Slide ${selectedIndex + 1} pronto!`);
+      if (!filename) throw new Error(`PNG do slide ${selectedIndex + 1} não encontrado na lista gerada`);
+      await downloadFileFromServer(filename);
+      toast.success(`Slide ${selectedIndex + 1} baixado!`);
     } catch (err: any) {
-      toast.error(err.message);
+      console.error('[DownloadCurrentPng]', err);
+      toast.error(`Falha: ${err.message || err}`);
     } finally {
       setScreenshotLoading(false);
     }
