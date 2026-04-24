@@ -469,6 +469,46 @@ export async function generateAndSaveScreenshotsHiFi(
         });
       }
 
+      // ── Pré-processamento dentro do iframe ──────────────────────────────
+      // Mesmo com iframe isolado, o html2canvas-pro tem quirks na hora de
+      // capturar. As funções abaixo mexem só em inline styles → seguras no
+      // documento do iframe.
+      const body = idoc.body as HTMLElement;
+      convertScaleTransforms(body);      // scale() → width/height/translate
+      fixCalcBackgroundPosition(body);   // calc(50%) → percentual
+      fixHtml2canvasTextRendering(body); // divs aninhadas → <br><span>
+      // Brightness overlays: adapta pra usar o document do iframe
+      {
+        const iwin = idoc.defaultView!;
+        const bgEls = Array.from(body.querySelectorAll('.bg, .slide-bg')) as HTMLElement[];
+        for (const el of bgEls) {
+          const inlineStyle = el.getAttribute('style') || '';
+          const inlineMatch = inlineStyle.match(/filter\s*:\s*brightness\(\s*(\d+(?:\.\d+)?)\s*%\s*\)/i);
+          let factor: number;
+          if (inlineMatch) factor = parseFloat(inlineMatch[1]) / 100;
+          else {
+            try {
+              const cf = iwin.getComputedStyle(el).getPropertyValue('filter') || '';
+              const cm = cf.match(/brightness\(\s*(\d+(?:\.\d+)?)\s*\)/);
+              factor = cm ? parseFloat(cm[1]) : 1.0;
+            } catch { factor = 1.0; }
+          }
+          if (Math.abs(factor - 1.0) < 0.02) continue;
+          const alpha = factor < 1.0 ? Math.min(1, 1 - factor) : 0;
+          if (alpha > 0.01) {
+            const ov = idoc.createElement('div');
+            ov.setAttribute(
+              'style',
+              `position:absolute;inset:0;z-index:0;background:rgba(0,0,0,${alpha.toFixed(4)});pointer-events:none;`,
+            );
+            el.insertAdjacentElement('afterend', ov);
+          }
+          if (inlineMatch) {
+            el.setAttribute('style', inlineStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?\s*/i, '').trim());
+          }
+        }
+      }
+
       // Fontes (já estão como links do Google Fonts — ignora se travar)
       if ((idoc as any).fonts?.ready) {
         await Promise.race([
