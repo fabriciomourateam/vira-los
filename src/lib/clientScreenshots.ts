@@ -470,13 +470,19 @@ export async function generateAndSaveScreenshotsHiFi(
       }
 
       // ── Pré-processamento dentro do iframe ──────────────────────────────
-      // Mesmo com iframe isolado, o html2canvas-pro tem quirks na hora de
-      // capturar. As funções abaixo mexem só em inline styles → seguras no
-      // documento do iframe.
+      // IMPORTANTE: NÃO converto scale() pra width/height nem aplico word-spacing
+      // aqui — o iframe isolado renderiza nativamente (sem Tailwind brigando),
+      // e o html2canvas-pro captura transforms/espaços corretamente quando o
+      // DOM está limpo. As conversões do fluxo não-HiFi são hacks que ficam
+      // contraproducentes aqui (zoom excessivo, espaços duplos).
+      //
+      // Mantenho só:
+      // - fixCalcBackgroundPosition: html2canvas não entende calc() em
+      //   background-position → fundo preto. Conversão é segura.
+      // - applyBrightnessOverlays: html2canvas ignora CSS filter → precisa
+      //   virar overlay rgba.
       const body = idoc.body as HTMLElement;
-      convertScaleTransforms(body);      // scale() → width/height/translate
-      fixCalcBackgroundPosition(body);   // calc(50%) → percentual
-      fixHtml2canvasTextRendering(body); // divs aninhadas → <br><span>
+      fixCalcBackgroundPosition(body);
       // Brightness overlays: adapta pra usar o document do iframe
       {
         const iwin = idoc.defaultView!;
@@ -547,6 +553,11 @@ export async function generateAndSaveScreenshotsHiFi(
           windowWidth: 1080,
           windowHeight: 1350,
           scale: 1,
+          // Agora que tudo é data URL (sem CORS), podemos usar SVG foreignObject —
+          // render 100% nativo do browser, respeita transform:scale() e espaços
+          // corretamente. Fallback pro render manual se falhar.
+          // @ts-expect-error — option aceito em runtime
+          foreignObjectRendering: true,
         });
         dataUrl = canvas.toDataURL('image/png');
       } catch (err: any) {
