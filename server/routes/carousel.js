@@ -170,7 +170,27 @@ router.post('/save-template', async (req, res) => {
 // ─── Carrosseis salvos (histórico + templates) ────────────────────────────────
 
 router.get('/saved', (req, res) => {
-  res.json(db.getAllCarousels());
+  // Auto-popula screenshots a partir dos arquivos em disco quando o DB tem array vazio.
+  // Isso corrige carrosseis salvos antes de a geração de screenshots estar funcionando
+  // (ou antes de um PATCH ter sido feito com os filenames gerados no cliente).
+  const carousels = db.getAllCarousels().map(c => {
+    if (!c.screenshots?.length && c.folderName) {
+      const folderPath = path.join(OUTPUT_DIR, c.folderName);
+      try {
+        if (fs.existsSync(folderPath)) {
+          const pngs = fs.readdirSync(folderPath)
+            .filter(f => /^slide_\d+\.png$/.test(f))
+            .sort();
+          if (pngs.length) {
+            db.updateCarousel(c.id, { screenshots: pngs });
+            return { ...c, screenshots: pngs };
+          }
+        }
+      } catch { /* ignora — pasta inacessível */ }
+    }
+    return c;
+  });
+  res.json(carousels);
 });
 
 router.post('/saved', (req, res) => {
