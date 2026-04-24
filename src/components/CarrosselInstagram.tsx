@@ -6,7 +6,7 @@ import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
-  Archive, ArchiveRestore, Save,
+  Archive, ArchiveRestore, Save, X,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 import { generateAndSaveScreenshots as libGenerateScreenshots } from '@/lib/clientScreenshots';
@@ -305,6 +305,8 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [regeneratingCoverId, setRegeneratingCoverId] = useState<string | null>(null);
+  const [viewingSlides, setViewingSlides] = useState<SavedCarousel | null>(null);
+  const [viewingSlideIndex, setViewingSlideIndex] = useState(0);
   const [editorOpen, setEditorOpen] = useState(false);
   const [inlineEditMode, setInlineEditMode] = useState(false);
   const [savingEdits, setSavingEdits] = useState(false);
@@ -779,6 +781,25 @@ ${stats ? `- Stats: ${stats}` : ''}
     } finally {
       setRegeneratingCoverId(null);
     }
+  }
+
+  function openSavedSlidesViewer(saved: SavedCarousel) {
+    if (!saved.screenshots?.length) {
+      toast.error('Esse carrossel não tem imagens geradas. Clique em "Regenerar capa".');
+      return;
+    }
+    setViewingSlides(saved);
+    setViewingSlideIndex(0);
+  }
+
+  function openSavedSlideInNewTab(folderName: string, filename: string) {
+    const url = `${API}/output/${folderName}/${filename}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.click();
   }
 
   function handleLoadConfig(saved: SavedCarousel) {
@@ -2220,6 +2241,15 @@ document.addEventListener('DOMContentLoaded', function() {
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
                         )}
+                        {(saved.screenshots?.length ?? 0) > 0 && (
+                          <button
+                            onClick={() => openSavedSlidesViewer(saved)}
+                            className="p-1 rounded text-muted-foreground hover:text-emerald-400 transition-colors"
+                            title="Baixar slides (um por um)"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <a
                           href={`${API}/output/${saved.folderName}/carrossel.html`}
                           target="_blank"
@@ -2304,6 +2334,154 @@ document.addEventListener('DOMContentLoaded', function() {
           </AnimatePresence>
         </div>
       )}
+
+      {/* ── Modal: visualizador de slides de um carrossel salvo ──────────── */}
+      {viewingSlides && viewingSlides.screenshots && (
+        <SavedSlidesModal
+          saved={viewingSlides}
+          index={viewingSlideIndex}
+          onIndexChange={setViewingSlideIndex}
+          onClose={() => setViewingSlides(null)}
+          onDownload={(filename) => openSavedSlideInNewTab(viewingSlides.folderName, filename)}
+          apiBase={API}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Componente: modal de slides do histórico ──────────────────────────────────
+
+function SavedSlidesModal({
+  saved, index, onIndexChange, onClose, onDownload, apiBase,
+}: {
+  saved: SavedCarousel;
+  index: number;
+  onIndexChange: (i: number) => void;
+  onClose: () => void;
+  onDownload: (filename: string) => void;
+  apiBase: string;
+}) {
+  const total = saved.screenshots.length;
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  function prev() { if (index > 0) onIndexChange(index - 1); }
+  function next() { if (index < total - 1) onIndexChange(index + 1); }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') prev();
+      if (e.key === 'ArrowRight') next();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [index, total]);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) next();
+      else prev();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  }
+
+  const filename = saved.screenshots[index];
+  const src = `${apiBase}/output/${saved.folderName}/${filename}`;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-2 px-1">
+          <p className="text-white text-sm font-semibold truncate">{saved.topic}</p>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0"
+            title="Fechar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Slide */}
+        <div
+          className="relative aspect-[4/5] bg-black rounded-xl overflow-hidden select-none"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <img
+            src={src}
+            alt={`Slide ${index + 1}`}
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+          <button
+            onClick={() => onDownload(filename)}
+            className="absolute bottom-2 right-2 p-2 rounded-lg bg-black/60 hover:bg-black/80 active:bg-black/90 text-white transition-colors"
+            title="Abrir em nova aba / baixar"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Nav + indicador */}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <button
+            onClick={prev}
+            disabled={index === 0}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-colors"
+            title="Anterior"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1.5">
+            {saved.screenshots.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => onIndexChange(i)}
+                className={`rounded-full transition-all ${
+                  i === index ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40'
+                }`}
+                title={`Slide ${i + 1}`}
+              />
+            ))}
+          </div>
+          <button
+            onClick={next}
+            disabled={index === total - 1}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-colors"
+            title="Próximo"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* "Baixar todos" */}
+        <button
+          onClick={() => saved.screenshots.forEach((f) => onDownload(f))}
+          className="w-full mt-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-400 active:bg-orange-600 text-white text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
+        >
+          <Download className="w-4 h-4" />
+          Baixar todos ({total}) em novas abas
+        </button>
+
+        <p className="text-white/60 text-xs text-center mt-2">
+          {index + 1} / {total} · toque nas setas ou arraste
+        </p>
+      </div>
     </div>
   );
 }
