@@ -16,6 +16,67 @@ const TRANSPARENT_PIXEL =
 // ─── Pré-processamento dos elementos .bg/.slide-bg ──────────────────────────
 
 /**
+ * Corrige background-position: calc(50% ± Xpx) calc(50% ± Ypx).
+ * html2canvas-pro não suporta calc() em background-position, resultando em fundo preto.
+ * Converte para valores percentuais equivalentes.
+ */
+function fixCalcBackgroundPosition(container: HTMLElement): void {
+  const bgEls = Array.from(container.querySelectorAll('[style]')) as HTMLElement[];
+  for (const el of bgEls) {
+    let s = el.getAttribute('style') || '';
+    if (!s.includes('calc(50%')) continue;
+
+    // Lê dimensões efetivas (podem ter sido alteradas por convertScaleTransforms)
+    const wMatch = /width\s*:\s*([\d.]+)%/.exec(s);
+    const hMatch = /height\s*:\s*([\d.]+)%/.exec(s);
+    const W = wMatch ? (parseFloat(wMatch[1]) / 100) * 1080 : 1080;
+    const H = hMatch ? (parseFloat(hMatch[1]) / 100) * 1350 : 1350;
+
+    s = s.replace(
+      /background-position\s*:\s*calc\(50%\s*([+-])\s*([\d.]+)px\)\s+calc\(50%\s*([+-])\s*([\d.]+)px\)/gi,
+      (_, sx, vx, sy, vy) => {
+        const ox = (sx === '-' ? -1 : 1) * parseFloat(vx);
+        const oy = (sy === '-' ? -1 : 1) * parseFloat(vy);
+        const px = 50 + (ox / W) * 100;
+        const py = 50 + (oy / H) * 100;
+        return `background-position: ${Math.max(0, Math.min(100, px)).toFixed(1)}% ${Math.max(0, Math.min(100, py)).toFixed(1)}%`;
+      },
+    );
+    el.setAttribute('style', s);
+  }
+}
+
+/**
+ * Corrige renderização de texto no html2canvas-pro:
+ * 1. Converte <div> dentro de containers de texto para <br><span> —
+ *    html2canvas perde espaços entre palavras ao encontrar divs aninhadas.
+ * 2. Adiciona word-spacing explícito para evitar que spans/hl colapsem espaços.
+ */
+function fixHtml2canvasTextRendering(container: HTMLElement): void {
+  const TEXT_SELECTORS = [
+    '.cover-title', '.content-title', '.content-body', '.cta-title',
+    '.split-title', '.title', '.subtitle', '.narrative-text',
+    '.cover-subtitle', '.cta-subtitle', '.step-text', '.tip-text',
+  ];
+  for (const sel of TEXT_SELECTORS) {
+    container.querySelectorAll(sel).forEach(outer => {
+      // Converte <div> aninhadas para <br><span> (preserva estilo)
+      (outer as HTMLElement).querySelectorAll('div').forEach(inner => {
+        const br = document.createElement('br');
+        const span = document.createElement('span');
+        const inStyle = inner.getAttribute('style');
+        if (inStyle) span.setAttribute('style', inStyle);
+        span.innerHTML = inner.innerHTML;
+        inner.before(br);
+        inner.replaceWith(span);
+      });
+      // word-spacing explícito previne colapso de espaços pelo html2canvas
+      (outer as HTMLElement).style.wordSpacing = '0.2em';
+    });
+  }
+}
+
+/**
  * html2canvas-pro não suporta filter:brightness().
  * Converte para overlay div rgba equivalente (que html2canvas renderiza normalmente).
  * Também lida com o valor decimal do computed style (.clean-cta .bg { filter: brightness(0.3) }).
@@ -194,6 +255,12 @@ export async function generateAndSaveScreenshots(
 
       // ── Pré-processamento ─────────────────────────────────────────────────
 
+      // 0. Limpa ;; duplicados nos atributos style (artefato de edições múltiplas)
+      container.querySelectorAll('[style]').forEach(el => {
+        const s = el.getAttribute('style') || '';
+        if (s.includes(';;')) el.setAttribute('style', s.replace(/;{2,}/g, ';'));
+      });
+
       // 1. Pré-carrega background-images CSS (evita fundo branco no render)
       await preloadBackgroundImages(container);
 
@@ -203,6 +270,14 @@ export async function generateAndSaveScreenshots(
       // 3. transform:scale() → width/height/translate equivalente
       //    (html2canvas não renderiza scale() em elementos position:absolute corretamente)
       convertScaleTransforms(container);
+
+      // 4. background-position: calc(50% ± Xpx) → percentual equivalente
+      //    (html2canvas não suporta calc() em background-position → fundo preto)
+      fixCalcBackgroundPosition(container);
+
+      // 5. <div> aninhada em container de texto → <br><span> + word-spacing explícito
+      //    (html2canvas perde espaços entre palavras com divs aninhadas: "ESTAVAPERDENDO")
+      fixHtml2canvasTextRendering(container);
 
       // Aguarda <img> tags carregarem
       await Promise.all(
