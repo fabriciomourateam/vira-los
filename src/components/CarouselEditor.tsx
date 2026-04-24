@@ -2425,6 +2425,72 @@ export default function CarouselEditor({
     }
   }
 
+  // ── PNG download (exatamente como está no editor) ───────────────────────────
+
+  /**
+   * Abre um PNG em nova aba (comportamento ideal no mobile: long-press salva
+   * nas fotos; no desktop: Ctrl+S salva o arquivo).
+   */
+  function openPngInNewTab(filename: string) {
+    const url = `${API}/output/${folderName}/${filename}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.click();
+  }
+
+  /** Gera screenshots de todos os slides (a partir do estado atual do editor)
+   *  e devolve a lista de filenames salvos no servidor. */
+  async function regenerateAllToDisk(): Promise<string[]> {
+    const modifiedHtml = rebuildHtml();
+    await fetch(`${API}/api/carousel/screenshots`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html: modifiedHtml, folderName }),
+    });
+    const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
+    onScreenshotsUpdated(screenshots);
+    return screenshots;
+  }
+
+  async function handleDownloadPngs() {
+    toast.info('Gerando PNGs com o que está no editor…');
+    setScreenshotLoading(true);
+    try {
+      const screenshots = await regenerateAllToDisk();
+      for (const filename of screenshots) {
+        openPngInNewTab(filename);
+        await new Promise(r => setTimeout(r, 200));
+      }
+      toast.success(`${screenshots.length} PNGs abertos em novas abas!`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setScreenshotLoading(false);
+    }
+  }
+
+  async function handleDownloadCurrentPng() {
+    if (selectedIndex === null) {
+      toast.error('Selecione um slide primeiro');
+      return;
+    }
+    toast.info(`Gerando PNG do slide ${selectedIndex + 1}…`);
+    setScreenshotLoading(true);
+    try {
+      const screenshots = await regenerateAllToDisk();
+      const filename = screenshots[selectedIndex];
+      if (!filename) throw new Error(`PNG do slide ${selectedIndex + 1} não encontrado`);
+      openPngInNewTab(filename);
+      toast.success(`Slide ${selectedIndex + 1} pronto!`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setScreenshotLoading(false);
+    }
+  }
+
   // ── Upload de imagem de fundo ─────────────────────────────────────────────────
 
   function handleBgFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -2631,6 +2697,16 @@ export default function CarouselEditor({
             <button onClick={handleRegenerateScreenshots} disabled={screenshotLoading} title="Gerar PNGs"
               className="p-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white transition-colors">
               {screenshotLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+            </button>
+            <button onClick={handleDownloadCurrentPng} disabled={screenshotLoading || selectedIndex === null}
+              title="Baixar PNG do slide atual (como está no editor)"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
+              <Download className="w-3 h-3" /> PNG
+            </button>
+            <button onClick={handleDownloadPngs} disabled={screenshotLoading}
+              title="Baixar PNGs de todos os slides (como estão no editor)"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
+              <Download className="w-3 h-3" /> PNGs
             </button>
             <button onClick={handleDownloadJpegs} disabled={screenshotLoading} title="Baixar JPEGs"
               className="p-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white transition-colors">
