@@ -470,20 +470,18 @@ export async function generateAndSaveScreenshotsHiFi(
       }
 
       // ── Pré-processamento dentro do iframe ──────────────────────────────
-      // IMPORTANTE: NÃO converto scale() pra width/height nem aplico word-spacing
-      // aqui — o iframe isolado renderiza nativamente (sem Tailwind brigando),
-      // e o html2canvas-pro captura transforms/espaços corretamente quando o
-      // DOM está limpo. As conversões do fluxo não-HiFi são hacks que ficam
-      // contraproducentes aqui (zoom excessivo, espaços duplos).
+      // Render manual (sem foreignObject) + iframe isolado é o compromisso:
+      // - foreignObject falha em carregar Google Fonts → texto com fallback mais
+      //   largo → quebra linha no botão
+      // - modo manual respeita fontes, mas precisa de um único fix: brightness
+      //   via overlay (html2canvas ignora CSS filter)
       //
-      // Mantenho só:
-      // - fixCalcBackgroundPosition: html2canvas não entende calc() em
-      //   background-position → fundo preto. Conversão é segura.
-      // - applyBrightnessOverlays: html2canvas ignora CSS filter → precisa
-      //   virar overlay rgba.
+      // IMPORTANTE: NÃO converto scale() nem adiciono word-spacing aqui —
+      // html2canvas-pro recente lida razoavelmente com transform:scale, e as
+      // conversões causavam zoom excessivo / espaços duplos no render.
       const body = idoc.body as HTMLElement;
-      fixCalcBackgroundPosition(body);
-      // Brightness overlays: adapta pra usar o document do iframe
+      // Brightness: adiciona overlay rgba E força `filter:none` inline
+      // para sobrepor qualquer regra de classe CSS (evita double darkening).
       {
         const iwin = idoc.defaultView!;
         const bgEls = Array.from(body.querySelectorAll('.bg, .slide-bg')) as HTMLElement[];
@@ -509,9 +507,12 @@ export async function generateAndSaveScreenshotsHiFi(
             );
             el.insertAdjacentElement('afterend', ov);
           }
-          if (inlineMatch) {
-            el.setAttribute('style', inlineStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?\s*/i, '').trim());
-          }
+          // SEMPRE adiciona `filter:none` inline pra sobrepor a classe CSS.
+          // Sem isso, o filter da classe continua aplicando E o overlay adiciona
+          // mais escuridão → double darkening.
+          const cleaned = inlineStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?\s*/i, '').trim();
+          const sep = cleaned && !cleaned.endsWith(';') ? '; ' : '';
+          el.setAttribute('style', `${cleaned}${sep}filter: none`);
         }
       }
 
@@ -553,11 +554,9 @@ export async function generateAndSaveScreenshotsHiFi(
           windowWidth: 1080,
           windowHeight: 1350,
           scale: 1,
-          // Agora que tudo é data URL (sem CORS), podemos usar SVG foreignObject —
-          // render 100% nativo do browser, respeita transform:scale() e espaços
-          // corretamente. Fallback pro render manual se falhar.
-          // @ts-expect-error — option aceito em runtime
-          foreignObjectRendering: true,
+          // Manual rendering (sem foreignObject): respeita Google Fonts (o modo
+          // foreignObject carrega o DOM como SVG image, o que bloqueia fontes
+          // externas e fez o botão "Siga @fabriciomourateam" quebrar linha).
         });
         dataUrl = canvas.toDataURL('image/png');
       } catch (err: any) {
