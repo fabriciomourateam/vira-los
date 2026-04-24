@@ -7,7 +7,7 @@ import {
   Undo2, Redo2, Search, Copy, Sparkles, ChevronDown, Library, Bookmark, X,
 } from 'lucide-react';
 
-import { generateAndSaveScreenshots } from '@/lib/clientScreenshots';
+import { generateAndSaveScreenshots, generateAndSaveScreenshotsHiFi } from '@/lib/clientScreenshots';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -2447,16 +2447,17 @@ export default function CarouselEditor({
   }
 
   /** Gera screenshots de todos os slides (a partir do estado atual do editor).
-   *  Usa a mesma função que gera os thumbnails salvos — tem todo o
-   *  pre-processamento pro html2canvas (background-images, brightness, scale,
-   *  calc, espaçamento de texto). */
+   *  Usa a versão HiFi: renderiza cada slide em iframe isolado 1080×1350,
+   *  sem contaminação de CSS da app (Tailwind). Dispensa os hacks de
+   *  word-spacing, scale→width, calc→percentual do fluxo legado, porque
+   *  o iframe usa render nativo do browser. */
   async function regenerateAllToDisk(): Promise<string[]> {
     const modifiedHtml = rebuildHtml();
     await fetch(`${API}/api/carousel/screenshots`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ html: modifiedHtml, folderName }),
     });
-    const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
+    const screenshots = await generateAndSaveScreenshotsHiFi(API, modifiedHtml, folderName);
     if (!screenshots.length) {
       throw new Error('Nenhum screenshot foi gerado — verifique o console para erros do html2canvas');
     }

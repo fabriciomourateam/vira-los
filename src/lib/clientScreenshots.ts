@@ -438,7 +438,36 @@ export async function generateAndSaveScreenshotsHiFi(
           });
         }),
       );
-      await new Promise((r) => setTimeout(r, 200));
+
+      // Pré-carrega background-images CSS — html2canvas não espera por eles.
+      // Usa getComputedStyle pra pegar URLs resolvidas (incluindo as que estão
+      // em <style> blocks, não só inline).
+      const bgUrls = new Set<string>();
+      Array.from(idoc.querySelectorAll<HTMLElement>('*')).forEach((el) => {
+        try {
+          const bg = idoc.defaultView!.getComputedStyle(el).backgroundImage;
+          if (bg && bg !== 'none') {
+            const matches = bg.matchAll(/url\(["']?([^"')]+)["']?\)/g);
+            for (const m of matches) {
+              if (m[1] && !m[1].startsWith('data:')) bgUrls.add(m[1]);
+            }
+          }
+        } catch { /* elemento sem computed style — ignora */ }
+      });
+      if (bgUrls.size > 0) {
+        await Promise.all(
+          Array.from(bgUrls).map((url) => new Promise<void>((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            setTimeout(resolve, 8000);
+            img.src = url;
+          })),
+        );
+      }
+
+      await new Promise((r) => setTimeout(r, 300));
 
       // Revalida defaultView imediatamente antes de chamar html2canvas.
       if (!idoc.defaultView) throw new Error('iframe perdeu defaultView durante carga');
