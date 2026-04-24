@@ -82,8 +82,16 @@ router.post('/generate', async (req, res) => {
     });
     res.json(result);
   } catch (err) {
-    console.error('[Carousel Route]', err.message);
-    res.status(500).json({ error: err.message });
+    const isOverload =
+      err?.status === 529 ||
+      err?.error?.type === 'overloaded_error' ||
+      (err?.message || '').includes('overloaded');
+    const status = isOverload ? 503 : 500;
+    const message = isOverload
+      ? 'A IA está sobrecarregada no momento. Aguarde alguns instantes e tente novamente.'
+      : err.message;
+    console.error('[Carousel Route]', err.status || 500, err.message);
+    res.status(status).json({ error: message });
   }
 });
 

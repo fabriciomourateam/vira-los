@@ -19,6 +19,29 @@ const path = require('path');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// ─── Retry automático para erros de sobrecarga da Anthropic ──────────────────
+// HTTP 529 / overloaded_error: tenta novamente com backoff exponencial
+async function anthropicWithRetry(params, maxRetries = 4) {
+  let delay = 5000; // começa com 5s
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await anthropic.messages.create(params); // linha interna do retry — não alterar
+    } catch (err) {
+      const isOverload =
+        err?.status === 529 ||
+        err?.error?.type === 'overloaded_error' ||
+        (err?.message || '').includes('overloaded');
+      if (isOverload && attempt < maxRetries) {
+        console.warn(`[Anthropic] Sobrecarga (tentativa ${attempt + 1}/${maxRetries}), aguardando ${delay / 1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+        delay = Math.min(delay * 2, 30000); // max 30s
+        continue;
+      }
+      throw err; // outro erro ou última tentativa
+    }
+  }
+}
+
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
 const OUTPUT_DIR = path.join(DATA_DIR, 'output');
 if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -207,7 +230,7 @@ Responda APENAS com um JSON array de strings, sem markdown:
 ["query slide 1", "query slide 2", ...]`;
 
   try {
-    const res = await anthropic.messages.create({
+    const res = await anthropicWithRetry({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
       messages: [{ role: 'user', content: prompt }],
@@ -1319,12 +1342,12 @@ async function generateCarousel(config) {
   }
 
   const [htmlRes, legendaRes] = await Promise.all([
-    anthropic.messages.create({
+    anthropicWithRetry({
       model: 'claude-sonnet-4-6',
       max_tokens: 16000,
       messages: [{ role: 'user', content: htmlPrompt }],
     }),
-    anthropic.messages.create({
+    anthropicWithRetry({
       model: 'claude-sonnet-4-6',
       max_tokens: 500,
       messages: [{ role: 'user', content: buildLegendaPrompt({ topic: topic.trim(), instagramHandle, niche }) }],
@@ -1441,7 +1464,7 @@ ${slideHtml}
 
 Retorne apenas o <div> externo com novo conteúdo:`;
 
-  const response = await anthropic.messages.create({
+  const response = await anthropicWithRetry({
     model: 'claude-sonnet-4-6',
     max_tokens: 3000,
     messages: [{ role: 'user', content: prompt }],
