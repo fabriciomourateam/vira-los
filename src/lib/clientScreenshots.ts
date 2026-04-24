@@ -356,6 +356,11 @@ export async function generateAndSaveScreenshots(
  * usando o head/styles originais do HTML. Evita contaminação de CSS da app
  * (Tailwind, tema dark, etc) e entrega render idêntico ao que o usuário vê
  * quando abre o arquivo .html baixado localmente.
+ *
+ * IMPORTANTE: usa `src='about:blank'` + `document.write` em vez de `srcdoc`.
+ * Com srcdoc, o iframe navega assincronamente e o document que o html2canvas
+ * recebe tem `defaultView === null`, causando "Document is not attached to a
+ * Window". Com about:blank + write, o document e a window permanecem estáveis.
  */
 export async function generateAndSaveScreenshotsHiFi(
   api: string,
@@ -382,20 +387,35 @@ export async function generateAndSaveScreenshotsHiFi(
     const iframe = document.createElement('iframe');
     iframe.style.cssText =
       'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;border:0;';
-    // Sem sandbox — precisamos acessar contentDocument pro html2canvas
+    iframe.src = 'about:blank';
     document.body.appendChild(iframe);
 
     try {
-      const iframeHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">${headHtml}<style>html,body{margin:0;padding:0;width:1080px;height:1350px;overflow:hidden}</style></head><body>${slides[i].outerHTML}</body></html>`;
-      iframe.srcdoc = iframeHtml;
-
+      // Aguarda o about:blank carregar — garante contentDocument + contentWindow estáveis.
       await new Promise<void>((resolve) => {
         if (iframe.contentDocument?.readyState === 'complete') resolve();
         else iframe.addEventListener('load', () => resolve(), { once: true });
       });
 
       const idoc = iframe.contentDocument!;
-      const iwin = iframe.contentWindow!;
+      if (!idoc.defaultView) {
+        throw new Error('iframe contentDocument sem defaultView');
+      }
+
+      // open/write/close preserva o Document object e a Window do iframe.
+      const iframeHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">${headHtml}<style>html,body{margin:0;padding:0;width:1080px;height:1350px;overflow:hidden;background:transparent}</style></head><body>${slides[i].outerHTML}</body></html>`;
+      idoc.open();
+      idoc.write(iframeHtml);
+      idoc.close();
+
+      // Aguarda readyState=complete após o write (carrega <link>, <script>, etc)
+      if (idoc.readyState !== 'complete') {
+        await new Promise<void>((r) => {
+          const onLoad = () => { idoc.defaultView?.removeEventListener('load', onLoad); r(); };
+          idoc.defaultView?.addEventListener('load', onLoad, { once: true });
+          setTimeout(r, 5000); // fallback
+        });
+      }
 
       // Aguarda fontes e imagens carregarem dentro do iframe
       if ((idoc as any).fonts?.ready) {
@@ -420,6 +440,9 @@ export async function generateAndSaveScreenshotsHiFi(
       );
       await new Promise((r) => setTimeout(r, 200));
 
+      // Revalida defaultView imediatamente antes de chamar html2canvas.
+      if (!idoc.defaultView) throw new Error('iframe perdeu defaultView durante carga');
+
       let dataUrl: string;
       try {
         const canvas = await html2canvas(idoc.body as HTMLElement, {
@@ -433,18 +456,10 @@ export async function generateAndSaveScreenshotsHiFi(
           windowWidth: 1080,
           windowHeight: 1350,
           scale: 1,
-          // Usa a window do iframe como contexto de computedStyle
-          // @ts-expect-error — opção runtime
-          foreignObjectRendering: false,
-          onclone: (clonedDoc) => {
-            // Garante que o clone tem as mesmas dimensões
-            clonedDoc.body.style.width = '1080px';
-            clonedDoc.body.style.height = '1350px';
-          },
         });
         dataUrl = canvas.toDataURL('image/png');
       } catch (err: any) {
-        console.error('[ScreenshotsHiFi] html2canvas failed', { slide: i + 1, err, iwin });
+        console.error('[ScreenshotsHiFi] html2canvas failed', { slide: i + 1, err });
         throw new Error(`Falha ao renderizar slide ${i + 1}: ${err?.message || err}`);
       }
 
