@@ -35,11 +35,16 @@ function fixCalcBackgroundPosition(container: HTMLElement): void {
     s = s.replace(
       /background-position\s*:\s*calc\(50%\s*([+-])\s*([\d.]+)px\)\s+calc\(50%\s*([+-])\s*([\d.]+)px\)/gi,
       (_, sx, vx, sy, vy) => {
+        // O editor armazena pan como dragOffset: calc(50% + dragX) calc(50% + dragY)
+        // onde dragX/dragY positivo = arrastou pra baixo/direita = mostra topo/esquerda.
+        // Background-position: valor MAIOR mostra mais da borda direita/baixo da imagem.
+        // Conversão: py = 50 - (dragY / H) * 100 (sinal correto: drag negativo → py > 50% → mostra fundo)
         const ox = (sx === '-' ? -1 : 1) * parseFloat(vx);
         const oy = (sy === '-' ? -1 : 1) * parseFloat(vy);
-        const px = 50 + (ox / W) * 100;
-        const py = 50 + (oy / H) * 100;
-        return `background-position: ${Math.max(0, Math.min(100, px)).toFixed(1)}% ${Math.max(0, Math.min(100, py)).toFixed(1)}%`;
+        const px = 50 - (ox / W) * 100;  // sinal correto
+        const py = 50 - (oy / H) * 100;  // sinal correto
+        // Permite valores fora de 0-100 (html2canvas suporta; CSS nativo também)
+        return `background-position: ${px.toFixed(1)}% ${py.toFixed(1)}%`;
       },
     );
     el.setAttribute('style', s);
@@ -69,6 +74,21 @@ function fixHtml2canvasTextRendering(container: HTMLElement): void {
         span.innerHTML = inner.innerHTML;
         inner.before(br);
         inner.replaceWith(span);
+      });
+      // Corrige espaços entre spans e text nodes adjacentes.
+      // html2canvas colapsa o espaço no limite </span>→textNode (ex: "MÚSCULOSEM SABER").
+      // Substitui espaços normais por &nbsp; (\u00A0) nesses limites.
+      (outer as HTMLElement).querySelectorAll('span').forEach(span => {
+        const next = span.nextSibling;
+        if (next?.nodeType === Node.TEXT_NODE) {
+          const t = next.textContent || '';
+          if (/^\s/.test(t)) next.textContent = '\u00A0' + t.replace(/^\s+/, '');
+        }
+        const prev = span.previousSibling;
+        if (prev?.nodeType === Node.TEXT_NODE) {
+          const t = prev.textContent || '';
+          if (/\s$/.test(t)) prev.textContent = t.replace(/\s+$/, '') + '\u00A0';
+        }
       });
       // word-spacing explícito previne colapso de espaços pelo html2canvas
       (outer as HTMLElement).style.wordSpacing = '0.2em';
