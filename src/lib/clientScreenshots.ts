@@ -97,6 +97,59 @@ function fixHtml2canvasTextRendering(container: HTMLElement): void {
 }
 
 /**
+ * Versão HiFi (assíncrona) de fixCalcBackgroundPosition.
+ * Carrega a imagem de fundo (data URL já embutida) para obter dimensões reais e
+ * calcula o percentual exato levando em conta o fator de escala do background-size:cover.
+ *
+ * html2canvas ignora calc() em background-position → imagem fica em 50% 50%.
+ * Fórmula exata: p = 50 + 100 * offset_px / (container_size - scaled_image_size)
+ */
+async function fixCalcBackgroundPositionHiFi(container: HTMLElement): Promise<void> {
+  const W = 1080;
+  const H = 1350;
+  const bgEls = Array.from(container.querySelectorAll('[style]')) as HTMLElement[];
+  for (const el of bgEls) {
+    let s = el.getAttribute('style') || '';
+    if (!s.includes('calc(50%')) continue;
+
+    let scaledW = W;
+    let scaledH = H;
+    const bgImgM = s.match(/background-image\s*:\s*url\(['"]?(data:[^'")\s]+)['"]?\)/i);
+    if (bgImgM?.[1]) {
+      try {
+        const img = new Image();
+        img.src = bgImgM[1];
+        await new Promise<void>(r => {
+          if (img.complete && img.naturalWidth > 0) { r(); return; }
+          img.onload = () => r();
+          img.onerror = () => r();
+          setTimeout(r, 3000);
+        });
+        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+          const coverScale = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+          scaledW = img.naturalWidth * coverScale;
+          scaledH = img.naturalHeight * coverScale;
+        }
+      } catch { /* usa dimensões padrão */ }
+    }
+
+    s = s.replace(
+      /background-position\s*:\s*calc\(50%\s*([+-])\s*([\d.]+)px\)\s+calc\(50%\s*([+-])\s*([\d.]+)px\)/gi,
+      (_, sx, vx, sy, vy) => {
+        const ox = (sx === '-' ? -1 : 1) * parseFloat(vx);
+        const oy = (sy === '-' ? -1 : 1) * parseFloat(vy);
+        const denomX = W - scaledW;
+        const denomY = H - scaledH;
+        const px = denomX !== 0 ? 50 + (ox / denomX) * 100 : 50;
+        const py = denomY !== 0 ? 50 + (oy / denomY) * 100 : 50;
+        return `background-position: ${px.toFixed(1)}% ${py.toFixed(1)}%`;
+      },
+    );
+    el.setAttribute('style', s);
+  }
+}
+
+/**
  * html2canvas-pro não suporta filter:brightness().
  * Converte para overlay div rgba equivalente (que html2canvas renderiza normalmente).
  * Também lida com o valor decimal do computed style (.clean-cta .bg { filter: brightness(0.3) }).
@@ -515,6 +568,12 @@ export async function generateAndSaveScreenshotsHiFi(
           el.setAttribute('style', `${cleaned}${sep}filter: none`);
         }
       }
+
+      // background-position: calc(50% ± Xpx) → percentual exato
+      // html2canvas ignora calc() e posiciona a imagem em 50% 50% — errado quando
+      // o usuário arrastou o fundo no editor. A versão HiFi carrega a imagem para
+      // obter as dimensões reais e calcula o percentual exato via fórmula de cover.
+      await fixCalcBackgroundPositionHiFi(body);
 
       // Fontes (já estão como links do Google Fonts — ignora se travar)
       if ((idoc as any).fonts?.ready) {
