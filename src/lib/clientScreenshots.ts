@@ -215,7 +215,10 @@ export async function generateAndSaveScreenshots(
   const proxied = unescaped
     .replace(/src="(https?:\/\/[^"]+)"/g,   (_, u) => `src="${proxyUrl(u)}"`)
     .replace(/src='(https?:\/\/[^']+)'/g,   (_, u) => `src="${proxyUrl(u)}"`)
-    .replace(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g, (_, u) => `url("${proxyUrl(u)}")`);
+    // IMPORTANTE: não usar aspas dentro de url() — a URL do proxy não precisa delas
+    // e aspas duplas dentro de style="..." quebram o HTML: DOMParser encerra o atributo cedo
+    // resultando em background-image perdido → fundo preto no slide.
+    .replace(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g, (_, u) => `url(${proxyUrl(u)})`);
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(proxied, 'text/html');
