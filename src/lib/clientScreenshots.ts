@@ -361,6 +361,11 @@ export async function generateAndSaveScreenshots(
  * Com srcdoc, o iframe navega assincronamente e o document que o html2canvas
  * recebe tem `defaultView === null`, causando "Document is not attached to a
  * Window". Com about:blank + write, o document e a window permanecem estáveis.
+ *
+ * Pré-embute TODAS as imagens externas como data URLs antes de escrever no
+ * iframe — iframes about:blank têm origem "null", e fetches cross-origin de
+ * dentro deles podem falhar ou tornar o canvas tainted. Data URLs eliminam o
+ * problema de raiz.
  */
 export async function generateAndSaveScreenshotsHiFi(
   api: string,
@@ -370,15 +375,56 @@ export async function generateAndSaveScreenshotsHiFi(
 ): Promise<string[]> {
   const { default: html2canvas } = await import('html2canvas-pro');
 
-  // Proxy de URLs externas — idem fluxo legado (evita canvas tainted).
+  // ── Pré-embute TODAS as URLs externas como data URLs ─────────────────────
+  // (tanto <img src> quanto url() de CSS, inline ou em <style>)
+  const fetchAsDataUrl = async (url: string): Promise<string> => {
+    const res = await fetch(url, { credentials: 'omit', cache: 'force-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('FileReader'));
+      reader.readAsDataURL(blob);
+    });
+  };
   const proxyUrl = (url: string) => `${api}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
-  const proxied = html
-    .replace(/src="(https?:\/\/[^"]+)"/g, (_, u) => `src="${proxyUrl(u)}"`)
-    .replace(/src='(https?:\/\/[^']+)'/g, (_, u) => `src="${proxyUrl(u)}"`)
-    .replace(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g, (_, u) => `url("${proxyUrl(u)}")`);
+
+  // Coleta todas as URLs externas do HTML
+  const urlPatterns = [
+    /src="(https?:\/\/[^"]+)"/g,
+    /src='(https?:\/\/[^']+)'/g,
+    /url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/g,
+  ];
+  const externalUrls = new Set<string>();
+  for (const pat of urlPatterns) {
+    for (const m of html.matchAll(pat)) externalUrls.add(m[1]);
+  }
+
+  // Baixa cada uma em paralelo (via proxy pra evitar CORS do Unsplash) e converte a data URL
+  const dataUrlByOrig = new Map<string, string>();
+  await Promise.all(
+    Array.from(externalUrls).map(async (url) => {
+      try {
+        const dataUrl = await fetchAsDataUrl(proxyUrl(url));
+        dataUrlByOrig.set(url, dataUrl);
+      } catch (e) {
+        console.warn('[ScreenshotsHiFi] falha ao baixar', url, e);
+        dataUrlByOrig.set(url, TRANSPARENT_PIXEL);
+      }
+    }),
+  );
+
+  // Substitui no HTML todas as ocorrências por data URLs
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let embedded = html;
+  for (const [orig, dataUrl] of dataUrlByOrig.entries()) {
+    const re = new RegExp(escapeRe(orig), 'g');
+    embedded = embedded.replace(re, dataUrl);
+  }
 
   const parser = new DOMParser();
-  const doc = parser.parseFromString(proxied, 'text/html');
+  const doc = parser.parseFromString(embedded, 'text/html');
   const headHtml = doc.head.innerHTML;
   const slides = Array.from(doc.body.children) as HTMLElement[];
   const savedFiles: string[] = [];
@@ -417,57 +463,27 @@ export async function generateAndSaveScreenshotsHiFi(
         });
       }
 
-      // Aguarda fontes e imagens carregarem dentro do iframe
+      // Fontes (já estão como links do Google Fonts — ignora se travar)
       if ((idoc as any).fonts?.ready) {
         await Promise.race([
           (idoc as any).fonts.ready,
           new Promise((r) => setTimeout(r, 3000)),
         ]);
       }
+
+      // Aguarda <img> dentro do iframe terminarem (todas data URLs — decode rápido)
       await Promise.all(
         Array.from(idoc.images).map((img) => {
           if (img.complete && img.naturalWidth > 0) return Promise.resolve();
           return new Promise<void>((r) => {
             const done = () => r();
             img.onload = done;
-            img.onerror = () => {
-              img.src = TRANSPARENT_PIXEL;
-              done();
-            };
-            setTimeout(done, 6000);
+            img.onerror = done;
+            setTimeout(done, 3000);
           });
         }),
       );
-
-      // Pré-carrega background-images CSS — html2canvas não espera por eles.
-      // Usa getComputedStyle pra pegar URLs resolvidas (incluindo as que estão
-      // em <style> blocks, não só inline).
-      const bgUrls = new Set<string>();
-      Array.from(idoc.querySelectorAll<HTMLElement>('*')).forEach((el) => {
-        try {
-          const bg = idoc.defaultView!.getComputedStyle(el).backgroundImage;
-          if (bg && bg !== 'none') {
-            const matches = bg.matchAll(/url\(["']?([^"')]+)["']?\)/g);
-            for (const m of matches) {
-              if (m[1] && !m[1].startsWith('data:')) bgUrls.add(m[1]);
-            }
-          }
-        } catch { /* elemento sem computed style — ignora */ }
-      });
-      if (bgUrls.size > 0) {
-        await Promise.all(
-          Array.from(bgUrls).map((url) => new Promise<void>((resolve) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-            setTimeout(resolve, 8000);
-            img.src = url;
-          })),
-        );
-      }
-
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 200));
 
       // Revalida defaultView imediatamente antes de chamar html2canvas.
       if (!idoc.defaultView) throw new Error('iframe perdeu defaultView durante carga');
