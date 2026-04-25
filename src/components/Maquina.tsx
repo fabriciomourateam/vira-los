@@ -47,6 +47,8 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
   // Etapa 2 — headlines
   const [headlinesRaw, setHeadlinesRaw] = useState('');
   const [headlinesParsed, setHeadlinesParsed] = useState<ParsedHeadline[]>([]);
+  const [recommendedNum, setRecommendedNum] = useState<number | null>(null);
+  const [recommendedReason, setRecommendedReason] = useState<string | null>(null);
   const [headlineEscolhida, setHeadlineEscolhida] = useState<ParsedHeadline | null>(null);
 
   // Etapa 3 — estrutura
@@ -104,7 +106,10 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
     try {
       const data = await maquinaApi.headlines(briefing.tema, briefing.nicho);
       setHeadlinesRaw(data.headlines);
-      setHeadlinesParsed(parseHeadlines(data.headlines));
+      const result = parseHeadlines(data.headlines);
+      setHeadlinesParsed(result.items);
+      setRecommendedNum(result.recommendedNum);
+      setRecommendedReason(result.recommendedReason);
       setStage('headlines');
     } catch (e) {
       toast.error(`Erro nas headlines: ${(e as Error).message}`);
@@ -122,7 +127,10 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
       const tema = `${briefing.tema}\n\nHeadlines anteriores:\n${headlinesRaw}\n\nComando: ${command}`;
       const data = await maquinaApi.headlines(tema, briefing.nicho);
       setHeadlinesRaw(data.headlines);
-      setHeadlinesParsed(parseHeadlines(data.headlines));
+      const result = parseHeadlines(data.headlines);
+      setHeadlinesParsed(result.items);
+      setRecommendedNum(result.recommendedNum);
+      setRecommendedReason(result.recommendedReason);
     } catch (e) {
       toast.error(`Erro: ${(e as Error).message}`);
     } finally {
@@ -206,10 +214,14 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
   // ── Ações do histórico ─────────────────────────────────────────────────────
   const handleOpenHistorico = (item: MaquinaCarrossel) => {
     setBriefing({ ...initialBriefing, ...(item.briefing || {}) } as Briefing);
-    setHeadlinesRaw(typeof item.headlines === 'string' ? item.headlines : '');
-    setHeadlinesParsed(typeof item.headlines === 'string' ? parseHeadlines(item.headlines) : []);
+    const md = typeof item.headlines === 'string' ? item.headlines : '';
+    setHeadlinesRaw(md);
+    const result = md ? parseHeadlines(md) : { items: [], recommendedNum: null, recommendedReason: null };
+    setHeadlinesParsed(result.items);
+    setRecommendedNum(result.recommendedNum);
+    setRecommendedReason(result.recommendedReason);
     if (item.headlineEscolhida) {
-      setHeadlineEscolhida({ num: 0, text: item.headlineEscolhida, trigger: '' });
+      setHeadlineEscolhida({ num: 0, text: item.headlineEscolhida, trigger: '', score: null, recommended: false });
     }
     setEstrutura(item.estrutura || '');
     setHtml(item.html || '');
@@ -222,6 +234,8 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
     setBriefing({ ...initialBriefing, ...(item.briefing || {}) } as Briefing);
     setHeadlinesRaw('');
     setHeadlinesParsed([]);
+    setRecommendedNum(null);
+    setRecommendedReason(null);
     setHeadlineEscolhida(null);
     setEstrutura('');
     setHtml('');
@@ -262,6 +276,8 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
           <HeadlinesPicker
             rawMarkdown={headlinesRaw}
             parsed={headlinesParsed}
+            recommendedNum={recommendedNum}
+            recommendedReason={recommendedReason}
             loading={loadingHeadlines}
             onPick={handlePickHeadline}
             onRegenerate={handleRegenerateHeadlines}

@@ -72,8 +72,23 @@ async function generateHeadlines(tema, nicho = 'Consultoria Esportiva', brandKit
       content:
         `Gere 10 headlines para o seguinte tema/conteúdo:\n\n${tema}\n\nNicho: ${nicho}` +
         briefingExtra +
-        `\n\nSiga exatamente o formato de tabela markdown com colunas #, Headline, Gatilho.\n` +
-        `Distribuição obrigatória: opções 1–5 em formato Investigação Cultural, opções 6–10 em formato Narrativa Magnética.`
+        `\n\n## Formato OBRIGATÓRIO da tabela markdown\n` +
+        `Colunas: | # | Headline | Gatilho | Score |\n\n` +
+        `## Regras de tamanho (CRÍTICO)\n` +
+        `- TODAS as 10 headlines devem ter NO MÁXIMO 120 caracteres (1 linha visual no Instagram).\n` +
+        `- Headline = título de capa, NÃO parágrafo. Sem ponto final, sem múltiplas frases conectadas.\n` +
+        `- Se o conceito é longo, comprime em 1 frase punchy. Se não couber, descarta.\n\n` +
+        `## Distribuição\n` +
+        `- Opções 1–5: formato Investigação Cultural (IC) — denúncia, padrão oculto, tendência interpretada.\n` +
+        `- Opções 6–10: formato Narrativa Magnética (NM) — promessa, tese contraintuitiva, micro-história em 1 linha.\n` +
+        `- Mesmo as NM devem ser HEADLINES, não miniparagrafos.\n\n` +
+        `## Coluna Score (potencial viral 1-10)\n` +
+        `Avalie cada headline pelos critérios do banco de hooks BrandsDecoded e do manual de qualidade ` +
+        `(tensão emocional, especificidade, gatilho cultural ativo, originalidade do ângulo, capacidade de stop-scroll). ` +
+        `Marque a melhor com ⭐ na frente do score (ex: "⭐ 9"). Apenas UMA headline recebe a estrela.\n\n` +
+        `## Após a tabela\n` +
+        `Adicione UMA linha curta no formato:\n` +
+        `**Recomendada: #N** — <motivo em 1 frase explicando por que essa tem maior potencial viral baseado nos princípios do BrandsDecoded>`
     }],
   });
 

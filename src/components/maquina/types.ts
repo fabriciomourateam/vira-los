@@ -24,6 +24,14 @@ export interface ParsedHeadline {
   num: number;
   text: string;
   trigger: string;
+  score: number | null;
+  recommended: boolean;
+}
+
+export interface HeadlinesResult {
+  items: ParsedHeadline[];
+  recommendedNum: number | null;
+  recommendedReason: string | null;
 }
 
 export const initialBriefing: Briefing = {
@@ -55,20 +63,47 @@ export const TIPOS: { id: TipoCarrossel; label: string; arc: string }[] = [
 
 export const SLIDES_OPTIONS: SlidesCount[] = [5, 7, 9, 12];
 
-/** Extrai linhas de tabela markdown 10x3 das headlines retornadas pelo Claude */
-export function parseHeadlines(markdown: string): ParsedHeadline[] {
-  const out: ParsedHeadline[] = [];
+/** Extrai linhas de tabela markdown 10x4 (#, headline, gatilho, score) + bloco "Recomendada" */
+export function parseHeadlines(markdown: string): HeadlinesResult {
+  const items: ParsedHeadline[] = [];
   const lines = markdown.split('\n').filter(l => l.trim().startsWith('|'));
   for (const line of lines) {
     const cols = line.split('|').map(c => c.trim()).filter(Boolean);
     if (cols.length < 2) continue;
     const num = parseInt(cols[0], 10);
     if (Number.isNaN(num) || num < 1 || num > 10) continue;
-    out.push({
+    const scoreRaw = (cols[3] || '').trim();
+    const recommended = scoreRaw.includes('⭐') || scoreRaw.toLowerCase().includes('star');
+    const scoreMatch = scoreRaw.match(/(\d+(?:\.\d+)?)/);
+    items.push({
       num,
       text: cols[1] || '',
       trigger: cols[2] || '',
+      score: scoreMatch ? parseFloat(scoreMatch[1]) : null,
+      recommended,
     });
   }
-  return out.sort((a, b) => a.num - b.num);
+  items.sort((a, b) => a.num - b.num);
+
+  // Bloco "Recomendada: #N — motivo"
+  const recoMatch = markdown.match(/\*?\*?Recomendada:?\s*#?\s*(\d+)\*?\*?\s*[—–-]?\s*([^\n]*)/i);
+  let recommendedNum: number | null = null;
+  let recommendedReason: string | null = null;
+  if (recoMatch) {
+    recommendedNum = parseInt(recoMatch[1], 10);
+    recommendedReason = (recoMatch[2] || '').trim() || null;
+  }
+
+  // Se nenhuma headline foi marcada com ⭐ mas veio "Recomendada", marca via fallback
+  if (recommendedNum && !items.some((i) => i.recommended)) {
+    const target = items.find((i) => i.num === recommendedNum);
+    if (target) target.recommended = true;
+  }
+  // Caso contrário, deduz a recomendada da que tem ⭐
+  if (!recommendedNum) {
+    const starred = items.find((i) => i.recommended);
+    if (starred) recommendedNum = starred.num;
+  }
+
+  return { items, recommendedNum, recommendedReason };
 }
