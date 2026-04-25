@@ -4,15 +4,16 @@
  * (escolher 1-10, "refazer headlines", "ajusta a 3", "mistura 2 com 7").
  */
 
-import React, { useState, useEffect } from 'react';
-import { Loader2, RefreshCw, ArrowLeft, ArrowRight, MessageSquare, Star, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Loader2, RefreshCw, ArrowLeft, ArrowRight, MessageSquare } from 'lucide-react';
 import { ParsedHeadline } from './types';
 
 interface HeadlinesPickerProps {
   rawMarkdown: string;
   parsed: ParsedHeadline[];
-  recommendedNum: number | null;
-  recommendedReason: string | null;
+  triagem: string | null;
+  eixo: string | null;
+  funil: string | null;
   loading: boolean;
   onPick: (headline: ParsedHeadline) => void;
   onRegenerate: () => void;
@@ -21,15 +22,10 @@ interface HeadlinesPickerProps {
 }
 
 export default function HeadlinesPicker({
-  rawMarkdown, parsed, recommendedNum, recommendedReason, loading, onPick, onRegenerate, onCommand, onBack,
+  rawMarkdown, parsed, triagem, eixo, funil, loading, onPick, onRegenerate, onCommand, onBack,
 }: HeadlinesPickerProps) {
   const [selected, setSelected] = useState<number | null>(null);
   const [command, setCommand] = useState('');
-
-  // Pré-seleciona a recomendada quando a tabela chega
-  useEffect(() => {
-    if (selected === null && recommendedNum !== null) setSelected(recommendedNum);
-  }, [recommendedNum]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmitCommand = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,15 +57,30 @@ export default function HeadlinesPicker({
           </button>
         </div>
 
-        {recommendedNum !== null && (
-          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-violet-500/10 border border-violet-500/30">
-            <Sparkles className="w-3.5 h-3.5 text-violet-400 mt-0.5 shrink-0" />
-            <div className="text-[11px] leading-snug">
-              <span className="font-bold text-violet-300">Máquina recomenda #{recommendedNum}</span>
-              {recommendedReason && (
-                <span className="text-violet-200/80"> — {recommendedReason}</span>
-              )}
-            </div>
+        {(triagem || eixo || funil) && (
+          <div className="space-y-1.5 p-2.5 rounded-lg bg-secondary/40 border border-border">
+            {triagem && (
+              <div className="text-[11px] leading-snug">
+                <span className="text-[10px] uppercase tracking-wider text-orange-400 font-bold mr-2">Triagem</span>
+                <span className="text-foreground/90">{triagem}</span>
+              </div>
+            )}
+            {(eixo || funil) && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                {eixo && (
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mr-1.5">Eixo</span>
+                    <span className="text-foreground/90">{eixo}</span>
+                  </div>
+                )}
+                {funil && (
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mr-1.5">Funil</span>
+                    <span className="text-foreground/90">{funil}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -127,55 +138,39 @@ export default function HeadlinesPicker({
 function HeadlineRow({
   h, selected, onSelect,
 }: { h: ParsedHeadline; selected: boolean; onSelect: () => void }) {
-  // Aviso visual quando excede 120 chars (limite definido no prompt)
-  const tooLong = h.text.length > 120;
+  // Tipo derivado do número conforme a metodologia v4 (linha 179-180 do system prompt):
+  //   1-5  = Investigação Cultural (frase única ~20-24 palavras com dois-pontos)
+  //   6-10 = Narrativa Magnética   (3 frases com ponto, até ~45 palavras)
+  const tipo: 'IC' | 'NM' = h.num <= 5 ? 'IC' : 'NM';
 
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-left p-2.5 rounded-lg border transition-colors relative ${
+      className={`w-full text-left p-2.5 rounded-lg border transition-colors ${
         selected
           ? 'bg-orange-500/15 border-orange-500/40'
-          : h.recommended
-            ? 'bg-violet-500/10 border-violet-500/30 hover:border-violet-500/50'
-            : 'bg-secondary border-border hover:border-foreground/20'
+          : 'bg-secondary border-border hover:border-foreground/20'
       }`}
     >
       <div className="flex items-start gap-2">
-        <span className={`text-[10px] font-mono font-bold w-5 shrink-0 mt-0.5 ${selected ? 'text-orange-400' : 'text-muted-foreground'}`}>
-          {String(h.num).padStart(2, '0')}
-        </span>
+        <div className="flex flex-col items-center w-7 shrink-0 mt-0.5">
+          <span className={`text-[10px] font-mono font-bold ${selected ? 'text-orange-400' : 'text-muted-foreground'}`}>
+            {String(h.num).padStart(2, '0')}
+          </span>
+          <span
+            className={`text-[8px] font-mono font-bold mt-0.5 px-1 rounded ${
+              tipo === 'IC' ? 'bg-sky-500/15 text-sky-300' : 'bg-fuchsia-500/15 text-fuchsia-300'
+            }`}
+            title={tipo === 'IC' ? 'Investigação Cultural — frase única ~20-24 palavras' : 'Narrativa Magnética — 3 frases até ~45 palavras'}
+          >
+            {tipo}
+          </span>
+        </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-2">
-            <p className={`flex-1 text-xs leading-snug ${selected ? 'text-foreground' : 'text-foreground/90'}`}>{h.text}</p>
-            {h.score !== null && (
-              <span
-                className={`shrink-0 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5 ${
-                  h.recommended
-                    ? 'bg-violet-500/20 text-violet-300'
-                    : h.score >= 8
-                      ? 'bg-emerald-500/15 text-emerald-300'
-                      : h.score >= 6
-                        ? 'bg-amber-500/15 text-amber-300'
-                        : 'bg-secondary text-muted-foreground'
-                }`}
-                title={h.recommended ? 'Recomendada pela Máquina' : `Potencial viral: ${h.score}/10`}
-              >
-                {h.recommended && <Star className="w-2.5 h-2.5 fill-current" />}
-                {h.score}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            {h.trigger && (
-              <p className="text-[10px] text-muted-foreground italic">↳ {h.trigger}</p>
-            )}
-            {tooLong && (
-              <span className="text-[9px] text-amber-400 uppercase tracking-wider font-bold">
-                {h.text.length} chars (longo)
-              </span>
-            )}
-          </div>
+          <p className={`text-xs leading-snug ${selected ? 'text-foreground' : 'text-foreground/90'}`}>{h.text}</p>
+          {h.trigger && (
+            <p className="text-[10px] text-muted-foreground italic mt-1">↳ {h.trigger}</p>
+          )}
         </div>
       </div>
     </button>

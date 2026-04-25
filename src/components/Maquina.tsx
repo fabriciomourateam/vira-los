@@ -40,15 +40,18 @@ interface MaquinaProps {
   onClearInitialIdea?: () => void;
 }
 
+const STORAGE_KEY = 'viraos:maquina:state:v1';
+
 export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProps) {
   const [stage, setStage] = useState<Stage>('briefing');
   const [briefing, setBriefing] = useState<Briefing>(initialBriefing);
 
-  // Etapa 2 — headlines
+  // Etapa 2 — headlines (output v4: Triagem + Eixo·Funil + tabela 3 colunas)
   const [headlinesRaw, setHeadlinesRaw] = useState('');
   const [headlinesParsed, setHeadlinesParsed] = useState<ParsedHeadline[]>([]);
-  const [recommendedNum, setRecommendedNum] = useState<number | null>(null);
-  const [recommendedReason, setRecommendedReason] = useState<string | null>(null);
+  const [triagem, setTriagem] = useState<string | null>(null);
+  const [eixo, setEixo] = useState<string | null>(null);
+  const [funil, setFunil] = useState<string | null>(null);
   const [headlineEscolhida, setHeadlineEscolhida] = useState<ParsedHeadline | null>(null);
 
   // Etapa 3 — estrutura
@@ -67,6 +70,50 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
   const [historico, setHistorico] = useState<MaquinaCarrossel[]>([]);
   const [historicoLoading, setHistoricoLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // ── Persistência (sobrevive a troca de aba e refresh do browser) ──────────
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    // Mount: restaura snapshot do localStorage
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s.briefing)         setBriefing({ ...initialBriefing, ...s.briefing });
+        if (s.headlinesRaw)     setHeadlinesRaw(s.headlinesRaw);
+        if (Array.isArray(s.headlinesParsed)) setHeadlinesParsed(s.headlinesParsed);
+        if (s.triagem !== undefined) setTriagem(s.triagem);
+        if (s.eixo !== undefined)    setEixo(s.eixo);
+        if (s.funil !== undefined)   setFunil(s.funil);
+        if (s.headlineEscolhida) setHeadlineEscolhida(s.headlineEscolhida);
+        if (s.estrutura)         setEstrutura(s.estrutura);
+        if (s.html)              setHtml(s.html);
+        if (s.editingId)         setEditingId(s.editingId);
+        if (s.stage)             setStage(s.stage);
+      }
+    } catch {
+      // Snapshot corrompido — ignora
+    }
+    setRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        briefing, headlinesRaw, headlinesParsed,
+        triagem, eixo, funil, headlineEscolhida,
+        estrutura, html, editingId, stage,
+      }));
+    } catch {
+      // Quota cheia ou localStorage indisponível — silencioso
+    }
+  }, [
+    restored, briefing, headlinesRaw, headlinesParsed,
+    triagem, eixo, funil, headlineEscolhida,
+    estrutura, html, editingId, stage,
+  ]);
 
   // ── Prefill quando vem com `initialIdea` (do IdeasGenerator) ───────────────
   useEffect(() => {
@@ -108,8 +155,9 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
       setHeadlinesRaw(data.headlines);
       const result = parseHeadlines(data.headlines);
       setHeadlinesParsed(result.items);
-      setRecommendedNum(result.recommendedNum);
-      setRecommendedReason(result.recommendedReason);
+      setTriagem(result.triagem);
+      setEixo(result.eixo);
+      setFunil(result.funil);
       setStage('headlines');
     } catch (e) {
       toast.error(`Erro nas headlines: ${(e as Error).message}`);
@@ -129,8 +177,9 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
       setHeadlinesRaw(data.headlines);
       const result = parseHeadlines(data.headlines);
       setHeadlinesParsed(result.items);
-      setRecommendedNum(result.recommendedNum);
-      setRecommendedReason(result.recommendedReason);
+      setTriagem(result.triagem);
+      setEixo(result.eixo);
+      setFunil(result.funil);
     } catch (e) {
       toast.error(`Erro: ${(e as Error).message}`);
     } finally {
@@ -216,12 +265,13 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
     setBriefing({ ...initialBriefing, ...(item.briefing || {}) } as Briefing);
     const md = typeof item.headlines === 'string' ? item.headlines : '';
     setHeadlinesRaw(md);
-    const result = md ? parseHeadlines(md) : { items: [], recommendedNum: null, recommendedReason: null };
+    const result = md ? parseHeadlines(md) : { items: [], triagem: null, eixo: null, funil: null };
     setHeadlinesParsed(result.items);
-    setRecommendedNum(result.recommendedNum);
-    setRecommendedReason(result.recommendedReason);
+    setTriagem(result.triagem);
+    setEixo(result.eixo);
+    setFunil(result.funil);
     if (item.headlineEscolhida) {
-      setHeadlineEscolhida({ num: 0, text: item.headlineEscolhida, trigger: '', score: null, recommended: false });
+      setHeadlineEscolhida({ num: 0, text: item.headlineEscolhida, trigger: '' });
     }
     setEstrutura(item.estrutura || '');
     setHtml(item.html || '');
@@ -234,8 +284,9 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
     setBriefing({ ...initialBriefing, ...(item.briefing || {}) } as Briefing);
     setHeadlinesRaw('');
     setHeadlinesParsed([]);
-    setRecommendedNum(null);
-    setRecommendedReason(null);
+    setTriagem(null);
+    setEixo(null);
+    setFunil(null);
     setHeadlineEscolhida(null);
     setEstrutura('');
     setHtml('');
@@ -276,8 +327,9 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
           <HeadlinesPicker
             rawMarkdown={headlinesRaw}
             parsed={headlinesParsed}
-            recommendedNum={recommendedNum}
-            recommendedReason={recommendedReason}
+            triagem={triagem}
+            eixo={eixo}
+            funil={funil}
             loading={loadingHeadlines}
             onPick={handlePickHeadline}
             onRegenerate={handleRegenerateHeadlines}

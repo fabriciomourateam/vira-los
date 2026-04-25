@@ -24,14 +24,16 @@ export interface ParsedHeadline {
   num: number;
   text: string;
   trigger: string;
-  score: number | null;
-  recommended: boolean;
 }
 
 export interface HeadlinesResult {
+  /** "Triagem: ..." — 1 frase com o ângulo central extraído (formato v4) */
+  triagem: string | null;
+  /** Mercado | Cases | Notícias | Cultura | Produto */
+  eixo: string | null;
+  /** Topo | Meio | Fundo */
+  funil: string | null;
   items: ParsedHeadline[];
-  recommendedNum: number | null;
-  recommendedReason: string | null;
 }
 
 export const initialBriefing: Briefing = {
@@ -63,8 +65,25 @@ export const TIPOS: { id: TipoCarrossel; label: string; arc: string }[] = [
 
 export const SLIDES_OPTIONS: SlidesCount[] = [5, 7, 9, 12];
 
-/** Extrai linhas de tabela markdown 10x4 (#, headline, gatilho, score) + bloco "Recomendada" */
+/**
+ * Extrai a saída da Etapa 2 do system prompt v4 (linhas 262-293):
+ *   1. **Triagem:** ...
+ *   2. **Eixo:** ... · **Funil:** ...
+ *   3. Tabela markdown | # | Headline | Gatilho |
+ *   4. Fecho "Escolhe 1-10..."
+ */
 export function parseHeadlines(markdown: string): HeadlinesResult {
+  // Triagem
+  const triagemMatch = markdown.match(/\*\*Triagem:\*\*\s*([^\n]+)/i);
+  const triagem = triagemMatch ? triagemMatch[1].trim() : null;
+
+  // Eixo + Funil (na mesma linha, separados por ·)
+  const eixoMatch = markdown.match(/\*\*Eixo:\*\*\s*([^·\n]+)/i);
+  const funilMatch = markdown.match(/\*\*Funil:\*\*\s*([^\n·]+)/i);
+  const eixo = eixoMatch ? eixoMatch[1].trim() : null;
+  const funil = funilMatch ? funilMatch[1].trim() : null;
+
+  // Tabela
   const items: ParsedHeadline[] = [];
   const lines = markdown.split('\n').filter(l => l.trim().startsWith('|'));
   for (const line of lines) {
@@ -72,38 +91,13 @@ export function parseHeadlines(markdown: string): HeadlinesResult {
     if (cols.length < 2) continue;
     const num = parseInt(cols[0], 10);
     if (Number.isNaN(num) || num < 1 || num > 10) continue;
-    const scoreRaw = (cols[3] || '').trim();
-    const recommended = scoreRaw.includes('⭐') || scoreRaw.toLowerCase().includes('star');
-    const scoreMatch = scoreRaw.match(/(\d+(?:\.\d+)?)/);
     items.push({
       num,
       text: cols[1] || '',
       trigger: cols[2] || '',
-      score: scoreMatch ? parseFloat(scoreMatch[1]) : null,
-      recommended,
     });
   }
   items.sort((a, b) => a.num - b.num);
 
-  // Bloco "Recomendada: #N — motivo"
-  const recoMatch = markdown.match(/\*?\*?Recomendada:?\s*#?\s*(\d+)\*?\*?\s*[—–-]?\s*([^\n]*)/i);
-  let recommendedNum: number | null = null;
-  let recommendedReason: string | null = null;
-  if (recoMatch) {
-    recommendedNum = parseInt(recoMatch[1], 10);
-    recommendedReason = (recoMatch[2] || '').trim() || null;
-  }
-
-  // Se nenhuma headline foi marcada com ⭐ mas veio "Recomendada", marca via fallback
-  if (recommendedNum && !items.some((i) => i.recommended)) {
-    const target = items.find((i) => i.num === recommendedNum);
-    if (target) target.recommended = true;
-  }
-  // Caso contrário, deduz a recomendada da que tem ⭐
-  if (!recommendedNum) {
-    const starred = items.find((i) => i.recommended);
-    if (starred) recommendedNum = starred.num;
-  }
-
-  return { items, recommendedNum, recommendedReason };
+  return { triagem, eixo, funil, items };
 }
