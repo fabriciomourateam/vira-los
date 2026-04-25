@@ -249,7 +249,9 @@ Responda APENAS com um JSON array de strings, sem markdown:
 
 // URL única que carrega todas as fontes disponíveis no editor
 const ALL_FONTS_URL =
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900' +
+  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800;900' +
+  '&family=Plus+Jakarta+Sans:wght@400;700;800' +
+  '&family=Inter:wght@300;400;500;600;700;800;900' +
   '&family=Poppins:wght@300;400;500;600;700;800;900' +
   '&family=Montserrat:wght@300;400;500;600;700;800;900' +
   '&family=Raleway:wght@300;400;500;600;700;800;900' +
@@ -915,11 +917,11 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
     }
     .fmt-slide .fmt-brand-handle { color: rgba(255,255,255,0.55); }
     .fmt-slide .fmt-brand-year   { color: rgba(255,255,255,0.45); }
-    /* Variantes light/yellow → texto escuro */
+    /* Variantes light/gradient → texto escuro */
     .fmt-slide.is-light .fmt-brand-handle,
-    .fmt-slide.is-yellow .fmt-brand-handle { color: rgba(0,0,0,0.55); }
+    .fmt-slide.is-gradient .fmt-brand-handle { color: rgba(0,0,0,0.55); }
     .fmt-slide.is-light .fmt-brand-year,
-    .fmt-slide.is-yellow .fmt-brand-year   { color: rgba(0,0,0,0.45); }
+    .fmt-slide.is-gradient .fmt-brand-year   { color: rgba(0,0,0,0.45); }
 
     /* Progress bar inferior */
     .fmt-slide .fmt-progress {
@@ -932,17 +934,19 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
       overflow: hidden;
     }
     .fmt-slide.is-light .fmt-progress-track,
-    .fmt-slide.is-yellow .fmt-progress-track { background: rgba(0,0,0,0.12); }
+    .fmt-slide.is-gradient .fmt-progress-track { background: rgba(0,0,0,0.12); }
     .fmt-slide .fmt-progress-fill {
       height: 100%; background: ${accent}; border-radius: 2px;
     }
+    .fmt-slide.is-light .fmt-progress-fill    { background: #B8860B; }
+    .fmt-slide.is-gradient .fmt-progress-fill { background: #fff; }
     .fmt-slide .fmt-progress-count {
       font-family: '${bodyFF}', sans-serif;
       font-size: 16px; font-weight: 500;
       color: rgba(255,255,255,0.55); letter-spacing: 1px;
     }
     .fmt-slide.is-light .fmt-progress-count,
-    .fmt-slide.is-yellow .fmt-progress-count { color: rgba(0,0,0,0.55); }
+    .fmt-slide.is-gradient .fmt-progress-count { color: rgba(0,0,0,0.55); }
 
     /* Número decorativo gigante (canto inferior direito) */
     .fmt-slide .fmt-decor-number {
@@ -952,8 +956,8 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
       color: rgba(255,195,0,0.08);
       pointer-events: none; z-index: 1;
     }
-    .fmt-slide.is-light .fmt-decor-number  { color: rgba(0,0,0,0.06); }
-    .fmt-slide.is-yellow .fmt-decor-number { color: rgba(0,0,0,0.10); }
+    .fmt-slide.is-light .fmt-decor-number    { color: rgba(0,0,0,0.06); }
+    .fmt-slide.is-gradient .fmt-decor-number { color: rgba(0,0,0,0.10); }
 
     /* ── CAPA (.fmt-cover) ── */
     .fmt-cover { background: #0a0a0a; }
@@ -964,7 +968,7 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
     }
     .fmt-cover .fmt-cover-overlay {
       position: absolute; inset: 0;
-      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.94) 100%);
+      background: linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.97) 100%);
       z-index: 1;
     }
     .fmt-cover .fmt-cover-content {
@@ -1000,10 +1004,10 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
     .fmt-cover .fmt-verified svg { width: 24px; height: 24px; display: block; flex-shrink: 0; }
     .fmt-cover .fmt-cover-title {
       font-family: '${titleFF}', sans-serif;
-      font-size: ${titleFontSize > 0 ? titleFontSize : 102}px;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 80}px;
       font-weight: ${titleFW}; line-height: 0.96;
       color: white; text-transform: ${titleTT};
-      letter-spacing: -1px;
+      letter-spacing: -2.5px;
     }
     .fmt-cover .fmt-cover-title .hl { color: ${accent}; font-style: normal; }
 
@@ -1012,14 +1016,19 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
       padding: 110px 60px 90px;
       display: flex; flex-direction: column; gap: 28px;
     }
-    .fmt-content.is-dark   { background: #0d0d0d; }
-    .fmt-content.is-light  { background: #f3ead4; }
-    .fmt-content.is-yellow { background: ${accent}; }
+    .fmt-content.is-dark     { background: #0A0A0A; }
+    .fmt-content.is-light    { background: #F5F0E0; }
+    .fmt-content.is-gradient { background: linear-gradient(165deg, #B8860B 0%, #FFC300 55%, #FFD54F 100%); }
 
     .fmt-content .fmt-img-box {
-      width: 100%; height: 380px;
-      border-radius: 24px; overflow: hidden; flex-shrink: 0;
+      width: 100%; height: 300px;
+      border-radius: 20px; overflow: hidden; flex-shrink: 0;
       background-size: cover; background-position: center;
+      position: relative;
+    }
+    .fmt-content .fmt-img-box::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 60px;
+      background: linear-gradient(to top, rgba(0,0,0,0.2), transparent);
     }
     .fmt-content .fmt-tag {
       font-family: '${bodyFF}', sans-serif;
@@ -1028,58 +1037,58 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
       color: ${accent};
     }
     .fmt-content.is-light .fmt-tag,
-    .fmt-content.is-yellow .fmt-tag { color: ${accentDark}; }
+    .fmt-content.is-gradient .fmt-tag { color: ${accentDark}; }
 
     .fmt-content .fmt-title {
       font-family: '${titleFF}', sans-serif;
       font-size: ${titleFontSize > 0 ? titleFontSize : 88}px;
-      font-weight: ${titleFW}; line-height: 0.98;
+      font-weight: ${titleFW}; line-height: 0.92;
       color: white; text-transform: ${titleTT};
-      letter-spacing: -0.5px;
+      letter-spacing: -3px;
     }
-    .fmt-content.is-light .fmt-title,
-    .fmt-content.is-yellow .fmt-title { color: #0d0d0d; }
+    .fmt-content.is-light .fmt-title    { color: #0d0d0d; }
+    .fmt-content.is-gradient .fmt-title { color: #0d0d0d; }
     .fmt-content .fmt-title .hl { color: ${accent}; font-style: normal; }
-    .fmt-content.is-yellow .fmt-title .hl { color: white; }
+    .fmt-content.is-gradient .fmt-title .hl { color: white; }
 
     .fmt-content .fmt-body {
       font-family: '${bodyFF}', sans-serif;
-      font-size: ${bodyFontSize > 0 ? bodyFontSize : 28}px;
-      font-weight: ${bodyFW}; line-height: 1.45;
-      color: rgba(255,255,255,0.62);
+      font-size: ${bodyFontSize > 0 ? bodyFontSize : 30}px;
+      font-weight: ${bodyFW}; line-height: 1.5;
+      color: rgba(255,255,255,0.78);
     }
-    .fmt-content.is-light .fmt-body  { color: rgba(0,0,0,0.66); }
-    .fmt-content.is-yellow .fmt-body { color: rgba(0,0,0,0.78); }
+    .fmt-content.is-light .fmt-body    { color: rgba(15,13,12,0.72); }
+    .fmt-content.is-gradient .fmt-body { color: rgba(255,255,255,0.85); }
     .fmt-content .fmt-body strong, .fmt-content .fmt-body b {
       color: white; font-weight: 700;
     }
-    .fmt-content.is-light .fmt-body strong, .fmt-content.is-light .fmt-body b,
-    .fmt-content.is-yellow .fmt-body strong, .fmt-content.is-yellow .fmt-body b { color: #0d0d0d; }
+    .fmt-content.is-light .fmt-body strong, .fmt-content.is-light .fmt-body b { color: #0d0d0d; }
+    .fmt-content.is-gradient .fmt-body strong, .fmt-content.is-gradient .fmt-body b { color: #0d0d0d; }
     .fmt-content .fmt-body em {
-      color: ${accent}; font-style: normal; font-weight: 500;
+      color: ${accent}; font-style: normal; font-weight: 700;
     }
-    .fmt-content.is-yellow .fmt-body em { color: white; font-weight: 700; }
+    .fmt-content.is-gradient .fmt-body em { color: white; font-weight: 700; }
 
     /* Arrow rows (lista de pontos) */
     .fmt-content .fmt-arrow-row {
-      display: flex; gap: 18px; padding: 14px 0;
+      display: flex; gap: 18px; padding: 12px 0;
       font-family: '${bodyFF}', sans-serif;
-      font-size: ${bodyFontSize > 0 ? bodyFontSize : 30}px; line-height: 1.35;
+      font-size: ${bodyFontSize > 0 ? bodyFontSize : 30}px; line-height: 1.5;
     }
     .fmt-content .fmt-arrow-row .fmt-arrow {
       color: ${accent}; font-weight: 800; flex-shrink: 0;
     }
-    .fmt-content.is-yellow .fmt-arrow-row .fmt-arrow { color: #0d0d0d; }
+    .fmt-content.is-gradient .fmt-arrow-row .fmt-arrow { color: #0d0d0d; }
     .fmt-content .fmt-arrow-row .fmt-arrow-text strong {
       color: white; font-weight: 800;
     }
     .fmt-content.is-light .fmt-arrow-row .fmt-arrow-text strong,
-    .fmt-content.is-yellow .fmt-arrow-row .fmt-arrow-text strong { color: #0d0d0d; }
+    .fmt-content.is-gradient .fmt-arrow-row .fmt-arrow-text strong { color: #0d0d0d; }
     .fmt-content .fmt-arrow-row .fmt-arrow-text {
-      color: rgba(255,255,255,0.62);
+      color: rgba(255,255,255,0.78);
     }
-    .fmt-content.is-light .fmt-arrow-row .fmt-arrow-text  { color: rgba(0,0,0,0.66); }
-    .fmt-content.is-yellow .fmt-arrow-row .fmt-arrow-text { color: rgba(0,0,0,0.78); }
+    .fmt-content.is-light .fmt-arrow-row .fmt-arrow-text    { color: rgba(15,13,12,0.72); }
+    .fmt-content.is-gradient .fmt-arrow-row .fmt-arrow-text { color: rgba(255,255,255,0.85); }
 
     /* ── CTA FINAL (.fmt-cta) ── */
     .fmt-cta { background: #0a0a0a; }
@@ -1090,7 +1099,7 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
     }
     .fmt-cta .fmt-cta-overlay {
       position: absolute; inset: 0;
-      background: linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.94) 100%);
+      background: linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.93) 100%);
       z-index: 1;
     }
     .fmt-cta .fmt-cta-content {
@@ -1112,27 +1121,27 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
     }
     .fmt-cta .fmt-cta-title .hl { color: ${accent}; font-style: normal; }
     .fmt-cta .fmt-cta-box {
-      border: 1.5px solid rgba(255,195,0,0.55);
+      border: 1.5px solid rgba(255,195,0,0.35);
       border-radius: 16px;
       padding: 28px 36px;
       display: flex; flex-direction: column; gap: 8px;
-      background: rgba(0,0,0,0.35);
+      background: rgba(0,0,0,0.3);
     }
     .fmt-cta .fmt-cta-box-label {
       font-family: '${bodyFF}', sans-serif;
-      font-size: 22px; font-weight: 400;
-      color: rgba(255,255,255,0.72);
+      font-size: 20px; font-weight: 400;
+      color: rgba(255,255,255,0.65);
     }
     .fmt-cta .fmt-cta-box-keyword {
       font-family: '${titleFF}', sans-serif;
-      font-size: 88px; font-weight: ${titleFW}; line-height: 1;
+      font-size: 72px; font-weight: ${titleFW}; line-height: 1;
       color: ${accent}; text-transform: uppercase;
-      letter-spacing: -0.5px;
+      letter-spacing: -1px;
     }
     .fmt-cta .fmt-cta-box-after {
       font-family: '${bodyFF}', sans-serif;
       font-size: 20px; font-weight: 400;
-      color: rgba(255,255,255,0.72);
+      color: rgba(255,255,255,0.65);
     }
     .fmt-cta .fmt-cta-footer {
       display: flex; align-items: center; gap: 14px;
@@ -1464,11 +1473,15 @@ ${roteiroSection}
 - TODOS os slides DEVEM começar com .fmt-accent-bar + .fmt-brand-bar e terminar com .fmt-progress
 - Brand bar: APENAS "${handleUpper}" à esquerda + "2026" à direita. NUNCA "Powered by", NUNCA pipes, NUNCA outros textos.
 - Sem swipe arrow / hint de "deslize" em slide algum
-- Palavras-chave da headline da capa em <em class="hl">PALAVRA</em> (1–2 palavras no máximo)
-- Tag de seção de cada slide interno: 1 frase curta uppercase em .fmt-tag (ex: "O PARADOXO", "COMO FUNCIONA", "O PRÉ-REQUISITO")
-- Número decorativo gigante (.fmt-decor-number) no canto inferior direito de TODO slide de conteúdo, com o número do slide
-- Alternância de fundos entre slides internos: use .is-dark, .is-light e .is-yellow conforme couber visualmente. Não force sequência rígida.
-- Máximo 35 palavras por slide de conteúdo
+- Sem badge de tipo (ANÁLISE, TENDÊNCIA etc.) em nenhum slide — NEM na capa
+- Palavras-chave da headline da capa em <em class="hl">PALAVRA</em> (1–2 palavras, separadas em linha própria se necessário)
+- Headline da capa: Barlow Condensed 800, 80px, letter-spacing -2.5px, uppercase, máx 12 palavras
+- TODOS os slides internos (2 ao penúltimo-1) recebem .fmt-img-box 300px no topo — OBRIGATÓRIO
+- Headline interna (.fmt-title): Barlow Condensed 800, 88px, letter-spacing -3px, line-height 0.92, máximo 2 linhas, palavra-chave em <em class="hl">AMARELO</em>
+- Número decorativo gigante (.fmt-decor-number) no canto inferior direito de TODO slide de conteúdo
+- Sequência de fundos internos: .is-dark → .is-light → .is-dark → .is-light... penúltimo slide de conteúdo usa .is-gradient
+- Último slide (CTA) usa .fmt-cta com foto de fundo portrait e overlay dark
+- Máximo 2 blocos .fmt-body por slide de conteúdo
 
 ${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
 
@@ -1494,41 +1507,38 @@ SLIDE 1 — CAPA (.fmt-cover):
   ${progressFor(1)}
 </div>
 
-SLIDE 2 a ${numSlides - 1} — CONTEÚDO (.fmt-content) — alterne .is-dark / .is-light / .is-yellow:
+SLIDES 2 a ${numSlides - 1} — CONTEÚDO (.fmt-content):
+Sequência de fundos: .is-dark → .is-light → .is-dark → .is-light... O penúltimo slide de conteúdo (slide ${numSlides - 1}) usa .is-gradient.
+TODOS os slides internos recebem .fmt-img-box 300px com foto landscape no topo.
 
-VARIANTE A (img-box no topo + título + body):
+VARIANTE DARK (slides ímpares do conteúdo):
 <div class="fmt-slide fmt-content is-dark">
   ${headerStd}
   <div class="fmt-img-box" style="background-image: url('FOTO_N')"></div>
-  <div class="fmt-tag">[TAG DA SEÇÃO — ex: O PARADOXO]</div>
-  <div class="fmt-title">[título do ponto — 1 palavra em <em class="hl">DESTAQUE</em>]</div>
-  <div class="fmt-body">[parágrafo com <strong>frase-chave</strong> em destaque]</div>
+  <div class="fmt-title"><em class="hl">PALAVRA</em><br>COMPLEMENTO</div>
+  <div class="fmt-body">[corpo do slide — máx 2 blocos, <em>palavra</em> em amarelo quando relevante]</div>
   <div class="fmt-decor-number">[N]</div>
   ${progressFor(0).replace('${current}', '[N]').replace(/style="width:\d+%"/, 'style="width:[PCT]%"')}
 </div>
 
-VARIANTE B (texto puro, sem foto):
+VARIANTE LIGHT (slides pares do conteúdo):
 <div class="fmt-slide fmt-content is-light">
   ${headerStd}
-  <div class="fmt-tag">[TAG DA SEÇÃO]</div>
-  <div class="fmt-title">[título]</div>
-  <div class="fmt-body">[parágrafo 1]</div>
-  <div class="fmt-body">[parágrafo 2 com <em>palavra em amarelo</em>]</div>
+  <div class="fmt-img-box" style="background-image: url('FOTO_N')"></div>
+  <div class="fmt-title">PALAVRA:<br><em class="hl">COMPLEMENTO</em></div>
+  <div class="fmt-body">[corpo — texto dark, máx 2 blocos]</div>
   <div class="fmt-decor-number">[N]</div>
-  ${progressFor(0).replace('${current}', '[N]')}
+  ${progressFor(0).replace('${current}', '[N]').replace(/style="width:\d+%"/, 'style="width:[PCT]%"')}
 </div>
 
-VARIANTE C (slide amarelo com arrow rows):
-<div class="fmt-slide fmt-content is-yellow">
+VARIANTE GRADIENT (penúltimo slide de conteúdo):
+<div class="fmt-slide fmt-content is-gradient">
   ${headerStd}
   <div class="fmt-img-box" style="background-image: url('FOTO_N')"></div>
-  <div class="fmt-tag">[TAG]</div>
-  <div class="fmt-title">[título].</div>
-  <div class="fmt-arrow-row"><span class="fmt-arrow">→</span><span class="fmt-arrow-text"><strong>Ponto 1 em bold</strong> — complemento</span></div>
-  <div class="fmt-arrow-row"><span class="fmt-arrow">→</span><span class="fmt-arrow-text"><strong>Ponto 2 em bold</strong> — complemento</span></div>
-  <div class="fmt-arrow-row"><span class="fmt-arrow">→</span><span class="fmt-arrow-text"><strong>Ponto 3</strong> complemento</span></div>
+  <div class="fmt-title">PONTO<br><em class="hl">FINAL</em></div>
+  <div class="fmt-body">[síntese ou aplicação prática — máx 2 blocos]</div>
   <div class="fmt-decor-number">[N]</div>
-  ${progressFor(0).replace('${current}', '[N]')}
+  ${progressFor(0).replace('${current}', '[N]').replace(/style="width:\d+%"/, 'style="width:[PCT]%"')}
 </div>
 
 Para CADA slide interno: substitua [N] pelo número do slide e [PCT] pela porcentagem (slide_num / ${numSlides} * 100, arredondado).
@@ -1539,12 +1549,11 @@ SLIDE ${numSlides} — CTA (.fmt-cta):
   <div class="fmt-cta-bg" style="background-image: url('ULTIMA_FOTO')"></div>
   <div class="fmt-cta-overlay"></div>
   <div class="fmt-cta-content">
-    <div class="fmt-cta-bridge">[frase-ponte com <strong>palavra forte em bold</strong>]</div>
-    <div class="fmt-cta-title">QUAL É A SUA <em class="hl">ESTRATÉGIA?</em></div>
+    <div class="fmt-cta-bridge">[frase-ponte conectando o conteúdo ao CTA — específica ao tema, com <strong>palavra forte</strong>]</div>
     <div class="fmt-cta-box">
       <div class="fmt-cta-box-label">Comenta a palavra abaixo:</div>
       <div class="fmt-cta-box-keyword">[KEYWORD]</div>
-      <div class="fmt-cta-box-after">e me segue para mais conteúdos.</div>
+      <div class="fmt-cta-box-after">[benefício direto — 1 linha]</div>
     </div>
     <div class="fmt-cta-footer">
       <div class="fmt-avatar-ring">

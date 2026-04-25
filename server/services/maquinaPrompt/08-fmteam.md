@@ -1,145 +1,119 @@
-# Template `fmteam` — Fabricio Moura (Consultoria Esportiva)
+# Guia fmteam — Fabricio Moura (@fabriciomourateam)
+Versão 3.0 — calibração visual para o template fmteam.
 
-**Versão 2.0 — guia complementar aos arquivos BrandsDecoded.**
-
-Quando o usuário escolher `template: fmteam` no briefing, este guia **substitui** o design system padrão (mantendo a metodologia editorial BrandsDecoded — headlines, espinha, validação, anti-AI slop). É APENAS uma calibração visual.
+Quando o usuário escolher `template: fmteam` no briefing, este guia **substitui** o design system padrão (mantendo a metodologia editorial BrandsDecoded — headlines, espinha, validação, anti-AI slop).
 
 ---
 
-## 1. IDENTIDADE FIXA (nunca alterar)
+## 1. IDENTIDADE FIXA
 
 | Elemento | Valor |
 |---|---|
-| Fonte headline | Barlow Condensed 800/900 |
-| Fonte body | Plus Jakarta Sans 400/700/800 |
+| Fonte headline | Barlow Condensed 800 |
+| Fonte body | Plus Jakarta Sans 400 (700 para `<strong>`/destaques) |
 | Cor primária | `#FFC300` (amarelo dourado) |
 | Cor escura | `#B8860B` |
 | Cor clara | `#FFD54F` |
-| Gradiente da marca | `linear-gradient(165deg, #B8860B 0%, #FFC300 50%, #FFD54F 100%)` |
+| Gradiente | `165deg, #B8860B → #FFC300 → #FFD54F` |
+| Fundo dark | `#0A0A0A` |
+| Fundo light | `#F5F0E0` |
 | Handle | @fabriciomourateam |
 | Nicho | Consultoria Esportiva |
-
-**Cores dos fundos de slides:** podem variar por tema. O padrão alternado dark/light é referência, não regra rígida.
+| Ano brand bar | 2026 |
 
 ---
 
 ## 2. ELEMENTOS FIXOS EM TODOS OS SLIDES
 
-Estes elementos aparecem **sempre**, em todos os slides:
-
-- **Accent bar superior**: barra de 7px de altura no topo do slide com o gradiente da marca (`linear-gradient(90deg, #B8860B, #FFC300, #FFD54F)`).
-- **Brand bar**: logo abaixo da accent bar, em texto pequeno tracking-wide:
-  - À esquerda: `@FABRICIOMOURATEAM` (uppercase, font-size ~13px, cor `rgba(255,255,255,0.5)` no dark / `#666` no light)
-  - À direita: `2026` (mesma fonte/cor)
-  - **NUNCA escreva "Powered by Content Machine"**, **NUNCA escreva "Powered by"** — apenas o handle e o ano.
-- **Progress bar inferior**: barra fina (~3px) no rodapé com fill em `#FFC300` proporcional ao slide atual (`{slide_atual}/{total}` no canto direito do rodapé, mesma fonte da brand bar).
-- **Sem swipe arrow.** Não inclua hint "deslize", setas ou ícones de navegação no template.
+- **Accent bar:** 7px no topo, gradiente `#B8860B → #FFC300 → #FFD54F`
+- **Brand bar:** `@FABRICIOMOURATEAM` à esquerda + `2026` à direita — NADA mais
+- **Progress bar:** rodapé; fill `#FFC300` nos slides dark, `#B8860B` nos light, `#fff` no gradient
+- **SEM swipe arrow** em nenhum slide
+- **SEM badge de tipo** (ANÁLISE, TENDÊNCIA etc.) em NENHUM slide, incluindo a capa
 
 ---
 
-## 3. CAPA (Slide 1) — sempre
+## 3. CAPA (Slide 1)
 
-- **Foto de fundo full-bleed** relacionada ao tema do carrossel — usar placeholder `PEXELS:query-em-ingles` (orientation portrait).
-- **Gradiente escuro de baixo pra cima** sobre a foto, garantindo contraste do texto:
-  ```
-  linear-gradient(180deg, transparent 0%, transparent 30%, rgba(0,0,0,0.4) 55%, rgba(0,0,0,0.92) 100%)
-  ```
-- **Profile badge no terço inferior** (acima da headline):
-  - Avatar circular com **anel gradiente Instagram**: `conic-gradient(from 45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888, #f09433)` ou `linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)` aplicado em `padding: 3px` ao redor de `<img src="{{AVATAR_B64}}">`.
-  - Ao lado do avatar: nome **`Fabricio Moura`** em branco (Plus Jakarta Sans 700, ~26px) + **selo verificado azul** (SVG inline do check verificado do Twitter/X).
-  - Abaixo do nome: `@fabriciomourateam` em branco com 60% opacity (~20px).
-- **Headline** logo abaixo do badge, **uppercase**, Barlow Condensed 800, tamanhos generosos (90–110px), **palavras-chave em `#FFC300`** (use `<em style="color:#FFC300;font-style:normal;">PALAVRA</em>`).
+- Foto de fundo full-bleed **portrait** (Pexels, query temática)
+- Overlay: `rgba(0,0,0,0.05) 0% → rgba(0,0,0,0.97) 100%`
+- Badge Instagram no terço inferior antes da headline:
+  - Foto circular com anel gradiente Instagram (laranja → rosa → roxo)
+  - Nome "Fabricio Moura" + selo verificado azul (SVG inline)
+  - Handle `@fabriciomourateam`
+- **Headline:** Barlow Condensed 800, **80px**, letter-spacing -2.5px, uppercase, máx 12 palavras
+  - 1–2 palavras-chave em `#FFC300` via `<em class="hl">`
+  - Quebra de linha manual para isolar frase de efeito
 
-### SVG do selo verificado (use literal no HTML)
+---
 
-```html
-<svg width="28" height="28" viewBox="0 0 24 24" fill="#1D9BF0" style="display:inline-block;vertical-align:middle;margin-left:4px;">
-  <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/>
-</svg>
+## 4. SLIDES INTERNOS (2 ao penúltimo)
+
+### Img-box — OBRIGATÓRIO em TODOS
+
+- Topo do slide, altura **300px**, border-radius 20px
+- Foto **landscape** via Pexels (query temática por slide, nunca repetida)
+- Overlay sutil no rodapé da img-box: `rgba(0,0,0,0.2)`
+
+### Headline interna — OBRIGATÓRIO
+
+- Barlow Condensed 800, **88px**, letter-spacing **-3px**, line-height **0.92**
+- Máximo **2 linhas**
+- Palavra-chave principal sempre em `#FFC300` via `<em class="hl">`
+
+Exemplos corretos:
+```
+<em class="hl">DÉFICIT</em><br>QUE SABOTA
+PROTEÍNA:<br>O <em class="hl">CÁLCULO</em> MUDOU
+SEM EXAME,<br>AJUSTE É <em class="hl">CHUTE</em>
 ```
 
----
+### Body text
 
-## 4. SLIDES INTERNOS — layout flexível
+- Plus Jakarta Sans 400, **30px**, line-height 1.5
+- Máximo **2 blocos** por slide
+- Dark: `rgba(255,255,255,0.78)` | Light: `rgba(15,13,12,0.72)` | Gradient: `rgba(255,255,255,0.85)`
 
-Cada slide recebe o layout que ficar **mais bonito para aquele conteúdo específico**. Não existe sequência obrigatória.
+### Sequência de fundos (referência 9 slides)
 
-**Opções de layout** (escolha o melhor por slide):
-
-| Layout | Quando usar |
+| Slide | Fundo |
 |---|---|
-| **img-box no topo + texto abaixo** | Slide com menos texto, espaço sobrando. Img-box é landscape com border-radius generoso (~24px), altura ~40% do slide. |
-| **Texto puro (sem img-box)** | Slide denso, muito conteúdo. Headline + 2-3 parágrafos com frase-chave em **bold branco**. |
-| **Tabela de dados** | Comparações com 3+ itens. Bordas finas em `rgba(255,255,255,0.1)` (dark) ou `rgba(0,0,0,0.1)` (light). Header em `#FFC300`. |
-| **Big stat + label** | Um único número protagonista (Barlow 200–280px) + label curta abaixo. |
-| **Arrow rows** | Lista de 2-3 pontos sequenciais. Cada linha começa com `→` em `#FFC300`, depois trecho em **bold** + complemento em peso 400. |
+| 1 | Capa (foto full-bleed) |
+| 2 | Dark `#0A0A0A` |
+| 3 | Light `#F5F0E0` |
+| 4 | Dark |
+| 5 | Light |
+| 6 | Dark |
+| 7 | Light |
+| 8 | Gradient `165deg, #B8860B → #FFC300 → #FFD54F` |
+| 9 | CTA (foto full-bleed) |
 
-**Estrutura textual de cada slide interno:**
-
-1. **Tag de seção** acima da headline: caps minúsculo tracking ~3px, font-size ~14px, cor `#FFC300` (ex: `O PARADOXO`, `COMO FUNCIONA`, `O PRÉ-REQUISITO`).
-2. **Headline** Barlow Condensed 800, uppercase, ~85–105px, com 1 palavra em `#FFC300` ou com ponto final em `#FFC300` (ex: `O SENSO COMUM ESTÁ <em>ERRADO.</em>`).
-3. **Body**: Plus Jakarta Sans 400, ~26–30px, line-height 1.4. Cor do body em `rgba(255,255,255,0.62)` no dark / `#3a3a3a` no light. Frase-chave em **bold branco** (dark) ou **bold preto** (light).
-4. **Número decorativo gigante** no canto inferior direito: Barlow Condensed 800, ~360px, cor `rgba(255,195,0,0.08)` (quase transparente, atrás do conteúdo). Mostra o número do slide.
-
-**Fotos**: buscar via Pexels com query relacionada ao tema do slide. **Landscape para img-box** (orientação landscape), **portrait para fundo full-bleed** com overlay.
+Para outros números: dark/light alternando, gradient no penúltimo de conteúdo, CTA no último.
 
 ---
 
-## 5. SLIDE CTA (último slide) — sempre
+## 5. SLIDE CTA (último)
 
-- **Fundo**: fundo do CTA via `background-image: url('{{CTABG_B64}}')` (asset embutido — foto do Fabricio).
-- **Overlay dark progressivo de cima pra baixo**:
-  ```
-  linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.92) 100%)
-  ```
-- **Frase-ponte** logo acima do CTA, conectando o conteúdo do carrossel ao convite. Plus Jakarta Sans 400, ~28px, branco com ~70% opacity. Frase-chave em `bold branco`.
-- **CTA principal** em duas linhas:
-  - Linha 1 (pergunta): `QUAL É A SUA <em style="color:#FFC300;">ESTRATÉGIA?</em>` (Barlow Condensed 800, ~92px, uppercase). A última palavra OU a palavra-pergunta em `#FFC300`.
-- **CTA box** com borda dourada sutil:
-  ```
-  border: 1.5px solid rgba(255,195,0,0.55);
-  border-radius: 16px;
-  padding: 28px 36px;
-  ```
-  Conteúdo:
-  - Linha pequena no topo: `Comenta a palavra abaixo:` (Plus Jakarta Sans 400, ~22px, `rgba(255,255,255,0.72)`).
-  - **Keyword grande**: a palavra do CTA em Barlow Condensed 800, uppercase, ~88px, cor `#FFC300` (ex: `SHAPE`).
-  - Linha pequena abaixo: `e me segue para mais conteúdos.` (Plus Jakarta Sans 400, ~20px, `rgba(255,255,255,0.72)`).
-- **Rodapé do CTA**: foto circular pequena do Fabricio com **anel Instagram** (mesmo estilo da capa) + texto `@fabriciomourateam · Consultoria Esportiva` em `rgba(255,255,255,0.6)`, ~18px.
+- Foto de fundo **portrait** via Pexels
+- Overlay: `rgba(0,0,0,0.5) → rgba(0,0,0,0.93)`
+- **Frase-ponte** específica ao tema (não genérica)
+- CTA box: borda `rgba(255,195,0,0.35)`, fundo `rgba(0,0,0,0.3)`
+  - "Comenta a palavra abaixo:" — 20px, `rgba(255,255,255,0.65)`
+  - **KEYWORD** — Barlow Condensed 800, 72px, `#FFC300`
+  - Benefício direto — 20px, `rgba(255,255,255,0.65)`
+- Rodapé: foto circular com anel Instagram + `@fabriciomourateam · Consultoria Esportiva`
 
 ---
 
-## 6. CHECKLIST OBRIGATÓRIO (auto-validar antes de retornar HTML)
+## 6. REGRAS ABSOLUTAS
 
-- [ ] Brand bar tem APENAS `@fabriciomourateam` + `2026` — **sem** "Powered by"
-- [ ] Accent bar de 7px no topo de TODOS os slides
-- [ ] Progress bar no rodapé de TODOS os slides com fill em `#FFC300`
-- [ ] Capa tem profile badge com avatar + anel Instagram + nome + check verificado azul
-- [ ] CTA usa o asset `{{CTABG_B64}}` como fundo
-- [ ] CTA tem rodapé com mini-avatar do Fabricio com anel Instagram
-- [ ] Cor primária `#FFC300` aplicada em palavras-chave da capa, tags de seção, headlines internas, número do CTA
-- [ ] Sem swipe arrow / hint de "deslize"
-- [ ] Slides 1080×1350 nativos (sem transform/scale)
-- [ ] Fontes embutidas via `@font-face` com placeholders `{{BARLOW_B64}}` / `{{PJS400_B64}}` / `{{PJS700_B64}}` / `{{PJS800_B64}}`
-
----
-
-## 7. O QUE PODE VARIAR ENTRE CARROSSÉIS
-
-- Número de slides (5/7/9/12 conforme tema)
-- Cores dos fundos dos slides internos (alternar dark/cream/yellow conforme couber melhor)
-- Presença ou não de img-box por slide
-- Layout de cada slide (tabela / big stat / arrow rows / texto puro / img-box+texto)
-- Queries das fotos do Pexels
-- Headline e copy (sempre seguindo metodologia BrandsDecoded — headlines, espinha, validação 7-parâmetros, anti-AI slop)
-
-## O QUE NUNCA MUDA
-
-- Fontes Barlow Condensed (headline) + Plus Jakarta Sans (body)
-- Cor primária `#FFC300`
-- Brand bar `@fabriciomourateam` + `2026` (nunca "Powered by")
-- Profile badge da capa (avatar + anel Instagram + check verificado)
-- Fundo do CTA (`{{CTABG_B64}}`)
-- Rodapé do CTA com mini-avatar
-- Accent bar de 7px no topo
-- Progress bar com fill `#FFC300` no rodapé
+1. Barlow Condensed 800 para TODAS as headlines
+2. Plus Jakarta Sans para body (400 normal, 700 para strong)
+3. Cor primária `#FFC300`
+4. Badge Instagram na capa: foto + anel + verificado + handle
+5. **SEM badge de tipo em NENHUM slide**
+6. Headlines internas: 88px, máx 2 linhas, palavra-chave em amarelo — SEMPRE
+7. Img-box em TODOS os slides internos (300px, landscape, border-radius 20px)
+8. Brand bar: apenas `@FABRICIOMOURATEAM` + `2026`
+9. Rodapé CTA: foto circular + `@fabriciomourateam · Consultoria Esportiva`
+10. Fotos via Pexels — portrait para capa/CTA, landscape para internos
