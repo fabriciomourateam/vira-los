@@ -27,8 +27,6 @@ import {
   Sparkles,
   Loader2,
   Instagram,
-  Wand2,
-  Palette,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -44,21 +42,20 @@ import ViralScore from './ViralScore';
 import ProfileSettings from './ProfileSettings';
 import IdeasGenerator from './IdeasGenerator';
 import InstagramAnalytics from './InstagramAnalytics';
-import StudioCriacao, { StudioContext, ContentIdea, Oportunidade } from './StudioCriacao';
-import BrandKits from './BrandKits';
+import CriarTabs from './CriarTabs';
+import type { MaquinaInitialIdea } from './Maquina';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'studio' | 'avaliar' | 'agendar' | 'analytics';
+type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'agendar' | 'analytics';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'metodo',    label: 'Método',    icon: Zap },
   { id: 'descobrir', label: 'Descobrir', icon: Search },
   { id: 'ideias',    label: 'Ideias',    icon: Sparkles },
   { id: 'criar',     label: 'Criar',     icon: Layers },
-  { id: 'studio',    label: 'Studio',    icon: Wand2 },
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
   { id: 'agendar',   label: 'Agendar',   icon: Calendar },
   { id: 'analytics', label: 'Analytics', icon: Instagram },
@@ -356,10 +353,9 @@ export default function ViralOS() {
   const [metodoSubTab,    setMetodoSubTab]    = useState<'roteiro' | 'produtos'>('roteiro');
   const [descobrirSubTab, setDescobrirSubTab] = useState<'pesquisa' | 'radar' | 'agente'>('pesquisa');
   const [avaliarSubTab,   setAvaliarSubTab]   = useState<'analisador' | 'score' | 'metricas'>('analisador');
-  const [studioSubTab,    setStudioSubTab]    = useState<'studio' | 'brandkits'>('studio');
   const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
   const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
-  const [studioContext, setStudioContext] = useState<StudioContext | null>(null);
+  const [maquinaInitialIdea, setMaquinaInitialIdea] = useState<MaquinaInitialIdea | null>(null);
   const [state, setState] = useState<AppState>(initialState);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -543,16 +539,15 @@ export default function ViralOS() {
     setTimeout(() => setCarouselPrefill(null), 500);
   };
 
-  const handleOpenStudioFromIdea = (idea: ContentIdea) => {
-    setStudioContext({ type: 'idea', data: idea });
-    setActiveTab('studio');
-    toast.success('Ideia carregada no Studio!');
-  };
-
-  const handleOpenStudioFromTrend = (trend: Oportunidade) => {
-    setStudioContext({ type: 'trend', data: trend });
-    setActiveTab('studio');
-    toast.success('Trend carregado no Studio!');
+  const handleUseInMaquina = (idea: { title: string; hook: string; cta?: string; numSlides?: number }) => {
+    setMaquinaInitialIdea({
+      title: idea.title,
+      hook: idea.hook,
+      cta: idea.cta,
+      numSlides: idea.numSlides,
+    });
+    setActiveTab('criar');
+    toast.success('Ideia carregada na Máquina!');
   };
 
   async function handleAIRoteiro(targetId: string) {
@@ -667,7 +662,7 @@ export default function ViralOS() {
         </div>
       </header>
 
-      <main className={activeTab === 'studio' ? 'px-3 sm:px-4 pt-4' : 'max-w-3xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8'}>
+      <main className="max-w-3xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8">
 
         {/* ── DESCOBRIR ── */}
         {activeTab === 'descobrir' && (
@@ -682,7 +677,7 @@ export default function ViralOS() {
               onChange={(id) => setDescobrirSubTab(id as typeof descobrirSubTab)}
             />
             {descobrirSubTab === 'pesquisa' && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
-            {descobrirSubTab === 'radar'    && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} onOpenStudio={handleOpenStudioFromTrend} />}
+            {descobrirSubTab === 'radar'    && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} />}
             {descobrirSubTab === 'agente'   && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
           </>
         )}
@@ -694,34 +689,18 @@ export default function ViralOS() {
               setCarouselPrefill({ topic, script });
               setActiveTab('criar');
             }}
-            onOpenStudio={handleOpenStudioFromIdea}
+            onUseInMaquina={handleUseInMaquina}
           />
         )}
 
-        {/* ── CRIAR ── */}
+        {/* ── CRIAR (Básico | Máquina | Brand Kits) ── */}
         {activeTab === 'criar' && (
-          <CarrosselInstagram prefillScript={carouselPrefill?.script} prefillTopic={carouselPrefill?.topic} />
-        )}
-
-        {/* ── STUDIO ── */}
-        {activeTab === 'studio' && (
-          <>
-            <SubTabBar
-              tabs={[
-                { id: 'studio',     label: 'Studio de Criação', icon: Wand2 },
-                { id: 'brandkits',  label: 'Brand Kits',        icon: Palette },
-              ]}
-              active={studioSubTab}
-              onChange={(id) => setStudioSubTab(id as typeof studioSubTab)}
-            />
-            {studioSubTab === 'studio' && (
-              <StudioCriacao
-                initialContext={studioContext || undefined}
-                onClearContext={() => setStudioContext(null)}
-              />
-            )}
-            {studioSubTab === 'brandkits' && <BrandKits />}
-          </>
+          <CriarTabs
+            prefillScript={carouselPrefill?.script}
+            prefillTopic={carouselPrefill?.topic}
+            initialMaquinaIdea={maquinaInitialIdea}
+            onClearMaquinaIdea={() => setMaquinaInitialIdea(null)}
+          />
         )}
 
         {/* ── AVALIAR ── */}

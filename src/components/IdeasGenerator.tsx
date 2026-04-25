@@ -121,10 +121,10 @@ function weekDates(): { iso: string; label: string; weekday: string }[] {
 
 interface Props {
   onCreateCarousel: (topic: string, script: string) => void;
-  onOpenStudio?: (idea: ContentIdea) => void;
+  onUseInMaquina?: (idea: ContentIdea) => void;
 }
 
-export default function IdeasGenerator({ onCreateCarousel, onOpenStudio }: Props) {
+export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Props) {
   const [subTab, setSubTab] = useState<'ideias' | 'semana' | 'performance'>('ideias');
   const [showConfig, setShowConfig] = useState(false);
 
@@ -687,7 +687,7 @@ export default function IdeasGenerator({ onCreateCarousel, onOpenStudio }: Props
                     idea={idea}
                     onCreateCarousel={() => createCarouselFromIdea(idea)}
                     onGenerateReels={() => generateReels(idea)}
-                    onOpenStudio={onOpenStudio ? () => onOpenStudio(idea) : undefined}
+                    onUseInMaquina={onUseInMaquina ? () => onUseInMaquina(idea) : undefined}
                     onAddToCalendar={() => {
                       setSubTab('semana');
                       toast('Vá para a aba Semana e clique no dia para adicionar esta ideia', { icon: '📅' });
@@ -935,12 +935,12 @@ export default function IdeasGenerator({ onCreateCarousel, onOpenStudio }: Props
 // ─── Componente: Card de Ideia ─────────────────────────────────────────────────
 
 function IdeaCard({
-  idea, onCreateCarousel, onGenerateReels, onOpenStudio, onAddToCalendar, onDelete,
+  idea, onCreateCarousel, onGenerateReels, onUseInMaquina, onAddToCalendar, onDelete,
 }: {
   idea: ContentIdea;
   onCreateCarousel: () => void;
   onGenerateReels: () => void;
-  onOpenStudio?: () => void;
+  onUseInMaquina?: () => void;
   onAddToCalendar: () => void;
   onDelete: () => void;
 }) {
@@ -995,10 +995,10 @@ function IdeaCard({
           className="flex-1 min-w-0 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 text-purple-300 text-[11px] font-semibold transition-colors flex items-center justify-center gap-1">
           🎬 Reels
         </button>
-        {onOpenStudio && (
-          <button onClick={onOpenStudio}
+        {onUseInMaquina && (
+          <button onClick={onUseInMaquina}
             className="flex-1 min-w-0 py-1.5 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/30 text-violet-300 text-[11px] font-semibold transition-colors flex items-center justify-center gap-1">
-            ✦ Studio
+            ⚙ Máquina
           </button>
         )}
         <button onClick={onAddToCalendar}
