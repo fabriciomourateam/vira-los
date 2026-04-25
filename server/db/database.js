@@ -285,6 +285,16 @@ const createStudioPost  = (p) => { const db = readDb('studio_posts'); db.push({ 
 const updateStudioPost  = (id, data) => { const db = readDb('studio_posts').map((p) => p.id === id ? { ...p, ...data, updated_at: now() } : p); writeDb('studio_posts', db); };
 const deleteStudioPost  = (id) => writeDb('studio_posts', readDb('studio_posts').filter((p) => p.id !== id));
 
+// ── Máquina de Carrosséis (modo BrandsDecoded) ────────────────────────────────
+// Schema: { id, briefing, headlines:[], headlineEscolhida, estrutura, html,
+//          legenda, status: 'draft'|'approved'|'rendered', archived?:bool,
+//          created_at, updated_at }
+const getAllMaquinaCarrosseis = () => readDb('maquina_carrosseis').sort((a, b) => (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at));
+const getMaquinaCarrossel    = (id) => readDb('maquina_carrosseis').find((c) => c.id === id) || null;
+const createMaquinaCarrossel = (c) => { const db = readDb('maquina_carrosseis'); const item = { ...c, created_at: now(), updated_at: now() }; db.push(item); writeDb('maquina_carrosseis', db); return item; };
+const updateMaquinaCarrossel = (id, data) => { const db = readDb('maquina_carrosseis').map((c) => c.id === id ? { ...c, ...data, updated_at: now() } : c); writeDb('maquina_carrosseis', db); };
+const deleteMaquinaCarrossel = (id) => writeDb('maquina_carrosseis', readDb('maquina_carrosseis').filter((c) => c.id !== id));
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -303,6 +313,8 @@ module.exports = {
   getAllStudioConversations, getStudioConversation, createStudioConversation, updateStudioConversation, deleteStudioConversation,
   getStudioMessages, createStudioMessage, updateStudioMessage,
   getAllStudioPosts, getStudioPost, createStudioPost, updateStudioPost, deleteStudioPost,
+  // Máquina de Carrosséis
+  getAllMaquinaCarrosseis, getMaquinaCarrossel, createMaquinaCarrossel, updateMaquinaCarrossel, deleteMaquinaCarrossel,
   // Reels Scripts
   getAllReelsScripts, createReelsScript, updateReelsScript, deleteReelsScript,
   getInstagramToken, setInstagramToken, clearInstagramToken,

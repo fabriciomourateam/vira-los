@@ -38,6 +38,8 @@ app.use('/api/ideas',           require('./routes/ideas'));
 app.use('/api/instagram',       require('./routes/instagram'));
 app.use('/api/studio',          require('./routes/studio'));
 app.use('/api/brand-kits',      require('./routes/brandKits'));
+app.use('/api/maquina',         require('./routes/maquina'));
+app.use('/api/pexels',          require('./routes/pexels'));
 
 // Health check
 app.get('/api/health', (_req, res) =>
