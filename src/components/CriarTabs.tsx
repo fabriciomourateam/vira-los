@@ -71,13 +71,21 @@ export default function CriarTabs({
         onChange={setSubTab}
       />
 
-      {subTab === 'basico' && (
+      {/*
+        Renderiza os 3 sempre montados e alterna visibilidade com display:none.
+        Isso preserva o React state em memória ao trocar de subtab — sem perder
+        o que o usuário já fez na Máquina (briefing, headlines, estrutura, html).
+        A persistência em localStorage continua valendo entre sessões/refresh.
+      */}
+      <div style={{ display: subTab === 'basico' ? 'block' : 'none' }}>
         <CarrosselInstagram prefillScript={prefillScript} prefillTopic={prefillTopic} />
-      )}
-      {subTab === 'maquina' && (
+      </div>
+      <div style={{ display: subTab === 'maquina' ? 'block' : 'none' }}>
         <Maquina initialIdea={initialMaquinaIdea} onClearInitialIdea={onClearMaquinaIdea} />
-      )}
-      {subTab === 'brandkits' && <BrandKits />}
+      </div>
+      <div style={{ display: subTab === 'brandkits' ? 'block' : 'none' }}>
+        <BrandKits />
+      </div>
     </>
   );
 }

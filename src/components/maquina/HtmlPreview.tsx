@@ -46,6 +46,7 @@ export default function HtmlPreview({
   const [pexelsQuery, setPexelsQuery] = useState('');
   const [pexelsResults, setPexelsResults] = useState<{ url: string; thumb: string }[]>([]);
   const [pexelsLoading, setPexelsLoading] = useState(false);
+  const [pexelsApplyAll, setPexelsApplyAll] = useState(false);
 
   // ── Parse HTML completo em slides individuais + extrai <head> ──────────────
   const { head, slidesHtml } = useMemo(() => parseSlides(html), [html]);
@@ -150,16 +151,26 @@ export default function HtmlPreview({
   };
 
   const handlePexelsPick = (url: string) => {
-    const updated = swapImageInSlide(html, currentSlide, url);
-    if (!updated) {
-      toast.info('Não encontrei imagem nesse slide para substituir.');
-      return;
+    if (pexelsApplyAll) {
+      const { html: updated, changed } = swapImageInAllSlides(html, url);
+      if (changed === 0) {
+        toast.info('Nenhum slide com placeholder de imagem encontrado.');
+        return;
+      }
+      onHtmlChange(updated);
+      toast.success(`Imagem aplicada em ${changed} slide${changed > 1 ? 's' : ''}`);
+    } else {
+      const updated = swapImageInSlide(html, currentSlide, url);
+      if (!updated) {
+        toast.info('Não encontrei imagem nesse slide para substituir.');
+        return;
+      }
+      onHtmlChange(updated);
+      toast.success(`Imagem aplicada no slide ${currentSlide + 1}`);
     }
-    onHtmlChange(updated);
     setPexelsOpen(false);
     setPexelsResults([]);
     setPexelsQuery('');
-    toast.success('Imagem trocada');
   };
 
   // ── Export PNGs (download via blob, não abrir aba) ─────────────────────────
@@ -169,13 +180,15 @@ export default function HtmlPreview({
     setExportProgress({ done: 0, total });
     try {
       const folderName = `maquina-${slugify(briefingTitle)}-${Date.now()}`;
-      const paths = await generateAndSaveScreenshots(API, html, folderName, (done, t) => {
+      const filenames = await generateAndSaveScreenshots(API, html, folderName, (done, t) => {
         setExportProgress({ done, total: t });
       });
-      toast.success(`${paths.length} PNGs gerados — iniciando downloads`);
-      // Download sequencial com pequeno delay (evita bloqueio do browser)
-      for (let i = 0; i < paths.length; i++) {
-        await downloadAsBlob(`${API}${paths[i]}`, `slide-${String(i + 1).padStart(2, '0')}.png`);
+      toast.success(`${filenames.length} PNGs gerados — iniciando downloads`);
+      // Download sequencial com pequeno delay (evita bloqueio do browser).
+      // Servidor expõe os PNGs em /output/<folder>/<file>.
+      for (let i = 0; i < filenames.length; i++) {
+        const url = buildOutputUrl(folderName, filenames[i]);
+        await downloadAsBlob(url, filenames[i] || `slide-${String(i + 1).padStart(2, '0')}.png`);
         await sleep(120);
       }
     } catch (e) {
@@ -191,10 +204,11 @@ export default function HtmlPreview({
     setExportProgress({ done: 0, total: 1 });
     try {
       const folderName = `maquina-${slugify(briefingTitle)}-${Date.now()}`;
-      const paths = await generateAndSaveScreenshots(API, html, folderName);
-      const target = paths[currentSlide];
+      const filenames = await generateAndSaveScreenshots(API, html, folderName);
+      const target = filenames[currentSlide];
       if (!target) throw new Error('Slide não encontrado no export');
-      await downloadAsBlob(`${API}${target}`, `slide-${String(currentSlide + 1).padStart(2, '0')}.png`);
+      const url = buildOutputUrl(folderName, target);
+      await downloadAsBlob(url, target);
       toast.success(`Slide ${currentSlide + 1} baixado`);
     } catch (e) {
       toast.error(`Erro no export: ${(e as Error).message}`);
@@ -272,7 +286,16 @@ export default function HtmlPreview({
                 {pexelsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Buscar'}
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground">A imagem será aplicada no slide {currentSlide + 1}.</p>
+            <label className="flex items-center gap-2 text-[11px] text-foreground/80 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={pexelsApplyAll}
+                onChange={(e) => setPexelsApplyAll(e.target.checked)}
+                className="accent-orange-500"
+              />
+              Aplicar a mesma imagem em <strong>todos os slides</strong> com placeholder
+              {!pexelsApplyAll && <span className="text-muted-foreground"> (atual: só slide {currentSlide + 1})</span>}
+            </label>
             {pexelsResults.length > 0 && (
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
                 {pexelsResults.map((p, i) => (
@@ -412,6 +435,30 @@ function replaceSlideInHtml(fullHtml: string, slideIndex: number, newSlideHtml: 
   }
 }
 
+function swapImageInAllSlides(fullHtml: string, url: string): { html: string; changed: number } {
+  try {
+    const doc = new DOMParser().parseFromString(fullHtml, 'text/html');
+    const slides = Array.from(doc.body.children) as HTMLElement[];
+    let changed = 0;
+    for (const slide of slides) {
+      const bg = slide.querySelector('.img-box, .bg, .slide-bg, [class*="bg"]') as HTMLElement | null;
+      if (bg) {
+        bg.style.backgroundImage = `url('${url}')`;
+        changed++;
+        continue;
+      }
+      const img = slide.querySelector('img') as HTMLImageElement | null;
+      if (img) {
+        img.src = url;
+        changed++;
+      }
+    }
+    return { html: '<!DOCTYPE html>' + doc.documentElement.outerHTML, changed };
+  } catch {
+    return { html: fullHtml, changed: 0 };
+  }
+}
+
 function swapImageInSlide(fullHtml: string, slideIndex: number, url: string): string | null {
   try {
     const doc = new DOMParser().parseFromString(fullHtml, 'text/html');
@@ -449,6 +496,18 @@ async function downloadAsBlob(url: string, filename: string): Promise<void> {
   a.remove();
   // Revoga depois de 1s pra dar tempo do browser disparar o download
   setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+/**
+ * O servidor expõe os PNGs gerados em /output/<folder>/<file> (server/index.js).
+ * Se o backend retornar um path completo (começando com /) usamos direto;
+ * senão, montamos a URL canônica.
+ */
+function buildOutputUrl(folderName: string, filenameOrPath: string): string {
+  if (!filenameOrPath) return '';
+  if (/^https?:\/\//i.test(filenameOrPath)) return filenameOrPath;
+  if (filenameOrPath.startsWith('/')) return `${API}${filenameOrPath}`;
+  return `${API}/output/${folderName}/${filenameOrPath}`;
 }
 
 function sleep(ms: number) {
