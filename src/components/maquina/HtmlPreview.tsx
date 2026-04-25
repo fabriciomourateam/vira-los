@@ -15,7 +15,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Loader2, Download, Save, Image as ImageIcon, Search,
-  Edit3, Eye, ChevronLeft, ChevronRight,
+  Edit3, Eye, ChevronLeft, ChevronRight, Sparkles,
 } from 'lucide-react';
 import { generateAndSaveScreenshots } from '@/lib/clientScreenshots';
 import { pexelsApi } from '@/lib/maquinaApi';
@@ -47,6 +47,7 @@ export default function HtmlPreview({
   const [pexelsResults, setPexelsResults] = useState<{ url: string; thumb: string }[]>([]);
   const [pexelsLoading, setPexelsLoading] = useState(false);
   const [pexelsApplyAll, setPexelsApplyAll] = useState(false);
+  const [autoFilling, setAutoFilling] = useState(false);
 
   // ── Parse HTML completo em slides individuais + extrai <head> ──────────────
   const { head, slidesHtml } = useMemo(() => parseSlides(html), [html]);
@@ -136,6 +137,13 @@ export default function HtmlPreview({
     return () => iframe.contentDocument?.removeEventListener('blur', handler, true);
   }, [mode, currentSlide, srcDoc]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-preenche a busca Pexels com texto do slide atual ao abrir o painel
+  useEffect(() => {
+    if (!pexelsOpen) return;
+    const autoQ = extractSlideImageQuery(slidesHtml[currentSlide] || '');
+    if (autoQ) setPexelsQuery(autoQ);
+  }, [pexelsOpen, currentSlide]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Pexels: trocar imagem do slide atual ───────────────────────────────────
   const handlePexelsSearch = async () => {
     if (!pexelsQuery.trim()) return;
@@ -171,6 +179,49 @@ export default function HtmlPreview({
     setPexelsOpen(false);
     setPexelsResults([]);
     setPexelsQuery('');
+  };
+
+  // ── Auto-preencher: 1 imagem contextual por slide (batch) ─────────────────
+  const handleAutoFillImages = async () => {
+    setAutoFilling(true);
+    try {
+      // Identifica quais slides têm placeholder de imagem
+      const queries: { id: string; query: string; orientation: string }[] = [];
+      slidesHtml.forEach((slideHtml, idx) => {
+        if (!slideHasImagePlaceholder(slideHtml)) return;
+        const q = extractSlideImageQuery(slideHtml);
+        if (q) queries.push({ id: String(idx), query: q, orientation: 'portrait' });
+      });
+
+      if (queries.length === 0) {
+        toast.info('Nenhum slide com placeholder de imagem encontrado.');
+        return;
+      }
+
+      toast.info(`Buscando imagens para ${queries.length} slide${queries.length > 1 ? 's' : ''}…`);
+      const data = await pexelsApi.batch(queries);
+
+      // Aplica imagem a cada slide individualmente
+      let updatedHtml = html;
+      let applied = 0;
+      for (const { id } of queries) {
+        const photo = data.results[id];
+        if (!photo) continue;
+        const result = swapImageInSlide(updatedHtml, parseInt(id, 10), photo.url);
+        if (result) { updatedHtml = result; applied++; }
+      }
+
+      if (applied > 0) {
+        onHtmlChange(updatedHtml);
+        toast.success(`${applied} imagem${applied > 1 ? 'ns aplicadas' : ' aplicada'} com contexto do slide`);
+      } else {
+        toast.warning('Não foi possível aplicar imagens. Verifique a chave Pexels.');
+      }
+    } catch (e) {
+      toast.error(`Erro ao buscar imagens: ${(e as Error).message}`);
+    } finally {
+      setAutoFilling(false);
+    }
   };
 
   // ── Export PNGs (download via blob, não abrir aba) ─────────────────────────
@@ -231,6 +282,15 @@ export default function HtmlPreview({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleAutoFillImages}
+            disabled={autoFilling}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border disabled:opacity-50 text-xs font-bold transition-colors"
+            title="Busca 1 imagem no Pexels para cada slide, com base no texto do slide"
+          >
+            {autoFilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            Auto-imagens
+          </button>
           <button
             onClick={() => setPexelsOpen((v) => !v)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-xs font-bold transition-colors"
@@ -293,9 +353,12 @@ export default function HtmlPreview({
                 onChange={(e) => setPexelsApplyAll(e.target.checked)}
                 className="accent-orange-500"
               />
-              Aplicar a mesma imagem em <strong>todos os slides</strong> com placeholder
+              Aplicar em <strong>todos os slides</strong> com placeholder
               {!pexelsApplyAll && <span className="text-muted-foreground"> (atual: só slide {currentSlide + 1})</span>}
             </label>
+            <p className="text-[10px] text-muted-foreground">
+              Dica: use <strong>Auto-imagens</strong> para buscar 1 foto por slide com base no texto de cada um.
+            </p>
             {pexelsResults.length > 0 && (
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
                 {pexelsResults.map((p, i) => (
@@ -516,6 +579,46 @@ function sleep(ms: number) {
 
 function slugify(s: string) {
   return (s || 'maquina').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+}
+
+/** Returns true if the slide contains an image placeholder (img-box, bg, img tag). */
+function slideHasImagePlaceholder(slideHtml: string): boolean {
+  if (!slideHtml) return false;
+  try {
+    const doc = new DOMParser().parseFromString(`<body>${slideHtml}</body>`, 'text/html');
+    const el = doc.querySelector('.img-box, .bg, .slide-bg, [class*="img-"], img');
+    return !!el;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extracts the main heading text from a slide to use as a Pexels search query.
+ * Priority: h1 > h2 > h3 > .capa-headline > .headline > .cover-title > first-p
+ */
+function extractSlideImageQuery(slideHtml: string): string {
+  if (!slideHtml) return '';
+  try {
+    const doc = new DOMParser().parseFromString(`<body>${slideHtml}</body>`, 'text/html');
+    const sels = [
+      'h1', '.capa-headline-area em', '.capa-headline',
+      '.cover-title', '.headline', 'h2', 'h3', 'p',
+    ];
+    for (const sel of sels) {
+      const el = doc.querySelector(sel);
+      if (el) {
+        const text = (el.textContent || '').trim().replace(/\s+/g, ' ');
+        if (text.length > 3) {
+          // Limit to ~60 chars for a clean search query
+          return text.slice(0, 60);
+        }
+      }
+    }
+    return '';
+  } catch {
+    return '';
+  }
 }
 
 // ─── Edit script injetado no iframe (modo Editar) ────────────────────────────

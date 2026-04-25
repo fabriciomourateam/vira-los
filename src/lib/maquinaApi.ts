@@ -121,4 +121,14 @@ export const pexelsApi = {
     const res = await fetch(`${API}/api/pexels?${params}`);
     return res.json();
   },
+  batch: async (
+    queries: { id: string; query: string; orientation?: string }[]
+  ): Promise<{ results: Record<string, { url: string; thumb: string; photographer: string } | null> }> => {
+    const res = await fetch(`${API}/api/pexels/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queries }),
+    });
+    return res.json();
+  },
 };
