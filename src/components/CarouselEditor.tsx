@@ -273,7 +273,7 @@ function extractPosLeft(el: Element): number | undefined {
 }
 
 function extractBgImageUrl(el: Element): string | null {
-  const bgEl = el.querySelector('.slide-bg, .bg');
+  const bgEl = el.querySelector('.slide-bg, .bg, .fmt-cover-bg, .fmt-cta-bg, .fmt-img-box');
   if (bgEl) {
     const m = BG_IMAGE_REGEX.exec(bgEl.getAttribute('style') || '');
     if (m) return m[1];
@@ -284,6 +284,9 @@ function extractBgImageUrl(el: Element): string | null {
 
 function detectSlideType(el: Element): 'cover' | 'editorial' | 'cta' {
   const c = el.className || '';
+  if (c.includes('fmt-cover')) return 'cover';
+  if (c.includes('fmt-cta')) return 'cta';
+  if (c.includes('fmt-content')) return 'editorial';
   if (c.includes('clean-cover')) return 'cover';
   if (c.includes('clean-cta')) return 'cta';
   if (c.includes('clean-content') || c.includes('slide-editorial')) return 'editorial';
@@ -428,7 +431,7 @@ function parseSlides(html: string): { slides: EditableSlide[]; head: string } {
   const doc = parser.parseFromString(html, 'text/html');
   const head = doc.head.innerHTML;
   const slideEls = Array.from(doc.querySelectorAll(
-    '.slide, .slide-editorial, .clean-cover, .clean-content, .clean-cta, .clean-split'
+    '.slide, .slide-editorial, .clean-cover, .clean-content, .clean-cta, .clean-split, .fmt-slide'
   ));
   const slides: EditableSlide[] = slideEls.map((el, index) => ({
     index,
@@ -539,7 +542,7 @@ function rebuildSlideOuterHtml(
 
   // Background image + position + brightness
   if (newBgUrl !== null || bgImageConfig) {
-    const slideBg = el.querySelector('.slide-bg, .bg') as HTMLElement | null;
+    const slideBg = el.querySelector('.slide-bg, .bg, .fmt-cover-bg, .fmt-cta-bg, .fmt-img-box') as HTMLElement | null;
     const target = slideBg || el as HTMLElement;
     let s = target.getAttribute('style') || '';
     if (newBgUrl !== null) {
@@ -832,6 +835,12 @@ const DRAGGABLE_SELECTORS = [
   '.title', '.subtitle', '.subtitle-accent', '.narrative-text',
   '.content-title', '.content-body', '.cta-title',
   '.follow-pill', '.profile-name', '.profile-handle',
+  // ── Layout fmteam ──
+  '.fmt-cover-bg', '.fmt-cta-bg', '.fmt-img-box',
+  '.fmt-cover-title', '.fmt-title', '.fmt-body', '.fmt-tag',
+  '.fmt-profile-badge', '.fmt-cta-title', '.fmt-cta-bridge',
+  '.fmt-cta-box', '.fmt-cta-footer', '.fmt-decor-number',
+  '.fmt-arrow-row',
   // Custom text blocks
   '.custom-text',
 ];

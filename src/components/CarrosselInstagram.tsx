@@ -859,7 +859,14 @@ document.addEventListener('DOMContentLoaded', function() {
     '.split-title','.split-stats','.split-eyebrow',
     '.profile-name','.profile-handle','.swipe-hint',
     '.footer-left span','.footer-right','.footer-name-pill',
-    '.footer-handle-pill','.follow-banner'
+    '.footer-handle-pill','.follow-banner',
+    // ── Layout fmteam ──
+    '.fmt-cover-title','.fmt-title','.fmt-body','.fmt-tag',
+    '.fmt-cta-title','.fmt-cta-bridge',
+    '.fmt-cta-box-label','.fmt-cta-box-keyword','.fmt-cta-box-after',
+    '.fmt-cta-footer','.fmt-arrow-text',
+    '.fmt-profile-name','.fmt-profile-handle',
+    '.fmt-brand-handle','.fmt-brand-year','.fmt-progress-count','.fmt-decor-number'
   ];
   // ── Toolbar flutuante de tamanho de fonte ──
   var toolbar=document.createElement('div');
@@ -976,6 +983,11 @@ document.addEventListener('DOMContentLoaded', function() {
     var parent=bg.closest('.clean-cover,.clean-cta')||bg.parentElement;
     if(parent) addBgBtn(bg,parent);
   });
+  // Slides fmteam: .fmt-cover-bg, .fmt-cta-bg (full-bleed) e .fmt-img-box (interno)
+  document.querySelectorAll('.fmt-cover-bg, .fmt-cta-bg, .fmt-img-box').forEach(function(bg){
+    var parent=bg.closest('.fmt-slide')||bg.parentElement;
+    if(parent) addBgBtn(bg,parent);
+  });
   // Foto no topo (.top-photo-wrap img) e photo-card
   document.querySelectorAll('.top-photo-wrap img, .photo-card img, .split-panel img').forEach(function(img){
     img.style.cursor='pointer';
@@ -1071,7 +1083,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function extractSlides(html: string): string[] {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
-    const slides = Array.from(doc.querySelectorAll('.slide, .slide-editorial'));
+    const slides = Array.from(doc.querySelectorAll('.slide, .slide-editorial, .fmt-slide'));
     if (!slides.length) return [html];
     const head = doc.head.innerHTML;
     return slides.map(slide =>
