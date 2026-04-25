@@ -30,7 +30,7 @@ interface CarouselConfig {
   contentTone: string;
   dominantEmotion: string;
   roteiro: string;
-  layoutStyle: 'editorial' | 'clean';
+  layoutStyle: 'editorial' | 'clean' | 'fmteam';
   titleFontSize: number;       // 0 = auto, otherwise px
   bodyFontSize: number;        // 0 = auto, otherwise px
   bannerFontSize: number;      // 0 = auto, otherwise px
@@ -1122,11 +1122,11 @@ document.addEventListener('DOMContentLoaded', function() {
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
             <Palette className="w-3.5 h-3.5" /> Layout
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => set('layoutStyle', 'editorial')}
-              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-4 py-3 transition-all ${
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all ${
                 config.layoutStyle === 'editorial'
                   ? 'border-purple-500 bg-purple-500/10 text-purple-400'
                   : 'border-border bg-secondary text-muted-foreground hover:border-border/80'
@@ -1134,12 +1134,12 @@ document.addEventListener('DOMContentLoaded', function() {
             >
               <Layers className="w-5 h-5" />
               <span className="text-xs font-bold">Editorial</span>
-              <span className="text-[10px] opacity-70">Investigativo com header</span>
+              <span className="text-[10px] opacity-70 text-center leading-tight">Investigativo com header</span>
             </button>
             <button
               type="button"
               onClick={() => set('layoutStyle', 'clean')}
-              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-4 py-3 transition-all ${
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all ${
                 config.layoutStyle === 'clean'
                   ? 'border-purple-500 bg-purple-500/10 text-purple-400'
                   : 'border-border bg-secondary text-muted-foreground hover:border-border/80'
@@ -1147,7 +1147,20 @@ document.addEventListener('DOMContentLoaded', function() {
             >
               <Image className="w-5 h-5" />
               <span className="text-xs font-bold">Clean / Minimal</span>
-              <span className="text-[10px] opacity-70">Dark + badge + foto card</span>
+              <span className="text-[10px] opacity-70 text-center leading-tight">Dark + badge + foto card</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => set('layoutStyle', 'fmteam')}
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all ${
+                config.layoutStyle === 'fmteam'
+                  ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400'
+                  : 'border-border bg-secondary text-muted-foreground hover:border-border/80'
+              }`}
+            >
+              <Palette className="w-5 h-5" />
+              <span className="text-xs font-bold">fmteam</span>
+              <span className="text-[10px] opacity-70 text-center leading-tight">Amarelo #FFC300 + brand bar + número decor</span>
             </button>
           </div>
         </div>

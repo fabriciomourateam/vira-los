@@ -866,6 +866,295 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bo
   </style>`;
 }
 
+// ─── CSS template layout "fmteam" (Fabricio Moura — accent bar + brand bar + badge IG + número decorativo) ─
+//
+// Fixos (nunca mudam):
+//   - Accent bar 7px no topo com gradiente dourado
+//   - Brand bar: "@FABRICIOMOURATEAM" (esq) + "2026" (dir)
+//   - Profile badge da capa: avatar com anel Instagram + check verificado azul
+//   - Cor primária #FFC300 nas palavras-chave da headline e tags
+//   - Progress bar dourada no rodapé
+//   - Sem swipe arrow / hint
+//
+// Variável: usuário pode escolher cor primária diferente — mas a default é #FFC300.
+function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bodyFontSize = 0, titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
+  const titleFF = titleFontFamily || 'Barlow Condensed';
+  const bodyFF  = bodyFontFamily  || 'Plus Jakarta Sans';
+  const titleFW = titleFontWeight > 0 ? titleFontWeight : 800;
+  const bodyFW  = bodyFontWeight  > 0 ? bodyFontWeight  : 400;
+  const titleTT = titleTextTransform || 'uppercase';
+  const accent  = primaryColor || '#FFC300';
+  const accentDark = '#B8860B';
+  const accentLight = '#FFD54F';
+  return `
+  <link href="${ALL_FONTS_URL}" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── Wrapper base de TODOS os slides (mesma altura, mesma estrutura topo/rodapé) ── */
+    .fmt-slide {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      font-family: '${bodyFF}', sans-serif;
+      page-break-after: always;
+    }
+    /* Accent bar dourada no topo (7px) */
+    .fmt-slide .fmt-accent-bar {
+      position: absolute; top: 0; left: 0; right: 0; height: 7px;
+      background: linear-gradient(90deg, ${accentDark} 0%, ${accent} 50%, ${accentLight} 100%);
+      z-index: 5;
+    }
+    /* Brand bar (handle + ano) */
+    .fmt-slide .fmt-brand-bar {
+      position: absolute; top: 30px; left: 60px; right: 60px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 18px; font-weight: 500;
+      letter-spacing: 4px; text-transform: uppercase;
+      z-index: 5;
+    }
+    .fmt-slide .fmt-brand-handle { color: rgba(255,255,255,0.55); }
+    .fmt-slide .fmt-brand-year   { color: rgba(255,255,255,0.45); }
+    /* Variantes light/yellow → texto escuro */
+    .fmt-slide.is-light .fmt-brand-handle,
+    .fmt-slide.is-yellow .fmt-brand-handle { color: rgba(0,0,0,0.55); }
+    .fmt-slide.is-light .fmt-brand-year,
+    .fmt-slide.is-yellow .fmt-brand-year   { color: rgba(0,0,0,0.45); }
+
+    /* Progress bar inferior */
+    .fmt-slide .fmt-progress {
+      position: absolute; bottom: 24px; left: 60px; right: 60px;
+      display: flex; align-items: center; gap: 16px;
+      z-index: 5;
+    }
+    .fmt-slide .fmt-progress-track {
+      flex: 1; height: 2px; background: rgba(255,255,255,0.12); border-radius: 2px;
+      overflow: hidden;
+    }
+    .fmt-slide.is-light .fmt-progress-track,
+    .fmt-slide.is-yellow .fmt-progress-track { background: rgba(0,0,0,0.12); }
+    .fmt-slide .fmt-progress-fill {
+      height: 100%; background: ${accent}; border-radius: 2px;
+    }
+    .fmt-slide .fmt-progress-count {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 16px; font-weight: 500;
+      color: rgba(255,255,255,0.55); letter-spacing: 1px;
+    }
+    .fmt-slide.is-light .fmt-progress-count,
+    .fmt-slide.is-yellow .fmt-progress-count { color: rgba(0,0,0,0.55); }
+
+    /* Número decorativo gigante (canto inferior direito) */
+    .fmt-slide .fmt-decor-number {
+      position: absolute; bottom: 70px; right: 40px;
+      font-family: '${titleFF}', sans-serif;
+      font-size: 360px; font-weight: ${titleFW}; line-height: 1;
+      color: rgba(255,195,0,0.08);
+      pointer-events: none; z-index: 1;
+    }
+    .fmt-slide.is-light .fmt-decor-number  { color: rgba(0,0,0,0.06); }
+    .fmt-slide.is-yellow .fmt-decor-number { color: rgba(0,0,0,0.10); }
+
+    /* ── CAPA (.fmt-cover) ── */
+    .fmt-cover { background: #0a0a0a; }
+    .fmt-cover .fmt-cover-bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      z-index: 0;
+    }
+    .fmt-cover .fmt-cover-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.94) 100%);
+      z-index: 1;
+    }
+    .fmt-cover .fmt-cover-content {
+      position: absolute; left: 60px; right: 60px; bottom: 90px;
+      z-index: 3;
+    }
+    .fmt-cover .fmt-profile-badge {
+      display: flex; align-items: center; gap: 18px; margin-bottom: 32px;
+    }
+    .fmt-cover .fmt-avatar-ring {
+      width: 64px; height: 64px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+      padding: 3px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .fmt-cover .fmt-avatar-circle {
+      width: 100%; height: 100%; border-radius: 50%;
+      background: #0a0a0a; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 800; color: white;
+    }
+    .fmt-cover .fmt-avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+    .fmt-cover .fmt-profile-name {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 26px; font-weight: 700; color: white;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .fmt-cover .fmt-profile-handle {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 20px; font-weight: 400; color: rgba(255,255,255,0.6);
+      margin-top: 2px;
+    }
+    .fmt-cover .fmt-verified svg { width: 24px; height: 24px; display: block; flex-shrink: 0; }
+    .fmt-cover .fmt-cover-title {
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 102}px;
+      font-weight: ${titleFW}; line-height: 0.96;
+      color: white; text-transform: ${titleTT};
+      letter-spacing: -1px;
+    }
+    .fmt-cover .fmt-cover-title .hl { color: ${accent}; font-style: normal; }
+
+    /* ── SLIDE INTERNO DARK (.fmt-content.is-dark) ── */
+    .fmt-content {
+      padding: 110px 60px 90px;
+      display: flex; flex-direction: column; gap: 28px;
+    }
+    .fmt-content.is-dark   { background: #0d0d0d; }
+    .fmt-content.is-light  { background: #f3ead4; }
+    .fmt-content.is-yellow { background: ${accent}; }
+
+    .fmt-content .fmt-img-box {
+      width: 100%; height: 380px;
+      border-radius: 24px; overflow: hidden; flex-shrink: 0;
+      background-size: cover; background-position: center;
+    }
+    .fmt-content .fmt-tag {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 16px; font-weight: 700;
+      letter-spacing: 4px; text-transform: uppercase;
+      color: ${accent};
+    }
+    .fmt-content.is-light .fmt-tag,
+    .fmt-content.is-yellow .fmt-tag { color: ${accentDark}; }
+
+    .fmt-content .fmt-title {
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 88}px;
+      font-weight: ${titleFW}; line-height: 0.98;
+      color: white; text-transform: ${titleTT};
+      letter-spacing: -0.5px;
+    }
+    .fmt-content.is-light .fmt-title,
+    .fmt-content.is-yellow .fmt-title { color: #0d0d0d; }
+    .fmt-content .fmt-title .hl { color: ${accent}; font-style: normal; }
+    .fmt-content.is-yellow .fmt-title .hl { color: white; }
+
+    .fmt-content .fmt-body {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: ${bodyFontSize > 0 ? bodyFontSize : 28}px;
+      font-weight: ${bodyFW}; line-height: 1.45;
+      color: rgba(255,255,255,0.62);
+    }
+    .fmt-content.is-light .fmt-body  { color: rgba(0,0,0,0.66); }
+    .fmt-content.is-yellow .fmt-body { color: rgba(0,0,0,0.78); }
+    .fmt-content .fmt-body strong, .fmt-content .fmt-body b {
+      color: white; font-weight: 700;
+    }
+    .fmt-content.is-light .fmt-body strong, .fmt-content.is-light .fmt-body b,
+    .fmt-content.is-yellow .fmt-body strong, .fmt-content.is-yellow .fmt-body b { color: #0d0d0d; }
+    .fmt-content .fmt-body em {
+      color: ${accent}; font-style: normal; font-weight: 500;
+    }
+    .fmt-content.is-yellow .fmt-body em { color: white; font-weight: 700; }
+
+    /* Arrow rows (lista de pontos) */
+    .fmt-content .fmt-arrow-row {
+      display: flex; gap: 18px; padding: 14px 0;
+      font-family: '${bodyFF}', sans-serif;
+      font-size: ${bodyFontSize > 0 ? bodyFontSize : 30}px; line-height: 1.35;
+    }
+    .fmt-content .fmt-arrow-row .fmt-arrow {
+      color: ${accent}; font-weight: 800; flex-shrink: 0;
+    }
+    .fmt-content.is-yellow .fmt-arrow-row .fmt-arrow { color: #0d0d0d; }
+    .fmt-content .fmt-arrow-row .fmt-arrow-text strong {
+      color: white; font-weight: 800;
+    }
+    .fmt-content.is-light .fmt-arrow-row .fmt-arrow-text strong,
+    .fmt-content.is-yellow .fmt-arrow-row .fmt-arrow-text strong { color: #0d0d0d; }
+    .fmt-content .fmt-arrow-row .fmt-arrow-text {
+      color: rgba(255,255,255,0.62);
+    }
+    .fmt-content.is-light .fmt-arrow-row .fmt-arrow-text  { color: rgba(0,0,0,0.66); }
+    .fmt-content.is-yellow .fmt-arrow-row .fmt-arrow-text { color: rgba(0,0,0,0.78); }
+
+    /* ── CTA FINAL (.fmt-cta) ── */
+    .fmt-cta { background: #0a0a0a; }
+    .fmt-cta .fmt-cta-bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      z-index: 0;
+    }
+    .fmt-cta .fmt-cta-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.94) 100%);
+      z-index: 1;
+    }
+    .fmt-cta .fmt-cta-content {
+      position: absolute; left: 60px; right: 60px; bottom: 110px;
+      z-index: 3;
+      display: flex; flex-direction: column; gap: 28px;
+    }
+    .fmt-cta .fmt-cta-bridge {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 28px; font-weight: 400; line-height: 1.4;
+      color: rgba(255,255,255,0.72);
+    }
+    .fmt-cta .fmt-cta-bridge strong { color: white; font-weight: 700; }
+    .fmt-cta .fmt-cta-title {
+      font-family: '${titleFF}', sans-serif;
+      font-size: 92px; font-weight: ${titleFW}; line-height: 0.98;
+      color: white; text-transform: uppercase;
+      letter-spacing: -0.5px;
+    }
+    .fmt-cta .fmt-cta-title .hl { color: ${accent}; font-style: normal; }
+    .fmt-cta .fmt-cta-box {
+      border: 1.5px solid rgba(255,195,0,0.55);
+      border-radius: 16px;
+      padding: 28px 36px;
+      display: flex; flex-direction: column; gap: 8px;
+      background: rgba(0,0,0,0.35);
+    }
+    .fmt-cta .fmt-cta-box-label {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 22px; font-weight: 400;
+      color: rgba(255,255,255,0.72);
+    }
+    .fmt-cta .fmt-cta-box-keyword {
+      font-family: '${titleFF}', sans-serif;
+      font-size: 88px; font-weight: ${titleFW}; line-height: 1;
+      color: ${accent}; text-transform: uppercase;
+      letter-spacing: -0.5px;
+    }
+    .fmt-cta .fmt-cta-box-after {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 20px; font-weight: 400;
+      color: rgba(255,255,255,0.72);
+    }
+    .fmt-cta .fmt-cta-footer {
+      display: flex; align-items: center; gap: 14px;
+      font-family: '${bodyFF}', sans-serif;
+      font-size: 18px; color: rgba(255,255,255,0.68);
+    }
+    .fmt-cta .fmt-cta-footer .fmt-avatar-ring {
+      width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+      padding: 2px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .fmt-cta .fmt-cta-footer .fmt-avatar-circle {
+      width: 100%; height: 100%; border-radius: 50%;
+      background: #0a0a0a; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; color: white;
+    }
+    .fmt-cta .fmt-cta-footer .fmt-avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+  </style>`;
+}
+
 // ─── Prompt baseado em template HTML salvo ────────────────────────────────────
 
 function buildTemplateHTMLPrompt({ templateHtml, topic, instructions, niche, instagramHandle, creatorName, contentTone, dominantEmotion, unsplashImages, roteiro, numSlides }) {
@@ -1092,6 +1381,179 @@ SLIDE ${numSlides} — CTA (.clean-cta):
     <div class="follow-pill">Siga ${handleAt}</div>
   </div>
   <div class="cta-footer">${handleAt}</div>
+</div>
+
+━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
+${cssTemplate}
+
+Gere o HTML completo agora (apenas HTML, nada mais):`;
+}
+
+// ─── Prompt HTML layout "fmteam" ─────────────────────────────────────────────
+
+function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontFamily,
+  instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro,
+  titleFontSize = 0, bodyFontSize = 0,
+  titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
+
+  const handle = (instagramHandle || 'fabriciomourateam').replace('@', '');
+  const handleAt = `@${handle}`;
+  const handleUpper = handleAt.toUpperCase();
+  const displayName = creatorName
+    || handle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+         .replace(/\b\w/g, c => c.toUpperCase())
+    || handle;
+  const totalContent = numSlides - 2;
+  const cssTemplate = buildFmteamCSSTemplate({
+    primaryColor: primaryColor || '#FFC300',
+    fontFamily,
+    titleFontSize, bodyFontSize, titleFontWeight, bodyFontWeight,
+    titleTextTransform, titleFontFamily, bodyFontFamily,
+  });
+
+  const validImages = unsplashImages.filter(img => img.url);
+  const imagesSection = validImages.length
+    ? `\nImagens — cada uma foi buscada especificamente para aquele slide. Use a URL exata na ordem indicada:\n${unsplashImages.map((img, i) =>
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem — omita .fmt-img-box neste slide)`).join('\n')}`
+    : '\n(Sem imagens — omita os .fmt-img-box e use apenas texto nos slides de conteúdo)';
+
+  const roteiroSection = roteiro && roteiro.trim()
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim()}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  const instructionsSection = instructions && instructions.trim()
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  const avatarContent = handle.slice(0, 2).toUpperCase();
+
+  // Pré-monta a progress bar de cada slide (fill % proporcional)
+  const progressFor = (current) => {
+    const pct = Math.round((current / numSlides) * 100);
+    return `<div class="fmt-progress">
+    <div class="fmt-progress-track"><div class="fmt-progress-fill" style="width:${pct}%"></div></div>
+    <div class="fmt-progress-count">${current}/${numSlides}</div>
+  </div>`;
+  };
+
+  // Header padrão de TODOS os slides (accent bar + brand bar)
+  const headerStd = `<div class="fmt-accent-bar"></div>
+  <div class="fmt-brand-bar">
+    <span class="fmt-brand-handle">${handleUpper}</span>
+    <span class="fmt-brand-year">2026</span>
+  </div>`;
+
+  const verifiedSvg = `<span class="fmt-verified"><svg viewBox="0 0 24 24" fill="#1D9BF0" xmlns="http://www.w3.org/2000/svg"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg></span>`;
+
+  return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo fmteam (Fabricio Moura): accent bar dourada, brand bar limpa, profile badge com anel Instagram e check verificado, palavras-chave em amarelo #FFC300, número decorativo gigante, alternância dark/cream/yellow.
+
+Tema: "${topic}"
+Nicho: ${niche}
+Tom: ${contentTone}
+Emoção dominante: ${dominantEmotion}
+Instagram: ${handleAt}
+Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
+${instructionsSection}
+${imagesSection}
+${roteiroSection}
+
+━━━ REGRAS ABSOLUTAS DO TEMPLATE FMTEAM ━━━
+- Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
+- NÃO use markdown, code fences, comentários ou texto fora do HTML
+- Use EXATAMENTE as classes CSS do template abaixo (.fmt-slide, .fmt-cover, .fmt-content, .fmt-cta...)
+- TODOS os slides DEVEM começar com .fmt-accent-bar + .fmt-brand-bar e terminar com .fmt-progress
+- Brand bar: APENAS "${handleUpper}" à esquerda + "2026" à direita. NUNCA "Powered by", NUNCA pipes, NUNCA outros textos.
+- Sem swipe arrow / hint de "deslize" em slide algum
+- Palavras-chave da headline da capa em <em class="hl">PALAVRA</em> (1–2 palavras no máximo)
+- Tag de seção de cada slide interno: 1 frase curta uppercase em .fmt-tag (ex: "O PARADOXO", "COMO FUNCIONA", "O PRÉ-REQUISITO")
+- Número decorativo gigante (.fmt-decor-number) no canto inferior direito de TODO slide de conteúdo, com o número do slide
+- Alternância de fundos entre slides internos: use .is-dark, .is-light e .is-yellow conforme couber visualmente. Não force sequência rígida.
+- Máximo 35 palavras por slide de conteúdo
+
+${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
+
+━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
+
+SLIDE 1 — CAPA (.fmt-cover):
+<div class="fmt-slide fmt-cover">
+  ${headerStd}
+  <div class="fmt-cover-bg" style="background-image: url('FOTO_1')"></div>
+  <div class="fmt-cover-overlay"></div>
+  <div class="fmt-cover-content">
+    <div class="fmt-profile-badge">
+      <div class="fmt-avatar-ring">
+        <div class="fmt-avatar-circle">${avatarContent}</div>
+      </div>
+      <div>
+        <div class="fmt-profile-name">${displayName} ${verifiedSvg}</div>
+        <div class="fmt-profile-handle">${handleAt}</div>
+      </div>
+    </div>
+    <div class="fmt-cover-title">[título impactante — até 12 palavras — 1-2 em <em class="hl">DESTAQUE</em>]</div>
+  </div>
+  ${progressFor(1)}
+</div>
+
+SLIDE 2 a ${numSlides - 1} — CONTEÚDO (.fmt-content) — alterne .is-dark / .is-light / .is-yellow:
+
+VARIANTE A (img-box no topo + título + body):
+<div class="fmt-slide fmt-content is-dark">
+  ${headerStd}
+  <div class="fmt-img-box" style="background-image: url('FOTO_N')"></div>
+  <div class="fmt-tag">[TAG DA SEÇÃO — ex: O PARADOXO]</div>
+  <div class="fmt-title">[título do ponto — 1 palavra em <em class="hl">DESTAQUE</em>]</div>
+  <div class="fmt-body">[parágrafo com <strong>frase-chave</strong> em destaque]</div>
+  <div class="fmt-decor-number">[N]</div>
+  ${progressFor(0).replace('${current}', '[N]').replace(/style="width:\d+%"/, 'style="width:[PCT]%"')}
+</div>
+
+VARIANTE B (texto puro, sem foto):
+<div class="fmt-slide fmt-content is-light">
+  ${headerStd}
+  <div class="fmt-tag">[TAG DA SEÇÃO]</div>
+  <div class="fmt-title">[título]</div>
+  <div class="fmt-body">[parágrafo 1]</div>
+  <div class="fmt-body">[parágrafo 2 com <em>palavra em amarelo</em>]</div>
+  <div class="fmt-decor-number">[N]</div>
+  ${progressFor(0).replace('${current}', '[N]')}
+</div>
+
+VARIANTE C (slide amarelo com arrow rows):
+<div class="fmt-slide fmt-content is-yellow">
+  ${headerStd}
+  <div class="fmt-img-box" style="background-image: url('FOTO_N')"></div>
+  <div class="fmt-tag">[TAG]</div>
+  <div class="fmt-title">[título].</div>
+  <div class="fmt-arrow-row"><span class="fmt-arrow">→</span><span class="fmt-arrow-text"><strong>Ponto 1 em bold</strong> — complemento</span></div>
+  <div class="fmt-arrow-row"><span class="fmt-arrow">→</span><span class="fmt-arrow-text"><strong>Ponto 2 em bold</strong> — complemento</span></div>
+  <div class="fmt-arrow-row"><span class="fmt-arrow">→</span><span class="fmt-arrow-text"><strong>Ponto 3</strong> complemento</span></div>
+  <div class="fmt-decor-number">[N]</div>
+  ${progressFor(0).replace('${current}', '[N]')}
+</div>
+
+Para CADA slide interno: substitua [N] pelo número do slide e [PCT] pela porcentagem (slide_num / ${numSlides} * 100, arredondado).
+
+SLIDE ${numSlides} — CTA (.fmt-cta):
+<div class="fmt-slide fmt-cta">
+  ${headerStd}
+  <div class="fmt-cta-bg" style="background-image: url('ULTIMA_FOTO')"></div>
+  <div class="fmt-cta-overlay"></div>
+  <div class="fmt-cta-content">
+    <div class="fmt-cta-bridge">[frase-ponte com <strong>palavra forte em bold</strong>]</div>
+    <div class="fmt-cta-title">QUAL É A SUA <em class="hl">ESTRATÉGIA?</em></div>
+    <div class="fmt-cta-box">
+      <div class="fmt-cta-box-label">Comenta a palavra abaixo:</div>
+      <div class="fmt-cta-box-keyword">[KEYWORD]</div>
+      <div class="fmt-cta-box-after">e me segue para mais conteúdos.</div>
+    </div>
+    <div class="fmt-cta-footer">
+      <div class="fmt-avatar-ring">
+        <div class="fmt-avatar-circle">${avatarContent}</div>
+      </div>
+      ${handleAt} · ${niche}
+    </div>
+  </div>
+  ${progressFor(numSlides)}
 </div>
 
 ━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
@@ -1329,6 +1791,16 @@ async function generateCarousel(config) {
       instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, unsplashImages,
       titleFontSize, bodyFontSize, bannerFontSize,
+      titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
+    });
+  } else if (layoutStyle === 'fmteam') {
+    htmlPrompt = buildFmteamHTMLPrompt({
+      topic: topic.trim(), instructions: instructions.trim(), niche,
+      primaryColor: primaryColor || '#FFC300',
+      fontFamily,
+      instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
+      contentTone, dominantEmotion, roteiro, unsplashImages,
+      titleFontSize, bodyFontSize,
       titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
     });
   } else {
