@@ -42,11 +42,11 @@ router.get('/check', (_req, res) => {
 // ─── 1. Headlines ────────────────────────────────────────────────────────────
 router.post('/headlines', async (req, res) => {
   try {
-    const { tema, nicho, brandKitId } = req.body;
+    const { tema, nicho, brandKitId, template = 'brandsdecoded' } = req.body;
     if (!tema) return res.status(400).json({ error: 'Campo "tema" é obrigatório.' });
 
     const brandKit = brandKitId ? db.getBrandKit(brandKitId) : null;
-    const headlines = await generateHeadlines(tema, nicho, brandKit);
+    const headlines = await generateHeadlines(tema, nicho, brandKit, template);
     res.json({ headlines });
   } catch (err) {
     console.error('[Maquina/Headlines]', err.message);
@@ -57,11 +57,11 @@ router.post('/headlines', async (req, res) => {
 // ─── 2. Espinha dorsal ───────────────────────────────────────────────────────
 router.post('/structure', async (req, res) => {
   try {
-    const { headline, tema, conversationHistory = [] } = req.body;
+    const { headline, tema, conversationHistory = [], template = 'brandsdecoded' } = req.body;
     if (!headline || !tema) {
       return res.status(400).json({ error: 'Campos "headline" e "tema" são obrigatórios.' });
     }
-    const structure = await generateStructure(headline, tema, conversationHistory);
+    const structure = await generateStructure(headline, tema, conversationHistory, template);
     res.json({ structure });
   } catch (err) {
     console.error('[Maquina/Structure]', err.message);
@@ -74,7 +74,7 @@ router.post('/generate', async (req, res) => {
   try {
     const {
       tema, headline, cta, slides = 9, nicho,
-      brandKitId, conversationHistory = [],
+      brandKitId, conversationHistory = [], template = 'brandsdecoded',
     } = req.body;
 
     if (!tema || !headline) {
@@ -83,7 +83,7 @@ router.post('/generate', async (req, res) => {
 
     const brandKit = brandKitId ? db.getBrandKit(brandKitId) : null;
     const html = await generateCarouselHTML({
-      tema, headline, cta, slides, nicho, brandKit, conversationHistory,
+      tema, headline, cta, slides, nicho, brandKit, conversationHistory, template,
     });
     res.json({ html });
   } catch (err) {
@@ -102,6 +102,7 @@ router.post('/full', async (req, res) => {
       slides = 9,
       nicho = 'Consultoria Esportiva',
       brandKitId,
+      template = 'brandsdecoded',
     } = req.body;
 
     if (!tema) return res.status(400).json({ error: 'Campo "tema" é obrigatório.' });
@@ -109,7 +110,7 @@ router.post('/full', async (req, res) => {
     const brandKit = brandKitId ? db.getBrandKit(brandKitId) : null;
 
     // Passo 1: 10 headlines
-    const headlinesText = await generateHeadlines(tema, nicho, brandKit);
+    const headlinesText = await generateHeadlines(tema, nicho, brandKit, template);
 
     // Passo 2: extrai a headline escolhida da tabela markdown
     const tableLines = headlinesText
@@ -123,7 +124,7 @@ router.post('/full', async (req, res) => {
     }
 
     // Passo 3: espinha dorsal
-    const structure = await generateStructure(chosenHeadline, tema);
+    const structure = await generateStructure(chosenHeadline, tema, [], template);
 
     // Passo 4: HTML
     const conversationHistory = [
@@ -135,7 +136,7 @@ router.post('/full', async (req, res) => {
     ];
 
     const html = await generateCarouselHTML({
-      tema, headline: chosenHeadline, cta, slides, nicho, brandKit, conversationHistory,
+      tema, headline: chosenHeadline, cta, slides, nicho, brandKit, conversationHistory, template,
     });
 
     res.json({ headline: chosenHeadline, structure, html, headlines: headlinesText });

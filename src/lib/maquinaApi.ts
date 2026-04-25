@@ -5,6 +5,8 @@
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+export type MaquinaTemplate = 'brandsdecoded' | 'fmteam';
+
 export interface MaquinaBriefing {
   tema: string;
   nicho?: string;
@@ -16,6 +18,7 @@ export interface MaquinaBriefing {
   cta?: string;
   slides?: 5 | 7 | 9 | 12 | number;
   imagensPedidas?: number;
+  template?: MaquinaTemplate;
 }
 
 export interface MaquinaCarrossel {
@@ -56,11 +59,11 @@ export const maquinaApi = {
     return res.json();
   },
 
-  headlines: (tema: string, nicho?: string, brandKitId?: string) =>
-    postJson<{ headlines: string }>('/api/maquina/headlines', { tema, nicho, brandKitId }),
+  headlines: (tema: string, nicho?: string, brandKitId?: string, template?: MaquinaTemplate) =>
+    postJson<{ headlines: string }>('/api/maquina/headlines', { tema, nicho, brandKitId, template }),
 
-  structure: (headline: string, tema: string, conversationHistory: unknown[] = []) =>
-    postJson<{ structure: string }>('/api/maquina/structure', { headline, tema, conversationHistory }),
+  structure: (headline: string, tema: string, conversationHistory: unknown[] = [], template?: MaquinaTemplate) =>
+    postJson<{ structure: string }>('/api/maquina/structure', { headline, tema, conversationHistory, template }),
 
   generate: (params: {
     tema: string;
@@ -70,6 +73,7 @@ export const maquinaApi = {
     nicho?: string;
     brandKitId?: string;
     conversationHistory?: unknown[];
+    template?: MaquinaTemplate;
   }) => postJson<{ html: string }>('/api/maquina/generate', params),
 
   full: (params: {

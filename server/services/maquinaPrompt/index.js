@@ -31,6 +31,7 @@ const principiosMd    = read('04-principios-design.md');
 const referenciasMd   = read('05-referencias.md');
 const manualQualMd    = read('06-manual-qualidade.md');
 const filtroEditMd    = read('07-filtro-editorial.md');
+const fmteamMd        = read('08-fmteam.md');
 
 // ── Bloco 1: identidade + comportamento + fluxo + anti-AI slop (BLOCOs 1/3/4/7 do v4)
 // Mantém o v4 inteiro porque os blocos ficam interdependentes — separá-los quebraria
@@ -68,15 +69,30 @@ const SYSTEM_BLOCKS = {
   qualidadeFiltro,
 };
 
+// Template adicional opcional (não-cacheado — pequeno, só anexado quando selecionado).
+// Usar apenas se o usuário escolher template === 'fmteam' no briefing.
+const FMTEAM_OVERRIDE = `### [fmteam-template-override]
+
+${fmteamMd}`;
+
 // Helper: monta o array de blocos com cache_control para a API Anthropic.
 // Use diretamente no campo `system` da chamada messages.create().
-function buildSystemForAnthropic() {
-  return [
+//
+// `template` opcional:
+//   - 'brandsdecoded' (default) → usa apenas os 4 blocos cacheados padrão
+//   - 'fmteam'                  → anexa o guia fmteam como 5º bloco (sem cache,
+//     pois é override visual pequeno e cache breakpoints estão limitados a 4)
+function buildSystemForAnthropic(template = 'brandsdecoded') {
+  const blocks = [
     { type: 'text', text: SYSTEM_BLOCKS.identidadeFluxo, cache_control: { type: 'ephemeral' } },
     { type: 'text', text: SYSTEM_BLOCKS.engineHeadlines, cache_control: { type: 'ephemeral' } },
     { type: 'text', text: SYSTEM_BLOCKS.designSystem,    cache_control: { type: 'ephemeral' } },
     { type: 'text', text: SYSTEM_BLOCKS.qualidadeFiltro, cache_control: { type: 'ephemeral' } },
   ];
+  if (template === 'fmteam') {
+    blocks.push({ type: 'text', text: FMTEAM_OVERRIDE });
+  }
+  return blocks;
 }
 
-module.exports = { SYSTEM_BLOCKS, buildSystemForAnthropic };
+module.exports = { SYSTEM_BLOCKS, FMTEAM_OVERRIDE, buildSystemForAnthropic };

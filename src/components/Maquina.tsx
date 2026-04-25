@@ -151,7 +151,7 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
   const handleGenerateHeadlines = async () => {
     setLoadingHeadlines(true);
     try {
-      const data = await maquinaApi.headlines(briefing.tema, briefing.nicho);
+      const data = await maquinaApi.headlines(briefing.tema, briefing.nicho, undefined, briefing.template);
       setHeadlinesRaw(data.headlines);
       const result = parseHeadlines(data.headlines);
       setHeadlinesParsed(result.items);
@@ -173,7 +173,7 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
     setLoadingHeadlines(true);
     try {
       const tema = `${briefing.tema}\n\nHeadlines anteriores:\n${headlinesRaw}\n\nComando: ${command}`;
-      const data = await maquinaApi.headlines(tema, briefing.nicho);
+      const data = await maquinaApi.headlines(tema, briefing.nicho, undefined, briefing.template);
       setHeadlinesRaw(data.headlines);
       const result = parseHeadlines(data.headlines);
       setHeadlinesParsed(result.items);
@@ -193,7 +193,7 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
     setLoadingStructure(true);
     setStage('structure');
     try {
-      const data = await maquinaApi.structure(h.text, briefing.tema);
+      const data = await maquinaApi.structure(h.text, briefing.tema, [], briefing.template);
       setEstrutura(data.structure);
     } catch (e) {
       toast.error(`Erro na estrutura: ${(e as Error).message}`);
@@ -221,6 +221,7 @@ export default function Maquina({ initialIdea, onClearInitialIdea }: MaquinaProp
         slides: briefing.slides,
         nicho: briefing.nicho,
         conversationHistory,
+        template: briefing.template,
       });
       setHtml(data.html);
       setStage('preview');

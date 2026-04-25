@@ -10,9 +10,11 @@ import {
   ESTILOS,
   TIPOS,
   SLIDES_OPTIONS,
+  TEMPLATES,
   EstiloVisual,
   TipoCarrossel,
   SlidesCount,
+  MaquinaTemplate,
 } from './types';
 
 interface BriefingFormProps {
@@ -80,6 +82,20 @@ export default function BriefingForm({ briefing, onChange, onSubmit, loading }: 
             />
           </Field>
         </div>
+
+        <Field label="Template visual">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {TEMPLATES.map((t) => (
+              <ChoiceCard
+                key={t.id}
+                active={briefing.template === t.id}
+                onClick={() => set('template', t.id as MaquinaTemplate)}
+                title={t.label}
+                desc={t.desc}
+              />
+            ))}
+          </div>
+        </Field>
 
         <Field label="Estilo visual">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

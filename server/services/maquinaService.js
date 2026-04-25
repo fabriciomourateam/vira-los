@@ -58,7 +58,7 @@ function logUsage(label, usage) {
 }
 
 // ─── Etapa 2 do pipeline v4: 10 headlines ────────────────────────────────────
-async function generateHeadlines(tema, nicho = 'Consultoria Esportiva', brandKit = null) {
+async function generateHeadlines(tema, nicho = 'Consultoria Esportiva', brandKit = null, template = 'brandsdecoded') {
   const briefingExtra = brandKit
     ? `\n\nBrand kit ativo:\n${JSON.stringify(brandKit, null, 2)}`
     : '';
@@ -66,7 +66,7 @@ async function generateHeadlines(tema, nicho = 'Consultoria Esportiva', brandKit
   const res = await anthropicWithRetry({
     model: MODEL,
     max_tokens: 4000,
-    system: buildSystemForAnthropic(),
+    system: buildSystemForAnthropic(template),
     messages: [{
       role: 'user',
       content:
@@ -88,11 +88,11 @@ async function generateHeadlines(tema, nicho = 'Consultoria Esportiva', brandKit
 }
 
 // ─── Etapa 3: espinha dorsal ─────────────────────────────────────────────────
-async function generateStructure(headline, tema, conversationHistory = []) {
+async function generateStructure(headline, tema, conversationHistory = [], template = 'brandsdecoded') {
   const res = await anthropicWithRetry({
     model: MODEL,
     max_tokens: 4000,
-    system: buildSystemForAnthropic(),
+    system: buildSystemForAnthropic(template),
     messages: [
       ...conversationHistory,
       {
@@ -118,16 +118,28 @@ async function generateCarouselHTML(params) {
     nicho = 'Consultoria Esportiva',
     conversationHistory = [],
     brandKit = null,
+    template = 'brandsdecoded',
   } = params;
 
   const brandKitBlock = brandKit
     ? `\n\nBrand kit (aplicar cor primária e fonte conforme):\n${JSON.stringify(brandKit, null, 2)}`
     : '';
 
+  // Brand bar muda por template:
+  //  - brandsdecoded → "Powered by Content Machine | @handle | 2026"
+  //  - fmteam        → APENAS "@FABRICIOMOURATEAM" (esquerda) + "2026" (direita)
+  const brandBarRule = template === 'fmteam'
+    ? `6. Brand bar (template fmteam, OBRIGATÓRIO): à esquerda "@FABRICIOMOURATEAM" uppercase, à direita "2026". NUNCA escreva "Powered by", "Content Machine" ou pipes "|".`
+    : `6. Brand bar: "Powered by Content Machine    |    @fabriciomourateam    |    2026 ®"`;
+
+  const templateRule = template === 'fmteam'
+    ? `8. Aplicar o template fmteam descrito no bloco [fmteam-template-override]: accent bar dourada de 7px no topo, brand bar limpa, profile badge da capa com anel Instagram + check verificado azul, progress bar #FFC300 no rodapé, número decorativo gigante do slide no canto, cor primária #FFC300 nas palavras-chave. Layout interno flexível (img-box / texto puro / tabela / big stat / arrow rows) conforme o conteúdo.`
+    : `8. Aplicar template alternado claro/escuro conforme número de slides (5/7/9/12).`;
+
   const res = await anthropicWithRetry({
     model: MODEL,
     max_tokens: 16000,
-    system: buildSystemForAnthropic(),
+    system: buildSystemForAnthropic(template),
     messages: [
       ...conversationHistory,
       {
@@ -138,7 +150,8 @@ async function generateCarouselHTML(params) {
 Tema: ${tema}
 Headline da capa: ${headline}
 CTA: ${cta}
-Nicho: ${nicho}${brandKitBlock}
+Nicho: ${nicho}
+Template visual: ${template}${brandKitBlock}
 
 REGRAS OBRIGATÓRIAS DO HTML:
 1. Slides 1080×1350px nativos (sem transform/scale).
@@ -152,9 +165,9 @@ REGRAS OBRIGATÓRIAS DO HTML:
 5. Fotos dos slides internos: <div class="img-box" style="background-image:url('PEXELS:descrição-da-busca-aqui');"></div>
    - O servidor substitui PEXELS:query por URL real da Pexels (orientation portrait)
    - Use queries específicas e em inglês (ex: PEXELS:woman-running-morning, PEXELS:gym-barbell-deadlift)
-6. Brand bar: "Powered by Content Machine    |    @fabriciomourateam    |    2026 ®"
+${brandBarRule}
 7. Sem swipe arrow.
-8. Aplicar template alternado claro/escuro conforme número de slides (5/7/9/12).
+${templateRule}
 9. Retornar APENAS o HTML, sem explicações, sem blocos markdown.`
       },
     ],

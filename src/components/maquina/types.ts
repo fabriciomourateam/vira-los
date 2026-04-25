@@ -6,6 +6,7 @@ export type EstiloVisual = 'classico' | 'moderno' | 'minimalista' | 'bold';
 export type TipoCarrossel = 'tendencia' | 'tese' | 'case' | 'previsao';
 export type SlidesCount = 5 | 7 | 9 | 12;
 export type Stage = 'briefing' | 'headlines' | 'structure' | 'preview' | 'export';
+export type MaquinaTemplate = 'brandsdecoded' | 'fmteam';
 
 export interface Briefing {
   tema: string;
@@ -18,6 +19,7 @@ export interface Briefing {
   cta: string;
   slides: SlidesCount;
   imagensPedidas: number;
+  template: MaquinaTemplate;
 }
 
 export interface ParsedHeadline {
@@ -47,7 +49,13 @@ export const initialBriefing: Briefing = {
   cta: 'Comenta SHAPE e me segue para mais conteúdos como esse',
   slides: 9,
   imagensPedidas: 4,
+  template: 'brandsdecoded',
 };
+
+export const TEMPLATES: { id: MaquinaTemplate; label: string; desc: string }[] = [
+  { id: 'brandsdecoded', label: 'BrandsDecoded',     desc: 'Padrão editorial: alternância dark/light, hierarquia clássica.' },
+  { id: 'fmteam',        label: 'fmteam (Fabricio)', desc: 'Amarelo #FFC300, accent bar 7px, badge Instagram + check, brand bar limpa.' },
+];
 
 export const ESTILOS: { id: EstiloVisual; label: string; desc: string }[] = [
   { id: 'classico',     label: 'Clássico',    desc: 'Sóbrio, jornalístico. Serif nas headlines.' },
