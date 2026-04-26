@@ -879,12 +879,14 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bo
 //   - Sem swipe arrow / hint
 //
 // Variável: usuário pode escolher cor primária diferente — mas a default é #FFC300.
-function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bodyFontSize = 0, titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
-  const titleFF = titleFontFamily || 'Barlow Condensed';
-  const bodyFF  = bodyFontFamily  || 'Plus Jakarta Sans';
-  const titleFW = titleFontWeight > 0 ? titleFontWeight : 800;
-  const bodyFW  = bodyFontWeight  > 0 ? bodyFontWeight  : 400;
-  const titleTT = titleTextTransform || 'uppercase';
+// IMPORTANTE: o fmteam é uma identidade visual FIXA. Fontes, pesos e tamanhos NÃO devem
+// ser sobrescritos por configurações genéricas do form. Apenas a cor primária aceita override.
+function buildFmteamCSSTemplate({ primaryColor }) {
+  const titleFF = 'Barlow Condensed';
+  const bodyFF  = 'Plus Jakarta Sans';
+  const titleFW = 800;
+  const bodyFW  = 400;
+  const titleTT = 'uppercase';
   const accent  = primaryColor || '#FFC300';
   const accentDark = '#B8860B';
   const accentLight = '#FFD54F';
@@ -1004,7 +1006,7 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
     .fmt-cover .fmt-verified svg { width: 24px; height: 24px; display: block; flex-shrink: 0; }
     .fmt-cover .fmt-cover-title {
       font-family: '${titleFF}', sans-serif;
-      font-size: ${titleFontSize > 0 ? titleFontSize : 80}px;
+      font-size: 80px;
       font-weight: ${titleFW}; line-height: 0.96;
       color: white; text-transform: ${titleTT};
       letter-spacing: -2.5px;
@@ -1041,7 +1043,7 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
 
     .fmt-content .fmt-title {
       font-family: '${titleFF}', sans-serif;
-      font-size: ${titleFontSize > 0 ? titleFontSize : 88}px;
+      font-size: 88px;
       font-weight: ${titleFW}; line-height: 0.92;
       color: white; text-transform: ${titleTT};
       letter-spacing: -3px;
@@ -1053,7 +1055,7 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
 
     .fmt-content .fmt-body {
       font-family: '${bodyFF}', sans-serif;
-      font-size: ${bodyFontSize > 0 ? bodyFontSize : 30}px;
+      font-size: 30px;
       font-weight: ${bodyFW}; line-height: 1.5;
       color: rgba(255,255,255,0.78);
     }
@@ -1073,7 +1075,7 @@ function buildFmteamCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, b
     .fmt-content .fmt-arrow-row {
       display: flex; gap: 18px; padding: 12px 0;
       font-family: '${bodyFF}', sans-serif;
-      font-size: ${bodyFontSize > 0 ? bodyFontSize : 30}px; line-height: 1.5;
+      font-size: 30px; line-height: 1.5;
     }
     .fmt-content .fmt-arrow-row .fmt-arrow {
       color: ${accent}; font-weight: 800; flex-shrink: 0;
@@ -1415,9 +1417,6 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   const totalContent = numSlides - 2;
   const cssTemplate = buildFmteamCSSTemplate({
     primaryColor: primaryColor || '#FFC300',
-    fontFamily,
-    titleFontSize, bodyFontSize, titleFontWeight, bodyFontWeight,
-    titleTextTransform, titleFontFamily, bodyFontFamily,
   });
 
   const validImages = unsplashImages.filter(img => img.url);
