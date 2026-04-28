@@ -38,11 +38,12 @@ app.use(cors({
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '50mb' }));
 
-// Aumenta timeout do servidor para 5 minutos (Playwright + Claude pode demorar)
+// Sem timeout de socket — geração de carrossel pode levar >5 min (fmteam + Anthropic).
+// O controle de timeout fica no cliente (AbortController 6 min em CarrosselInstagram.tsx).
 const server = require('http').createServer(app);
-server.timeout = 300000;
-server.keepAliveTimeout = 300000;
-server.headersTimeout = 310000;
+server.timeout = 0;           // 0 = desabilitado (sem limite)
+server.keepAliveTimeout = 65000;  // 65s — maior que o Fly.dev proxy (60s)
+server.headersTimeout = 70000;
 
 // Serve arquivos de upload estaticamente (para Instagram consumir a URL pública)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
