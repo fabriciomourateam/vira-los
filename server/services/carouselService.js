@@ -868,301 +868,320 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bo
   </style>`;
 }
 
-// ─── CSS template layout "fmteam" (Fabricio Moura — accent bar + brand bar + badge IG + número decorativo) ─
+// ─── CSS template layout "fmteam" v2 (Fabricio Moura — sistema de design 2026) ─
 //
-// Fixos (nunca mudam):
-//   - Accent bar 7px no topo com gradiente dourado
-//   - Brand bar: "@FABRICIOMOURATEAM" (esq) + "2026" (dir)
-//   - Profile badge da capa: avatar com anel Instagram + check verificado azul
-//   - Cor primária #FFC300 nas palavras-chave da headline e tags
-//   - Progress bar dourada no rodapé
-//   - Sem swipe arrow / hint
+// Fixos (identidade visual FIXA — não sobrescrever):
+//   - Accent bar 7px no topo com gradiente dourado var(--G)
+//   - Brand bar: handle (esq) + "2026" (dir), 13px/700/1.5px tracking
+//   - Slides dark: foto full-bleed + overlay-shadow-up + texto sobre foto
+//   - Slides light: fundo off-white + img-box-top (img element) + texto dark
+//   - Slide gradient: fundo var(--G) + texto SEMPRE escuro
+//   - Capa: foto full-bleed + overlay-capa + capa-badge + capa-headline 116px
+//   - CTA: slide light com cta-kbox (card branco) + cta-footer-badge
+//   - Progress bar .prog no rodapé de todos os slides
+//   - Sem swipe hint
 //
-// Variável: usuário pode escolher cor primária diferente — mas a default é #FFC300.
-// IMPORTANTE: o fmteam é uma identidade visual FIXA. Fontes, pesos e tamanhos NÃO devem
-// ser sobrescritos por configurações genéricas do form. Apenas a cor primária aceita override.
 function buildFmteamCSSTemplate({ primaryColor }) {
-  const titleFF = 'Barlow Condensed';
-  const bodyFF  = 'Plus Jakarta Sans';
-  const titleFW = 800;
-  const bodyFW  = 400;
-  const titleTT = 'uppercase';
-  const accent  = primaryColor || '#FFC300';
-  const accentDark = '#B8860B';
-  const accentLight = '#FFD54F';
+  const P  = primaryColor || '#FFC300';
+  const PL = '#FFD54F';
+  const PD = '#B8860B';
+  const LB = '#F2F2F0';
+  const LR = '#DDDCDA';
+  const DB = '#0D0D0F';
+  const S  = '#1C1C1E';
+  const G  = `linear-gradient(165deg, ${PD} 0%, ${P} 50%, ${PL} 100%)`;
+
   return `
   <link href="${ALL_FONTS_URL}" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --P:  ${P};
+      --PL: ${PL};
+      --PD: ${PD};
+      --LB: ${LB};
+      --LR: ${LR};
+      --DB: ${DB};
+      --S:  ${S};
+      --G:  ${G};
+      --F-HEAD: 'Barlow Condensed', sans-serif;
+      --F-BODY: 'Plus Jakarta Sans', sans-serif;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
 
-    /* ── Wrapper base de TODOS os slides (mesma altura, mesma estrutura topo/rodapé) ── */
-    .fmt-slide {
-      width: 1080px; height: 1350px;
-      position: relative; overflow: hidden;
-      font-family: '${bodyFF}', sans-serif;
-      page-break-after: always;
+    /* ── SLIDE BASE ── */
+    .slide {
+      width:1080px; height:1350px;
+      position:relative; overflow:hidden; flex-shrink:0;
+      font-family:var(--F-BODY);
+      page-break-after:always;
     }
-    /* Accent bar dourada no topo (7px) */
-    .fmt-slide .fmt-accent-bar {
-      position: absolute; top: 0; left: 0; right: 0; height: 7px;
-      background: linear-gradient(90deg, ${accentDark} 0%, ${accent} 50%, ${accentLight} 100%);
-      z-index: 5;
-    }
-    /* Brand bar (handle + ano) */
-    .fmt-slide .fmt-brand-bar {
-      position: absolute; top: 30px; left: 60px; right: 60px;
-      display: flex; justify-content: space-between; align-items: center;
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 18px; font-weight: 500;
-      letter-spacing: 4px; text-transform: uppercase;
-      z-index: 5;
-    }
-    .fmt-slide .fmt-brand-handle { color: rgba(255,255,255,0.55); }
-    .fmt-slide .fmt-brand-year   { color: rgba(255,255,255,0.45); }
-    /* Variantes light/gradient → texto escuro */
-    .fmt-slide.is-light .fmt-brand-handle,
-    .fmt-slide.is-gradient .fmt-brand-handle { color: rgba(0,0,0,0.55); }
-    .fmt-slide.is-light .fmt-brand-year,
-    .fmt-slide.is-gradient .fmt-brand-year   { color: rgba(0,0,0,0.45); }
+    .slide-dark  { background:var(--DB); }
+    .slide-light { background:var(--LB); }
+    .slide-grad  { background:var(--G); }
 
-    /* Progress bar inferior */
-    .fmt-slide .fmt-progress {
-      position: absolute; bottom: 24px; left: 60px; right: 60px;
-      display: flex; align-items: center; gap: 16px;
-      z-index: 5;
+    /* ── ACCENT BAR ── */
+    .accent-bar {
+      position:absolute; top:0; left:0; right:0;
+      height:7px; z-index:30; background:var(--G);
     }
-    .fmt-slide .fmt-progress-track {
-      flex: 1; height: 2px; background: rgba(255,255,255,0.12); border-radius: 2px;
-      overflow: hidden;
-    }
-    .fmt-slide.is-light .fmt-progress-track,
-    .fmt-slide.is-gradient .fmt-progress-track { background: rgba(0,0,0,0.12); }
-    .fmt-slide .fmt-progress-fill {
-      height: 100%; background: ${accent}; border-radius: 2px;
-    }
-    .fmt-slide.is-light .fmt-progress-fill    { background: #B8860B; }
-    .fmt-slide.is-gradient .fmt-progress-fill { background: #fff; }
-    .fmt-slide .fmt-progress-count {
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 16px; font-weight: 500;
-      color: rgba(255,255,255,0.55); letter-spacing: 1px;
-    }
-    .fmt-slide.is-light .fmt-progress-count,
-    .fmt-slide.is-gradient .fmt-progress-count { color: rgba(0,0,0,0.55); }
+    .slide-grad .accent-bar { background:rgba(15,13,8,0.25); }
 
-    /* Número decorativo gigante (canto inferior direito) */
-    .fmt-slide .fmt-decor-number {
-      position: absolute; bottom: 70px; right: 40px;
-      font-family: '${titleFF}', sans-serif;
-      font-size: 360px; font-weight: ${titleFW}; line-height: 1;
-      color: rgba(255,195,0,0.08);
-      pointer-events: none; z-index: 1;
+    /* ── BRAND BAR ── */
+    .brand-bar {
+      position:absolute; top:7px; left:0; right:0;
+      padding:28px 56px 0;
+      display:flex; justify-content:space-between; align-items:center;
+      z-index:20; font-family:var(--F-BODY);
+      font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
     }
-    .fmt-slide.is-light .fmt-decor-number    { color: rgba(0,0,0,0.06); }
-    .fmt-slide.is-gradient .fmt-decor-number { color: rgba(0,0,0,0.10); }
+    .on-dark  .brand-bar { color:rgba(255,255,255,0.38); }
+    .on-light .brand-bar { color:rgba(15,13,8,0.38); }
+    .slide-grad .brand-bar { color:rgba(15,13,8,0.42); }
 
-    /* ── CAPA (.fmt-cover) ── */
-    .fmt-cover { background: #0a0a0a; }
-    .fmt-cover .fmt-cover-bg {
-      position: absolute; inset: 0;
-      background-size: cover; background-position: center;
-      z-index: 0;
+    /* ── PROGRESS BAR ── */
+    .prog {
+      position:absolute; bottom:0; left:0; right:0;
+      padding:0 56px 28px; z-index:20;
+      display:flex; align-items:center; gap:16px;
     }
-    .fmt-cover .fmt-cover-overlay {
-      position: absolute; inset: 0;
-      background: linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.97) 100%);
-      z-index: 1;
-    }
-    .fmt-cover .fmt-cover-content {
-      position: absolute; left: 60px; right: 60px; bottom: 90px;
-      z-index: 3;
-    }
-    .fmt-cover .fmt-profile-badge {
-      display: flex; align-items: center; gap: 18px; margin-bottom: 32px;
-    }
-    .fmt-cover .fmt-avatar-ring {
-      width: 64px; height: 64px; border-radius: 50%; flex-shrink: 0;
-      background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-      padding: 3px;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .fmt-cover .fmt-avatar-circle {
-      width: 100%; height: 100%; border-radius: 50%;
-      background: #0a0a0a; overflow: hidden;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px; font-weight: 800; color: white;
-    }
-    .fmt-cover .fmt-avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
-    .fmt-cover .fmt-profile-name {
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 26px; font-weight: 700; color: white;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .fmt-cover .fmt-profile-handle {
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 20px; font-weight: 400; color: rgba(255,255,255,0.6);
-      margin-top: 2px;
-    }
-    .fmt-cover .fmt-verified svg { width: 24px; height: 24px; display: block; flex-shrink: 0; }
-    .fmt-cover .fmt-cover-title {
-      font-family: '${titleFF}', sans-serif;
-      font-size: 80px;
-      font-weight: ${titleFW}; line-height: 0.96;
-      color: white; text-transform: ${titleTT};
-      letter-spacing: -2.5px;
-    }
-    .fmt-cover .fmt-cover-title .hl { color: ${accent}; font-style: normal; }
+    .prog-track { flex:1; height:3px; border-radius:2px; overflow:hidden; }
+    .prog-fill  { height:100%; border-radius:2px; }
+    .prog-num   { font-family:var(--F-BODY); font-size:13px; font-weight:600; flex-shrink:0; }
+    .on-dark  .prog-track { background:rgba(255,255,255,0.10); }
+    .on-dark  .prog-fill  { background:rgba(255,255,255,0.65); }
+    .on-dark  .prog-num   { color:rgba(255,255,255,0.22); }
+    .on-light .prog-track { background:rgba(0,0,0,0.08); }
+    .on-light .prog-fill  { background:var(--G); }
+    .on-light .prog-num   { color:rgba(0,0,0,0.22); }
+    .slide-grad .prog-track { background:rgba(15,13,8,0.15); }
+    .slide-grad .prog-fill  { background:rgba(15,13,8,0.40); }
+    .slide-grad .prog-num   { color:rgba(15,13,8,0.35); }
 
-    /* ── SLIDE INTERNO DARK (.fmt-content.is-dark) ── */
-    .fmt-content {
-      padding: 110px 60px 90px;
-      display: flex; flex-direction: column; gap: 28px;
+    /* ── TAG ── */
+    .tag {
+      font-family:var(--F-BODY); font-size:20px; font-weight:900;
+      letter-spacing:3px; text-transform:uppercase; margin-bottom:20px;
     }
-    .fmt-content.is-dark     { background: #0A0A0A; }
-    .fmt-content.is-light    { background: #F5F0E0; }
-    .fmt-content.is-gradient { background: linear-gradient(165deg, #B8860B 0%, #FFC300 55%, #FFD54F 100%); }
+    .on-dark  .tag { color:var(--PL); }
+    .on-light .tag { color:var(--PD); }
+    .slide-grad .tag { color:rgba(15,13,8,0.50); }
 
-    .fmt-content .fmt-img-box {
-      width: 100%; height: 300px;
-      border-radius: 20px; overflow: hidden; flex-shrink: 0;
-      background-size: cover; background-position: center;
-      position: relative;
+    /* ── CONTENT AREA ── */
+    .content {
+      position:absolute; top:110px; left:56px; right:56px; bottom:80px;
+      display:flex; flex-direction:column; justify-content:flex-end;
+      padding-bottom:36px; z-index:10;
     }
-    .fmt-content .fmt-img-box::after {
-      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 60px;
-      background: linear-gradient(to top, rgba(0,0,0,0.2), transparent);
+    /* Light e gradient slides: conteúdo flui de cima para baixo */
+    .slide-light .content,
+    .slide-grad  .content {
+      justify-content:flex-start;
+      padding-top:20px;
     }
-    .fmt-content .fmt-tag {
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 16px; font-weight: 700;
-      letter-spacing: 4px; text-transform: uppercase;
-      color: ${accent};
-    }
-    .fmt-content.is-light .fmt-tag,
-    .fmt-content.is-gradient .fmt-tag { color: ${accentDark}; }
 
-    .fmt-content .fmt-title {
-      font-family: '${titleFF}', sans-serif;
-      font-size: 88px;
-      font-weight: ${titleFW}; line-height: 0.92;
-      color: white; text-transform: ${titleTT};
-      letter-spacing: -3px;
-    }
-    .fmt-content.is-light .fmt-title    { color: #0d0d0d; }
-    .fmt-content.is-gradient .fmt-title { color: #0d0d0d; }
-    .fmt-content .fmt-title .hl { color: ${accent}; font-style: normal; }
-    .fmt-content.is-gradient .fmt-title .hl { color: white; }
+    /* ── FOTO DE FUNDO (dark full-bleed) ── */
+    .photo-bg { position:absolute; inset:0; z-index:0; }
+    .photo-bg img { width:100%; height:100%; object-fit:cover; display:block; }
 
-    .fmt-content .fmt-body {
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 30px;
-      font-weight: ${bodyFW}; line-height: 1.5;
-      color: rgba(255,255,255,0.78);
+    /* overlay capa — escurece da base */
+    .overlay-capa {
+      position:absolute; inset:0; z-index:1;
+      background:linear-gradient(to bottom,
+        rgba(15,13,8,0.35) 0%, rgba(15,13,8,0.06) 20%,
+        rgba(15,13,8,0.10) 38%, rgba(15,13,8,0.72) 58%,
+        rgba(15,13,8,0.96) 76%, rgba(15,13,8,0.99) 100%);
     }
-    .fmt-content.is-light .fmt-body    { color: rgba(15,13,12,0.72); }
-    .fmt-content.is-gradient .fmt-body { color: rgba(255,255,255,0.85); }
-    .fmt-content .fmt-body strong, .fmt-content .fmt-body b {
-      color: white; font-weight: 700;
-    }
-    .fmt-content.is-light .fmt-body strong, .fmt-content.is-light .fmt-body b { color: #0d0d0d; }
-    .fmt-content.is-gradient .fmt-body strong, .fmt-content.is-gradient .fmt-body b { color: #0d0d0d; }
-    .fmt-content .fmt-body em {
-      color: ${accent}; font-style: normal; font-weight: 700;
-    }
-    .fmt-content.is-gradient .fmt-body em { color: white; font-weight: 700; }
 
-    /* Arrow rows (lista de pontos) */
-    .fmt-content .fmt-arrow-row {
-      display: flex; gap: 18px; padding: 12px 0;
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 30px; line-height: 1.5;
+    /* overlay slides internos dark — escurece de baixo cobrindo mais */
+    .overlay-shadow-up {
+      position:absolute; inset:0; z-index:1;
+      background:linear-gradient(to top,
+        rgba(15,13,8,0.99) 0%, rgba(15,13,8,0.98) 35%,
+        rgba(15,13,8,0.92) 55%, rgba(15,13,8,0.70) 70%,
+        rgba(15,13,8,0.35) 85%, rgba(15,13,8,0.10) 100%);
     }
-    .fmt-content .fmt-arrow-row .fmt-arrow {
-      color: ${accent}; font-weight: 800; flex-shrink: 0;
-    }
-    .fmt-content.is-gradient .fmt-arrow-row .fmt-arrow { color: #0d0d0d; }
-    .fmt-content .fmt-arrow-row .fmt-arrow-text strong {
-      color: white; font-weight: 800;
-    }
-    .fmt-content.is-light .fmt-arrow-row .fmt-arrow-text strong,
-    .fmt-content.is-gradient .fmt-arrow-row .fmt-arrow-text strong { color: #0d0d0d; }
-    .fmt-content .fmt-arrow-row .fmt-arrow-text {
-      color: rgba(255,255,255,0.78);
-    }
-    .fmt-content.is-light .fmt-arrow-row .fmt-arrow-text    { color: rgba(15,13,12,0.72); }
-    .fmt-content.is-gradient .fmt-arrow-row .fmt-arrow-text { color: rgba(255,255,255,0.85); }
 
-    /* ── CTA FINAL (.fmt-cta) ── */
-    .fmt-cta { background: #0a0a0a; }
-    .fmt-cta .fmt-cta-bg {
-      position: absolute; inset: 0;
-      background-size: cover; background-position: center;
-      z-index: 0;
+    /* z-index boost para slides com foto de fundo */
+    .slide-with-bg .content,
+    .slide-with-bg .accent-bar,
+    .slide-with-bg .brand-bar,
+    .slide-with-bg .prog { z-index:3; }
+
+    /* ── IMG BOX (light e gradient slides) ── */
+    .img-box-top {
+      width:100%; border-radius:18px;
+      overflow:hidden; margin-bottom:24px; flex-shrink:0;
     }
-    .fmt-cta .fmt-cta-overlay {
-      position: absolute; inset: 0;
-      background: linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.93) 100%);
-      z-index: 1;
+    .img-box-top img { width:100%; height:100%; object-fit:cover; display:block; }
+
+    /* ── TIPOGRAFIA DARK ── */
+    .dark-h1 {
+      font-family:var(--F-HEAD); font-size:114px; font-weight:800;
+      line-height:0.90; letter-spacing:-4px; text-transform:uppercase;
+      color:#fff; margin-bottom:28px;
     }
-    .fmt-cta .fmt-cta-content {
-      position: absolute; left: 60px; right: 60px; bottom: 110px;
-      z-index: 3;
-      display: flex; flex-direction: column; gap: 28px;
+    .dark-h1 em {
+      font-style:normal; color:var(--PL);
     }
-    .fmt-cta .fmt-cta-bridge {
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 28px; font-weight: 400; line-height: 1.4;
-      color: rgba(255,255,255,0.72);
+    .dark-body {
+      font-family:var(--F-BODY); font-size:33px; font-weight:300;
+      line-height:1.52; color:rgba(255,255,255,0.75);
     }
-    .fmt-cta .fmt-cta-bridge strong { color: white; font-weight: 700; }
-    .fmt-cta .fmt-cta-title {
-      font-family: '${titleFF}', sans-serif;
-      font-size: 92px; font-weight: ${titleFW}; line-height: 0.98;
-      color: white; text-transform: uppercase;
-      letter-spacing: -0.5px;
+    .dark-body + .dark-body { margin-top:18px; }
+    .dark-body strong { color:#fff; font-weight:500; }
+    .dark-body em     { color:var(--PL); font-style:normal; }
+
+    /* ── TIPOGRAFIA LIGHT ── */
+    .light-h1 {
+      font-family:var(--F-HEAD); font-size:108px; font-weight:800;
+      line-height:0.90; letter-spacing:-4px; text-transform:uppercase;
+      color:var(--DB); margin-bottom:22px;
     }
-    .fmt-cta .fmt-cta-title .hl { color: ${accent}; font-style: normal; }
-    .fmt-cta .fmt-cta-box {
-      border: 1.5px solid rgba(255,195,0,0.35);
-      border-radius: 16px;
-      padding: 28px 36px;
-      display: flex; flex-direction: column; gap: 8px;
-      background: rgba(0,0,0,0.3);
+    .light-h1 em {
+      font-style:normal; color:var(--PD);
     }
-    .fmt-cta .fmt-cta-box-label {
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 20px; font-weight: 400;
-      color: rgba(255,255,255,0.65);
+    .light-body {
+      font-family:var(--F-BODY); font-size:33px; font-weight:300;
+      line-height:1.54; color:rgba(15,13,8,0.75);
     }
-    .fmt-cta .fmt-cta-box-keyword {
-      font-family: '${titleFF}', sans-serif;
-      font-size: 72px; font-weight: ${titleFW}; line-height: 1;
-      color: ${accent}; text-transform: uppercase;
-      letter-spacing: -1px;
+    .light-body + .light-body { margin-top:18px; }
+    .light-body strong { color:var(--DB); font-weight:600; }
+    .light-body em     { color:var(--PD); font-style:normal; }
+
+    /* Gradient slide usa mesma tipografia light mas ainda mais escuro */
+    .slide-grad .light-h1 { color:var(--DB); }
+    .slide-grad .light-h1 em { color:rgba(15,13,8,0.60); }
+    .slide-grad .light-body { color:rgba(15,13,8,0.72); }
+    .slide-grad .light-body strong { color:var(--DB); }
+
+    /* ── STAT ROWS ── */
+    .stat-row {
+      display:flex; align-items:stretch; margin-bottom:18px;
+      background:#fff; border-radius:16px; overflow:hidden;
+      border:1.5px solid var(--LR);
+      box-shadow:0 2px 12px rgba(184,134,11,0.08);
     }
-    .fmt-cta .fmt-cta-box-after {
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 20px; font-weight: 400;
-      color: rgba(255,255,255,0.65);
+    .stat-num {
+      background:var(--G); color:#0D0D0F;
+      font-family:var(--F-HEAD); font-size:29px; font-weight:900;
+      padding:16px 20px; min-width:140px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      text-align:center; line-height:1.2; letter-spacing:-0.5px;
     }
-    .fmt-cta .fmt-cta-footer {
-      display: flex; align-items: center; gap: 14px;
-      font-family: '${bodyFF}', sans-serif;
-      font-size: 18px; color: rgba(255,255,255,0.68);
+    .stat-content { padding:16px 20px; display:flex; flex-direction:column; justify-content:center; }
+    .stat-title { font-family:var(--F-BODY); font-size:20px; font-weight:800; color:var(--DB); margin-bottom:4px; }
+    .stat-desc  { font-family:var(--F-BODY); font-size:16px; font-weight:400; color:rgba(15,13,8,0.50); line-height:1.4; }
+
+    /* ── CAPA HEADLINE ── */
+    .capa-headline-area {
+      position:absolute; bottom:70px; left:0; right:0;
+      padding:0 52px; z-index:10;
     }
-    .fmt-cta .fmt-cta-footer .fmt-avatar-ring {
-      width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-      background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-      padding: 2px;
-      display: flex; align-items: center; justify-content: center;
+    .capa-headline {
+      font-family:var(--F-HEAD); font-size:116px; font-weight:800;
+      line-height:0.90; letter-spacing:-4px; text-transform:uppercase; color:#fff;
     }
-    .fmt-cta .fmt-cta-footer .fmt-avatar-circle {
-      width: 100%; height: 100%; border-radius: 50%;
-      background: #0a0a0a; overflow: hidden;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 13px; font-weight: 800; color: white;
+    .capa-headline em {
+      font-style:normal; color:var(--P);
     }
-    .fmt-cta .fmt-cta-footer .fmt-avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+    .capa-sub {
+      font-family:var(--F-HEAD); font-size:116px; font-weight:800;
+      line-height:0.92; color:rgba(255,255,255,0.88);
+      margin-top:14px; letter-spacing:-4px; text-transform:uppercase;
+    }
+
+    /* ── BADGE DA CAPA ── */
+    .capa-badge { display:flex; align-items:center; gap:18px; width:fit-content; margin-bottom:28px; }
+    .badge-ring {
+      width:80px; height:80px; flex-shrink:0; border-radius:50%;
+      background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
+      padding:3px; display:flex; align-items:center; justify-content:center;
+    }
+    .badge-avatar {
+      width:74px; height:74px; border-radius:50%; overflow:hidden;
+      border:3px solid #000;
+      background:#1a1a1a; display:flex; align-items:center; justify-content:center;
+      font-family:var(--F-HEAD); font-size:28px; font-weight:800; color:#fff;
+    }
+    .badge-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+    .badge-info { display:flex; flex-direction:column; gap:10px; }
+    .badge-name-row { display:flex; align-items:center; gap:10px; }
+    .badge-name   { font-family:var(--F-BODY); font-size:26px; font-weight:800; color:#fff; line-height:1; }
+    .badge-verified svg { width:22px; height:22px; display:block; flex-shrink:0; }
+    .badge-handle { font-family:var(--F-BODY); font-size:19px; font-weight:400; color:rgba(255,255,255,0.55); line-height:1; }
+
+    /* ── CTA SLIDE ── */
+    .cta-bridge {
+      font-family:var(--F-BODY); font-size:30px; font-weight:500;
+      line-height:1.5; color:rgba(15,13,8,0.50); margin-bottom:28px;
+    }
+    .cta-bridge strong { color:var(--DB); font-weight:800; }
+    .cta-kbox {
+      background:#fff; border:2px solid rgba(184,134,11,0.20);
+      border-radius:20px; padding:32px 40px; margin-bottom:22px;
+      box-shadow:0 2px 16px rgba(184,134,11,0.10);
+    }
+    .cta-kbox-label {
+      font-family:var(--F-BODY); font-size:17px; font-weight:500;
+      letter-spacing:4px; text-transform:uppercase; color:rgba(15,13,8,0.35);
+      margin-bottom:12px; text-align:center;
+    }
+    .cta-kbox-keyword {
+      font-family:var(--F-HEAD); font-size:110px; font-weight:900;
+      letter-spacing:-4px; line-height:0.90; text-align:center;
+      color:var(--P); text-transform:uppercase;
+    }
+    .cta-kbox-divider {
+      height:1px; background:rgba(184,134,11,0.30); margin:16px 0;
+    }
+    .cta-kbox-benefit {
+      font-family:var(--F-BODY); font-size:26px; font-weight:500;
+      color:rgba(15,13,8,0.55); text-align:center;
+    }
+    .cta-kbox-sub {
+      font-family:var(--F-BODY); font-size:21px; font-weight:400;
+      font-style:italic; color:rgba(15,13,8,0.38); text-align:center; margin-top:8px;
+    }
+    .cta-footer-badge {
+      display:flex; align-items:center; justify-content:center; gap:14px;
+    }
+    .cta-badge-ring {
+      width:58px; height:58px; border-radius:50%;
+      background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
+      padding:2px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    .cta-badge-avatar {
+      width:54px; height:54px; border-radius:50%; overflow:hidden;
+      border:2px solid var(--LB);
+      background:#1a1a1a; display:flex; align-items:center; justify-content:center;
+      font-family:var(--F-HEAD); font-size:20px; font-weight:800; color:#fff;
+    }
+    .cta-badge-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+    .cta-badge-info { display:flex; flex-direction:column; gap:4px; }
+    .cta-badge-name {
+      font-family:var(--F-BODY); font-size:22px; font-weight:800; color:var(--DB);
+      display:flex; align-items:center; gap:6px;
+    }
+    .cta-badge-name svg { width:18px; height:18px; flex-shrink:0; }
+    .cta-badge-handle { font-family:var(--F-BODY); font-size:16px; font-weight:400; color:rgba(15,13,8,0.42); }
+
+    /* ── ARROW ROWS (listas de pontos no gradient/dark) ── */
+    .arrow-row {
+      display:flex; gap:16px; padding:10px 0;
+      font-family:var(--F-BODY); font-size:27px; line-height:1.5;
+    }
+    .arrow-icon { font-weight:800; flex-shrink:0; }
+    .on-dark  .arrow-icon { color:var(--PL); }
+    .on-light .arrow-icon { color:var(--PD); }
+    .slide-grad .arrow-icon { color:rgba(15,13,8,0.35); }
+    .arrow-text { color:inherit; }
+    .on-dark  .arrow-text { color:rgba(255,255,255,0.75); }
+    .on-light .arrow-text { color:rgba(15,13,8,0.72); }
+    .slide-grad .arrow-text { color:rgba(15,13,8,0.72); }
+    .arrow-text strong { font-weight:700; }
+    .on-dark  .arrow-text strong { color:#fff; }
+    .on-light .arrow-text strong { color:var(--DB); }
+    .slide-grad .arrow-text strong { color:var(--DB); }
   </style>`;
 }
 
@@ -1400,7 +1419,7 @@ ${cssTemplate}
 Gere o HTML completo agora (apenas HTML, nada mais):`;
 }
 
-// ─── Prompt HTML layout "fmteam" ─────────────────────────────────────────────
+// ─── Prompt HTML layout "fmteam" v2 ──────────────────────────────────────────
 
 function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontFamily,
   instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro,
@@ -1415,15 +1434,13 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
          .replace(/\b\w/g, c => c.toUpperCase())
     || handle;
   const totalContent = numSlides - 2;
-  const cssTemplate = buildFmteamCSSTemplate({
-    primaryColor: primaryColor || '#FFC300',
-  });
+  const cssTemplate = buildFmteamCSSTemplate({ primaryColor: primaryColor || '#FFC300' });
 
   const validImages = unsplashImages.filter(img => img.url);
   const imagesSection = validImages.length
-    ? `\nImagens — cada uma foi buscada especificamente para aquele slide. Use a URL exata na ordem indicada:\n${unsplashImages.map((img, i) =>
-        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem — omita .fmt-img-box neste slide)`).join('\n')}`
-    : '\n(Sem imagens — omita os .fmt-img-box e use apenas texto nos slides de conteúdo)';
+    ? `\nImagens — use a URL exata na ordem indicada:\n${unsplashImages.map((img, i) =>
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}`
+    : '\n(Sem imagens fornecidas)';
 
   const roteiroSection = roteiro && roteiro.trim()
     ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim()}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
@@ -1433,27 +1450,27 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
     ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
-  const avatarContent = handle.slice(0, 2).toUpperCase();
+  const avatarInitials = handle.slice(0, 2).toUpperCase();
 
-  // Pré-monta a progress bar de cada slide (fill % proporcional)
-  const progressFor = (current) => {
+  // Progress bar — .on-dark ou .on-light conforme tipo de slide
+  const progFor = (current, ctx = 'dark') => {
     const pct = Math.round((current / numSlides) * 100);
-    return `<div class="fmt-progress">
-    <div class="fmt-progress-track"><div class="fmt-progress-fill" style="width:${pct}%"></div></div>
-    <div class="fmt-progress-count">${current}/${numSlides}</div>
+    return `<div class="prog">
+    <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+    <div class="prog-num">${current}/${numSlides}</div>
   </div>`;
   };
 
-  // Header padrão de TODOS os slides (accent bar + brand bar)
-  const headerStd = `<div class="fmt-accent-bar"></div>
-  <div class="fmt-brand-bar">
-    <span class="fmt-brand-handle">${handleUpper}</span>
-    <span class="fmt-brand-year">2026</span>
+  // Header padrão (accent bar + brand bar)
+  const header = `<div class="accent-bar"></div>
+  <div class="brand-bar">
+    <span>${handleUpper}</span>
+    <span>2026</span>
   </div>`;
 
-  const verifiedSvg = `<span class="fmt-verified"><svg viewBox="0 0 24 24" fill="#1D9BF0" xmlns="http://www.w3.org/2000/svg"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg></span>`;
+  const verifiedSvg = `<svg viewBox="0 0 24 24" fill="#1D9BF0" xmlns="http://www.w3.org/2000/svg"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>`;
 
-  return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo fmteam (Fabricio Moura): accent bar dourada, brand bar limpa, profile badge com anel Instagram e check verificado, palavras-chave em amarelo #FFC300, número decorativo gigante, alternância dark/cream/yellow.
+  return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo fmteam (Fabricio Moura): identidade visual dourada, slides dark com foto full-bleed e headline grande, slides light com imagem no topo e texto escuro, slide gradient com texto escuro, CTA com card branco.
 
 Tema: "${topic}"
 Nicho: ${niche}
@@ -1465,104 +1482,115 @@ ${instructionsSection}
 ${imagesSection}
 ${roteiroSection}
 
-━━━ REGRAS ABSOLUTAS DO TEMPLATE FMTEAM ━━━
+━━━ REGRAS ABSOLUTAS — FMTEAM v2 ━━━
 - Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
 - NÃO use markdown, code fences, comentários ou texto fora do HTML
-- Use EXATAMENTE as classes CSS do template abaixo (.fmt-slide, .fmt-cover, .fmt-content, .fmt-cta...)
-- TODOS os slides DEVEM começar com .fmt-accent-bar + .fmt-brand-bar e terminar com .fmt-progress
-- Brand bar: APENAS "${handleUpper}" à esquerda + "2026" à direita. NUNCA "Powered by", NUNCA pipes, NUNCA outros textos.
-- Sem swipe arrow / hint de "deslize" em slide algum
-- Sem badge de tipo (ANÁLISE, TENDÊNCIA etc.) em nenhum slide — NEM na capa
-- Palavras-chave da headline da capa em <em class="hl">PALAVRA</em> (1–2 palavras, separadas em linha própria se necessário)
-- Headline da capa: Barlow Condensed 800, 80px, letter-spacing -2.5px, uppercase, máx 12 palavras
-- TODOS os slides internos (2 ao penúltimo-1) recebem .fmt-img-box 300px no topo — OBRIGATÓRIO
-- Headline interna (.fmt-title): Barlow Condensed 800, 88px, letter-spacing -3px, line-height 0.92, máximo 2 linhas, palavra-chave em <em class="hl">AMARELO</em>
-- Número decorativo gigante (.fmt-decor-number) no canto inferior direito de TODO slide de conteúdo
-- Sequência de fundos internos: .is-dark → .is-light → .is-dark → .is-light... penúltimo slide de conteúdo usa .is-gradient
-- Último slide (CTA) usa .fmt-cta com foto de fundo portrait e overlay dark
-- Máximo 2 blocos .fmt-body por slide de conteúdo
+- Use EXATAMENTE as classes do CSS template abaixo
+- TODOS os slides: wrapper = <div class="slide [tipo] [ctx]"> onde:
+    tipos de fundo: slide-dark | slide-light | slide-grad
+    contexto: on-dark (dark slides) | on-light (light e gradient slides)
+- TODOS os slides começam com .accent-bar + .brand-bar e terminam com .prog
+- Brand bar: APENAS "${handleUpper}" à esquerda + "2026" à direita. NADA mais.
+- Sem swipe hint, sem badges de tipo (ANÁLISE, TENDÊNCIA etc.)
+- Slide 1 (capa): foto full-bleed em <img id="img-capa">, overlay-capa, capa-badge, capa-headline 116px
+- Slides dark internos (ímpares): foto full-bleed em <img id="img-sN">, overlay-shadow-up, dark-h1 + dark-body
+- Slides light internos (pares): fundo off-white, img-box-top com <img id="img-sN">, light-h1 + light-body
+- Slide gradient (penúltimo conteúdo): slide-grad on-light, img-box-top com <img id="img-sN">, light-h1 + light-body (texto ESCURO)
+- IDs de imagem: img-capa (slide 1), img-s2 a img-s${numSlides - 1} (slides internos). CTA sem ID de imagem.
+- Slide CTA (último): slide-light on-light, sem foto de fundo, com .cta-bridge + .cta-kbox + .cta-footer-badge
+- Máximo 40 palavras por slide de conteúdo
 
 ${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
 
 ━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
 
-SLIDE 1 — CAPA (.fmt-cover):
-<div class="fmt-slide fmt-cover">
-  ${headerStd}
-  <div class="fmt-cover-bg" style="background-image: url('FOTO_1')"></div>
-  <div class="fmt-cover-overlay"></div>
-  <div class="fmt-cover-content">
-    <div class="fmt-profile-badge">
-      <div class="fmt-avatar-ring">
-        <div class="fmt-avatar-circle">${avatarContent}</div>
+SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img id="img-capa" src="FOTO_1" alt="${topic}"></div>
+  <div class="overlay-capa"></div>
+  <div class="capa-headline-area">
+    <div class="capa-badge">
+      <div class="badge-ring">
+        <div class="badge-avatar">${avatarInitials}</div>
       </div>
-      <div>
-        <div class="fmt-profile-name">${displayName} ${verifiedSvg}</div>
-        <div class="fmt-profile-handle">${handleAt}</div>
+      <div class="badge-info">
+        <div class="badge-name-row">
+          <span class="badge-name">${displayName}</span>
+          <span class="badge-verified">${verifiedSvg}</span>
+        </div>
+        <div class="badge-handle">${handleAt}</div>
       </div>
     </div>
-    <div class="fmt-cover-title">[título impactante — até 12 palavras — 1-2 em <em class="hl">DESTAQUE</em>]</div>
+    <div class="capa-headline">[HEADLINE IMPACTANTE — até 8 palavras — 1–2 em <em>DESTAQUE</em>]</div>
   </div>
-  ${progressFor(1)}
+  ${progFor(1, 'dark')}
 </div>
 
-SLIDES 2 a ${numSlides - 1} — CONTEÚDO (.fmt-content):
-Sequência de fundos: .is-dark → .is-light → .is-dark → .is-light... O penúltimo slide de conteúdo (slide ${numSlides - 1}) usa .is-gradient.
-TODOS os slides internos recebem .fmt-img-box 300px com foto landscape no topo.
-
-VARIANTE DARK (slides ímpares do conteúdo):
-<div class="fmt-slide fmt-content is-dark">
-  ${headerStd}
-  <div class="fmt-img-box" style="background-image: url('FOTO_N')"></div>
-  <div class="fmt-title"><em class="hl">PALAVRA</em><br>COMPLEMENTO</div>
-  <div class="fmt-body">[corpo do slide — máx 2 blocos, <em>palavra</em> em amarelo quando relevante]</div>
-  <div class="fmt-decor-number">[N]</div>
-  ${progressFor(0).replace('${current}', '[N]').replace(/style="width:\d+%"/, 'style="width:[PCT]%"')}
+SLIDES DARK INTERNOS (ímpares: 2, 4, 6...):
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
+  <div class="overlay-shadow-up"></div>
+  <div class="content on-dark">
+    <div class="tag">[CATEGORIA EM 1–2 PALAVRAS]</div>
+    <div class="dark-h1"><em>PALAVRA-CHAVE</em><br>COMPLEMENTO</div>
+    <div class="dark-body">[corpo do slide — até 30 palavras — <em>destaques</em> em amarelo]</div>
+  </div>
+  [PROG_N]
 </div>
 
-VARIANTE LIGHT (slides pares do conteúdo):
-<div class="fmt-slide fmt-content is-light">
-  ${headerStd}
-  <div class="fmt-img-box" style="background-image: url('FOTO_N')"></div>
-  <div class="fmt-title">PALAVRA:<br><em class="hl">COMPLEMENTO</em></div>
-  <div class="fmt-body">[corpo — texto dark, máx 2 blocos]</div>
-  <div class="fmt-decor-number">[N]</div>
-  ${progressFor(0).replace('${current}', '[N]').replace(/style="width:\d+%"/, 'style="width:[PCT]%"')}
+SLIDES LIGHT INTERNOS (pares: 3, 5, 7...):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:440px"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
+    <div class="light-body">[corpo do slide — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
+  </div>
+  [PROG_N]
 </div>
 
-VARIANTE GRADIENT (penúltimo slide de conteúdo):
-<div class="fmt-slide fmt-content is-gradient">
-  ${headerStd}
-  <div class="fmt-img-box" style="background-image: url('FOTO_N')"></div>
-  <div class="fmt-title">PONTO<br><em class="hl">FINAL</em></div>
-  <div class="fmt-body">[síntese ou aplicação prática — máx 2 blocos]</div>
-  <div class="fmt-decor-number">[N]</div>
-  ${progressFor(0).replace('${current}', '[N]').replace(/style="width:\d+%"/, 'style="width:[PCT]%"')}
+SLIDE GRADIENT (penúltimo slide de conteúdo, slide ${numSlides - 1}):
+<div class="slide slide-grad on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:440px"><img id="img-s${numSlides - 1}" src="FOTO_N" alt="${topic}"></div>
+    <div class="tag">[SÍNTESE / CONCLUSÃO]</div>
+    <div class="light-h1">PONTO<br><em>FINAL</em></div>
+    <div class="light-body">[síntese ou aplicação prática — texto ESCURO — <em>destaques</em> em dourado]</div>
+  </div>
+  [PROG_N]
 </div>
 
-Para CADA slide interno: substitua [N] pelo número do slide e [PCT] pela porcentagem (slide_num / ${numSlides} * 100, arredondado).
-
-SLIDE ${numSlides} — CTA (.fmt-cta):
-<div class="fmt-slide fmt-cta">
-  ${headerStd}
-  <div class="fmt-cta-bg" style="background-image: url('ULTIMA_FOTO')"></div>
-  <div class="fmt-cta-overlay"></div>
-  <div class="fmt-cta-content">
-    <div class="fmt-cta-bridge">[frase-ponte conectando o conteúdo ao CTA — específica ao tema, com <strong>palavra forte</strong>]</div>
-    <div class="fmt-cta-box">
-      <div class="fmt-cta-box-label">Comenta a palavra abaixo:</div>
-      <div class="fmt-cta-box-keyword">[KEYWORD]</div>
-      <div class="fmt-cta-box-after">[benefício direto — 1 linha]</div>
+SLIDE ${numSlides} — CTA (slide-light, on-light, sem foto de fundo):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="cta-bridge">[frase-ponte conectando o conteúdo ao CTA — <strong>palavra forte</strong> em negrito]</div>
+    <div class="cta-kbox">
+      <div class="cta-kbox-label">Comenta a palavra abaixo:</div>
+      <div class="cta-kbox-keyword">[KEYWORD]</div>
+      <div class="cta-kbox-divider"></div>
+      <div class="cta-kbox-benefit">[benefício direto — 1 linha]</div>
     </div>
-    <div class="fmt-cta-footer">
-      <div class="fmt-avatar-ring">
-        <div class="fmt-avatar-circle">${avatarContent}</div>
+    <div class="cta-footer-badge">
+      <div class="cta-badge-ring">
+        <div class="cta-badge-avatar">${avatarInitials}</div>
       </div>
-      ${handleAt} · ${niche}
+      <div class="cta-badge-info">
+        <div class="cta-badge-name">${displayName} ${verifiedSvg}</div>
+        <div class="cta-badge-handle">${handleAt}</div>
+      </div>
     </div>
   </div>
-  ${progressFor(numSlides)}
+  ${progFor(numSlides, 'light')}
 </div>
+
+Instrução de progresso: Para cada slide interno substitua [PROG_N] pela tag:
+<div class="prog"><div class="prog-track"><div class="prog-fill" style="width:[PERCENT]%"></div></div><div class="prog-num">[N]/${numSlides}</div></div>
+Onde [N] é o número do slide e [PERCENT] = round(N/${numSlides}*100).
 
 ━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
 ${cssTemplate}
