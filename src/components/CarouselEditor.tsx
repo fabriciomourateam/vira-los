@@ -273,11 +273,19 @@ function extractPosLeft(el: Element): number | undefined {
 }
 
 function extractBgImageUrl(el: Element): string | null {
+  // Classic layouts: background-image on bg divs
   const bgEl = el.querySelector('.slide-bg, .bg, .fmt-cover-bg, .fmt-cta-bg, .fmt-img-box');
   if (bgEl) {
     const m = BG_IMAGE_REGEX.exec(bgEl.getAttribute('style') || '');
     if (m) return m[1];
   }
+  // fmteam v2: full-bleed dark slides use <img> inside .photo-bg
+  const photoBgImg = el.querySelector('.photo-bg img') as HTMLImageElement | null;
+  if (photoBgImg) return photoBgImg.getAttribute('src') || null;
+  // fmteam v2: light/gradient slides use <img> inside .img-box-top
+  const imgBoxImg = el.querySelector('.img-box-top img') as HTMLImageElement | null;
+  if (imgBoxImg) return imgBoxImg.getAttribute('src') || null;
+  // Fallback: background-image on slide root
   const m = BG_IMAGE_REGEX.exec(el.getAttribute('style') || '');
   return m ? m[1] : null;
 }
@@ -317,6 +325,23 @@ const TEXT_SELECTORS = [
   { selector: '.split-title', isMain: true },
   { selector: '.split-eyebrow', isMain: false },
   { selector: '.split-stats', isMain: false },
+  // ── fmteam v2 ──
+  { selector: '.capa-headline', isMain: true },
+  { selector: '.capa-sub', isMain: true },
+  { selector: '.dark-h1', isMain: true },
+  { selector: '.light-h1', isMain: true },
+  { selector: '.dark-body', isMain: true },
+  { selector: '.light-body', isMain: true },
+  { selector: '.tag', isMain: false },
+  { selector: '.badge-name', isMain: false },
+  { selector: '.badge-handle', isMain: false },
+  { selector: '.cta-bridge', isMain: true },
+  { selector: '.cta-kbox-label', isMain: false },
+  { selector: '.cta-kbox-keyword', isMain: true },
+  { selector: '.cta-kbox-benefit', isMain: false },
+  { selector: '.cta-kbox-sub', isMain: false },
+  { selector: '.cta-badge-name', isMain: false },
+  { selector: '.cta-badge-handle', isMain: false },
 ];
 
 // Converte <br> → \n para exibir corretamente no textarea
@@ -541,7 +566,37 @@ function rebuildSlideOuterHtml(
   }
 
   // Background image + position + brightness
-  if (newBgUrl !== null || bgImageConfig) {
+  // fmteam v2: images are <img> elements — apply src / object-position / filter
+  const fmteamImg = (el.querySelector('.photo-bg img') ?? el.querySelector('.img-box-top img')) as HTMLElement | null;
+  if (fmteamImg && (newBgUrl !== null || bgImageConfig)) {
+    if (newBgUrl !== null) {
+      fmteamImg.setAttribute('src', newBgUrl);
+    }
+    if (bgImageConfig) {
+      const pos = bgImageConfig.position.trim();
+      const posParts = pos.split(/\s+/);
+      const posX = parseFloat(posParts[0]) || 50;
+      const posY = parseFloat(posParts[1] ?? posParts[0]) || 50;
+      const scale = bgImageConfig.scale ?? 1.0;
+      const dragX = bgImageConfig.dragOffsetX ?? 0;
+      const dragY = bgImageConfig.dragOffsetY ?? 0;
+      const hasDrag = dragX !== 0 || dragY !== 0;
+      let imgStyle = fmteamImg.getAttribute('style') || '';
+      imgStyle = imgStyle.replace(/object-position\s*:\s*[^;]+;?/gi, '').trim();
+      imgStyle = imgStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?/i, '').trim();
+      imgStyle = imgStyle.replace(/transform\s*:[^;]+;?/i, '').trim();
+      const bpx = hasDrag
+        ? (dragX >= 0 ? `calc(50% + ${dragX.toFixed(1)}px)` : `calc(50% - ${(-dragX).toFixed(1)}px)`)
+        : `${posX}%`;
+      const bpy = hasDrag
+        ? (dragY >= 0 ? `calc(50% + ${dragY.toFixed(1)}px)` : `calc(50% - ${(-dragY).toFixed(1)}px)`)
+        : `${posY}%`;
+      const scaleTransform = scale > 1.005 ? ` transform: scale(${scale.toFixed(3)});` : '';
+      imgStyle += `; object-position: ${bpx} ${bpy}; filter: brightness(${bgImageConfig.brightness}%);${scaleTransform}`;
+      fmteamImg.setAttribute('style', imgStyle.replace(/^;\s*/, '').replace(/\s{2,}/g, ' '));
+    }
+  } else if (newBgUrl !== null || bgImageConfig) {
+    // Classic layout: background-image on bg divs
     const slideBg = el.querySelector('.slide-bg, .bg, .fmt-cover-bg, .fmt-cta-bg, .fmt-img-box') as HTMLElement | null;
     const target = slideBg || el as HTMLElement;
     let s = target.getAttribute('style') || '';
@@ -598,7 +653,7 @@ function rebuildSlideOuterHtml(
       }
     }
     target.setAttribute('style', s);
-  }
+  } // end else if classic layout
 
   // Follow banner visibility + cor
   if (followBannerConfig) {
@@ -835,12 +890,13 @@ const DRAGGABLE_SELECTORS = [
   '.title', '.subtitle', '.subtitle-accent', '.narrative-text',
   '.content-title', '.content-body', '.cta-title',
   '.follow-pill', '.profile-name', '.profile-handle',
-  // ── Layout fmteam ──
-  '.fmt-cover-bg', '.fmt-cta-bg', '.fmt-img-box',
-  '.fmt-cover-title', '.fmt-title', '.fmt-body', '.fmt-tag',
-  '.fmt-profile-badge', '.fmt-cta-title', '.fmt-cta-bridge',
-  '.fmt-cta-box', '.fmt-cta-footer', '.fmt-decor-number',
-  '.fmt-arrow-row',
+  // ── Layout fmteam v2 — imagens ──
+  '.photo-bg', '.img-box-top',
+  // ── Layout fmteam v2 — texto ──
+  '.capa-headline-area', '.capa-badge', '.capa-headline', '.capa-sub',
+  '.dark-h1', '.light-h1', '.dark-body', '.light-body',
+  '.tag', '.content',
+  '.cta-bridge', '.cta-kbox', '.cta-footer-badge',
   // Custom text blocks
   '.custom-text',
 ];
@@ -890,7 +946,7 @@ function buildDragScript(displayScale: number): string {
       if(el) return {el:el,sel:SELS[i]};
     }
     // Last resort: if clicked inside a slide but not on any draggable, try to find .bg
-    var slideEl=t.closest('.slide,.slide-editorial,.clean-cover,.clean-content,.clean-cta,.clean-split');
+    var slideEl=t.closest('.slide,.slide-dark,.slide-light,.slide-grad,.slide-editorial,.clean-cover,.clean-content,.clean-cta,.clean-split');
     if(slideEl){
       var fallbackBg=slideEl.querySelector('.bg, .slide-bg');
       if(fallbackBg) return {el:fallbackBg,sel:'.bg'};

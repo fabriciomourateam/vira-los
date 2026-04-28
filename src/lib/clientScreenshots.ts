@@ -49,6 +49,27 @@ function fixCalcBackgroundPosition(container: HTMLElement): void {
     );
     el.setAttribute('style', s);
   }
+
+  // fmteam v2: <img> elements may have object-position: calc(50% ± Xpx) calc(50% ± Ypx)
+  // html2canvas does not support calc() in object-position → convert to plain percentages
+  const imgEls = Array.from(container.querySelectorAll('img[style]')) as HTMLElement[];
+  for (const img of imgEls) {
+    let s = img.getAttribute('style') || '';
+    if (!s.includes('object-position') || !s.includes('calc(50%')) continue;
+    s = s.replace(
+      /object-position\s*:\s*calc\(50%\s*([+-])\s*([\d.]+)px\)\s+calc\(50%\s*([+-])\s*([\d.]+)px\)/gi,
+      (_, sx, vx, sy, vy) => {
+        const W = (img as HTMLElement).offsetWidth || 1080;
+        const H = (img as HTMLElement).offsetHeight || 1350;
+        const ox = (sx === '-' ? -1 : 1) * parseFloat(vx);
+        const oy = (sy === '-' ? -1 : 1) * parseFloat(vy);
+        const px = 50 - (ox / W) * 100;
+        const py = 50 - (oy / H) * 100;
+        return `object-position: ${px.toFixed(1)}% ${py.toFixed(1)}%`;
+      },
+    );
+    img.setAttribute('style', s);
+  }
 }
 
 /**
@@ -62,6 +83,9 @@ function fixHtml2canvasTextRendering(container: HTMLElement): void {
     '.cover-title', '.content-title', '.content-body', '.cta-title',
     '.split-title', '.title', '.subtitle', '.narrative-text',
     '.cover-subtitle', '.cta-subtitle', '.step-text', '.tip-text',
+    // fmteam v2
+    '.capa-headline', '.dark-h1', '.light-h1', '.dark-body', '.light-body',
+    '.tag', '.cta-bridge', '.cta-kbox-keyword', '.cta-kbox-benefit',
   ];
   for (const sel of TEXT_SELECTORS) {
     container.querySelectorAll(sel).forEach(outer => {
