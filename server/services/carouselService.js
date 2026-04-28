@@ -551,8 +551,7 @@ function buildHTMLPrompt({ topic, instructions, niche, primaryColor, accentColor
     : '\n(Sem imagens — use gradientes CSS criativos no fundo dos slides de foto)';
 
   const roteiroSection = roteiro && roteiro.trim()
-    ? `\n━━━ ROTEIRO DO CRIADOR — siga este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? "
-[...roteiro truncado para otimizar tokens...]" : ""}\n\nDistribua este roteiro pelos ${numSlides} slides:\n- SLIDE 1 (capa): gancho principal / título do roteiro\n- SLIDES 2 a ${numSlides - 1}: divida o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): use o CTA do roteiro ou crie um adequado\nUse APENAS o conteúdo acima — não adicione informações externas.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ? `\n━━━ ROTEIRO DO CRIADOR — siga este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n\nDistribua este roteiro pelos ${numSlides} slides:\n- SLIDE 1 (capa): gancho principal / título do roteiro\n- SLIDES 2 a ${numSlides - 1}: divida o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): use o CTA do roteiro ou crie um adequado\nUse APENAS o conteúdo acima — não adicione informações externas.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   const instructionsSection = instructions && instructions.trim()
@@ -1248,8 +1247,7 @@ function buildTemplateHTMLPrompt({ templateHtml, topic, instructions, niche, ins
     : '(Sem novas imagens — mantenha as URLs existentes no template)';
 
   const roteiroSection = roteiro && roteiro.trim()
-    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo nos textos ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? "
-[...roteiro truncado para otimizar tokens...]" : ""}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo nos textos ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   const instructionsSection = instructions && instructions.trim()
@@ -1324,8 +1322,7 @@ function buildCleanHTMLPrompt({ topic, instructions, niche, primaryColor, fontFa
     : '\n(Sem imagens — omita os .photo-card e .top-photo-wrap; use apenas texto nos slides de conteúdo)';
 
   const roteiroSection = roteiro && roteiro.trim()
-    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? "
-[...roteiro truncado para otimizar tokens...]" : ""}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   const instructionsSection = instructions && instructions.trim()
@@ -1489,8 +1486,7 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
     : '\n(Sem imagens fornecidas)';
 
   const roteiroSection = roteiro && roteiro.trim()
-    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? "
-[...roteiro truncado para otimizar tokens...]" : ""}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   const instructionsSection = instructions && instructions.trim()
