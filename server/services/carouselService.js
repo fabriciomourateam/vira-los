@@ -1883,6 +1883,8 @@ async function generateCarousel(config) {
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
 
+  console.log(`[GenerateCarousel] Iniciando: layout="${layoutStyle}" topic="${topic.substring(0, 60)}" numSlides=${numSlides}`);
+
   // Conta slides reais se roteiro tiver marcadores "SLIDE N"
   let slidesCount = Math.min(10, Math.max(5, Number(numSlides)));
   if (roteiro) {
@@ -1891,12 +1893,14 @@ async function generateCarousel(config) {
   }
 
   // Passo 1: Reddit (skip se tiver roteiro) + queries por slide, em paralelo
+  console.log(`[GenerateCarousel] Passo 1 — buscando tendências Reddit + queries de imagem...`);
   const [redditTrends, slideQueries] = await Promise.all([
     roteiro ? Promise.resolve([]) : fetchRedditTrends(topic),
     generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle),
   ]);
 
   // Passo 2: busca imagem específica para cada slide em paralelo
+  console.log(`[GenerateCarousel] Passo 2 — buscando imagens Unsplash (${slideQueries?.length ?? 0} queries)...`);
   // fmteam 9-slide: retorna 8 queries (sem CTA) — aceita length >= slidesCount - 1
   const minQueriesRequired = (layoutStyle === 'fmteam' && slidesCount === 9) ? slidesCount - 1 : slidesCount;
   let unsplashImages;
@@ -1952,6 +1956,8 @@ async function generateCarousel(config) {
     });
   }
 
+  console.log(`[GenerateCarousel] Passo 3 — chamando Anthropic (HTML + legenda em paralelo, prompt ~${htmlPrompt.length} chars)...`);
+  const t0 = Date.now();
   const [htmlRes, legendaRes] = await Promise.all([
     anthropicWithRetry({
       model: 'claude-sonnet-4-6',
@@ -1964,6 +1970,7 @@ async function generateCarousel(config) {
       messages: [{ role: 'user', content: buildLegendaPrompt({ topic: topic.trim(), instagramHandle, niche }) }],
     }),
   ]);
+  console.log(`[GenerateCarousel] Anthropic respondeu em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
   // Limpa possíveis code fences que Claude retorne
   let html = (htmlRes.content[0]?.text || '').trim()
@@ -2020,7 +2027,8 @@ async function generateCarousel(config) {
     );
   }
 
-  // Passo 6: Salvar arquivos (output/<slug>-<ts>/)
+  // Passo 4: Salvar arquivos (output/<slug>-<ts>/)
+  console.log(`[GenerateCarousel] Passo 4 — salvando arquivos em disco...`);
   const slug = topic.trim().toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-').substring(0, 40).replace(/-$/, '');
@@ -2035,6 +2043,7 @@ async function generateCarousel(config) {
   // Screenshots gerados no cliente (browser) via html-to-image — sem Playwright no servidor
   const screenshots = [];
 
+  console.log(`[GenerateCarousel] ✅ Concluído! folder="${folderName}" slides=${slidesCount} htmlSize=${html.length}`);
   return {
     html,
     legenda,

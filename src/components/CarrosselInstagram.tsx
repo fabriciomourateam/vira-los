@@ -589,7 +589,7 @@ ${stats ? `- Stats: ${stats}` : ''}
       }
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 180000); // 3 min
+      const timeout = setTimeout(() => controller.abort(), 360000); // 6 min (fmteam tem prompt grande)
       const res = await fetch(`${API}/api/carousel/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -658,7 +658,11 @@ ${stats ? `- Stats: ${stats}` : ''}
         toast.error(`Erro ao gerar imagens: ${e.message || e}. Carrossel salvo sem preview.`);
       }
     } catch (err: any) {
-      toast.error(err.message);
+      console.error('[Generate] Erro ao gerar carrossel:', err);
+      const msg = err?.name === 'AbortError'
+        ? 'Tempo limite excedido ao gerar o carrossel. Tente novamente (o servidor pode estar lento).'
+        : err.message || 'Erro desconhecido';
+      toast.error(msg, { duration: 8000 });
     } finally {
       setLoading(false);
     }
