@@ -1474,7 +1474,8 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
          .replace(/\b\w/g, c => c.toUpperCase())
     || handle;
   const totalContent = numSlides - 2;
-  const cssTemplate = buildFmteamCSSTemplate({ primaryColor: primaryColor || '#FFC300' });
+  // Nota: CSS NÃO é incluído no prompt — será injetado server-side após a geração.
+  // Isso economiza ~3.000 tokens de input E ~3.500 tokens de output por chamada.
 
   const validImages = unsplashImages.filter(img => img.url);
   // Para fmteam: slide 9 (CTA) usa foto do criador, não Unsplash — exclui da lista de imagens
@@ -1536,7 +1537,9 @@ ${roteiroSection}
 ━━━ REGRAS ABSOLUTAS — FMTEAM v2 ━━━
 - Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
 - NÃO use markdown, code fences, comentários ou texto fora do HTML
-- Use EXATAMENTE as classes do CSS template abaixo
+- NÃO inclua tags <style> nem <link rel="stylesheet"> no HTML — o CSS e fontes são injetados automaticamente pelo servidor
+- No <head> inclua apenas: <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>...</title>
+- Use EXATAMENTE as classes listadas abaixo
 - TODOS os slides: wrapper = <div class="slide [tipo] [ctx]"> onde:
     tipos de fundo: slide-dark | slide-light | slide-grad
     contexto: on-dark (dark slides) | on-light (light e gradient slides)
@@ -1689,8 +1692,19 @@ Instrução de progresso: Para cada slide interno substitua [PROG_N] pela tag:
 <div class="prog"><div class="prog-track"><div class="prog-fill" style="width:[PERCENT]%"></div></div><div class="prog-num">[N]/${numSlides}</div></div>
 Onde [N] é o número do slide e [PERCENT] = round(N/${numSlides}*100).
 
-━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
-${cssTemplate}
+━━━ CLASSES DISPONÍVEIS (use exatamente esses nomes) ━━━
+Slides:       .slide  .slide-dark  .slide-light  .slide-grad  .slide-with-bg  .on-dark  .on-light
+Fundo:        .photo-bg > img  |  .img-box-top > img  |  .overlay-capa  |  .overlay-shadow-up
+Header:       .accent-bar  |  .brand-bar (2 spans: handle + ano)
+Textos dark:  .dark-h1 (em=amarelo)  |  .dark-body (em=amarelo)  |  .tag
+Textos light: .light-h1 (em=dourado escuro)  |  .light-body (em=dourado escuro)  |  .tag
+Gradient:     .grad-num (número decorativo de fundo)
+Listas:       .arrow-row > .arrow-icon + .arrow-text  (strong=bold)
+Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
+Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
+Capa:         .capa-headline-area > .capa-badge (.badge-ring > .badge-avatar | .badge-info > .badge-name-row (.badge-name + .badge-verified) + .badge-handle) + .capa-headline (em=destaque) + .capa-sub
+CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
+IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s8 (slides internos)  |  CTA sem ID
 
 Gere o HTML completo agora (apenas HTML, nada mais):`;
 }
@@ -1958,10 +1972,14 @@ async function generateCarousel(config) {
 
   console.log(`[GenerateCarousel] Passo 3 — chamando Anthropic (HTML + legenda em paralelo, prompt ~${htmlPrompt.length} chars)...`);
   const t0 = Date.now();
+  // fmteam: sem CSS no output → ~8.000 tokens suficientes (HTML puro dos 9 slides)
+  // outros layouts: mantém 16.000 (têm CSS embutido no output)
+  const htmlMaxTokens = layoutStyle === 'fmteam' ? 8000 : 16000;
+
   const [htmlRes, legendaRes] = await Promise.all([
     anthropicWithRetry({
       model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
+      max_tokens: htmlMaxTokens,
       messages: [{ role: 'user', content: htmlPrompt }],
     }),
     anthropicWithRetry({
@@ -1986,6 +2004,24 @@ async function generateCarousel(config) {
   }
 
   const legenda = (legendaRes.content[0]?.text || '').trim();
+
+  // ── Pós-processamento fmteam: injeta CSS + fontes no HTML ──────────────────
+  // O prompt fmteam não inclui o CSS (economia de ~6.500 tokens por chamada).
+  // Aqui removemos qualquer <style>/<link> que Claude possa ter gerado e
+  // injetamos o CSS correto gerado pelo servidor.
+  if (layoutStyle === 'fmteam') {
+    const fmteamCss = buildFmteamCSSTemplate({ primaryColor: primaryColor || '#FFC300' });
+    // Remove qualquer <style> e <link> de fontes que Claude gerou por engano
+    html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+    html = html.replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, '');
+    // Injeta CSS correto antes de </head>
+    if (html.includes('</head>')) {
+      html = html.replace('</head>', `${fmteamCss}\n</head>`);
+    } else {
+      // fallback: insere antes do primeiro <div class="slide"
+      html = html.replace(/(<div[^>]*class="slide)/, `${fmteamCss}\n$1`);
+    }
+  }
 
   // Pós-processamento: injeta foto de perfil no avatar-circle (evita passar base64 enorme pro Claude)
   if (profilePhotoUrl && profilePhotoUrl.trim()) {
