@@ -97,6 +97,23 @@ function fixHtml2canvasTextRendering(container: HTMLElement): void {
 }
 
 /**
+ * Fix obrigatório para gradient text no fmteam antes do html2canvas.
+ * html2canvas-pro não suporta -webkit-background-clip:text / -webkit-text-fill-color:transparent.
+ * Converte para cor sólida #FFC300 antes de capturar.
+ */
+function fixFmteamGradientText(container: HTMLElement): void {
+  container.querySelectorAll<HTMLElement>(
+    '.capa-headline em, .dark-h1 em, .light-h1 em, .cta-kbox-keyword, .cta-kword'
+  ).forEach(el => {
+    el.style.webkitTextFillColor = '#FFC300';
+    (el.style as any).webkitBackgroundClip = 'unset';
+    el.style.backgroundClip = 'unset';
+    el.style.background = 'none';
+    el.style.color = '#FFC300';
+  });
+}
+
+/**
  * Versão HiFi (assíncrona) de fixCalcBackgroundPosition.
  * Carrega a imagem de fundo (data URL já embutida) para obter dimensões reais e
  * calcula o percentual exato levando em conta o fator de escala do background-size:cover.
@@ -354,6 +371,10 @@ export async function generateAndSaveScreenshots(
       // 5. <div> aninhada em container de texto → <br><span> + word-spacing explícito
       //    (html2canvas perde espaços entre palavras com divs aninhadas: "ESTAVAPERDENDO")
       fixHtml2canvasTextRendering(container);
+
+      // 6. Gradient text (fmteam) → cor sólida #FFC300
+      //    (html2canvas não suporta -webkit-background-clip:text / -webkit-text-fill-color:transparent)
+      fixFmteamGradientText(container);
 
       // Aguarda <img> tags carregarem
       await Promise.all(

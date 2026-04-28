@@ -987,18 +987,18 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     .overlay-capa {
       position:absolute; inset:0; z-index:1;
       background:linear-gradient(to bottom,
-        rgba(15,13,8,0.35) 0%, rgba(15,13,8,0.06) 20%,
-        rgba(15,13,8,0.10) 38%, rgba(15,13,8,0.72) 58%,
-        rgba(15,13,8,0.96) 76%, rgba(15,13,8,0.99) 100%);
+        rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.06) 20%,
+        rgba(0,0,0,0.10) 38%, rgba(0,0,0,0.72) 58%,
+        rgba(0,0,0,0.96) 76%, rgba(0,0,0,0.99) 100%);
     }
 
     /* overlay slides internos dark — escurece de baixo cobrindo mais */
     .overlay-shadow-up {
       position:absolute; inset:0; z-index:1;
       background:linear-gradient(to top,
-        rgba(15,13,8,0.99) 0%, rgba(15,13,8,0.98) 35%,
-        rgba(15,13,8,0.92) 55%, rgba(15,13,8,0.70) 70%,
-        rgba(15,13,8,0.35) 85%, rgba(15,13,8,0.10) 100%);
+        rgba(0,0,0,0.99) 0%, rgba(0,0,0,0.98) 35%,
+        rgba(0,0,0,0.92) 55%, rgba(0,0,0,0.70) 70%,
+        rgba(0,0,0,0.35) 85%, rgba(0,0,0,0.10) 100%);
     }
 
     /* z-index boost para slides com foto de fundo */
@@ -1021,7 +1021,10 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       color:#fff; margin-bottom:28px;
     }
     .dark-h1 em {
-      font-style:normal; color:var(--PL);
+      font-style:normal;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
     }
     .dark-body {
       font-family:var(--F-BODY); font-size:33px; font-weight:300;
@@ -1038,7 +1041,10 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       color:var(--DB); margin-bottom:22px;
     }
     .light-h1 em {
-      font-style:normal; color:var(--PD);
+      font-style:normal;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
     }
     .light-body {
       font-family:var(--F-BODY); font-size:33px; font-weight:300;
@@ -1050,7 +1056,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
 
     /* Gradient slide usa mesma tipografia light mas ainda mais escuro */
     .slide-grad .light-h1 { color:var(--DB); }
-    .slide-grad .light-h1 em { color:rgba(15,13,8,0.60); }
+    .slide-grad .light-h1 em { background:none; -webkit-text-fill-color:rgba(15,13,8,0.60); color:rgba(15,13,8,0.60); }
     .slide-grad .light-body { color:rgba(15,13,8,0.72); }
     .slide-grad .light-body strong { color:var(--DB); }
 
@@ -1082,7 +1088,10 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       line-height:0.90; letter-spacing:-4px; text-transform:uppercase; color:#fff;
     }
     .capa-headline em {
-      font-style:normal; color:var(--P);
+      font-style:normal;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
     }
     .capa-sub {
       font-family:var(--F-HEAD); font-size:116px; font-weight:800;
@@ -1129,7 +1138,10 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     .cta-kbox-keyword {
       font-family:var(--F-HEAD); font-size:110px; font-weight:900;
       letter-spacing:-4px; line-height:0.90; text-align:center;
-      color:var(--P); text-transform:uppercase;
+      text-transform:uppercase;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
     }
     .cta-kbox-divider {
       height:1px; background:rgba(184,134,11,0.30); margin:16px 0;
