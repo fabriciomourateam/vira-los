@@ -215,16 +215,32 @@ async function fetchOneImage(query, fallbackQuery) {
 }
 
 // Gera queries de imagem específicas por slide via Claude (chamada leve)
-async function generateSlideImageQueries(topic, roteiro, slidesCount, niche) {
+async function generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle = '') {
   const roteiroContext = roteiro
     ? `Roteiro:\n${roteiro.slice(0, 1200)}`
     : `Tema: "${topic}" — nicho: ${niche}`;
 
+  // fmteam 9-slide: gera apenas 8 queries (slide 9 usa foto do criador, não Unsplash)
+  // e inclui hint de orientação portrait/landscape por posição
+  const isFmteam9 = layoutStyle === 'fmteam' && slidesCount === 9;
+  const queryCount = isFmteam9 ? 8 : slidesCount;
+
+  const slideDesc = isFmteam9
+    ? `Slide 1 = capa PORTRAIT (pessoa ou cena vertical impactante)
+Slide 2 = conteúdo PORTRAIT (dark, pessoa ou cena dramática)
+Slide 3 = conteúdo PORTRAIT (dark, pessoa ou cena dramática)
+Slide 4 = LANDSCAPE (gradient, cena ampla ou dado visual horizontal)
+Slide 5 = LANDSCAPE (light dados, infográfico ou ambiente amplo)
+Slide 6 = conteúdo PORTRAIT (dark, pessoa ou cena forte)
+Slide 7 = LANDSCAPE (light, cena ampla ou visual do tema)
+Slide 8 = PORTRAIT (dark, foto de impacto para frase final)`
+    : `Slide 1 = capa (foto impactante do tema), slides 2 a ${queryCount - 1} = conteúdo específico de cada ponto, slide ${queryCount} = CTA/motivação`;
+
   const prompt = `${roteiroContext}
 
-Gere exatamente ${slidesCount} queries de busca de imagens no Unsplash/Pexels, uma por slide.
+Gere exatamente ${queryCount} queries de busca de imagens no Unsplash/Pexels, uma por slide.
 Cada query deve ser em INGLÊS, 2-4 palavras, descrevendo a imagem ideal para aquele slide.
-Slide 1 = capa (foto impactante do tema), slides 2 a ${slidesCount - 1} = conteúdo específico de cada ponto, slide ${slidesCount} = CTA/motivação.
+${slideDesc}
 
 Responda APENAS com um JSON array de strings, sem markdown:
 ["query slide 1", "query slide 2", ...]`;
@@ -250,7 +266,7 @@ Responda APENAS com um JSON array de strings, sem markdown:
 // URL única que carrega todas as fontes disponíveis no editor
 const ALL_FONTS_URL =
   'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800;900' +
-  '&family=Plus+Jakarta+Sans:wght@400;700;800' +
+  '&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800' +
   '&family=Inter:wght@300;400;500;600;700;800;900' +
   '&family=Poppins:wght@300;400;500;600;700;800;900' +
   '&family=Montserrat:wght@300;400;500;600;700;800;900' +
@@ -493,16 +509,16 @@ REGRAS DE ESCRITA:
       CTA(8),
     ].join('\n\n');
   } else {
-    // 9 ou 10 slides — estrutura completa
+    // 9 slides — estrutura fmteam v2 (posições fixas por tipo visual)
     structure += [
-      HOOK(1),
+      `SLIDE 1 — CAPA (hook visual): headline de gancho — promessa clara ou dor real em até 6 palavras. Subtítulo complementar. Proibido abertura genérica.`,
       QUEBRA(2),
       AMPLI(3, ' pt.1'),
-      AMPLI(4, ' pt.2'),
-      REVELACAO(5, ' pt.1'),
+      `SLIDE 4 — AMPLIFICAÇÃO pt.2 (slide GRADIENT dourado — virada narrativa): o momento de maior tensão editorial. Comportamento incoerente da maioria + consequência real. Usar arrow-rows (máx 3 pontos curtos). Texto SEMPRE escuro, nunca branco.`,
+      `SLIDE 5 — REVELAÇÃO com DADOS (slide LIGHT — prova social): insight central + 2 stat-rows com números reais, fonte confiável e título claro. Use dados que surpreendem.`,
       REVELACAO(6, ' pt.2'),
-      CONSEQUENCIA(7),
-      FRASE(8),
+      `SLIDE 7 — CONSEQUÊNCIA (slide LIGHT): custo real e específico de ignorar o problema — prazo, dado ou comparação concreta. Termina preparando para o CTA.`,
+      `SLIDE 8 — FRASE FINAL DE IMPACTO (slide DARK): uma única ideia curta que sintetize a emoção dominante (${dominantEmotion}). Pode usar dark-h1 apenas, sem dark-body, ou uma frase de dark-body sem título.`,
       ...(numSlides >= 10 ? [`SLIDE 9 — REFORÇO: exemplo real ou dado extra que solidifica a revelação. Direto e específico.`] : []),
       CTA(numSlides),
     ].join('\n\n');
@@ -872,7 +888,7 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bo
 //
 // Fixos (identidade visual FIXA — não sobrescrever):
 //   - Accent bar 7px no topo com gradiente dourado var(--G)
-//   - Brand bar: handle (esq) + "2026" (dir), 13px/700/1.5px tracking
+//   - Brand bar: handle (esq) + ano dinâmico (dir), 13px/700/1.5px tracking
 //   - Slides dark: foto full-bleed + overlay-shadow-up + texto sobre foto
 //   - Slides light: fundo off-white + img-box-top (img element) + texto dark
 //   - Slide gradient: fundo var(--G) + texto SEMPRE escuro
@@ -987,18 +1003,18 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     .overlay-capa {
       position:absolute; inset:0; z-index:1;
       background:linear-gradient(to bottom,
-        rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.06) 20%,
-        rgba(0,0,0,0.10) 38%, rgba(0,0,0,0.72) 58%,
-        rgba(0,0,0,0.96) 76%, rgba(0,0,0,0.99) 100%);
+        rgba(15,13,8,0.35) 0%, rgba(15,13,8,0.06) 20%,
+        rgba(15,13,8,0.10) 38%, rgba(15,13,8,0.72) 58%,
+        rgba(15,13,8,0.96) 76%, rgba(15,13,8,0.99) 100%);
     }
 
-    /* overlay slides internos dark — escurece de baixo cobrindo mais */
+    /* overlay slides internos dark — escurece de baixo até o meio */
     .overlay-shadow-up {
       position:absolute; inset:0; z-index:1;
       background:linear-gradient(to top,
-        rgba(0,0,0,0.99) 0%, rgba(0,0,0,0.98) 35%,
-        rgba(0,0,0,0.92) 55%, rgba(0,0,0,0.70) 70%,
-        rgba(0,0,0,0.35) 85%, rgba(0,0,0,0.10) 100%);
+        rgba(15,13,8,0.99) 0%, rgba(15,13,8,0.98) 30%,
+        rgba(15,13,8,0.90) 50%, rgba(15,13,8,0.50) 67%,
+        rgba(15,13,8,0.00) 82%);
     }
 
     /* z-index boost para slides com foto de fundo */
@@ -1011,8 +1027,11 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     .img-box-top {
       width:100%; border-radius:18px;
       overflow:hidden; margin-bottom:24px; flex-shrink:0;
+      position:relative; /* necessário para overlay de brightness posicionar-se corretamente */
     }
     .img-box-top img { width:100%; height:100%; object-fit:cover; display:block; }
+    /* Gradient slide: img-box com borda escura sutil */
+    .slide-grad .img-box-top { border:1.5px solid rgba(15,13,8,0.12); }
 
     /* ── TIPOGRAFIA DARK ── */
     .dark-h1 {
@@ -1144,7 +1163,8 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       background-clip:text;
     }
     .cta-kbox-divider {
-      height:1px; background:rgba(184,134,11,0.30); margin:16px 0;
+      height:1px; margin:12px 0;
+      background:linear-gradient(to right, transparent, rgba(184,134,11,0.45) 30%, rgba(184,134,11,0.45) 70%, transparent);
     }
     .cta-kbox-benefit {
       font-family:var(--F-BODY); font-size:26px; font-weight:500;
@@ -1174,19 +1194,19 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       font-family:var(--F-BODY); font-size:22px; font-weight:800; color:var(--DB);
       display:flex; align-items:center; gap:6px;
     }
-    .cta-badge-name svg { width:18px; height:18px; flex-shrink:0; }
+    .cta-badge-name svg { width:20px; height:20px; flex-shrink:0; }
     .cta-badge-handle { font-family:var(--F-BODY); font-size:16px; font-weight:400; color:rgba(15,13,8,0.42); }
 
     /* ── ARROW ROWS (listas de pontos no gradient/dark) ── */
     .arrow-row {
-      display:flex; gap:16px; padding:10px 0;
-      font-family:var(--F-BODY); font-size:27px; line-height:1.5;
+      display:flex; align-items:flex-start; gap:16px; padding:8px 0;
+      font-family:var(--F-BODY); font-size:27px; line-height:1.46;
     }
-    .arrow-icon { font-weight:800; flex-shrink:0; }
+    .arrow-icon { font-weight:800; flex-shrink:0; margin-top:4px; line-height:1; }
     .on-dark  .arrow-icon { color:var(--PL); }
     .on-light .arrow-icon { color:var(--PD); }
     .slide-grad .arrow-icon { color:rgba(15,13,8,0.35); }
-    .arrow-text { color:inherit; }
+    .arrow-text { font-weight:500; }
     .on-dark  .arrow-text { color:rgba(255,255,255,0.75); }
     .on-light .arrow-text { color:rgba(15,13,8,0.72); }
     .slide-grad .arrow-text { color:rgba(15,13,8,0.72); }
@@ -1194,6 +1214,14 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     .on-dark  .arrow-text strong { color:#fff; }
     .on-light .arrow-text strong { color:var(--DB); }
     .slide-grad .arrow-text strong { color:var(--DB); }
+
+    /* ── NÚMERO DECORATIVO DE FUNDO (slide gradient) ── */
+    .grad-num {
+      position:absolute; right:-10px; bottom:30px;
+      font-family:var(--F-HEAD); font-size:400px; font-weight:900;
+      line-height:1; color:rgba(15,13,8,0.06); user-select:none;
+      pointer-events:none; z-index:0;
+    }
   </style>`;
 }
 
@@ -1449,9 +1477,11 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   const cssTemplate = buildFmteamCSSTemplate({ primaryColor: primaryColor || '#FFC300' });
 
   const validImages = unsplashImages.filter(img => img.url);
+  // Para fmteam: slide 9 (CTA) usa foto do criador, não Unsplash — exclui da lista de imagens
+  const fmteamImageSlots = numSlides === 9 ? numSlides - 1 : numSlides;
   const imagesSection = validImages.length
-    ? `\nImagens — use a URL exata na ordem indicada:\n${unsplashImages.map((img, i) =>
-        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}`
+    ? `\nImagens — use a URL exata na ordem indicada:\n${unsplashImages.slice(0, fmteamImageSlots).map((img, i) =>
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}${numSlides === 9 ? `\nSlide 9 (CTA): usa foto do criador — NÃO substitua o src desta imagem` : ''}`
     : '\n(Sem imagens fornecidas)';
 
   const roteiroSection = roteiro && roteiro.trim()
@@ -1463,6 +1493,14 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
     : '';
 
   const avatarInitials = handle.slice(0, 2).toUpperCase();
+  // Badge avatar: usa foto de perfil real se disponível, senão iniciais
+  const badgeAvatarInner = profilePhotoUrl && profilePhotoUrl.trim()
+    ? `<img src="${profilePhotoUrl}" alt="${displayName}">`
+    : avatarInitials;
+  // Foto do CTA (portrait do criador): mesma foto de perfil ou placeholder
+  const ctaPhotoSrc = profilePhotoUrl && profilePhotoUrl.trim()
+    ? profilePhotoUrl
+    : 'FOTO_PERFIL_CRIADOR';
 
   // Progress bar — .on-dark ou .on-light conforme tipo de slide
   const progFor = (current, ctx = 'dark') => {
@@ -1474,10 +1512,11 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   };
 
   // Header padrão (accent bar + brand bar)
+  const currentYear = new Date().getFullYear();
   const header = `<div class="accent-bar"></div>
   <div class="brand-bar">
     <span>${handleUpper}</span>
-    <span>2026</span>
+    <span>${currentYear}</span>
   </div>`;
 
   const verifiedSvg = `<svg viewBox="0 0 24 24" fill="#1D9BF0" xmlns="http://www.w3.org/2000/svg"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>`;
@@ -1502,15 +1541,27 @@ ${roteiroSection}
     tipos de fundo: slide-dark | slide-light | slide-grad
     contexto: on-dark (dark slides) | on-light (light e gradient slides)
 - TODOS os slides começam com .accent-bar + .brand-bar e terminam com .prog
-- Brand bar: APENAS "${handleUpper}" à esquerda + "2026" à direita. NADA mais.
+- Brand bar: APENAS "${handleUpper}" à esquerda + "${currentYear}" à direita. NADA mais.
 - Sem swipe hint, sem badges de tipo (ANÁLISE, TENDÊNCIA etc.)
-- Slide 1 (capa): foto full-bleed em <img id="img-capa">, overlay-capa, capa-badge, capa-headline 116px
-- Slides dark internos (ímpares): foto full-bleed em <img id="img-sN">, overlay-shadow-up, dark-h1 + dark-body
-- Slides light internos (pares): fundo off-white, img-box-top com <img id="img-sN">, light-h1 + light-body
-- Slide gradient (penúltimo conteúdo): slide-grad on-light, img-box-top com <img id="img-sN">, light-h1 + light-body (texto ESCURO)
-- IDs de imagem: img-capa (slide 1), img-s2 a img-s${numSlides - 1} (slides internos). CTA sem ID de imagem.
-- Slide CTA (último): slide-light on-light, sem foto de fundo, com .cta-bridge + .cta-kbox + .cta-footer-badge
-- Máximo 40 palavras por slide de conteúdo
+
+${numSlides === 9 ? `DISTRIBUIÇÃO FIXA DOS 9 SLIDES (estrutura fmteam v2 — siga exatamente):
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 3: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 580px, arrow-rows, grad-num
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 500px, stat-rows (dados/prova)
+- Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 7: LIGHT — slide-light on-light — img-box-top 620px, light-h1 + light-body
+- Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 9 (CTA): LIGHT — slide-light on-light — img-box-top 380px (object-position:top) + .cta-bridge + .cta-kbox + .cta-footer-badge
+
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.` : `DISTRIBUIÇÃO DOS ${numSlides} SLIDES:
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top)
+- Inclua 1 slide gradient (slide-grad on-light) no meio do carrossel (virada narrativa)
+- Slide ${numSlides} (CTA): slide-light on-light — img-box-top 380px + .cta-bridge + .cta-kbox + .cta-footer-badge
+- IDs: id="img-capa" (slide 1), id="img-s2" até id="img-s${numSlides - 1}" (slides internos). CTA sem ID.`}
+Máximo 35 palavras por slide de conteúdo.
 
 ${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
 
@@ -1524,7 +1575,7 @@ SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
   <div class="capa-headline-area">
     <div class="capa-badge">
       <div class="badge-ring">
-        <div class="badge-avatar">${avatarInitials}</div>
+        <div class="badge-avatar">${badgeAvatarInner}</div>
       </div>
       <div class="badge-info">
         <div class="badge-name-row">
@@ -1534,12 +1585,14 @@ SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
         <div class="badge-handle">${handleAt}</div>
       </div>
     </div>
-    <div class="capa-headline">[HEADLINE IMPACTANTE — até 8 palavras — 1–2 em <em>DESTAQUE</em>]</div>
+    <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>
+    <div class="capa-sub">[SUBTÍTULO COMPLEMENTAR — mesma escala, sem em — omitir se não couber]</div>
+    <div style="font-family:var(--F-HEAD);font-size:64px;font-weight:800;text-transform:uppercase;letter-spacing:-2px;text-align:justify;text-align-last:justify;color:rgba(255,255,255,0.52);margin-top:16px">[(TEXTO ENTRE PARÊNTESES OPCIONAL — ex: A VERDADE QUE NINGUÉM TE CONTA)]</div>
   </div>
   ${progFor(1, 'dark')}
 </div>
 
-SLIDES DARK INTERNOS (ímpares: 2, 4, 6...):
+SLIDES DARK INTERNOS (slides 2, 3, 6, 8):
 <div class="slide slide-dark slide-with-bg on-dark">
   ${header}
   <div class="photo-bg"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
@@ -1547,49 +1600,81 @@ SLIDES DARK INTERNOS (ímpares: 2, 4, 6...):
   <div class="content on-dark">
     <div class="tag">[CATEGORIA EM 1–2 PALAVRAS]</div>
     <div class="dark-h1"><em>PALAVRA-CHAVE</em><br>COMPLEMENTO</div>
-    <div class="dark-body">[corpo do slide — até 30 palavras — <em>destaques</em> em amarelo]</div>
+    <div class="dark-body">[corpo — até 30 palavras — <em>destaques</em> em amarelo]</div>
   </div>
+NOTA: quando o conteúdo for uma lista de pontos, substitua dark-body por arrow-rows:
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto</strong> explicação</span></div>
   [PROG_N]
 </div>
 
-SLIDES LIGHT INTERNOS (pares: 3, 5, 7...):
-<div class="slide slide-light on-light">
-  ${header}
-  <div class="content on-light">
-    <div class="img-box-top" style="height:440px"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
-    <div class="tag">[CATEGORIA]</div>
-    <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
-    <div class="light-body">[corpo do slide — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
-  </div>
-  [PROG_N]
-</div>
-
-SLIDE GRADIENT (penúltimo slide de conteúdo, slide ${numSlides - 1}):
+SLIDE 4 — GRADIENT (slide-grad on-light — fundo dourado, texto SEMPRE escuro, nunca branco):
 <div class="slide slide-grad on-light">
   ${header}
+  <div class="grad-num">4</div>
   <div class="content on-light">
-    <div class="img-box-top" style="height:440px"><img id="img-s${numSlides - 1}" src="FOTO_N" alt="${topic}"></div>
-    <div class="tag">[SÍNTESE / CONCLUSÃO]</div>
-    <div class="light-h1">PONTO<br><em>FINAL</em></div>
-    <div class="light-body">[síntese ou aplicação prática — texto ESCURO — <em>destaques</em> em dourado]</div>
+    <div class="img-box-top" style="height:580px"><img id="img-s4" src="FOTO_4" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">TÍTULO<br>DO PONTO</div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 1</strong> — detalhe do argumento</span></div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 2</strong> — consequência ou dado</span></div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text">Ponto 3 — conclusão ou solução</span></div>
   </div>
-  [PROG_N]
+  [PROG_4]
 </div>
 
-SLIDE ${numSlides} — CTA (slide-light, on-light, sem foto de fundo):
+SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 500px + stat-rows para dados numéricos):
 <div class="slide slide-light on-light">
   ${header}
   <div class="content on-light">
+    <div class="img-box-top" style="height:500px"><img id="img-s5" src="FOTO_5" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">DADO<br><em>REAL</em></div>
+    <div class="stat-row">
+      <div class="stat-num">00%</div>
+      <div class="stat-content">
+        <div class="stat-title">[Título do dado]</div>
+        <div class="stat-desc">[Fonte ou contexto do dado]</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-num">00x</div>
+      <div class="stat-content">
+        <div class="stat-title">[Outro dado]</div>
+        <div class="stat-desc">[Explicação breve]</div>
+      </div>
+    </div>
+  </div>
+  [PROG_5]
+</div>
+
+SLIDE 7 — LIGHT CONTEÚDO (img-box 620px + light-h1 + light-body):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:620px"><img id="img-s7" src="FOTO_7" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
+    <div class="light-body">[corpo — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
+  </div>
+  [PROG_7]
+</div>
+
+SLIDE ${numSlides} — CTA (slide-light, on-light, com foto portrait 380px no topo):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:380px"><img src="${ctaPhotoSrc}" alt="${displayName}" style="object-position:top"></div>
     <div class="cta-bridge">[frase-ponte conectando o conteúdo ao CTA — <strong>palavra forte</strong> em negrito]</div>
     <div class="cta-kbox">
       <div class="cta-kbox-label">Comenta a palavra abaixo:</div>
       <div class="cta-kbox-keyword">[KEYWORD]</div>
       <div class="cta-kbox-divider"></div>
       <div class="cta-kbox-benefit">[benefício direto — 1 linha]</div>
+      <div class="cta-kbox-sub">[detalhe extra opcional — itálico]</div>
     </div>
     <div class="cta-footer-badge">
       <div class="cta-badge-ring">
-        <div class="cta-badge-avatar">${avatarInitials}</div>
+        <div class="cta-badge-avatar">${badgeAvatarInner}</div>
       </div>
       <div class="cta-badge-info">
         <div class="cta-badge-name">${displayName} ${verifiedSvg}</div>
@@ -1808,12 +1893,14 @@ async function generateCarousel(config) {
   // Passo 1: Reddit (skip se tiver roteiro) + queries por slide, em paralelo
   const [redditTrends, slideQueries] = await Promise.all([
     roteiro ? Promise.resolve([]) : fetchRedditTrends(topic),
-    generateSlideImageQueries(topic, roteiro, slidesCount, niche),
+    generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle),
   ]);
 
   // Passo 2: busca imagem específica para cada slide em paralelo
+  // fmteam 9-slide: retorna 8 queries (sem CTA) — aceita length >= slidesCount - 1
+  const minQueriesRequired = (layoutStyle === 'fmteam' && slidesCount === 9) ? slidesCount - 1 : slidesCount;
   let unsplashImages;
-  if (slideQueries && slideQueries.length >= slidesCount) {
+  if (slideQueries && slideQueries.length >= minQueriesRequired) {
     const perSlide = await Promise.all(
       slideQueries.map(q => fetchOneImage(q, topic))
     );
@@ -1900,6 +1987,22 @@ async function generateCarousel(config) {
       /(<div[^>]*class="avatar-circle"[^>]*>)([\s\S]*?)(<\/div>)/,
       `$1${imgTag}$3`
     );
+
+    // Pós-processamento fmteam: injeta foto de perfil nos badges (badge-avatar e cta-badge-avatar)
+    // Substitui texto de iniciais se a foto não foi colocada pelo Claude
+    if (layoutStyle === 'fmteam') {
+      const fmteamImgTag = `<img src="${profilePhotoUrl}" alt="${creatorName || 'avatar'}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+      // Badge da capa (.badge-avatar) — só substitui se não tem <img> já
+      html = html.replace(
+        /(<div[^>]*class="badge-avatar"[^>]*>)(?![\s\S]*?<img)([\s\S]*?)(<\/div>)/g,
+        `$1${fmteamImgTag}$3`
+      );
+      // Badge do CTA (.cta-badge-avatar) — idem
+      html = html.replace(
+        /(<div[^>]*class="cta-badge-avatar"[^>]*>)(?![\s\S]*?<img)([\s\S]*?)(<\/div>)/g,
+        `$1${fmteamImgTag}$3`
+      );
+    }
   }
 
   // Pós-processamento: garante que o selo verificado aparece no .profile-name
@@ -1980,7 +2083,7 @@ REGRAS OBRIGATÓRIAS:
 - NÃO altere: classes CSS, atributos style, estrutura de divs, src de imagens, IDs, nem qualquer atributo que não seja o conteúdo de texto
 - Substitua APENAS os textos dentro dos elementos com estas classes (use as que existirem no HTML):
   Layout editorial/clean: .title, .subtitle, .narrative-text, .content-title, .content-body, .cover-title, .cta-title
-  Layout fmteam: .capa-headline, .dark-h1, .light-h1, .dark-body, .light-body, .tag, .cta-bridge, .cta-kbox-keyword, .cta-kbox-benefit, .cta-kbox-sub
+  Layout fmteam: .capa-headline, .capa-sub, .dark-h1, .light-h1, .dark-body, .light-body, .tag, .cta-bridge, .cta-kbox-keyword, .cta-kbox-benefit, .cta-kbox-sub, .stat-num, .stat-title, .stat-desc, .arrow-text, .grad-num
 - Ao substituir .dark-h1 / .light-h1 / .capa-headline: mantenha a tag <em> exatamente onde está, troque apenas o texto (a cor/gradiente do <em> é aplicada via CSS)
 - Máximo 40 palavras por slide
 - Sem travessão (—) no meio de frases

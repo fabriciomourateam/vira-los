@@ -51,23 +51,41 @@ function fixCalcBackgroundPosition(container: HTMLElement): void {
   }
 
   // fmteam v2: <img> elements may have object-position: calc(50% ± Xpx) calc(50% ± Ypx)
-  // html2canvas does not support calc() in object-position → convert to plain percentages
+  // html2canvas does not support calc() in object-position → convert to plain percentages.
+  // Also normalise CSS keyword values (top/bottom/left/right/center) → % equivalents
+  // since some html2canvas versions only accept <percentage> or <length>.
+  const OBJPOS_KW: Record<string, string> = {
+    top: '50% 0%', bottom: '50% 100%',
+    left: '0% 50%', right: '100% 50%',
+    center: '50% 50%',
+  };
   const imgEls = Array.from(container.querySelectorAll('img[style]')) as HTMLElement[];
   for (const img of imgEls) {
     let s = img.getAttribute('style') || '';
-    if (!s.includes('object-position') || !s.includes('calc(50%')) continue;
+    if (!s.includes('object-position')) continue;
+
+    // 1. keyword shorthand → percentages (e.g. "object-position:top" → "object-position:50% 0%")
     s = s.replace(
-      /object-position\s*:\s*calc\(50%\s*([+-])\s*([\d.]+)px\)\s+calc\(50%\s*([+-])\s*([\d.]+)px\)/gi,
-      (_, sx, vx, sy, vy) => {
-        const W = (img as HTMLElement).offsetWidth || 1080;
-        const H = (img as HTMLElement).offsetHeight || 1350;
-        const ox = (sx === '-' ? -1 : 1) * parseFloat(vx);
-        const oy = (sy === '-' ? -1 : 1) * parseFloat(vy);
-        const px = 50 - (ox / W) * 100;
-        const py = 50 - (oy / H) * 100;
-        return `object-position: ${px.toFixed(1)}% ${py.toFixed(1)}%`;
-      },
+      /object-position\s*:\s*(top|bottom|left|right|center)\b/gi,
+      (_, kw) => `object-position: ${OBJPOS_KW[kw.toLowerCase()] ?? '50% 50%'}`,
     );
+
+    // 2. calc(50% ± Xpx) calc(50% ± Ypx) → plain percentages
+    if (s.includes('calc(50%')) {
+      s = s.replace(
+        /object-position\s*:\s*calc\(50%\s*([+-])\s*([\d.]+)px\)\s+calc\(50%\s*([+-])\s*([\d.]+)px\)/gi,
+        (_, sx, vx, sy, vy) => {
+          const W = (img as HTMLElement).offsetWidth || 1080;
+          const H = (img as HTMLElement).offsetHeight || 1350;
+          const ox = (sx === '-' ? -1 : 1) * parseFloat(vx);
+          const oy = (sy === '-' ? -1 : 1) * parseFloat(vy);
+          const px = 50 - (ox / W) * 100;
+          const py = 50 - (oy / H) * 100;
+          return `object-position: ${px.toFixed(1)}% ${py.toFixed(1)}%`;
+        },
+      );
+    }
+
     img.setAttribute('style', s);
   }
 }
@@ -84,8 +102,9 @@ function fixHtml2canvasTextRendering(container: HTMLElement): void {
     '.split-title', '.title', '.subtitle', '.narrative-text',
     '.cover-subtitle', '.cta-subtitle', '.step-text', '.tip-text',
     // fmteam v2
-    '.capa-headline', '.dark-h1', '.light-h1', '.dark-body', '.light-body',
-    '.tag', '.cta-bridge', '.cta-kbox-keyword', '.cta-kbox-benefit',
+    '.capa-headline', '.capa-sub', '.dark-h1', '.light-h1', '.dark-body', '.light-body',
+    '.tag', '.cta-bridge', '.cta-kbox-label', '.cta-kbox-keyword', '.cta-kbox-benefit', '.cta-kbox-sub',
+    '.arrow-text', '.stat-title', '.stat-desc',
   ];
   for (const sel of TEXT_SELECTORS) {
     container.querySelectorAll(sel).forEach(outer => {
@@ -129,6 +148,9 @@ function fixFmteamGradientText(container: HTMLElement): void {
   container.querySelectorAll<HTMLElement>(
     '.capa-headline em, .dark-h1 em, .light-h1 em, .cta-kbox-keyword, .cta-kword'
   ).forEach(el => {
+    // .slide-grad override: .light-h1 em já tem cor escura (rgba(15,13,8,0.60)) no CSS,
+    // background-clip:text foi removido no override — não aplicar gold aqui
+    if (el.closest('.slide-grad')) return;
     el.style.webkitTextFillColor = '#FFC300';
     (el.style as any).webkitBackgroundClip = 'unset';
     el.style.backgroundClip = 'unset';
@@ -196,6 +218,7 @@ async function fixCalcBackgroundPositionHiFi(container: HTMLElement): Promise<vo
  * Também lida com o valor decimal do computed style (.clean-cta .bg { filter: brightness(0.3) }).
  */
 function applyBrightnessOverlays(container: HTMLElement): void {
+  // ── Layout clássico: .bg / .slide-bg com background-image ──
   const bgEls = Array.from(container.querySelectorAll('.bg, .slide-bg')) as HTMLElement[];
   for (const el of bgEls) {
     const inlineStyle = el.getAttribute('style') || '';
@@ -220,12 +243,19 @@ function applyBrightnessOverlays(container: HTMLElement): void {
     if (Math.abs(factor - 1.0) < 0.02) continue; // ~100% — sem ajuste
 
     // Overlay imediatamente após .bg (mesmo z-index → acima por DOM order, abaixo do .overlay real)
-    const alpha = factor < 1.0 ? Math.min(1, 1 - factor) : 0;
-    if (alpha > 0.01) {
+    // factor < 1 → overlay preto (escurece) | factor > 1 → overlay branco (clareia)
+    const darkAlpha  = factor < 1.0 ? Math.min(1, 1 - factor) : 0;
+    const lightAlpha = factor > 1.0 ? Math.min(0.7, (factor - 1) * 0.75) : 0; // aproximação suave
+    const ovColor = darkAlpha > 0.01
+      ? `rgba(0,0,0,${darkAlpha.toFixed(4)})`
+      : lightAlpha > 0.01
+        ? `rgba(255,255,255,${lightAlpha.toFixed(4)})`
+        : null;
+    if (ovColor) {
       const ov = document.createElement('div');
       ov.setAttribute(
         'style',
-        `position:absolute;inset:0;z-index:0;background:rgba(0,0,0,${alpha.toFixed(4)});pointer-events:none;`,
+        `position:absolute;inset:0;z-index:0;background:${ovColor};pointer-events:none;`,
       );
       el.insertAdjacentElement('afterend', ov);
     }
@@ -234,6 +264,43 @@ function applyBrightnessOverlays(container: HTMLElement): void {
     if (inlineMatch) {
       el.setAttribute('style', inlineStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?\s*/i, '').trim());
     }
+  }
+
+  // ── fmteam v2: <img> dentro de .photo-bg ou .img-box-top com filter:brightness() ──
+  // html2canvas não suporta filter em <img> — converte para overlay sobre o container pai.
+  const fmteamImgs = Array.from(
+    container.querySelectorAll('.photo-bg img[style], .img-box-top img[style]')
+  ) as HTMLElement[];
+  for (const img of fmteamImgs) {
+    const inlineStyle = img.getAttribute('style') || '';
+    const inlineMatch = inlineStyle.match(/filter\s*:\s*brightness\(\s*(\d+(?:\.\d+)?)\s*%\s*\)/i);
+    if (!inlineMatch) continue;
+    const factor = parseFloat(inlineMatch[1]) / 100;
+    if (Math.abs(factor - 1.0) < 0.02) continue;
+
+    // Insere overlay dentro do container pai (position:relative, overflow:hidden já estão lá)
+    // factor < 1 → overlay preto (escurece) | factor > 1 → overlay branco (clareia)
+    const parent = img.parentElement;
+    if (parent) {
+      const darkAlpha  = factor < 1.0 ? Math.min(1, 1 - factor) : 0;
+      const lightAlpha = factor > 1.0 ? Math.min(0.7, (factor - 1) * 0.75) : 0;
+      const ovColor = darkAlpha > 0.01
+        ? `rgba(0,0,0,${darkAlpha.toFixed(4)})`
+        : lightAlpha > 0.01
+          ? `rgba(255,255,255,${lightAlpha.toFixed(4)})`
+          : null;
+      if (ovColor) {
+        const ov = document.createElement('div');
+        // z-index:1 fica acima da img (z-index:auto) mas abaixo dos overlays reais (z-index:1+)
+        ov.setAttribute(
+          'style',
+          `position:absolute;inset:0;z-index:1;background:${ovColor};pointer-events:none;border-radius:inherit;`,
+        );
+        parent.appendChild(ov);
+      }
+    }
+    // Remove filter do inline style da img
+    img.setAttribute('style', inlineStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?\s*/i, '').trim());
   }
 }
 
@@ -596,12 +663,19 @@ export async function generateAndSaveScreenshotsHiFi(
             } catch { factor = 1.0; }
           }
           if (Math.abs(factor - 1.0) < 0.02) continue;
-          const alpha = factor < 1.0 ? Math.min(1, 1 - factor) : 0;
-          if (alpha > 0.01) {
+          // factor < 1 → overlay preto (escurece) | factor > 1 → overlay branco (clareia)
+          const darkAlpha  = factor < 1.0 ? Math.min(1, 1 - factor) : 0;
+          const lightAlpha = factor > 1.0 ? Math.min(0.7, (factor - 1) * 0.75) : 0;
+          const ovColor = darkAlpha > 0.01
+            ? `rgba(0,0,0,${darkAlpha.toFixed(4)})`
+            : lightAlpha > 0.01
+              ? `rgba(255,255,255,${lightAlpha.toFixed(4)})`
+              : null;
+          if (ovColor) {
             const ov = idoc.createElement('div');
             ov.setAttribute(
               'style',
-              `position:absolute;inset:0;z-index:0;background:rgba(0,0,0,${alpha.toFixed(4)});pointer-events:none;`,
+              `position:absolute;inset:0;z-index:0;background:${ovColor};pointer-events:none;`,
             );
             el.insertAdjacentElement('afterend', ov);
           }
@@ -614,11 +688,61 @@ export async function generateAndSaveScreenshotsHiFi(
         }
       }
 
+      // ── fmteam v2: brightness para <img> dentro de .photo-bg / .img-box-top ──
+      // O bloco acima só trata .bg/.slide-bg — fmteam usa <img> não divs.
+      // Cria overlay dentro do container pai usando idoc.createElement (não document).
+      {
+        const fmteamImgs = Array.from(
+          body.querySelectorAll('.photo-bg img[style], .img-box-top img[style]')
+        ) as HTMLElement[];
+        for (const img of fmteamImgs) {
+          const inlineStyle = img.getAttribute('style') || '';
+          const m = inlineStyle.match(/filter\s*:\s*brightness\(\s*(\d+(?:\.\d+)?)\s*%\s*\)/i);
+          if (!m) continue;
+          const factor = parseFloat(m[1]) / 100;
+          if (Math.abs(factor - 1.0) < 0.02) continue;
+          // factor < 1 → overlay preto (escurece) | factor > 1 → overlay branco (clareia)
+          const parent = img.parentElement;
+          if (parent) {
+            const darkAlpha  = factor < 1.0 ? Math.min(1, 1 - factor) : 0;
+            const lightAlpha = factor > 1.0 ? Math.min(0.7, (factor - 1) * 0.75) : 0;
+            const ovColor = darkAlpha > 0.01
+              ? `rgba(0,0,0,${darkAlpha.toFixed(4)})`
+              : lightAlpha > 0.01
+                ? `rgba(255,255,255,${lightAlpha.toFixed(4)})`
+                : null;
+            if (ovColor) {
+              const ov = idoc.createElement('div');
+              ov.setAttribute('style',
+                `position:absolute;inset:0;z-index:1;background:${ovColor};pointer-events:none;border-radius:inherit;`);
+              parent.appendChild(ov);
+            }
+          }
+          // Remove filter + força filter:none para evitar double darkening via classe CSS
+          const cleaned = inlineStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?\s*/i, '').trim();
+          const sep = cleaned && !cleaned.endsWith(';') ? '; ' : '';
+          img.setAttribute('style', `${cleaned}${sep}filter: none`);
+        }
+      }
+
       // background-position: calc(50% ± Xpx) → percentual exato
       // html2canvas ignora calc() e posiciona a imagem em 50% 50% — errado quando
       // o usuário arrastou o fundo no editor. A versão HiFi carrega a imagem para
       // obter as dimensões reais e calcula o percentual exato via fórmula de cover.
       await fixCalcBackgroundPositionHiFi(body);
+
+      // fmteam v2: object-position: calc() / keyword (top, center, etc.) nos <img>
+      // fixCalcBackgroundPositionHiFi só corrige background-position. As imagens fmteam
+      // usam object-position — aplicar o fix standard que cobre ambos os casos.
+      // O background-position já foi convertido por fixCalcBackgroundPositionHiFi acima,
+      // então a passagem abaixo trata apenas o bloco de object-position (imgs sem calc() são
+      // ignoradas automaticamente pelo `if (!s.includes('object-position')) continue;`).
+      fixCalcBackgroundPosition(body);
+
+      // fmteam v2: gradient text (-webkit-background-clip:text + -webkit-text-fill-color:transparent)
+      // html2canvas não suporta background-clip:text → texto fica transparente.
+      // Converte para cor sólida #FFC300 antes de capturar.
+      fixFmteamGradientText(body);
 
       // Fontes (já estão como links do Google Fonts — ignora se travar)
       if ((idoc as any).fonts?.ready) {

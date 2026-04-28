@@ -342,6 +342,12 @@ const TEXT_SELECTORS = [
   { selector: '.cta-kbox-sub', isMain: false },
   { selector: '.cta-badge-name', isMain: false },
   { selector: '.cta-badge-handle', isMain: false },
+  // fmteam v2: stat-rows, arrow-rows e número decorativo
+  { selector: '.stat-num', isMain: true },
+  { selector: '.stat-title', isMain: false },
+  { selector: '.stat-desc', isMain: false },
+  { selector: '.arrow-text', isMain: false },
+  { selector: '.grad-num', isMain: false },
 ];
 
 // Converte <br> → \n para exibir corretamente no textarea
@@ -581,18 +587,27 @@ function rebuildSlideOuterHtml(
       const dragX = bgImageConfig.dragOffsetX ?? 0;
       const dragY = bgImageConfig.dragOffsetY ?? 0;
       const hasDrag = dragX !== 0 || dragY !== 0;
+      // Só sobrescreve object-position se houve drag ou se o usuário moveu o slider
+      // (posição não-default). Isso preserva object-position:top no CTA quando o
+      // usuário altera apenas o brilho sem ter mexido na posição.
+      const posIsDefault = posX === 50 && posY === 50 && !hasDrag;
       let imgStyle = fmteamImg.getAttribute('style') || '';
-      imgStyle = imgStyle.replace(/object-position\s*:\s*[^;]+;?/gi, '').trim();
+      if (!posIsDefault) {
+        imgStyle = imgStyle.replace(/object-position\s*:\s*[^;]+;?/gi, '').trim();
+      }
       imgStyle = imgStyle.replace(/filter\s*:\s*brightness\([^)]+\)\s*;?/i, '').trim();
       imgStyle = imgStyle.replace(/transform\s*:[^;]+;?/i, '').trim();
-      const bpx = hasDrag
-        ? (dragX >= 0 ? `calc(50% + ${dragX.toFixed(1)}px)` : `calc(50% - ${(-dragX).toFixed(1)}px)`)
-        : `${posX}%`;
-      const bpy = hasDrag
-        ? (dragY >= 0 ? `calc(50% + ${dragY.toFixed(1)}px)` : `calc(50% - ${(-dragY).toFixed(1)}px)`)
-        : `${posY}%`;
       const scaleTransform = scale > 1.005 ? ` transform: scale(${scale.toFixed(3)});` : '';
-      imgStyle += `; object-position: ${bpx} ${bpy}; filter: brightness(${bgImageConfig.brightness}%);${scaleTransform}`;
+      if (!posIsDefault) {
+        const bpx = hasDrag
+          ? (dragX >= 0 ? `calc(50% + ${dragX.toFixed(1)}px)` : `calc(50% - ${(-dragX).toFixed(1)}px)`)
+          : `${posX}%`;
+        const bpy = hasDrag
+          ? (dragY >= 0 ? `calc(50% + ${dragY.toFixed(1)}px)` : `calc(50% - ${(-dragY).toFixed(1)}px)`)
+          : `${posY}%`;
+        imgStyle += `; object-position: ${bpx} ${bpy};`;
+      }
+      imgStyle += ` filter: brightness(${bgImageConfig.brightness}%);${scaleTransform}`;
       fmteamImg.setAttribute('style', imgStyle.replace(/^;\s*/, '').replace(/\s{2,}/g, ' '));
     }
   } else if (newBgUrl !== null || bgImageConfig) {
@@ -671,11 +686,13 @@ function rebuildSlideOuterHtml(
   }
 
   // Overlay gradient — tenta todos os seletores possíveis de overlay
+  // NOTA: exclui .overlay-capa e .overlay-shadow-up (fmteam) — são overlays estruturais
+  // do sistema de design e não devem ser sobrescritos pelo editor de gradiente.
   if (overlayConfig) {
     const overlayEl = (
       el.querySelector('.overlay') ??
       el.querySelector('.slide-overlay') ??
-      el.querySelector('[class*="overlay"]')
+      el.querySelector('[class*="overlay"]:not(.overlay-capa):not(.overlay-shadow-up)')
     ) as HTMLElement | null;
     if (overlayEl) {
       const existing = overlayEl.getAttribute('style') || '';
@@ -897,6 +914,8 @@ const DRAGGABLE_SELECTORS = [
   '.dark-h1', '.light-h1', '.dark-body', '.light-body',
   '.tag', '.content',
   '.cta-bridge', '.cta-kbox', '.cta-footer-badge',
+  // ── Layout fmteam v2 — componentes de dados ──
+  '.stat-row', '.arrow-row',
   // Custom text blocks
   '.custom-text',
 ];
@@ -1038,6 +1057,22 @@ function buildDragScript(displayScale: number): string {
       window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
       return true;
     }
+    // fmteam v2: .photo-bg / .img-box-top — pan child <img> via object-position
+    if(el.classList.contains('photo-bg')||el.classList.contains('img-box-top')){
+      var childImg=el.querySelector('img');
+      if(childImg){
+        var curObjPos=childImg.style.objectPosition||'';
+        var opRx2=/calc\(50% ([+\-]) ([\d.]+)px\)/g;
+        var pm2,opVals2=[];
+        while((pm2=opRx2.exec(curObjPos))!==null) opVals2.push((pm2[1]==='-'?-1:1)*parseFloat(pm2[2]));
+        var origTx=opVals2.length>=1?opVals2[0]:0;
+        var origTy=opVals2.length>=2?opVals2[1]:0;
+        dragging={el:childImg,sel:found.sel,elemIdx:elemIdx,mode:'photopan',startX:cx,startY:cy,origTx:origTx,origTy:origTy,_curX:origTx,_curY:origTy};
+        dragMoved=false;
+        window.parent.postMessage({type:'elementClicked',selector:found.sel},'*');
+        return true;
+      }
+    }
     // For .bg elements, pan via background-position — no black bands for taller images
     if(found.sel==='.bg'||el.classList.contains('bg')||el.classList.contains('slide-bg')){
       // Parse current background-position: handles "calc(50% + Npx)" AND "calc(50% - Npx)"
@@ -1120,6 +1155,15 @@ function buildDragScript(displayScale: number): string {
       dragging.el.style.objectPosition=opx+' '+opy;
       return;
     }
+    if(dragging.mode==='photopan'){
+      // fmteam v2: pan <img> inside .photo-bg / .img-box-top via object-position
+      var nx=dragging.origTx+dx, ny=dragging.origTy+dy;
+      dragging._curX=nx; dragging._curY=ny;
+      var opx=nx>=0?'calc(50% + '+nx.toFixed(1)+'px)':'calc(50% - '+(-nx).toFixed(1)+'px)';
+      var opy=ny>=0?'calc(50% + '+ny.toFixed(1)+'px)':'calc(50% - '+(-ny).toFixed(1)+'px)';
+      dragging.el.style.objectPosition=opx+' '+opy;
+      return;
+    }
     if(dragging.mode==='abs'){
       dragging.el.style.left=(dragging.origLeft+dx)+'px';
       dragging.el.style.top=(dragging.origTop+dy)+'px';
@@ -1158,13 +1202,26 @@ function buildDragScript(displayScale: number): string {
         payload.imgElemIdx=dragging.elemIdx;
         payload.mode='imgpan';
       }
+      else if(dragging.mode==='photopan'){
+        // fmteam v2: save pan as bgTranslateX/Y — rebuildSlideOuterHtml already reads dragOffsetX/Y
+        payload.bgTranslateX=dragging._curX!==undefined?dragging._curX:0;
+        payload.bgTranslateY=dragging._curY!==undefined?dragging._curY:0;
+        payload.mode='photopan';
+      }
       else{payload.transform=dragging.el.style.transform;}
       window.parent.postMessage(payload,'*');
     }
     dragging=null;
   }
 
-  var TEXT_EDIT_SELS=['.title','.subtitle','.subtitle-accent','.narrative-text','.content-title','.content-body','.cta-title','.cover-title','.custom-text','.follow-pill','.footer-name-pill'];
+  var TEXT_EDIT_SELS=[
+    '.title','.subtitle','.subtitle-accent','.narrative-text','.content-title','.content-body','.cta-title','.cover-title','.custom-text','.follow-pill','.footer-name-pill',
+    // fmteam v2
+    '.capa-headline','.capa-sub','.dark-h1','.light-h1','.dark-body','.light-body',
+    '.tag','.cta-bridge','.cta-kbox-label','.cta-kbox-keyword','.cta-kbox-benefit','.cta-kbox-sub',
+    '.stat-num','.stat-title','.stat-desc','.arrow-text','.grad-num',
+    '.badge-name','.badge-handle','.cta-badge-name','.cta-badge-handle'
+  ];
   document.addEventListener('dblclick',function(e){
     var textEl=null;
     for(var i=0;i<TEXT_EDIT_SELS.length;i++){var t=e.target.closest(TEXT_EDIT_SELS[i]);if(t){textEl=t;break;}}
@@ -1572,7 +1629,11 @@ export default function CarouselEditor({
     if (overlayConfigs[selectedIndex]) return;  // já tem config → não sobrescreve
     const sel = slides[selectedIndex];
     if (!sel) return;
-    const hasOverlay = sel.outerHtml.includes('class="overlay"') || sel.outerHtml.includes('class="slide-overlay"');
+    // Exclui overlays estruturais do fmteam — esses não são controláveis pelo editor de gradiente
+    const isFmteamSlide = sel.outerHtml.includes('overlay-capa') || sel.outerHtml.includes('overlay-shadow-up');
+    const hasOverlay = !isFmteamSlide && (
+      sel.outerHtml.includes('class="overlay"') || sel.outerHtml.includes('class="slide-overlay"')
+    );
     if (!hasOverlay) return;
     setOverlayConfigs(prev => ({
       ...prev,
@@ -1622,6 +1683,27 @@ export default function CarouselEditor({
       'step-text': 'Texto do passo',
       'footer-text': 'Rodapé',
       'slide-footer': 'Rodapé',
+      // fmteam v2
+      'capa-headline': 'Headline da capa',
+      'capa-sub': 'Subtítulo da capa',
+      'dark-h1': 'Título (dark)',
+      'light-h1': 'Título (light)',
+      'dark-body': 'Corpo (dark)',
+      'light-body': 'Corpo (light)',
+      'cta-bridge': 'Texto ponte CTA',
+      'cta-kbox-label': 'Label do box CTA',
+      'cta-kbox-keyword': 'Palavra-chave CTA',
+      'cta-kbox-benefit': 'Benefício CTA',
+      'cta-kbox-sub': 'Sublinha CTA',
+      'stat-num': 'Número do dado',
+      'stat-title': 'Título do dado',
+      'stat-desc': 'Descrição do dado',
+      'arrow-text': 'Texto de ponto',
+      'grad-num': 'Número decorativo',
+      'badge-name': 'Nome do perfil',
+      'badge-handle': '@Handle',
+      'cta-badge-name': 'Nome (badge CTA)',
+      'cta-badge-handle': '@Handle (badge CTA)',
     };
     return map[cn] ?? `.${cn}`;
   }
@@ -2349,6 +2431,18 @@ export default function CarouselEditor({
       const idx = data.imgElemIdx ?? 0;
       applyInlineImgObjectPos(selectedIndex, idx, dx, dy);
       setInlineImgPos({ x: dx, y: dy });
+      return;
+    }
+
+    // fmteam v2 photo pan: .photo-bg / .img-box-top — salva como dragOffsetX/Y em bgImageConfigs
+    // rebuildSlideOuterHtml já lê dragOffsetX/Y e aplica como object-position no <img>
+    if (data.mode === 'photopan') {
+      const dx = data.bgTranslateX ?? 0;
+      const dy = data.bgTranslateY ?? 0;
+      setBgImageConfigs(prev => {
+        const cur = prev[selectedIndex] ?? { position: '50% 50%', brightness: 100 };
+        return { ...prev, [selectedIndex]: { ...cur, dragOffsetX: dx, dragOffsetY: dy } };
+      });
       return;
     }
 
@@ -3342,9 +3436,22 @@ export default function CarouselEditor({
                                 const panelIdx = panels.indexOf(img.closest('.split-panel') as Element);
                                 label = panelIdx === 0 ? '📷 Antes' : '📷 Depois';
                               }
-                              return { idx: i, src: img.getAttribute('src') || '', label };
+                              // fmteam v2: labels específicos por container
+                              else if (img.closest('.photo-bg')) label = '📸 Foto principal';
+                              else if (img.closest('.img-box-top')) label = '📸 Foto topo';
+                              return { idx: i, src: img.getAttribute('src') || '', label, el: img };
                             })
-                            .filter(img => img.src && !img.src.includes('svg') && !img.src.includes('badge')) : [];
+                            .filter(img =>
+                              img.src &&
+                              !img.src.includes('data:image/svg') &&
+                              !img.src.includes('badge') &&
+                              // fmteam: exclui avatares de badge (não são fotos de conteúdo)
+                              !img.el.closest('.badge-avatar') &&
+                              !img.el.closest('.cta-badge-avatar') &&
+                              !img.el.closest('.badge-ring') &&
+                              !(img.el.closest('.badge-verified'))
+                            )
+                            .map(({ el: _el, ...rest }) => rest) : [];
                           if (inlineImgs.length === 0) return null;
                           return (
                             <div className="flex gap-1 flex-wrap">
@@ -3745,7 +3852,7 @@ export default function CarouselEditor({
                       })()}
 
                       {/* ── Gradiente / Overlay ── */}
-                      {(sel.outerHtml.includes('class="overlay"') || sel.outerHtml.includes('class="slide-overlay"')) && (() => {
+                      {(sel.outerHtml.includes('class="overlay"') || sel.outerHtml.includes('class="slide-overlay"') || sel.outerHtml.includes('overlay-capa') || sel.outerHtml.includes('overlay-shadow-up')) && (() => {
                         const ov: OverlayConfig = overlayConfigs[selectedIndex] ?? {
                           opacity: 0.96, direction: 'to bottom', color: '0,0,0', startAt: 40
                         };
