@@ -6,8 +6,36 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// Permite requisições do Vercel (produção) e localhost (dev).
+// ALLOWED_ORIGINS pode ser sobrescrito via variável de ambiente no Fly.dev.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+const DEFAULT_ORIGINS = [
+  'https://vira-los.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:4173',
+];
+
+const allowedSet = new Set([...DEFAULT_ORIGINS, ...ALLOWED_ORIGINS]);
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // Permite chamadas sem origin (curl, Postman, server-to-server)
+    if (!origin) return cb(null, true);
+    if (allowedSet.has(origin)) return cb(null, true);
+    // Permite qualquer subdomínio do Vercel (deploy previews)
+    if (/\.vercel\.app$/.test(origin)) return cb(null, true);
+    cb(new Error(`CORS bloqueado: ${origin}`));
+  },
+  credentials: true,
+}));
+
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // Aumenta timeout do servidor para 5 minutos (Playwright + Claude pode demorar)
