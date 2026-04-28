@@ -1340,9 +1340,17 @@ document.addEventListener('DOMContentLoaded', function() {
               {/* Badges de resumo quando colapsado */}
               {!showPersonalization && (
                 <div className="flex items-center gap-1.5 ml-1">
-                  <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.primaryColor }} />
-                  <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.accentColor }} />
-                  <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.bgColor }} />
+                  {config.layoutStyle === 'editorial' ? (
+                    <>
+                      <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.primaryColor }} />
+                      <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.accentColor }} />
+                      <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.bgColor }} />
+                    </>
+                  ) : config.layoutStyle === 'clean' ? (
+                    <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: '#ff5c4d' }} />
+                  ) : config.layoutStyle === 'fmteam' ? (
+                    <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: '#FFC300' }} />
+                  ) : null}
                   <span className="text-[10px] text-muted-foreground">{config.fontFamily}</span>
                 </div>
               )}
@@ -1436,16 +1444,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
               </div>
 
-              {/* Paleta de Cores */}
+              {/* Paleta de Cores — somente Editorial */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
                   <Palette className="w-3.5 h-3.5" /> Paleta de Cores
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <ColorPicker label="Cor Principal"   value={config.primaryColor} onChange={v => set('primaryColor', v)} />
-                  <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
-                  <ColorPicker label="Fundo Slides"    value={config.bgColor}      onChange={v => set('bgColor', v)} />
-                </div>
+                {config.layoutStyle === 'editorial' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <ColorPicker label="Cor Principal"   value={config.primaryColor} onChange={v => set('primaryColor', v)} />
+                    <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
+                    <ColorPicker label="Fundo Slides"    value={config.bgColor}      onChange={v => set('bgColor', v)} />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+                    <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      O layout <span className="font-semibold text-foreground capitalize">{config.layoutStyle}</span> usa sua própria paleta de cores — disponível apenas no <span className="font-semibold text-foreground">Editorial</span>.
+                    </p>
+                    {config.layoutStyle === 'clean' && (
+                      <span className="ml-auto shrink-0 w-4 h-4 rounded-full border border-border" style={{ background: '#ff5c4d' }} title="#ff5c4d" />
+                    )}
+                    {config.layoutStyle === 'fmteam' && (
+                      <span className="ml-auto shrink-0 w-4 h-4 rounded-full border border-border" style={{ background: '#FFC300' }} title="#FFC300" />
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Prévia Visual das Cores */}

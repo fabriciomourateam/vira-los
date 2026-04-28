@@ -1794,17 +1794,21 @@ async function generateCarousel(config) {
       contentTone, dominantEmotion, roteiro, unsplashImages, numSlides: slidesCount,
     });
   } else if (layoutStyle === 'clean') {
+    // Layout Clean usa paleta própria — ignora cores do usuário
     htmlPrompt = buildCleanHTMLPrompt({
-      topic: topic.trim(), instructions: instructions.trim(), niche, primaryColor, fontFamily,
+      topic: topic.trim(), instructions: instructions.trim(), niche,
+      primaryColor: '#ff5c4d', // cor fixa do Clean (vermelho-coral da identidade)
+      fontFamily,
       instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, unsplashImages,
       titleFontSize, bodyFontSize, bannerFontSize,
       titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
     });
   } else if (layoutStyle === 'fmteam') {
+    // Layout Fmteam usa paleta própria — ignora cores do usuário
     htmlPrompt = buildFmteamHTMLPrompt({
       topic: topic.trim(), instructions: instructions.trim(), niche,
-      primaryColor: primaryColor || '#FFC300',
+      primaryColor: '#FFC300', // cor fixa do Fmteam (amarelo dourado da identidade)
       fontFamily,
       instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, unsplashImages,
