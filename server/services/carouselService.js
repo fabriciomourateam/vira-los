@@ -1977,8 +1977,11 @@ ${typeDesc}
 
 REGRAS OBRIGATÓRIAS:
 - Retorne SOMENTE o elemento <div> externo do slide, nada mais
-- NÃO altere classes CSS, styles inline, estrutura de divs ou src de imagens
-- Substitua APENAS os textos em: .title, .subtitle, .narrative-text, .content-title, .content-body, .cover-title, .cta-title
+- NÃO altere: classes CSS, atributos style, estrutura de divs, src de imagens, IDs, nem qualquer atributo que não seja o conteúdo de texto
+- Substitua APENAS os textos dentro dos elementos com estas classes (use as que existirem no HTML):
+  Layout editorial/clean: .title, .subtitle, .narrative-text, .content-title, .content-body, .cover-title, .cta-title
+  Layout fmteam: .capa-headline, .dark-h1, .light-h1, .dark-body, .light-body, .tag, .cta-bridge, .cta-kbox-keyword, .cta-kbox-benefit, .cta-kbox-sub
+- Ao substituir .dark-h1 / .light-h1 / .capa-headline: mantenha a tag <em> exatamente onde está, troque apenas o texto (a cor/gradiente do <em> é aplicada via CSS)
 - Máximo 40 palavras por slide
 - Sem travessão (—) no meio de frases
 - Sem clichês ou frases genéricas
