@@ -5,7 +5,7 @@ import {
   Link2, Play, CheckCircle2, XCircle, Loader2, Copy, Check,
   Mic, Eye, Layers, Video, ChevronDown, ChevronUp, AlertTriangle,
   Zap, FileText, Tv2, Sparkles, BookMarked, Gauge,
-  BookmarkPlus, Save, Trash2, Tv,
+  BookmarkPlus, Save, Trash2, Tv, Plus, X,
 } from 'lucide-react';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
 
@@ -220,6 +220,9 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: Analis
   const [savingScript, setSavingScript] = useState(false);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
   const [teleprompterText, setTeleprompterText] = useState('');
+  const [newScriptForm, setNewScriptForm] = useState<{ open: boolean; title: string; script: string }>({
+    open: false, title: '', script: '',
+  });
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const stepsEndRef    = useRef<HTMLDivElement | null>(null);
@@ -269,6 +272,28 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: Analis
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       await reloadScripts();
+      toast.success('Roteiro salvo no banco!');
+    } catch (e: any) {
+      toast.error(`Falha ao salvar: ${e.message || e}`);
+    } finally {
+      setSavingScript(false);
+    }
+  }
+
+  async function saveNewScript() {
+    const { title, script } = newScriptForm;
+    if (!title.trim()) { toast.error('Informe um título para o roteiro'); return; }
+    if (!script.trim()) { toast.error('O roteiro não pode estar vazio'); return; }
+    setSavingScript(true);
+    try {
+      const r = await fetch(`${API}/api/reels-analyzer/scripts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim(), script: script.trim() }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await reloadScripts();
+      setNewScriptForm({ open: false, title: '', script: '' });
       toast.success('Roteiro salvo no banco!');
     } catch (e: any) {
       toast.error(`Falha ao salvar: ${e.message || e}`);
@@ -911,14 +936,66 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: Analis
             <h2 className="font-bold text-sm uppercase tracking-wider">Banco de Roteiros</h2>
             <span className="text-xs text-muted-foreground">({savedScripts.length})</span>
           </div>
-          <p className="text-xs text-muted-foreground hidden sm:block">
-            Salve roteiros pra gravar depois. Clique num card pra editar ou abrir no teleprompter.
-          </p>
+          <button
+            onClick={() => setNewScriptForm(f => ({ ...f, open: !f.open, title: '', script: '' }))}
+            className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg transition-colors shrink-0"
+          >
+            {newScriptForm.open ? <X size={12} /> : <Plus size={12} />}
+            {newScriptForm.open ? 'Cancelar' : 'Novo roteiro'}
+          </button>
         </div>
 
-        {savedScripts.length === 0 && (
+        {/* Formulário de novo roteiro direto */}
+        <AnimatePresence initial={false}>
+          {newScriptForm.open && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3 space-y-2">
+                <input
+                  type="text"
+                  value={newScriptForm.title}
+                  onChange={e => setNewScriptForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="Título do roteiro"
+                  autoFocus
+                  className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                />
+                <textarea
+                  value={newScriptForm.script}
+                  onChange={e => setNewScriptForm(f => ({ ...f, script: e.target.value }))}
+                  placeholder="Escreva o roteiro aqui..."
+                  rows={8}
+                  className="w-full bg-background border border-border rounded-lg px-2.5 py-2 text-sm font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/40 resize-y"
+                />
+                <div className="flex items-center gap-2 justify-end">
+                  <button
+                    onClick={() => openTeleprompter(newScriptForm.title || 'Roteiro', newScriptForm.script)}
+                    disabled={!newScriptForm.script.trim()}
+                    className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <Tv size={12} />
+                    Teleprompter
+                  </button>
+                  <button
+                    onClick={saveNewScript}
+                    disabled={savingScript || !newScriptForm.title.trim() || !newScriptForm.script.trim()}
+                    className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    {savingScript ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                    Salvar no banco
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {savedScripts.length === 0 && !newScriptForm.open && (
           <p className="text-xs text-muted-foreground py-3 text-center">
-            Nenhum roteiro salvo. Gere uma análise e clique em "Salvar no banco" no Roteiro Reels.
+            Nenhum roteiro salvo. Clique em "Novo roteiro" ou analise um reel e salve o roteiro gerado.
           </p>
         )}
 
