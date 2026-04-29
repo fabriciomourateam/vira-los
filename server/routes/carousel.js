@@ -16,6 +16,7 @@ const path = require('path');
 const axios = require('axios');
 const multer = require('multer');
 const { generateCarousel, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate } = require('../services/carouselService');
+const { FABRICIO_AVATAR_DATA_URL } = require('../services/fmteamAssets');
 const db = require('../db/database');
 
 const router = express.Router();
@@ -446,20 +447,23 @@ router.post('/re-apply-fmteam-css', (req, res) => {
   });
 
   // 5. Substitui o avatar (.badge-avatar e .cta-badge-avatar)
-  if (profilePhotoUrl && typeof profilePhotoUrl === 'string' && profilePhotoUrl.trim()) {
-    const safeUrl = profilePhotoUrl.trim().replace(/"/g, '&quot;');
-    const imgTag = `<img src="${safeUrl}" alt="${newName}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
-    updated = updated.replace(buildFlexRegex('div', 'badge-avatar'), (m, open, inner, close) => {
-      stats.avatar++;
-      return `${open}${imgTag}${close}`;
-    });
-    updated = updated.replace(buildFlexRegex('div', 'cta-badge-avatar'), (m, open, inner, close) => {
-      stats.ctaAvatar++;
-      return `${open}${imgTag}${close}`;
-    });
-  }
+  // Foto efetiva: user-provided > Fabricio default embutido (fmteam sempre tem foto)
+  const effectivePhoto = (profilePhotoUrl && typeof profilePhotoUrl === 'string' && profilePhotoUrl.trim())
+    ? profilePhotoUrl.trim()
+    : FABRICIO_AVATAR_DATA_URL;
+  const safeUrl = effectivePhoto.replace(/"/g, '&quot;');
+  const imgTag = `<img src="${safeUrl}" alt="${newName}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+  updated = updated.replace(buildFlexRegex('div', 'badge-avatar'), (m, open, inner, close) => {
+    stats.avatar++;
+    return `${open}${imgTag}${close}`;
+  });
+  updated = updated.replace(buildFlexRegex('div', 'cta-badge-avatar'), (m, open, inner, close) => {
+    stats.ctaAvatar++;
+    return `${open}${imgTag}${close}`;
+  });
 
-  console.log('[re-apply-fmteam-css]', stats, 'photoLen=', (profilePhotoUrl || '').length);
+  const usedDefault = effectivePhoto === FABRICIO_AVATAR_DATA_URL;
+  console.log('[re-apply-fmteam-css]', stats, 'photoLen=', (profilePhotoUrl || '').length, 'usedDefault=', usedDefault);
   res.json({ html: updated, stats });
 });
 

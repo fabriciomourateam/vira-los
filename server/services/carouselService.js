@@ -16,6 +16,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { FABRICIO_AVATAR_DATA_URL } = require('./fmteamAssets');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -1514,14 +1515,12 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
     : '';
 
   const avatarInitials = handle.slice(0, 2).toUpperCase();
-  // Badge avatar: usa foto de perfil real se disponível, senão iniciais
-  const badgeAvatarInner = profilePhotoUrl && profilePhotoUrl.trim()
-    ? `<img src="${profilePhotoUrl}" alt="${displayName}">`
-    : avatarInitials;
-  // Foto do CTA (portrait do criador): mesma foto de perfil ou placeholder
-  const ctaPhotoSrc = profilePhotoUrl && profilePhotoUrl.trim()
-    ? profilePhotoUrl
-    : 'FOTO_PERFIL_CRIADOR';
+  // Foto efetiva: profilePhotoUrl do user > avatar embutido do Fabricio (default fmteam)
+  const effectivePhoto = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : FABRICIO_AVATAR_DATA_URL;
+  // Badge avatar: sempre <img> (fmteam tem foto default embutida — nunca cai em iniciais)
+  const badgeAvatarInner = `<img src="${effectivePhoto}" alt="${displayName}">`;
+  // Foto do CTA (portrait do criador): mesma foto efetiva
+  const ctaPhotoSrc = effectivePhoto;
 
   // Progress bar — .on-dark ou .on-light conforme tipo de slide
   const progFor = (current, ctx = 'dark') => {
