@@ -1992,7 +1992,7 @@ async function generateCarousel(config) {
       messages: [{ role: 'user', content: htmlPrompt }],
     }),
     anthropicWithRetry({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001', // legenda = tarefa simples (caption + hashtags)
       max_tokens: 500,
       messages: [{ role: 'user', content: buildLegendaPrompt({ topic: topic.trim(), instagramHandle, niche }) }],
     }),
@@ -2149,7 +2149,7 @@ ${slideHtml}
 Retorne apenas o <div> externo com novo conteúdo:`;
 
   const response = await anthropicWithRetry({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-haiku-4-5-20251001', // regeneração de slide = tarefa isolada, não precisa de Sonnet
     max_tokens: 3000,
     messages: [{ role: 'user', content: prompt }],
   });
