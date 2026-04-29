@@ -89,8 +89,34 @@ async function runDiscovery(jobId, config) {
       reddit:    redditResult.status === 'fulfilled' ? redditResult.value : [],
     };
 
+    // ── Diagnóstico por plataforma: o que veio vs vazio ─────────────────────────
+    const platformStatus = {
+      instagram: { active: platforms.includes('instagram'), count: scrapedData.instagram.length, error: igResult.status === 'rejected' ? (igResult.reason?.message || 'erro') : (platforms.includes('instagram') && scrapedData.instagram.length === 0 ? 'sem resultados (Apify pode estar inativo)' : null) },
+      tiktok:    { active: platforms.includes('tiktok'),    count: scrapedData.tiktok.length,    error: ttResult.status === 'rejected' ? (ttResult.reason?.message || 'erro') : (platforms.includes('tiktok') && scrapedData.tiktok.length === 0 ? 'TikTok bloqueou IP do servidor (403)' : null) },
+      trends:    { active: platforms.includes('trends'),    count: scrapedData.trends.length,    error: trendsResult.status === 'rejected' ? (trendsResult.reason?.message || 'erro') : (platforms.includes('trends') && scrapedData.trends.length === 0 ? 'Google Trends bloqueou IP do servidor (403)' : null) },
+      reddit:    { active: platforms.includes('reddit'),    count: scrapedData.reddit.length,    error: redditResult.status === 'rejected' ? (redditResult.reason?.message || 'erro') : (platforms.includes('reddit') && scrapedData.reddit.length === 0 ? 'Reddit bloqueou IP do servidor (403)' : null) },
+    };
+    scrapedData.platformStatus = platformStatus;
+
     const total = scrapedData.instagram.length + scrapedData.tiktok.length +
                   scrapedData.reddit.length + scrapedData.trends.length;
+
+    // ── Se TODOS os scrapers falharam: vai direto pro Claude (fallback) ─────────
+    if (total === 0) {
+      update('fallback', 70, 'Scrapers bloquearam o servidor — gerando ideias direto via IA…');
+      try {
+        const ideas = await generateIdeas(scrapedData, config);
+        db.saveDiscoveredIdeas(ideas);
+        update('done', 100, `${ideas.length} ideias geradas (modo fallback IA)`);
+        const job = jobs.get(jobId);
+        jobs.set(jobId, { ...job, status: 'done', results: ideas, scrapedData, progress: 100 });
+      } catch (err) {
+        console.error('[Ideas/Discovery] fallback IA falhou:', err.message);
+        const job = jobs.get(jobId);
+        if (job) jobs.set(jobId, { ...job, status: 'error', error: `Scrapers bloqueados e fallback IA falhou: ${err.message}` });
+      }
+      return;
+    }
 
     // ── Pausa para revisão: o usuário verá os dados antes de gerar ideias ──────
     update('scraped', 65, `${total} resultados coletados. Revise os dados abaixo.`);

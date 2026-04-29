@@ -56,11 +56,23 @@ interface ScrapedItem {
   url?: string;
 }
 
+interface PlatformStatusEntry {
+  active: boolean;
+  count: number;
+  error: string | null;
+}
+
 interface ScrapedData {
   instagram: ScrapedItem[];
   tiktok: ScrapedItem[];
   reddit: ScrapedItem[];
   trends: string[];
+  platformStatus?: {
+    instagram: PlatformStatusEntry;
+    tiktok: PlatformStatusEntry;
+    trends: PlatformStatusEntry;
+    reddit: PlatformStatusEntry;
+  };
 }
 
 interface JobStatus {
@@ -242,12 +254,37 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                           (status.scrapedData.tiktok?.length || 0) +
                           (status.scrapedData.instagram?.length || 0) +
                           (status.scrapedData.trends?.length || 0);
-            toast.success(`${total} resultados coletados — revise antes de gerar ideias`);
+            const ps = status.scrapedData.platformStatus;
+            const failed: string[] = [];
+            if (ps) {
+              if (ps.reddit.error)    failed.push('Reddit');
+              if (ps.trends.error)    failed.push('Trends');
+              if (ps.tiktok.error)    failed.push('TikTok');
+              if (ps.instagram.error) failed.push('Instagram');
+            }
+            const suffix = failed.length ? ` (${failed.join(', ')} bloqueado${failed.length > 1 ? 's' : ''})` : '';
+            toast.success(`${total} resultados coletados${suffix} — revise antes de gerar ideias`);
           }
         } else if (status.status === 'done') {
           clearInterval(pollRef.current!);
           setJobId(null);
-          if (status.results) { setIdeas(status.results); toast.success(`${status.results.length} ideias geradas! 🎉`); }
+          if (status.results) {
+            setIdeas(status.results);
+            // Se chegou direto a 'done' (sem 'scraped'), todos os scrapers falharam — usou fallback IA
+            const ps = status.scrapedData?.platformStatus;
+            const blocked: string[] = [];
+            if (ps) {
+              if (ps.reddit.error)    blocked.push('Reddit');
+              if (ps.trends.error)    blocked.push('Google Trends');
+              if (ps.tiktok.error)    blocked.push('TikTok');
+              if (ps.instagram.error) blocked.push('Instagram');
+            }
+            if (blocked.length === 4) {
+              toast.warning(`Scrapers bloquearam o servidor (${blocked.join(', ')}). ${status.results.length} ideias geradas via IA com base no nicho.`, { duration: 7000 });
+            } else {
+              toast.success(`${status.results.length} ideias geradas! 🎉`);
+            }
+          }
         } else if (status.status === 'error') {
           clearInterval(pollRef.current!);
           setJobId(null);
