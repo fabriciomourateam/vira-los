@@ -686,14 +686,14 @@ function rebuildSlideOuterHtml(
     }
   }
 
-  // Overlay gradient — tenta todos os seletores possíveis de overlay
-  // NOTA: exclui .overlay-capa e .overlay-shadow-up (fmteam) — são overlays estruturais
-  // do sistema de design e não devem ser sobrescritos pelo editor de gradiente.
+  // Overlay gradient — tenta todos os seletores possíveis de overlay, incluindo fmteam
   if (overlayConfig) {
     const overlayEl = (
       el.querySelector('.overlay') ??
       el.querySelector('.slide-overlay') ??
-      el.querySelector('[class*="overlay"]:not(.overlay-capa):not(.overlay-shadow-up)')
+      el.querySelector('.overlay-capa') ??
+      el.querySelector('.overlay-shadow-up') ??
+      el.querySelector('[class*="overlay"]')
     ) as HTMLElement | null;
     if (overlayEl) {
       const existing = overlayEl.getAttribute('style') || '';
@@ -1707,16 +1707,21 @@ export default function CarouselEditor({
     if (overlayConfigs[selectedIndex]) return;  // já tem config → não sobrescreve
     const sel = slides[selectedIndex];
     if (!sel) return;
-    // Exclui overlays estruturais do fmteam — esses não são controláveis pelo editor de gradiente
-    const isFmteamSlide = sel.outerHtml.includes('overlay-capa') || sel.outerHtml.includes('overlay-shadow-up');
-    const hasOverlay = !isFmteamSlide && (
-      sel.outerHtml.includes('class="overlay"') || sel.outerHtml.includes('class="slide-overlay"')
-    );
+    const isFmteamShadowUp = sel.outerHtml.includes('overlay-shadow-up');
+    const isFmteamCapa     = sel.outerHtml.includes('overlay-capa');
+    const hasOverlay =
+      sel.outerHtml.includes('class="overlay"') ||
+      sel.outerHtml.includes('class="slide-overlay"') ||
+      isFmteamCapa || isFmteamShadowUp;
     if (!hasOverlay) return;
-    setOverlayConfigs(prev => ({
-      ...prev,
-      [selectedIndex]: { opacity: 0.96, direction: 'to bottom', color: '0,0,0', startAt: 40 },
-    }));
+    // Padrão fmteam: cor escura da identidade (15,13,8 ≈ #0F0D08)
+    // overlay-shadow-up → sombra sobe de baixo; overlay-capa → escurece de cima pra baixo
+    const defaultConfig = isFmteamShadowUp
+      ? { opacity: 0.99, direction: 'to top'    as const, color: '15,13,8', startAt: 0 }
+      : isFmteamCapa
+        ? { opacity: 0.96, direction: 'to bottom' as const, color: '15,13,8', startAt: 38 }
+        : { opacity: 0.96, direction: 'to bottom' as const, color: '0,0,0',   startAt: 40 };
+    setOverlayConfigs(prev => ({ ...prev, [selectedIndex]: defaultConfig }));
   }, [collapsedSections['gradient'], selectedIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleBlock(key: string) {
