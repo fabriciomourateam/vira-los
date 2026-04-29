@@ -1125,6 +1125,26 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       line-height:0.92; color:rgba(255,255,255,0.88);
       margin-top:14px; letter-spacing:-4px; text-transform:uppercase;
     }
+    /* Texto opcional entre parênteses (linha 3 da capa) */
+    .capa-context {
+      font-family:var(--F-HEAD); font-size:64px; font-weight:800;
+      line-height:1; letter-spacing:-2px; text-transform:uppercase;
+      text-align:justify; text-align-last:justify;
+      color:rgba(255,255,255,0.52); margin-top:16px;
+    }
+    .capa-context em {
+      font-style:normal;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    /* Modificador para aplicar gradiente em todo o texto da linha 3 */
+    .capa-context.gradient {
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+      color:transparent;
+    }
 
     /* ── BADGE DA CAPA ── */
     .capa-badge { display:flex; align-items:center; gap:18px; width:fit-content; margin-bottom:28px; }
@@ -1610,7 +1630,7 @@ SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
     </div>
     <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>
     <div class="capa-sub">[SUBTÍTULO COMPLEMENTAR — mesma escala, sem em — omitir se não couber]</div>
-    <div style="font-family:var(--F-HEAD);font-size:64px;font-weight:800;text-transform:uppercase;letter-spacing:-2px;text-align:justify;text-align-last:justify;color:rgba(255,255,255,0.52);margin-top:16px">[(TEXTO ENTRE PARÊNTESES OPCIONAL — ex: A VERDADE QUE NINGUÉM TE CONTA)]</div>
+    <div class="capa-context">[(TEXTO ENTRE PARÊNTESES OPCIONAL — ex: A VERDADE QUE NINGUÉM TE CONTA — pode usar <em>palavra</em> para destacar com gradiente dourado, ou adicionar a classe "gradient" no div para todo o texto receber o gradiente)]</div>
   </div>
   ${progFor(1, 'dark')}
 </div>

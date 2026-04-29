@@ -328,6 +328,7 @@ const TEXT_SELECTORS = [
   // ── fmteam v2 ──
   { selector: '.capa-headline', isMain: true },
   { selector: '.capa-sub', isMain: true },
+  { selector: '.capa-context', isMain: false },
   { selector: '.dark-h1', isMain: true },
   { selector: '.light-h1', isMain: true },
   { selector: '.dark-body', isMain: true },
@@ -910,7 +911,7 @@ const DRAGGABLE_SELECTORS = [
   // ── Layout fmteam v2 — imagens ──
   '.photo-bg', '.img-box-top',
   // ── Layout fmteam v2 — texto ──
-  '.capa-headline-area', '.capa-badge', '.capa-headline', '.capa-sub',
+  '.capa-headline-area', '.capa-badge', '.capa-headline', '.capa-sub', '.capa-context',
   '.dark-h1', '.light-h1', '.dark-body', '.light-body',
   '.tag', '.content',
   '.cta-bridge', '.cta-kbox', '.cta-footer-badge',
@@ -1217,7 +1218,7 @@ function buildDragScript(displayScale: number): string {
   var TEXT_EDIT_SELS=[
     '.title','.subtitle','.subtitle-accent','.narrative-text','.content-title','.content-body','.cta-title','.cover-title','.custom-text','.follow-pill','.footer-name-pill',
     // fmteam v2
-    '.capa-headline','.capa-sub','.dark-h1','.light-h1','.dark-body','.light-body',
+    '.capa-headline','.capa-sub','.capa-context','.dark-h1','.light-h1','.dark-body','.light-body',
     '.tag','.cta-bridge','.cta-kbox-label','.cta-kbox-keyword','.cta-kbox-benefit','.cta-kbox-sub',
     '.stat-num','.stat-title','.stat-desc','.arrow-text','.grad-num',
     '.badge-name','.badge-handle','.cta-badge-name','.cta-badge-handle'
@@ -1763,6 +1764,7 @@ export default function CarouselEditor({
       // fmteam v2
       'capa-headline': 'Headline da capa',
       'capa-sub': 'Subtítulo da capa',
+      'capa-context': 'Linha 3 da capa (parênteses)',
       'dark-h1': 'Título (dark)',
       'light-h1': 'Título (light)',
       'dark-body': 'Corpo (dark)',

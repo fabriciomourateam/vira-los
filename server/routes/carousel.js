@@ -426,6 +426,14 @@ router.post('/re-apply-fmteam-css', (req, res) => {
   updated = updated.replace(/<style[\s\S]*?<\/style>/gi, '');
   updated = updated.replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, '');
 
+  // 1.5. Migra divs inline da linha 3 da capa para a classe .capa-context
+  // (carrosseis fmteam antigos usavam style inline; agora a linha tem classe própria
+  // para ser editável no editor e suportar gradiente via <em> ou .gradient).
+  updated = updated.replace(
+    /<div\s+style="[^"]*color:rgba\(255,255,255,0\.52\)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+    '<div class="capa-context">$1</div>'
+  );
+
   // 2. Injeta CSS fmteam atual com gold #FFC300 fixo
   const fmteamCss = buildFmteamCSSTemplate({ primaryColor: '#FFC300' });
   if (updated.includes('</head>')) {
