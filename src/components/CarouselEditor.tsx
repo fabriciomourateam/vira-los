@@ -1618,6 +1618,19 @@ export default function CarouselEditor({
   // Foto local opcional (vira data URL via FileReader) — usada se config.profilePhotoUrl não chegou
   const [reapplyPhotoDataUrl, setReapplyPhotoDataUrl] = useState<string>('');
   const reapplyPhotoInputRef = useRef<HTMLInputElement>(null);
+  // ── Dropdown de downloads ──────────────────────────────────────────────────
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!downloadMenuOpen) return;
+    function onOutside(e: MouseEvent) {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(e.target as Node)) {
+        setDownloadMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [downloadMenuOpen]);
 
   function handleReapplyPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -3052,14 +3065,13 @@ export default function CarouselEditor({
             <button
               onClick={() => reapplyPhotoInputRef.current?.click()}
               title={reapplyPhotoDataUrl ? 'Foto carregada — clique para trocar' : 'Subir foto para usar nas badges (capa + CTA)'}
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+              className={`p-1.5 rounded-lg transition-colors ${
                 reapplyPhotoDataUrl
                   ? 'bg-green-600 hover:bg-green-500 text-white'
                   : 'bg-secondary hover:bg-border text-foreground'
               }`}
             >
-              <Upload className="w-3 h-3" />
-              {reapplyPhotoDataUrl ? 'Foto OK' : 'Foto'}
+              <Upload className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={reapplyFmteamTemplate}
@@ -3068,40 +3080,87 @@ export default function CarouselEditor({
               className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black transition-colors"
             >
               {reapplyLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-              Atualizar template
+              Atualizar
             </button>
-            <button onClick={handleDownloadHtml} title="Baixar HTML"
-              className="p-1.5 rounded-lg bg-secondary hover:bg-border transition-colors">
-              <Download className="w-3 h-3" />
-            </button>
-            <button onClick={handleRegenerateScreenshots} disabled={screenshotLoading} title="Gerar PNGs"
+            <button
+              onClick={handleRegenerateScreenshots}
+              disabled={screenshotLoading}
+              title="Regerar miniaturas"
               className="p-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white transition-colors">
-              {screenshotLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              {screenshotLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             </button>
-            <button onClick={handleDownloadCurrentPng} disabled={screenshotLoading || selectedIndex === null}
-              title="Baixar PNG do slide atual (como está no editor)"
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
-              <Download className="w-3 h-3" /> PNG
-            </button>
-            <button onClick={handleDownloadPngs} disabled={screenshotLoading}
-              title="Baixar PNGs (rápido, html2canvas)"
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
-              <Download className="w-3 h-3" /> PNGs
-            </button>
-            <button onClick={handleDownloadPngsHD} disabled={screenshotLoading}
-              title="Baixar PNGs HD (pixel-perfect, navegador real — mais lento mas idêntico ao preview)"
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-violet-700 hover:bg-violet-600 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
-              <Download className="w-3 h-3" /> HD
-            </button>
-            <button onClick={handleDownloadPexelsPhotos} disabled={screenshotLoading}
-              title="Baixar SÓ as fotos do Pexels (sem o overlay do slide) — pra usar como B-roll em reels"
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-cyan-700 hover:bg-cyan-600 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
-              <Image className="w-3 h-3" /> Fotos
-            </button>
-            <button onClick={handleDownloadJpegs} disabled={screenshotLoading} title="Baixar JPEGs"
-              className="p-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white transition-colors">
-              <Download className="w-3 h-3" />
-            </button>
+            {/* ── Dropdown de downloads ── */}
+            <div ref={downloadMenuRef} className="relative">
+              <button
+                onClick={() => setDownloadMenuOpen(v => !v)}
+                disabled={screenshotLoading}
+                title="Baixar"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
+                <Download className="w-3 h-3" /> Baixar
+                <ChevronDown className={`w-3 h-3 transition-transform ${downloadMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              <AnimatePresence>
+                {downloadMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute right-0 mt-1 w-56 z-50 rounded-xl border border-border bg-card shadow-xl overflow-hidden"
+                  >
+                    <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Imagens</div>
+                    <button
+                      onClick={() => { setDownloadMenuOpen(false); handleDownloadPngsHD(); }}
+                      disabled={screenshotLoading}
+                      title="PNGs HD (pixel-perfect via navegador real — idêntico ao preview, mais lento)"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-violet-500/10 transition-colors disabled:opacity-50">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                      <span className="flex-1">PNGs HD <span className="text-muted-foreground">(pixel-perfect)</span></span>
+                    </button>
+                    <button
+                      onClick={() => { setDownloadMenuOpen(false); handleDownloadPngs(); }}
+                      disabled={screenshotLoading}
+                      title="PNGs rápidos (html2canvas — instantâneo)"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-500/10 transition-colors disabled:opacity-50">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="flex-1">PNGs rápidos <span className="text-muted-foreground">(html2canvas)</span></span>
+                    </button>
+                    <button
+                      onClick={() => { setDownloadMenuOpen(false); handleDownloadCurrentPng(); }}
+                      disabled={screenshotLoading || selectedIndex === null}
+                      title="PNG só do slide atual"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-500/10 transition-colors disabled:opacity-50">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
+                      <span className="flex-1">PNG do slide atual</span>
+                    </button>
+                    <button
+                      onClick={() => { setDownloadMenuOpen(false); handleDownloadJpegs(); }}
+                      disabled={screenshotLoading}
+                      title="JPEGs (menor tamanho)"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-orange-500/10 transition-colors disabled:opacity-50">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+                      <span className="flex-1">JPEGs <span className="text-muted-foreground">(menor)</span></span>
+                    </button>
+                    <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold border-t border-border mt-1">Outros</div>
+                    <button
+                      onClick={() => { setDownloadMenuOpen(false); handleDownloadPexelsPhotos(); }}
+                      disabled={screenshotLoading}
+                      title="Só as fotos do Pexels — pra usar como B-roll em reels"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-cyan-500/10 transition-colors disabled:opacity-50">
+                      <Image className="w-3 h-3 text-cyan-500 shrink-0" />
+                      <span className="flex-1">Fotos do Pexels <span className="text-muted-foreground">(B-roll)</span></span>
+                    </button>
+                    <button
+                      onClick={() => { setDownloadMenuOpen(false); handleDownloadHtml(); }}
+                      title="Baixar HTML do carrossel"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-secondary transition-colors">
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground shrink-0" />
+                      <span className="flex-1">Arquivo HTML</span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
         {/* Linha 3: Salvar modelo */}
