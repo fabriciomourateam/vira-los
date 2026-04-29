@@ -2194,4 +2194,4 @@ Retorne apenas o <div> externo com novo conteúdo:`;
   return result;
 }
 
-module.exports = { generateCarousel, takeScreenshots, OUTPUT_DIR, regenerateSlide };
+module.exports = { generateCarousel, takeScreenshots, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate };

@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const multer = require('multer');
-const { generateCarousel, OUTPUT_DIR, regenerateSlide } = require('../services/carouselService');
+const { generateCarousel, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate } = require('../services/carouselService');
 const db = require('../db/database');
 
 const router = express.Router();
@@ -382,6 +382,78 @@ router.post('/regenerate-slide', async (req, res) => {
 });
 
 // ─── Slides Salvos (biblioteca) ───────────────────────────────────────────────
+
+// ── Re-aplica o CSS fmteam atual + atualiza avatar/nome em HTML já gerado ─────
+router.post('/re-apply-fmteam-css', (req, res) => {
+  const { html, profilePhotoUrl, creatorName, instagramHandle } = req.body || {};
+  if (!html || typeof html !== 'string') {
+    return res.status(400).json({ error: 'html obrigatório' });
+  }
+
+  let updated = html;
+
+  // 1. Remove <style> antigo e <link> de fontes (Google Fonts)
+  updated = updated.replace(/<style[\s\S]*?<\/style>/gi, '');
+  updated = updated.replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, '');
+
+  // 2. Injeta CSS fmteam atual com gold #FFC300 fixo
+  const fmteamCss = buildFmteamCSSTemplate({ primaryColor: '#FFC300' });
+  if (updated.includes('</head>')) {
+    updated = updated.replace('</head>', `${fmteamCss}\n</head>`);
+  } else {
+    updated = `${fmteamCss}\n${updated}`;
+  }
+
+  // 3. Atualiza nome do criador (.badge-name e .cta-badge-name) se fornecido
+  const handle = (instagramHandle || 'fabriciomourateam').replace('@', '');
+  const isFmteamHandle = /fabriciomoura/i.test(handle);
+  const newName = creatorName
+    || (isFmteamHandle ? 'Fabricio Moura' : null)
+    || handle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+         .replace(/\b\w/g, c => c.toUpperCase())
+    || handle;
+
+  updated = updated.replace(
+    /(<span class="badge-name">)[\s\S]*?(<\/span>)/g,
+    `$1${newName}$2`
+  );
+  updated = updated.replace(
+    /(<div class="cta-badge-name">)([\s\S]*?)(<\/div>)/g,
+    (match, open, inner, close) => {
+      // preserva o SVG verificado se houver
+      const svgMatch = inner.match(/<svg[\s\S]*?<\/svg>/);
+      const svg = svgMatch ? ` ${svgMatch[0]}` : '';
+      return `${open}${newName}${svg}${close}`;
+    }
+  );
+
+  // 4. Atualiza handle (.badge-handle e .cta-badge-handle) se fornecido
+  const handleAt = `@${handle}`;
+  updated = updated.replace(
+    /(<div class="badge-handle">)[\s\S]*?(<\/div>)/g,
+    `$1${handleAt}$2`
+  );
+  updated = updated.replace(
+    /(<div class="cta-badge-handle">)[\s\S]*?(<\/div>)/g,
+    `$1${handleAt}$2`
+  );
+
+  // 5. Substitui o avatar (.badge-avatar e .cta-badge-avatar) se foto for fornecida
+  if (profilePhotoUrl && typeof profilePhotoUrl === 'string' && profilePhotoUrl.trim()) {
+    const safeUrl = profilePhotoUrl.trim().replace(/"/g, '&quot;');
+    const imgTag = `<img src="${safeUrl}" alt="${newName}">`;
+    updated = updated.replace(
+      /(<div class="badge-avatar">)[\s\S]*?(<\/div>)/g,
+      `$1${imgTag}$2`
+    );
+    updated = updated.replace(
+      /(<div class="cta-badge-avatar">)[\s\S]*?(<\/div>)/g,
+      `$1${imgTag}$2`
+    );
+  }
+
+  res.json({ html: updated });
+});
 
 router.get('/saved-slides', (req, res) => {
   res.json(db.getSavedSlides());

@@ -1613,6 +1613,36 @@ export default function CarouselEditor({
   const [regenHint, setRegenHint] = useState('');
   const [showRegenInput, setShowRegenInput] = useState(false);
 
+  // ── Re-aplicar CSS fmteam atual (corrige cores e tamanhos sem regerar texto) ──
+  const [reapplyLoading, setReapplyLoading] = useState(false);
+  async function reapplyFmteamTemplate() {
+    setReapplyLoading(true);
+    try {
+      const minimalHtml = `<!DOCTYPE html><html><head>${head}</head><body></body></html>`;
+      const res = await fetch(`${API}/api/carousel/re-apply-fmteam-css`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html: minimalHtml,
+          profilePhotoUrl: (config as any)?.profilePhotoUrl || '',
+          creatorName: (config as any)?.creatorName || '',
+          instagramHandle: (config as any)?.instagramHandle || '',
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(data.html, 'text/html');
+      const newHead = doc.head.innerHTML;
+      setHead(newHead);
+      toast.success('Template fmteam atualizado (cores e tamanhos)');
+    } catch (err: unknown) {
+      toast.error('Erro ao atualizar template: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setReapplyLoading(false);
+    }
+  }
+
   // ── Blocos e seções colapsáveis ───────────────────────────────────────────────
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -2863,6 +2893,15 @@ export default function CarouselEditor({
           )}
           {/* Ações secundárias */}
           <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={reapplyFmteamTemplate}
+              disabled={reapplyLoading}
+              title="Atualizar template fmteam (cores, tamanhos, nome, foto) sem mexer nos textos"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black transition-colors"
+            >
+              {reapplyLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Atualizar template
+            </button>
             <button onClick={handleDownloadHtml} title="Baixar HTML"
               className="p-1.5 rounded-lg bg-secondary hover:bg-border transition-colors">
               <Download className="w-3 h-3" />
