@@ -705,13 +705,6 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                     <p className="text-xs font-semibold text-amber-600">⚠️ Nenhuma plataforma retornou dados — IPs do servidor bloqueados pelos sites gratuitos.</p>
                     <p className="text-[11px] text-muted-foreground">Configure as APIs autenticadas abaixo (gratuitas) para obter dados reais:</p>
                     <div className="space-y-2">
-                      {ps.reddit?.error && (
-                        <div className="rounded-lg bg-card border border-border p-3 text-[11px] space-y-1">
-                          <p className="font-semibold text-foreground">💬 Reddit OAuth (grátis)</p>
-                          <p className="text-muted-foreground">1. Acesse <span className="text-blue-400">reddit.com/prefs/apps</span> → Criar app tipo "script"</p>
-                          <p className="text-muted-foreground">2. Adicione no Fly.io: <code className="bg-secondary px-1 rounded">REDDIT_CLIENT_ID</code> e <code className="bg-secondary px-1 rounded">REDDIT_CLIENT_SECRET</code></p>
-                        </div>
-                      )}
                       {ps.youtube?.error && (
                         <div className="rounded-lg bg-card border border-border p-3 text-[11px] space-y-1">
                           <p className="font-semibold text-foreground">▶️ YouTube Data API (10k req/dia grátis)</p>

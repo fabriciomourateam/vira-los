@@ -73,9 +73,10 @@ async function runDiscovery(jobId, config) {
 
     const SUBREDDITS = ['Fitness', 'bodybuilding', 'Testosterone', 'TRT', 'nutrition', 'GettingBigger'];
 
-    const redditLabel = hasRedditOAuth() ? 'Reddit (OAuth)' : 'Reddit (público)';
-    const youtubeLabel = hasYoutube() ? 'YouTube' : null;
-    update('start', 5, `Iniciando coleta — ${redditLabel}${youtubeLabel ? ' · ' + youtubeLabel : ''}…`);
+    const sources = ['TikTok', 'Instagram'];
+    if (hasYoutube()) sources.push('YouTube');
+    if (hasRedditOAuth()) sources.push('Reddit');
+    update('start', 5, `Iniciando coleta — ${sources.join(' · ')}…`);
 
     // Corre todas as plataformas em paralelo — falhas individuais são toleradas
     const [igResult, ttResult, trendsResult, redditResult, ytResult] = await Promise.allSettled([
@@ -108,7 +109,7 @@ async function runDiscovery(jobId, config) {
       instagram: { active: platforms.includes('instagram'), count: scrapedData.instagram.length, error: igError },
       tiktok:    { active: platforms.includes('tiktok'),    count: scrapedData.tiktok.length,    error: ttError },
       trends:    { active: platforms.includes('trends'),    count: scrapedData.trends.length,    error: trendsResult.status === 'rejected' ? trendsResult.reason?.message : (platforms.includes('trends') && !scrapedData.trends.length ? blockMsg('Google Trends') : null) },
-      reddit:    { active: platforms.includes('reddit'),    count: scrapedData.reddit.length,    error: redditResult.status === 'rejected' ? redditResult.reason?.message : (platforms.includes('reddit') && !scrapedData.reddit.length ? (hasRedditOAuth() ? 'Reddit OAuth falhou' : blockMsg('Reddit') + ' — configure REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET') : null) },
+      reddit:    { active: hasRedditOAuth(),                 count: scrapedData.reddit.length,    error: redditResult.status === 'rejected' ? redditResult.reason?.message : (!hasRedditOAuth() ? 'Reddit API requer aprovação manual — não disponível' : (!scrapedData.reddit.length ? 'Reddit OAuth falhou' : null)) },
       youtube:   { active: hasYoutube(),                    count: scrapedData.youtube.length,   error: ytResult.status === 'rejected' ? ytResult.reason?.message : (!hasYoutube() ? 'configure YOUTUBE_API_KEY para ativar' : null) },
     };
     scrapedData.platformStatus = platformStatus;
