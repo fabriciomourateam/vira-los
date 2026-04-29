@@ -3,6 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
+// Tracking de uso do Claude (custo/economia) — patch SDK ANTES de qualquer service ser carregado
+const usageTracker = require('./services/usageTracker');
+usageTracker.patchAnthropicSDK();
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -53,6 +57,38 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 app.use('/output', express.static(path.join(DATA_DIR, 'output')));
 
 // ── Rotas API ─────────────────────────────────────────────────────────────────
+// ── Feature tagging para usage tracker ────────────────────────────────────────
+// Mapeia URL → label. Middleware roda ANTES dos route handlers; AsyncLocalStorage
+// propaga o label até as chamadas Claude dentro dos services.
+const FEATURE_PATTERNS = [
+  // [pathPrefix, feature] — primeiro match ganha
+  ['/api/carousel/regenerate-slide',  'regenerate-slide'],
+  ['/api/carousel/generate',          'carousel'],
+  ['/api/maquina/headlines',          'maquina-headlines'],
+  ['/api/maquina/structure',          'maquina-structure'],
+  ['/api/maquina/generate',           'maquina-html'],
+  ['/api/maquina/full',               'maquina-full'],
+  ['/api/maquina/regenerate-slide',   'regenerate-slide'],
+  ['/api/ideas',                      'ideas'],
+  ['/api/reels-analyzer',             'reels-analysis'],
+  ['/api/viral-score',                'viral-score'],
+  ['/api/trend-radar',                'trend-radar'],
+  ['/api/story-sequence',             'story-sequence'],
+  ['/api/instagram',                  'instagram-analytics'],
+  ['/api/agent',                      'agent'],
+  ['/api/research',                   'research'],
+  ['/api/schedule',                   'schedule'],
+];
+app.use((req, res, next) => {
+  const url = req.path;
+  let feature = 'unknown';
+  for (const [prefix, label] of FEATURE_PATTERNS) {
+    if (url.startsWith(prefix)) { feature = label; break; }
+  }
+  usageTracker.withFeature(feature, () => next());
+});
+
+app.use('/api/usage',           require('./routes/usage'));
 app.use('/api/content',         require('./routes/posts'));
 app.use('/api/schedule',        require('./routes/schedule'));
 app.use('/api/platforms',       require('./routes/platforms'));

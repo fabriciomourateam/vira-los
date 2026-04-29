@@ -45,6 +45,7 @@ import InstagramAnalytics from './InstagramAnalytics';
 import CriarTabs from './CriarTabs';
 import type { MaquinaInitialIdea } from './Maquina';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
+import UsageBar from './UsageBar';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -661,6 +662,9 @@ export default function ViralOS() {
           })}
         </div>
       </header>
+
+      {/* Barra de gastos/economia com Claude */}
+      <UsageBar />
 
       <main className="max-w-3xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8">
 
