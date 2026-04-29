@@ -23,8 +23,8 @@ async function generateIdeas(scrapedData, config) {
     hashtags = [],
   } = config;
 
-  const { instagram = [], tiktok = [], reddit = [], trends = [] } = scrapedData;
-  const totalPosts = instagram.length + tiktok.length + reddit.length;
+  const { instagram = [], tiktok = [], reddit = [], trends = [], youtube = [] } = scrapedData;
+  const totalPosts = instagram.length + tiktok.length + reddit.length + youtube.length;
   const hasScrapeData = totalPosts > 0 || trends.length > 0;
 
   // ── Formatar cada fonte de dados ──
@@ -64,6 +64,15 @@ async function generateIdeas(scrapedData, config) {
       `REDDIT — perguntas e dores reais da audiência (top posts da semana):\n` +
       reddit.slice(0, 12).map(p =>
         `  • [r/${p.subreddit}] "${sanitizeText(p.title)}" — ${p.score} upvotes, ${p.comments} comentários`
+      ).join('\n')
+    );
+  }
+
+  if (youtube.length > 0) {
+    sections.push(
+      `YOUTUBE — vídeos mais vistos do nicho (último mês, BR):\n` +
+      youtube.slice(0, 15).map(p =>
+        `  • "${sanitizeText(p.title.substring(0, 120))}"${p.channel ? ` [${p.channel}]` : ''}${p.views > 0 ? ` — ${(p.views || 0).toLocaleString()} views, ${(p.likes || 0).toLocaleString()} likes` : ''}`
       ).join('\n')
     );
   }

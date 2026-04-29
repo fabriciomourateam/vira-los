@@ -67,11 +67,13 @@ interface ScrapedData {
   tiktok: ScrapedItem[];
   reddit: ScrapedItem[];
   trends: string[];
+  youtube?: ScrapedItem[];
   platformStatus?: {
     instagram: PlatformStatusEntry;
     tiktok: PlatformStatusEntry;
     trends: PlatformStatusEntry;
     reddit: PlatformStatusEntry;
+    youtube?: PlatformStatusEntry;
   };
 }
 
@@ -253,7 +255,8 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
             const total = (status.scrapedData.reddit?.length || 0) +
                           (status.scrapedData.tiktok?.length || 0) +
                           (status.scrapedData.instagram?.length || 0) +
-                          (status.scrapedData.trends?.length || 0);
+                          (status.scrapedData.trends?.length || 0) +
+                          (status.scrapedData.youtube?.length || 0);
             const ps = status.scrapedData.platformStatus;
             const failed: string[] = [];
             if (ps) {
@@ -575,7 +578,7 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
 
             {!isRunning && (
               <p className="text-[11px] text-muted-foreground/60 text-center">
-                TikTok CC · Google Trends · Reddit (grátis) → Claude analisa → 12 ideias prontas
+                Reddit OAuth · YouTube · TikTok CC · Google Trends → Claude analisa → 12 ideias
               </p>
             )}
           </div>
@@ -652,6 +655,25 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                 </ScrapedSection>
               )}
 
+              {/* YouTube */}
+              {(scrapedData.youtube?.length ?? 0) > 0 && (
+                <ScrapedSection
+                  emoji="▶️" label="YouTube" subtitle="Vídeos mais vistos do nicho (último mês, BR)"
+                  count={scrapedData.youtube!.length}
+                  collapsed={!!collapsedSources['youtube']}
+                  onToggle={() => setCollapsedSources(p => ({ ...p, youtube: !p['youtube'] }))}
+                  onRemoveAll={() => setScrapedData(p => p ? { ...p, youtube: [] } : p)}
+                >
+                  {scrapedData.youtube!.map((item, i) => (
+                    <ScrapedItemRow key={i}
+                      label={item.title || ''}
+                      meta={item.views ? `${((item.views || 0) / 1000).toFixed(0)}K views · ${(item.likes || 0).toLocaleString()} likes${item.channel ? ` · ${item.channel}` : ''}` : (item.channel || '')}
+                      onRemove={() => removeScrapedItem('youtube' as any, i)}
+                    />
+                  ))}
+                </ScrapedSection>
+              )}
+
               {/* Instagram */}
               {scrapedData.instagram?.length > 0 && (
                 <ScrapedSection
@@ -671,16 +693,51 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                 </ScrapedSection>
               )}
 
-              {/* Botão gerar */}
-              <div className="px-4 py-3 bg-secondary/30 border-t border-amber-500/20">
-                <button
-                  onClick={() => generateFromScrapedData(scrapedData)}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  Gerar 12 Ideias com esses dados
-                </button>
-              </div>
+              {/* Zero resultados: mostra guia de setup de APIs */}
+              {(() => {
+                const ps = scrapedData.platformStatus;
+                const total = (scrapedData.reddit?.length || 0) + (scrapedData.tiktok?.length || 0) +
+                              (scrapedData.instagram?.length || 0) + (scrapedData.trends?.length || 0) +
+                              (scrapedData.youtube?.length || 0);
+                if (total > 0 || !ps) return null;
+                return (
+                  <div className="px-4 pb-4 space-y-3">
+                    <p className="text-xs font-semibold text-amber-600">⚠️ Nenhuma plataforma retornou dados — IPs do servidor bloqueados pelos sites gratuitos.</p>
+                    <p className="text-[11px] text-muted-foreground">Configure as APIs autenticadas abaixo (gratuitas) para obter dados reais:</p>
+                    <div className="space-y-2">
+                      {ps.reddit?.error && (
+                        <div className="rounded-lg bg-card border border-border p-3 text-[11px] space-y-1">
+                          <p className="font-semibold text-foreground">💬 Reddit OAuth (grátis)</p>
+                          <p className="text-muted-foreground">1. Acesse <span className="text-blue-400">reddit.com/prefs/apps</span> → Criar app tipo "script"</p>
+                          <p className="text-muted-foreground">2. Adicione no Fly.io: <code className="bg-secondary px-1 rounded">REDDIT_CLIENT_ID</code> e <code className="bg-secondary px-1 rounded">REDDIT_CLIENT_SECRET</code></p>
+                        </div>
+                      )}
+                      {ps.youtube?.error && (
+                        <div className="rounded-lg bg-card border border-border p-3 text-[11px] space-y-1">
+                          <p className="font-semibold text-foreground">▶️ YouTube Data API (10k req/dia grátis)</p>
+                          <p className="text-muted-foreground">1. <span className="text-blue-400">console.cloud.google.com</span> → Ative "YouTube Data API v3" → Crie API Key</p>
+                          <p className="text-muted-foreground">2. Adicione no Fly.io: <code className="bg-secondary px-1 rounded">YOUTUBE_API_KEY</code></p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Botão gerar (só aparece quando há dados) */}
+              {((scrapedData.reddit?.length || 0) + (scrapedData.tiktok?.length || 0) +
+                (scrapedData.instagram?.length || 0) + (scrapedData.trends?.length || 0) +
+                (scrapedData.youtube?.length || 0)) > 0 && (
+                <div className="px-4 py-3 bg-secondary/30 border-t border-amber-500/20">
+                  <button
+                    onClick={() => generateFromScrapedData(scrapedData)}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Gerar 12 Ideias com esses dados
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
