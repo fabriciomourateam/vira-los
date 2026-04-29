@@ -118,11 +118,17 @@ router.post('/generate', (req, res) => {
       err?.status === 529 ||
       err?.error?.type === 'overloaded_error' ||
       (err?.message || '').includes('overloaded');
-    const message = isOverload
-      ? 'A IA está sobrecarregada. Aguarde alguns instantes e tente novamente.'
-      : (err.message || 'Erro desconhecido');
-    jobs.set(jobId, { ...jobs.get(jobId), status: 'error', error: message });
-    console.error(`[Job ${jobId}] Erro:`, message);
+    // Extrai mensagem útil do erro (Anthropic SDK retorna em .error.error.message ou .message)
+    const anthropicMsg = err?.error?.error?.message || err?.error?.message;
+    const httpStatus = err?.status ? `[HTTP ${err.status}] ` : '';
+    const errorType = err?.error?.error?.type || err?.error?.type;
+    const fullMessage =
+      isOverload
+        ? 'A IA está sobrecarregada. Aguarde alguns instantes e tente novamente.'
+        : `${httpStatus}${errorType ? `(${errorType}) ` : ''}${anthropicMsg || err?.message || 'Erro desconhecido'}`;
+    jobs.set(jobId, { ...jobs.get(jobId), status: 'error', error: fullMessage });
+    console.error(`[Job ${jobId}] Erro:`, fullMessage);
+    if (err?.stack) console.error(err.stack);
   });
 });
 
