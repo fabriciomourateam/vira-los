@@ -1515,12 +1515,13 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
     : '';
 
   const avatarInitials = handle.slice(0, 2).toUpperCase();
-  // Foto efetiva: profilePhotoUrl do user > avatar embutido do Fabricio (default fmteam)
-  const effectivePhoto = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : FABRICIO_AVATAR_DATA_URL;
+  // Usa placeholder para não embutir o base64 do avatar no prompt (~10KB cada, 2x = ~20KB).
+  // O servidor substitui __CREATOR_PHOTO__ após a geração (ver pós-processamento em generateCarousel).
+  const avatarSrc = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : '__CREATOR_PHOTO__';
   // Badge avatar: sempre <img> (fmteam tem foto default embutida — nunca cai em iniciais)
-  const badgeAvatarInner = `<img src="${effectivePhoto}" alt="${displayName}">`;
-  // Foto do CTA (portrait do criador): mesma foto efetiva
-  const ctaPhotoSrc = effectivePhoto;
+  const badgeAvatarInner = `<img src="${avatarSrc}" alt="${displayName}">`;
+  // Foto do CTA (portrait do criador): mesma fonte
+  const ctaPhotoSrc = avatarSrc;
 
   // Progress bar — .on-dark ou .on-light conforme tipo de slide
   const progFor = (current, ctx = 'dark') => {
@@ -2033,10 +2034,10 @@ async function generateCarousel(config, setStep = () => {}) {
 
   const legenda = (legendaRes.content[0]?.text || '').trim();
 
-  // ── Pós-processamento fmteam: injeta CSS + fontes no HTML ──────────────────
-  // O prompt fmteam não inclui o CSS (economia de ~6.500 tokens por chamada).
+  // ── Pós-processamento fmteam: injeta CSS + avatar + fontes no HTML ──────────
+  // O prompt fmteam não inclui o CSS nem o avatar base64 (economia de ~25k chars por chamada).
   // Aqui removemos qualquer <style>/<link> que Claude possa ter gerado e
-  // injetamos o CSS correto gerado pelo servidor.
+  // injetamos o CSS correto + substituímos o placeholder __CREATOR_PHOTO__.
   if (layoutStyle === 'fmteam') {
     const fmteamCss = buildFmteamCSSTemplate({ primaryColor: '#FFC300' });
     // Remove qualquer <style> e <link> de fontes que Claude gerou por engano
@@ -2048,6 +2049,11 @@ async function generateCarousel(config, setStep = () => {}) {
     } else {
       // fallback: insere antes do primeiro <div class="slide"
       html = html.replace(/(<div[^>]*class="slide)/, `${fmteamCss}\n$1`);
+    }
+    // Substitui placeholder do avatar pelo data URI real (não foi enviado no prompt)
+    if (html.includes('__CREATOR_PHOTO__')) {
+      const creatorPhoto = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : FABRICIO_AVATAR_DATA_URL;
+      html = html.replace(/__CREATOR_PHOTO__/g, creatorPhoto);
     }
   }
 
