@@ -22,6 +22,27 @@ const router = express.Router();
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
 const UPLOADS_DIR = path.join(__dirname, '../uploads');
 
+// ─── Job store em memória ─────────────────────────────────────────────────────
+// Mantém jobs de geração em andamento. Cada job dura no máx 15 min em memória.
+// { [jobId]: { status: 'processing'|'done'|'error', step, result?, error? } }
+const jobs = new Map();
+const JOB_TTL_MS = 15 * 60 * 1000; // 15 min
+
+function createJob() {
+  const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  jobs.set(jobId, { status: 'processing', step: 'Iniciando...', startedAt: Date.now() });
+  setTimeout(() => jobs.delete(jobId), JOB_TTL_MS);
+  return jobId;
+}
+
+// Limpeza periódica de jobs expirados (a cada 5 min)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, job] of jobs) {
+    if (now - job.startedAt > JOB_TTL_MS) jobs.delete(id);
+  }
+}, 5 * 60 * 1000);
+
 // ─── Multer: upload de foto de perfil ────────────────────────────────────────
 
 const profilePhotoStorage = multer.diskStorage({
@@ -52,15 +73,14 @@ router.post('/upload-photo', uploadPhoto.single('photo'), (req, res) => {
   res.json({ url });
 });
 
-// ─── Gerar carrossel ──────────────────────────────────────────────────────────
+// ─── Gerar carrossel (assíncrono — responde imediatamente com jobId) ──────────
 
-router.post('/generate', async (req, res) => {
+router.post('/generate', (req, res) => {
   const {
     topic, instructions, niche, primaryColor, accentColor, bgColor,
     fontFamily, instagramHandle, creatorName, profilePhotoUrl,
     numSlides, contentTone, dominantEmotion, roteiro, layoutStyle,
     templateHtml,
-    // Tipografia
     titleFontSize, bodyFontSize, bannerFontSize,
     titleFontWeight, bodyFontWeight, titleTextTransform,
     titleFontFamily, bodyFontFamily,
@@ -70,29 +90,43 @@ router.post('/generate', async (req, res) => {
     return res.status(400).json({ error: 'O campo "topic" (tema) é obrigatório' });
   }
 
-  try {
-    const result = await generateCarousel({
-      topic, instructions, niche, primaryColor, accentColor, bgColor,
-      fontFamily, instagramHandle, creatorName, profilePhotoUrl,
-      numSlides, contentTone, dominantEmotion, roteiro, layoutStyle,
-      templateHtml,
-      titleFontSize, bodyFontSize, bannerFontSize,
-      titleFontWeight, bodyFontWeight, titleTextTransform,
-      titleFontFamily, bodyFontFamily,
-    });
-    res.json(result);
-  } catch (err) {
+  // Cria job e responde IMEDIATAMENTE — sem esperar Anthropic
+  const jobId = createJob();
+  res.json({ jobId });
+
+  // Processa em background (sem bloquear o HTTP)
+  generateCarousel({
+    topic, instructions, niche, primaryColor, accentColor, bgColor,
+    fontFamily, instagramHandle, creatorName, profilePhotoUrl,
+    numSlides, contentTone, dominantEmotion, roteiro, layoutStyle,
+    templateHtml,
+    titleFontSize, bodyFontSize, bannerFontSize,
+    titleFontWeight, bodyFontWeight, titleTextTransform,
+    titleFontFamily, bodyFontFamily,
+  }).then(result => {
+    jobs.set(jobId, { ...jobs.get(jobId), status: 'done', result, step: 'Concluído!' });
+    console.log(`[Job ${jobId}] Concluído.`);
+  }).catch(err => {
     const isOverload =
       err?.status === 529 ||
       err?.error?.type === 'overloaded_error' ||
       (err?.message || '').includes('overloaded');
-    const status = isOverload ? 503 : 500;
     const message = isOverload
-      ? 'A IA está sobrecarregada no momento. Aguarde alguns instantes e tente novamente.'
-      : err.message;
-    console.error('[Carousel Route]', err.status || 500, err.message);
-    res.status(status).json({ error: message });
-  }
+      ? 'A IA está sobrecarregada. Aguarde alguns instantes e tente novamente.'
+      : (err.message || 'Erro desconhecido');
+    jobs.set(jobId, { ...jobs.get(jobId), status: 'error', error: message });
+    console.error(`[Job ${jobId}] Erro:`, message);
+  });
+});
+
+// ─── Consultar status de job ──────────────────────────────────────────────────
+
+router.get('/jobs/:id', (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job não encontrado ou expirado' });
+  // Não retorna o HTML completo enquanto ainda processando
+  if (job.status !== 'done') return res.json({ status: job.status, step: job.step });
+  res.json({ status: 'done', result: job.result });
 });
 
 // ─── Config persistente ───────────────────────────────────────────────────────

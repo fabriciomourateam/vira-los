@@ -588,17 +588,36 @@ ${stats ? `- Stats: ${stats}` : ''}
         }
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 360000); // 6 min (fmteam tem prompt grande)
-      const res = await fetch(`${API}/api/carousel/generate`, {
+      // ── Passo 1: inicia o job (resposta imediata < 2s) ──────────────────────
+      const startRes = await fetch(`${API}/api/carousel/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...finalConfig, templateHtml }),
-        signal: controller.signal,
       });
-      clearTimeout(timeout);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao gerar carrossel');
+      const startData = await startRes.json();
+      if (!startRes.ok) throw new Error(startData.error || 'Erro ao iniciar geração');
+      const { jobId } = startData;
+      if (!jobId) throw new Error('Servidor não retornou jobId');
+
+      // ── Passo 2: polling até completar ───────────────────────────────────────
+      const POLL_INTERVAL = 4000;   // 4s entre cada check
+      const POLL_TIMEOUT  = 600000; // 10 min máximo total
+      const pollStart = Date.now();
+      let data: any = null;
+
+      while (true) {
+        if (Date.now() - pollStart > POLL_TIMEOUT) {
+          throw new Error('Tempo limite de 10 minutos excedido. O servidor pode estar lento — tente novamente.');
+        }
+        await new Promise(r => setTimeout(r, POLL_INTERVAL));
+        const pollRes = await fetch(`${API}/api/carousel/jobs/${jobId}`);
+        if (!pollRes.ok) throw new Error(`Erro ao consultar job: HTTP ${pollRes.status}`);
+        const job = await pollRes.json();
+
+        if (job.status === 'error') throw new Error(job.error || 'Erro na geração');
+        if (job.status === 'done') { data = job.result; break; }
+        // status === 'processing': continua polling
+      }
 
       const carouselId = `c_${Date.now()}`;
       setResult({ ...data, id: carouselId, screenshots: [] });
@@ -658,11 +677,8 @@ ${stats ? `- Stats: ${stats}` : ''}
         toast.error(`Erro ao gerar imagens: ${e.message || e}. Carrossel salvo sem preview.`);
       }
     } catch (err: any) {
-      console.error('[Generate] Erro ao gerar carrossel:', err);
-      const msg = err?.name === 'AbortError'
-        ? 'Tempo limite excedido ao gerar o carrossel. Tente novamente (o servidor pode estar lento).'
-        : err.message || 'Erro desconhecido';
-      toast.error(msg, { duration: 8000 });
+      console.error('[Generate] Erro:', err);
+      toast.error(err.message || 'Erro desconhecido ao gerar carrossel', { duration: 8000 });
     } finally {
       setLoading(false);
     }
