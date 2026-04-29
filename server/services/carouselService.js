@@ -1207,7 +1207,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     /* ── ARROW ROWS (listas de pontos no gradient/dark) ── */
     .arrow-row {
       display:flex; align-items:flex-start; gap:16px; padding:8px 0;
-      font-family:var(--F-BODY); font-size:27px; line-height:1.46;
+      font-family:var(--F-BODY); font-size:36px; line-height:1.4;
     }
     .arrow-icon { font-weight:800; flex-shrink:0; margin-top:4px; line-height:1; }
     .on-dark  .arrow-icon { color:var(--PL); }
