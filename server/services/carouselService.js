@@ -1913,7 +1913,13 @@ async function generateCarousel(config, setStep = () => {}) {
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
 
-  console.log(`[GenerateCarousel] Iniciando: layout="${layoutStyle}" topic="${topic.substring(0, 60)}" numSlides=${numSlides} roteiroLen=${(roteiro||'').length} instructionsLen=${(instructions||'').length}`);
+  // Sanitiza profilePhotoUrl: data URIs base64 podem ter 50k+ chars e inflam o prompt.
+  // Mantém apenas URLs http/https — data URIs ficam no cliente (não precisam ir ao Anthropic).
+  const safeProfilePhotoUrl = (profilePhotoUrl && /^https?:\/\//i.test(profilePhotoUrl.trim()))
+    ? profilePhotoUrl.trim()
+    : '';
+
+  console.log(`[GenerateCarousel] Iniciando: layout="${layoutStyle}" topic="${topic.substring(0, 60)}" numSlides=${numSlides} roteiroLen=${(roteiro||'').length} instructionsLen=${(instructions||'').length} profilePhotoIsUrl=${!!safeProfilePhotoUrl}`);
 
   // Conta slides reais se roteiro tiver marcadores "SLIDE N"
   let slidesCount = Math.min(10, Math.max(5, Number(numSlides)));
@@ -1962,7 +1968,7 @@ async function generateCarousel(config, setStep = () => {}) {
       topic: topic.trim(), instructions: instructions.trim(), niche,
       primaryColor: '#ff5c4d', // cor fixa do Clean (vermelho-coral da identidade)
       fontFamily,
-      instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
+      instagramHandle, creatorName, profilePhotoUrl: safeProfilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, unsplashImages,
       titleFontSize, bodyFontSize, bannerFontSize,
       titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
@@ -1973,7 +1979,7 @@ async function generateCarousel(config, setStep = () => {}) {
       topic: topic.trim(), instructions: instructions.trim(), niche,
       primaryColor: '#FFC300', // cor fixa do Fmteam (amarelo dourado da identidade)
       fontFamily,
-      instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
+      instagramHandle, creatorName, profilePhotoUrl: safeProfilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, unsplashImages,
       titleFontSize, bodyFontSize,
       titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
@@ -1981,7 +1987,7 @@ async function generateCarousel(config, setStep = () => {}) {
   } else {
     htmlPrompt = buildHTMLPrompt({
       topic: topic.trim(), instructions: instructions.trim(), niche, primaryColor, accentColor, bgColor,
-      fontFamily, instagramHandle, creatorName, profilePhotoUrl, numSlides: slidesCount,
+      fontFamily, instagramHandle, creatorName, profilePhotoUrl: safeProfilePhotoUrl, numSlides: slidesCount,
       contentTone, dominantEmotion, roteiro, redditTrends, unsplashImages,
       titleFontSize, bodyFontSize, bannerFontSize,
       titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
@@ -2080,6 +2086,12 @@ async function generateCarousel(config, setStep = () => {}) {
         return `${open}${cleaned}${VERIFIED_SVG}${close}`;
       }
     );
+  }
+
+  // Se profilePhotoUrl era base64 (não incluída no prompt), reinsere no HTML gerado
+  // para que o carrossel exiba a foto corretamente no cliente.
+  if (profilePhotoUrl && profilePhotoUrl.trim() && !safeProfilePhotoUrl) {
+    html = html.replace(/FOTO_PERFIL_CRIADOR/g, profilePhotoUrl.trim());
   }
 
   // Passo 4: Salvar arquivos (output/<slug>-<ts>/)
