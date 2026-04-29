@@ -145,11 +145,10 @@ function fixHtml2canvasTextRendering(container: HTMLElement): void {
  * Converte para cor sólida #FFC300 antes de capturar.
  */
 function fixFmteamGradientText(container: HTMLElement): void {
+  // Cobertura por classe (legado) — slides com background-clip:text aplicado via classe
   container.querySelectorAll<HTMLElement>(
     '.capa-headline em, .dark-h1 em, .light-h1 em, .cta-kbox-keyword, .cta-kword'
   ).forEach(el => {
-    // .slide-grad override: .light-h1 em já tem cor escura (rgba(15,13,8,0.60)) no CSS,
-    // background-clip:text foi removido no override — não aplicar gold aqui
     if (el.closest('.slide-grad')) return;
     el.style.webkitTextFillColor = '#FFC300';
     (el.style as any).webkitBackgroundClip = 'unset';
@@ -157,6 +156,29 @@ function fixFmteamGradientText(container: HTMLElement): void {
     el.style.background = 'none';
     el.style.color = '#FFC300';
   });
+
+  // Cobertura por estilo computado — pega qualquer elemento com text-fill-color:transparent
+  // ou background-clip:text. Cobre slides editoriais, fmteam, e variações híbridas.
+  const win = container.ownerDocument?.defaultView || window;
+  const all = container.querySelectorAll<HTMLElement>('em, span, strong, b, i');
+  for (const el of Array.from(all)) {
+    // skip se já tratado acima
+    if (el.style.color === 'rgb(255, 195, 0)' || el.style.color === '#FFC300') continue;
+    let computed: CSSStyleDeclaration;
+    try { computed = win.getComputedStyle(el); } catch { continue; }
+    const fillColor = (computed as any).webkitTextFillColor || computed.getPropertyValue('-webkit-text-fill-color') || '';
+    const clip = (computed as any).webkitBackgroundClip || computed.getPropertyValue('-webkit-background-clip') || computed.backgroundClip || '';
+    const isGradientText =
+      fillColor.includes('transparent') || fillColor.includes('rgba(0, 0, 0, 0)')
+      || clip.includes('text');
+    if (!isGradientText) continue;
+    if (el.closest('.slide-grad')) continue;
+    el.style.webkitTextFillColor = '#FFC300';
+    (el.style as any).webkitBackgroundClip = 'unset';
+    el.style.backgroundClip = 'unset';
+    el.style.background = 'none';
+    el.style.color = '#FFC300';
+  }
 }
 
 /**
@@ -743,6 +765,52 @@ export async function generateAndSaveScreenshotsHiFi(
       // html2canvas não suporta background-clip:text → texto fica transparente.
       // Converte para cor sólida #FFC300 antes de capturar.
       fixFmteamGradientText(body);
+
+      // Word-spacing fix (versão segura para HiFi):
+      // html2canvas-pro perde espaços em <span> ↔ text node boundaries quando
+      // headlines têm letter-spacing negativo + line-height baixo (caso comum
+      // em fmteam/editorial). Faz "AJANELA" no lugar de "A JANELA".
+      // Solução: substitui espaço normal por nbsp( ) nesses limites.
+      // NÃO mexemos em wordSpacing CSS (causou espaços duplos no passado).
+      {
+        const TEXT_SELECTORS = [
+          // editorial
+          '.cover-title', '.content-title', '.content-body', '.cta-title',
+          '.split-title', '.title', '.subtitle', '.subtitle-accent', '.narrative-text',
+          '.cover-subtitle', '.cta-subtitle',
+          // fmteam v2
+          '.capa-headline', '.capa-sub', '.dark-h1', '.light-h1', '.dark-body', '.light-body',
+          '.tag', '.cta-bridge', '.cta-kbox-label', '.cta-kbox-keyword', '.cta-kbox-benefit', '.cta-kbox-sub',
+          '.arrow-text', '.stat-title', '.stat-desc',
+        ];
+        for (const sel of TEXT_SELECTORS) {
+          body.querySelectorAll(sel).forEach(outer => {
+            // <div> aninhado dentro de container de texto → <br><span> (preserva inline style)
+            (outer as HTMLElement).querySelectorAll('div').forEach(inner => {
+              const br = idoc.createElement('br');
+              const span = idoc.createElement('span');
+              const inStyle = inner.getAttribute('style');
+              if (inStyle) span.setAttribute('style', inStyle);
+              span.innerHTML = inner.innerHTML;
+              inner.before(br);
+              inner.replaceWith(span);
+            });
+            // espaço em borda <span>↔textNode → nbsp (não colapsa)
+            (outer as HTMLElement).querySelectorAll('span, em, strong, b, i').forEach(inline => {
+              const next = inline.nextSibling;
+              if (next?.nodeType === 3) { // TEXT_NODE
+                const t = next.textContent || '';
+                if (/^\s/.test(t)) next.textContent = ' ' + t.replace(/^\s+/, '');
+              }
+              const prev = inline.previousSibling;
+              if (prev?.nodeType === 3) {
+                const t = prev.textContent || '';
+                if (/\s$/.test(t)) prev.textContent = t.replace(/\s+$/, '') + ' ';
+              }
+            });
+          });
+        }
+      }
 
       // Fontes (já estão como links do Google Fonts — ignora se travar)
       if ((idoc as any).fonts?.ready) {
