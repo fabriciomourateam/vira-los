@@ -2669,6 +2669,85 @@ export default function CarouselEditor({
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   }
 
+  // ── Extrair e baixar SÓ as fotos do Pexels/externas dos slides ──────────────
+  // Pra usar como B-roll em reels (sem o overlay do slide).
+  function extractPhotoUrlsFromSlides(): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const s of slides) {
+      const html = s.outerHtml || '';
+      // <img src="https://...">
+      for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)) {
+        const u = m[1];
+        if (!u.startsWith('http')) continue; // pula data: e relativos
+        if (seen.has(u)) continue;
+        seen.add(u); out.push(u);
+      }
+      // background-image: url(https://...)
+      for (const m of html.matchAll(/background-image\s*:\s*url\(\s*['"]?(https?:\/\/[^'")\s]+)/gi)) {
+        const u = m[1];
+        if (seen.has(u)) continue;
+        seen.add(u); out.push(u);
+      }
+    }
+    return out;
+  }
+
+  function pexelsFilenameFor(url: string, index: number): string {
+    // Tenta extrair o ID numérico da URL Pexels (https://images.pexels.com/photos/12345/...)
+    const m = url.match(/\/photos\/(\d+)\//);
+    const num = String(index + 1).padStart(2, '0');
+    if (m) return `foto_${num}_pexels_${m[1]}.jpg`;
+    // Não-Pexels: usa o último segmento do path como base
+    try {
+      const u = new URL(url);
+      const last = (u.pathname.split('/').pop() || 'foto').split('?')[0];
+      const ext = last.includes('.') ? '' : '.jpg';
+      return `foto_${num}_${last}${ext}`;
+    } catch {
+      return `foto_${num}.jpg`;
+    }
+  }
+
+  async function handleDownloadPexelsPhotos() {
+    const urls = extractPhotoUrlsFromSlides();
+    if (urls.length === 0) {
+      toast.info('Nenhuma foto externa encontrada nos slides');
+      return;
+    }
+    toast.info(`Baixando ${urls.length} foto(s)…`);
+    setScreenshotLoading(true);
+    let ok = 0;
+    try {
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        const filename = pexelsFilenameFor(url, i);
+        try {
+          // Usa o proxy do servidor pra contornar CORS do Pexels
+          const proxied = `${API}/api/carousel/proxy-image?url=${encodeURIComponent(url)}`;
+          const res = await fetch(proxied);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+          ok++;
+          await new Promise(r => setTimeout(r, 300));
+        } catch (e: any) {
+          console.warn('[DownloadPexels] falha em', url, e);
+        }
+      }
+      toast.success(`${ok}/${urls.length} fotos baixadas`);
+    } finally {
+      setScreenshotLoading(false);
+    }
+  }
+
   /** Gera screenshots de todos os slides (a partir do estado atual do editor).
    *  Usa a versão HiFi: renderiza cada slide em iframe isolado 1080×1350,
    *  sem contaminação de CSS da app (Tailwind). Dispensa os hacks de
@@ -3013,6 +3092,11 @@ export default function CarouselEditor({
               title="Baixar PNGs HD (pixel-perfect, navegador real — mais lento mas idêntico ao preview)"
               className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-violet-700 hover:bg-violet-600 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
               <Download className="w-3 h-3" /> HD
+            </button>
+            <button onClick={handleDownloadPexelsPhotos} disabled={screenshotLoading}
+              title="Baixar SÓ as fotos do Pexels (sem o overlay do slide) — pra usar como B-roll em reels"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-cyan-700 hover:bg-cyan-600 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
+              <Image className="w-3 h-3" /> Fotos
             </button>
             <button onClick={handleDownloadJpegs} disabled={screenshotLoading} title="Baixar JPEGs"
               className="p-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white transition-colors">
