@@ -1235,11 +1235,20 @@ function buildTemplateHTMLPrompt({ templateHtml, topic, instructions, niche, ins
          .replace(/\b\w/g, c => c.toUpperCase())
     || handle;
 
-  // Remove data:... base64 URIs (muito grandes para o contexto)
+  // Limpa o HTML do template para reduzir tokens no prompt:
+  // 1. Remove base64 URIs (muito grandes)
+  // 2. Remove bloco <style> (Claude deve manter CSS idêntico; o CSS é re-injetado server-side)
+  // 3. Remove <link> de fontes (idem)
+  // 4. Limita a 20k chars para evitar prompts > 30k
+  const MAX_TEMPLATE_CHARS = 20000;
   const cleanedHtml = templateHtml
     .replace(/src="data:[^"]{10,}"/g, 'src=""')
     .replace(/url\('data:[^']{10,}'\)/g, "url('')")
-    .replace(/url\("data:[^"]{10,}"\)/g, 'url("")');
+    .replace(/url\("data:[^"]{10,}"\)/g, 'url("")')
+    .replace(/<style[\s\S]*?<\/style>/gi, '<!-- CSS omitido — re-injetado automaticamente pelo servidor -->')
+    .replace(/<link[^>]+stylesheet[^>]*>/gi, '')
+    .slice(0, MAX_TEMPLATE_CHARS)
+    + (templateHtml.length > MAX_TEMPLATE_CHARS ? '\n<!-- [HTML truncado — use o mesmo padrão dos slides acima para os slides restantes] -->' : '');
 
   const validImages = (unsplashImages || []).filter(img => img.url);
   const imagesSection = validImages.length
