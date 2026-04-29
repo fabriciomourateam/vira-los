@@ -1100,9 +1100,9 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       display:flex; align-items:center; justify-content:center;
       text-align:center; line-height:1.2; letter-spacing:-0.5px;
     }
-    .stat-content { padding:16px 20px; display:flex; flex-direction:column; justify-content:center; }
-    .stat-title { font-family:var(--F-BODY); font-size:20px; font-weight:800; color:var(--DB); margin-bottom:4px; }
-    .stat-desc  { font-family:var(--F-BODY); font-size:16px; font-weight:400; color:rgba(15,13,8,0.50); line-height:1.4; }
+    .stat-content { padding:18px 22px; display:flex; flex-direction:column; justify-content:center; }
+    .stat-title { font-family:var(--F-BODY); font-size:26px; font-weight:800; color:var(--DB); margin-bottom:6px; line-height:1.25; }
+    .stat-desc  { font-family:var(--F-BODY); font-size:20px; font-weight:400; color:rgba(15,13,8,0.62); line-height:1.4; }
 
     /* ── CAPA HEADLINE ── */
     .capa-headline-area {
@@ -1485,7 +1485,11 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   const handle = (instagramHandle || 'fabriciomourateam').replace('@', '');
   const handleAt = `@${handle}`;
   const handleUpper = handleAt.toUpperCase();
+  // fmteam é Fabricio Moura: handle "fabriciomourateam" não tem separadores
+  // para o algoritmo achar — força default explícito quando creatorName não vem.
+  const isFmteamHandle = /fabriciomoura/i.test(handle);
   const displayName = creatorName
+    || (isFmteamHandle ? 'Fabricio Moura' : null)
     || handle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
          .replace(/\b\w/g, c => c.toUpperCase())
     || handle;
@@ -2035,7 +2039,7 @@ async function generateCarousel(config, setStep = () => {}) {
   // Aqui removemos qualquer <style>/<link> que Claude possa ter gerado e
   // injetamos o CSS correto gerado pelo servidor.
   if (layoutStyle === 'fmteam') {
-    const fmteamCss = buildFmteamCSSTemplate({ primaryColor: primaryColor || '#FFC300' });
+    const fmteamCss = buildFmteamCSSTemplate({ primaryColor: '#FFC300' });
     // Remove qualquer <style> e <link> de fontes que Claude gerou por engano
     html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
     html = html.replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, '');
