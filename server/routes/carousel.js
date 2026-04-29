@@ -413,46 +413,54 @@ router.post('/re-apply-fmteam-css', (req, res) => {
          .replace(/\b\w/g, c => c.toUpperCase())
     || handle;
 
-  updated = updated.replace(
-    /(<span class="badge-name">)[\s\S]*?(<\/span>)/g,
-    `$1${newName}$2`
-  );
-  updated = updated.replace(
-    /(<div class="cta-badge-name">)([\s\S]*?)(<\/div>)/g,
-    (match, open, inner, close) => {
-      // preserva o SVG verificado se houver
-      const svgMatch = inner.match(/<svg[\s\S]*?<\/svg>/);
-      const svg = svgMatch ? ` ${svgMatch[0]}` : '';
-      return `${open}${newName}${svg}${close}`;
-    }
+  // Helper: regex permissivo que matches <TAG class="...alvo..."> independente de
+  // ordem de atributos, espaços e aspas simples/duplas.
+  const buildFlexRegex = (tagName, className) => new RegExp(
+    `(<${tagName}[^>]*\\bclass\\s*=\\s*["'][^"']*\\b${className}\\b[^"']*["'][^>]*>)([\\s\\S]*?)(</${tagName}>)`,
+    'gi'
   );
 
-  // 4. Atualiza handle (.badge-handle e .cta-badge-handle) se fornecido
+  // Conta substituições para diagnóstico
+  const stats = { name: 0, ctaName: 0, handle: 0, ctaHandle: 0, avatar: 0, ctaAvatar: 0 };
+
+  updated = updated.replace(buildFlexRegex('span', 'badge-name'), (m, open, inner, close) => {
+    stats.name++;
+    return `${open}${newName}${close}`;
+  });
+  updated = updated.replace(buildFlexRegex('div', 'cta-badge-name'), (m, open, inner, close) => {
+    stats.ctaName++;
+    const svgMatch = inner.match(/<svg[\s\S]*?<\/svg>/);
+    const svg = svgMatch ? ` ${svgMatch[0]}` : '';
+    return `${open}${newName}${svg}${close}`;
+  });
+
+  // 4. Atualiza handle
   const handleAt = `@${handle}`;
-  updated = updated.replace(
-    /(<div class="badge-handle">)[\s\S]*?(<\/div>)/g,
-    `$1${handleAt}$2`
-  );
-  updated = updated.replace(
-    /(<div class="cta-badge-handle">)[\s\S]*?(<\/div>)/g,
-    `$1${handleAt}$2`
-  );
+  updated = updated.replace(buildFlexRegex('div', 'badge-handle'), (m, open, inner, close) => {
+    stats.handle++;
+    return `${open}${handleAt}${close}`;
+  });
+  updated = updated.replace(buildFlexRegex('div', 'cta-badge-handle'), (m, open, inner, close) => {
+    stats.ctaHandle++;
+    return `${open}${handleAt}${close}`;
+  });
 
-  // 5. Substitui o avatar (.badge-avatar e .cta-badge-avatar) se foto for fornecida
+  // 5. Substitui o avatar (.badge-avatar e .cta-badge-avatar)
   if (profilePhotoUrl && typeof profilePhotoUrl === 'string' && profilePhotoUrl.trim()) {
     const safeUrl = profilePhotoUrl.trim().replace(/"/g, '&quot;');
-    const imgTag = `<img src="${safeUrl}" alt="${newName}">`;
-    updated = updated.replace(
-      /(<div class="badge-avatar">)[\s\S]*?(<\/div>)/g,
-      `$1${imgTag}$2`
-    );
-    updated = updated.replace(
-      /(<div class="cta-badge-avatar">)[\s\S]*?(<\/div>)/g,
-      `$1${imgTag}$2`
-    );
+    const imgTag = `<img src="${safeUrl}" alt="${newName}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+    updated = updated.replace(buildFlexRegex('div', 'badge-avatar'), (m, open, inner, close) => {
+      stats.avatar++;
+      return `${open}${imgTag}${close}`;
+    });
+    updated = updated.replace(buildFlexRegex('div', 'cta-badge-avatar'), (m, open, inner, close) => {
+      stats.ctaAvatar++;
+      return `${open}${imgTag}${close}`;
+    });
   }
 
-  res.json({ html: updated });
+  console.log('[re-apply-fmteam-css]', stats, 'photoLen=', (profilePhotoUrl || '').length);
+  res.json({ html: updated, stats });
 });
 
 router.get('/saved-slides', (req, res) => {

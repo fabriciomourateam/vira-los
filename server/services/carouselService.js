@@ -982,7 +982,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
 
     /* ── TAG ── */
     .tag {
-      font-family:var(--F-BODY); font-size:32px; font-weight:900;
+      font-family:var(--F-BODY); font-size:26px; font-weight:900;
       letter-spacing:3px; text-transform:uppercase; margin-bottom:20px;
     }
     .on-dark  .tag { color:var(--PL); }

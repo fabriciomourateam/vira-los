@@ -1615,35 +1615,61 @@ export default function CarouselEditor({
 
   // ── Re-aplicar CSS fmteam atual (corrige cores e tamanhos sem regerar texto) ──
   const [reapplyLoading, setReapplyLoading] = useState(false);
+  // Foto local opcional (vira data URL via FileReader) — usada se config.profilePhotoUrl não chegou
+  const [reapplyPhotoDataUrl, setReapplyPhotoDataUrl] = useState<string>('');
+  const reapplyPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  function handleReapplyPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione um arquivo de imagem');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setReapplyPhotoDataUrl(String(reader.result || ''));
+      toast.success('Foto carregada — clique em Atualizar template');
+    };
+    reader.onerror = () => toast.error('Erro ao ler imagem');
+    reader.readAsDataURL(file);
+    if (reapplyPhotoInputRef.current) reapplyPhotoInputRef.current.value = '';
+  }
+
   async function reapplyFmteamTemplate() {
     setReapplyLoading(true);
     try {
-      // Manda o HTML completo (head + body com slides) — o backend precisa
-      // do body pra atualizar avatar, nome e handle dentro das badges.
       const fullHtml = rebuildHtml();
+      // Prioridade: foto local subida no editor → config.profilePhotoUrl
+      const photo = reapplyPhotoDataUrl || (config as any)?.profilePhotoUrl || '';
       const res = await fetch(`${API}/api/carousel/re-apply-fmteam-css`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           html: fullHtml,
-          profilePhotoUrl: (config as any)?.profilePhotoUrl || '',
+          profilePhotoUrl: photo,
           creatorName: (config as any)?.creatorName || '',
           instagramHandle: (config as any)?.instagramHandle || '',
         }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      // Re-parse o HTML retornado pra extrair head atualizado + slides com avatar/nome novos.
       const parsed = parseSlides(data.html);
       setHead(parsed.head);
-      // Atualiza outerHtml/html de cada slide preservando o index. Edições
-      // inline em editedTexts permanecem aplicadas via rebuildSlideOuterHtml.
       setSlides(prev => prev.map((s, i) => {
         const updated = parsed.slides[i];
         if (!updated) return s;
         return { ...s, outerHtml: updated.outerHtml, html: updated.html, texts: updated.texts };
       }));
-      toast.success('Template fmteam atualizado');
+      const stats = data.stats || {};
+      const avatarReplaced = (stats.avatar || 0) + (stats.ctaAvatar || 0);
+      if (photo && avatarReplaced === 0) {
+        toast.warning('Template atualizado, mas nenhuma badge de avatar foi encontrada no HTML');
+      } else if (photo) {
+        toast.success(`Template atualizado — ${avatarReplaced} avatar(es) trocado(s)`);
+      } else {
+        toast.success('Template atualizado (sem foto fornecida)');
+      }
     } catch (err: unknown) {
       toast.error('Erro ao atualizar template: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -2901,6 +2927,25 @@ export default function CarouselEditor({
           )}
           {/* Ações secundárias */}
           <div className="flex items-center gap-1 shrink-0">
+            <input
+              ref={reapplyPhotoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleReapplyPhotoSelect}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => reapplyPhotoInputRef.current?.click()}
+              title={reapplyPhotoDataUrl ? 'Foto carregada — clique para trocar' : 'Subir foto para usar nas badges (capa + CTA)'}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                reapplyPhotoDataUrl
+                  ? 'bg-green-600 hover:bg-green-500 text-white'
+                  : 'bg-secondary hover:bg-border text-foreground'
+              }`}
+            >
+              <Upload className="w-3 h-3" />
+              {reapplyPhotoDataUrl ? 'Foto OK' : 'Foto'}
+            </button>
             <button
               onClick={reapplyFmteamTemplate}
               disabled={reapplyLoading}
