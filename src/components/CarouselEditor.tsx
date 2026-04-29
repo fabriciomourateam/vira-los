@@ -2707,6 +2707,42 @@ export default function CarouselEditor({
     }
   }
 
+  // Versão alta-fidelidade: server-side via Playwright. Pixel-perfect, lida com
+  // Pexels/gradient text/filter:brightness/calc() nativamente.
+  async function handleDownloadPngsHD() {
+    toast.info('Gerando PNGs HD via navegador real… (pode levar alguns segundos)');
+    setScreenshotLoading(true);
+    try {
+      const html = rebuildHtml();
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 90_000); // 90s hard cap
+      const res = await fetch(`${API}/api/carousel/screenshots-pp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html, folderName }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      const screenshots: string[] = data.screenshots || [];
+      if (!screenshots.length) throw new Error('Nenhum screenshot gerado');
+      const ms = data.ms ? ` em ${Math.round(data.ms/1000)}s` : '';
+      onScreenshotsUpdated(screenshots);
+      toast.info(`${screenshots.length} PNGs HD prontos${ms}. Baixando…`);
+      for (const filename of screenshots) {
+        await downloadFileFromServer(filename);
+        await new Promise(r => setTimeout(r, 300));
+      }
+      toast.success(`${screenshots.length} PNGs HD baixados!`);
+    } catch (err: any) {
+      console.error('[DownloadPngsHD]', err);
+      toast.error(`Falha HD: ${err.message || err}`);
+    } finally {
+      setScreenshotLoading(false);
+    }
+  }
+
   async function handleDownloadCurrentPng() {
     if (selectedIndex === null) {
       toast.error('Selecione um slide primeiro');
@@ -2969,9 +3005,14 @@ export default function CarouselEditor({
               <Download className="w-3 h-3" /> PNG
             </button>
             <button onClick={handleDownloadPngs} disabled={screenshotLoading}
-              title="Baixar PNGs de todos os slides (como estão no editor)"
+              title="Baixar PNGs (rápido, html2canvas)"
               className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
               <Download className="w-3 h-3" /> PNGs
+            </button>
+            <button onClick={handleDownloadPngsHD} disabled={screenshotLoading}
+              title="Baixar PNGs HD (pixel-perfect, navegador real — mais lento mas idêntico ao preview)"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-violet-700 hover:bg-violet-600 disabled:opacity-60 text-white text-[11px] font-semibold transition-colors">
+              <Download className="w-3 h-3" /> HD
             </button>
             <button onClick={handleDownloadJpegs} disabled={screenshotLoading} title="Baixar JPEGs"
               className="p-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white transition-colors">

@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const multer = require('multer');
-const { generateCarousel, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate } = require('../services/carouselService');
+const { generateCarousel, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, takeScreenshotsPixelPerfect } = require('../services/carouselService');
 const { FABRICIO_AVATAR_DATA_URL } = require('../services/fmteamAssets');
 const db = require('../db/database');
 
@@ -335,6 +335,29 @@ router.post('/save-screenshots', (req, res) => {
     }
   }
   res.json({ ok: true, screenshots: saved });
+});
+
+// ─── Screenshots pixel-perfect via Playwright ────────────────────────────────
+// POST /api/carousel/screenshots-pp  { html, folderName }  → { screenshots: [...] }
+//
+// Gera PNGs 1080x1350 (deviceScaleFactor 2 → 2160x2700 efetivo, downsample no
+// PNG = retina-quality) usando Chromium real. Lida com Pexels nativamente.
+// Salva em data/output/<folderName>/slide_NN.png, sobrescrevendo qualquer PNG
+// antigo do html2canvas no mesmo destino.
+router.post('/screenshots-pp', async (req, res) => {
+  const { html, folderName } = req.body || {};
+  if (!html || !folderName) return res.status(400).json({ error: 'html e folderName obrigatórios' });
+  const folderPath = path.join(OUTPUT_DIR, folderName);
+  try {
+    const t0 = Date.now();
+    const screenshots = await takeScreenshotsPixelPerfect(html, folderPath);
+    const ms = Date.now() - t0;
+    console.log(`[screenshots-pp] ${screenshots.length} slides em ${ms}ms (${Math.round(ms/screenshots.length)}ms/slide)`);
+    res.json({ screenshots, ms });
+  } catch (e) {
+    console.error('[screenshots-pp]', e);
+    res.status(500).json({ error: e.message || 'Falha no screenshot pixel-perfect' });
+  }
 });
 
 // ─── Busca Unsplash inline ────────────────────────────────────────────────────

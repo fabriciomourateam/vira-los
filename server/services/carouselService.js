@@ -2193,4 +2193,70 @@ Retorne apenas o <div> externo com novo conteúdo:`;
   return result;
 }
 
-module.exports = { generateCarousel, takeScreenshots, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate };
+/**
+ * Screenshots pixel-perfect via Playwright (alternativa ao html2canvas-pro).
+ *
+ * Vantagens:
+ *  - Carrega Pexels/Unsplash direto pelo Chromium (sem proxy + base64 inline)
+ *  - Renderiza CSS 100%: background-clip:text, filter:brightness, calc(),
+ *    letter-spacing negativo, gradient text — tudo nativo
+ *  - Sem hacks de fix-* funcionais
+ *
+ * Estratégia de velocidade:
+ *  - Reusa instância de browser via getBrowser() (sem cold start em chamadas seguintes)
+ *  - setContent + waitUntil:'load' + Promise.all(images.complete) — explícito,
+ *    sem depender de networkidle que pode esperar requests fantasmas
+ *  - Single pass: todos os slides visíveis, tira screenshot por bounding box
+ *    de cada elemento (Playwright .screenshot() em locator)
+ */
+async function takeScreenshotsPixelPerfect(html, outputDir) {
+  const browser = await getBrowser();
+  if (!browser) throw new Error('Playwright não disponível neste server');
+
+  const context = await browser.newContext({
+    viewport: { width: 1080, height: 1350 },
+    deviceScaleFactor: 2,  // retina-quality (2160x2700 internamente)
+  });
+  const page = await context.newPage();
+
+  try {
+    // setContent com baseURL não importa — todas Pexels são URLs absolutas
+    await page.setContent(html, { waitUntil: 'load', timeout: 30000 });
+
+    // Garante que TODA <img> chegou (timeout individual de 8s por imagem)
+    await page.evaluate(() => Promise.all(
+      Array.from(document.images).map(img =>
+        new Promise(resolve => {
+          if (img.complete && img.naturalWidth > 0) return resolve();
+          const t = setTimeout(resolve, 8000);
+          img.addEventListener('load',  () => { clearTimeout(t); resolve(); }, { once: true });
+          img.addEventListener('error', () => { clearTimeout(t); resolve(); }, { once: true });
+        })
+      )
+    ));
+    // Garante fontes
+    await page.evaluate(() => document.fonts && document.fonts.ready ? document.fonts.ready : null);
+    await page.waitForTimeout(150); // settle
+
+    // Cada filho direto de body é 1 slide
+    const slidesCount = await page.evaluate(() => document.body.children.length);
+    if (slidesCount === 0) throw new Error('Nenhum slide encontrado no HTML');
+
+    fs.mkdirSync(outputDir, { recursive: true });
+    const screenshots = [];
+
+    for (let i = 0; i < slidesCount; i++) {
+      const num = String(i + 1).padStart(2, '0');
+      const filePath = path.join(outputDir, `slide_${num}.png`);
+      const locator = page.locator('body > *').nth(i);
+      await locator.screenshot({ path: filePath, type: 'png' });
+      screenshots.push(`slide_${num}.png`);
+    }
+
+    return screenshots;
+  } finally {
+    await context.close();
+  }
+}
+
+module.exports = { generateCarousel, takeScreenshots, takeScreenshotsPixelPerfect, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate };
