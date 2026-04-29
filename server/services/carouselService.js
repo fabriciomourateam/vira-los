@@ -555,7 +555,7 @@ function buildHTMLPrompt({ topic, instructions, niche, primaryColor, accentColor
     : '';
 
   const instructionsSection = instructions && instructions.trim()
-    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   const typographyLines = [
@@ -1251,7 +1251,7 @@ function buildTemplateHTMLPrompt({ templateHtml, topic, instructions, niche, ins
     : '';
 
   const instructionsSection = instructions && instructions.trim()
-    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   return `Você é um especialista em carrosseis para Instagram. Sua tarefa é criar um NOVO carrossel reutilizando EXATAMENTE o layout visual de um template existente.
@@ -1326,7 +1326,7 @@ function buildCleanHTMLPrompt({ topic, instructions, niche, primaryColor, fontFa
     : '';
 
   const instructionsSection = instructions && instructions.trim()
-    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   // Avatar: Claude gera apenas as iniciais; a foto é injetada em pós-processamento
@@ -1490,7 +1490,7 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
     : '';
 
   const instructionsSection = instructions && instructions.trim()
-    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim()}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : '';
 
   const avatarInitials = handle.slice(0, 2).toUpperCase();
@@ -1897,7 +1897,7 @@ async function generateCarousel(config) {
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
 
-  console.log(`[GenerateCarousel] Iniciando: layout="${layoutStyle}" topic="${topic.substring(0, 60)}" numSlides=${numSlides}`);
+  console.log(`[GenerateCarousel] Iniciando: layout="${layoutStyle}" topic="${topic.substring(0, 60)}" numSlides=${numSlides} roteiroLen=${(roteiro||'').length} instructionsLen=${(instructions||'').length}`);
 
   // Conta slides reais se roteiro tiver marcadores "SLIDE N"
   let slidesCount = Math.min(10, Math.max(5, Number(numSlides)));
@@ -2108,7 +2108,7 @@ async function regenerateSlide({ slideIndex, numSlides, slideHtml, topic, instru
   const fullStructure = buildViralStructure({ numSlides: n, dominantEmotion: dominantEmotion || 'medo de perder', handleAt, roteiro: '' });
   const typeDesc = fullStructure.split('\n\n').find(s => s.trimStart().startsWith(`SLIDE ${slideNum} —`)) || `SLIDE ${slideNum}`;
 
-  const instructionsLine = instructions && instructions.trim() ? `\nDiretriz de conteúdo: ${instructions.trim()}` : '';
+  const instructionsLine = instructions && instructions.trim() ? `\nDiretriz de conteúdo: ${instructions.trim().slice(0, 3000)}` : '';
   const hintLine = userHint && userHint.trim() ? `\nPedido do criador: "${userHint.trim()}"` : '';
 
   const prompt = `Você é especialista em carrosseis virais para Instagram.
