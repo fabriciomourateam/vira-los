@@ -19,7 +19,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { scrapeInstagram, scrapeTikTok, scrapeGoogleTrends, scrapeReddit, scrapeYoutube, hasRedditOAuth, hasYoutube } = require('../services/discoveryService');
+const { scrapeInstagram, scrapeTikTok, scrapeGoogleTrends, scrapeReddit, scrapeYoutube, hasRedditOAuth, hasYoutube, hasRapidApi } = require('../services/discoveryService');
 const { generateIdeas, generateReelsScript } = require('../services/ideasGeneratorService');
 const db = require('../db/database');
 
@@ -96,9 +96,17 @@ async function runDiscovery(jobId, config) {
 
     // ── Diagnóstico por plataforma ────────────────────────────────────────────
     const blockMsg = (n) => `${n} bloqueou IP do servidor (403) — configure API key para contornar`;
+    const igError = igResult.status === 'rejected' ? igResult.reason?.message
+      : (platforms.includes('instagram') && !scrapedData.instagram.length
+          ? (hasRapidApi() ? 'RapidAPI sem resultados de Instagram' : 'configure RAPIDAPI_KEY (ou APIFY_API_KEY) para ativar')
+          : null);
+    const ttError = ttResult.status === 'rejected' ? ttResult.reason?.message
+      : (platforms.includes('tiktok') && !scrapedData.tiktok.length
+          ? (hasRapidApi() ? 'RapidAPI sem resultados de TikTok' : blockMsg('TikTok') + ' — configure RAPIDAPI_KEY')
+          : null);
     const platformStatus = {
-      instagram: { active: platforms.includes('instagram'), count: scrapedData.instagram.length, error: igResult.status === 'rejected' ? igResult.reason?.message : (platforms.includes('instagram') && !scrapedData.instagram.length ? 'sem resultados (requer APIFY_API_KEY)' : null) },
-      tiktok:    { active: platforms.includes('tiktok'),    count: scrapedData.tiktok.length,    error: ttResult.status === 'rejected' ? ttResult.reason?.message : (platforms.includes('tiktok') && !scrapedData.tiktok.length ? blockMsg('TikTok') : null) },
+      instagram: { active: platforms.includes('instagram'), count: scrapedData.instagram.length, error: igError },
+      tiktok:    { active: platforms.includes('tiktok'),    count: scrapedData.tiktok.length,    error: ttError },
       trends:    { active: platforms.includes('trends'),    count: scrapedData.trends.length,    error: trendsResult.status === 'rejected' ? trendsResult.reason?.message : (platforms.includes('trends') && !scrapedData.trends.length ? blockMsg('Google Trends') : null) },
       reddit:    { active: platforms.includes('reddit'),    count: scrapedData.reddit.length,    error: redditResult.status === 'rejected' ? redditResult.reason?.message : (platforms.includes('reddit') && !scrapedData.reddit.length ? (hasRedditOAuth() ? 'Reddit OAuth falhou' : blockMsg('Reddit') + ' — configure REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET') : null) },
       youtube:   { active: hasYoutube(),                    count: scrapedData.youtube.length,   error: ytResult.status === 'rejected' ? ytResult.reason?.message : (!hasYoutube() ? 'configure YOUTUBE_API_KEY para ativar' : null) },

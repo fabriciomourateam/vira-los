@@ -29,6 +29,7 @@ const axios = require('axios');
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const hasApify   = () => !!process.env.APIFY_API_KEY;
+const hasRapidApi    = () => !!process.env.RAPIDAPI_KEY;
 const hasRedditOAuth = () => !!process.env.REDDIT_CLIENT_ID && !!process.env.REDDIT_CLIENT_SECRET;
 const hasYoutube     = () => !!process.env.YOUTUBE_API_KEY;
 
@@ -54,9 +55,50 @@ async function runApifySync(actorSlug, input, timeoutSecs = 90) {
   }
 }
 
-// ─── 1. Instagram via Apify (opcional) ────────────────────────────────────────
+// ─── 1. Instagram via RapidAPI (preferido) ou Apify (fallback) ────────────────
 
 async function scrapeInstagram(hashtags = []) {
+  // 1a. RapidAPI primeiro (mesma key já configurada para outras buscas)
+  if (hasRapidApi() && hashtags.length > 0) {
+    const results = [];
+    const apiKey = process.env.RAPIDAPI_KEY;
+    for (const tag of hashtags.slice(0, 3)) {
+      try {
+        const res = await axios.post(
+          'https://instagram-scraper-stable-api.p.rapidapi.com/search_ig.php',
+          new URLSearchParams({ search_query: tag }),
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'x-rapidapi-key': apiKey,
+              'x-rapidapi-host': 'instagram-scraper-stable-api.p.rapidapi.com',
+            },
+            timeout: 15000,
+          }
+        );
+        const users = res.data?.users || [];
+        for (const u of users.slice(0, 8)) {
+          const user = u.user || u;
+          if (!user.username) continue;
+          results.push({
+            platform: 'instagram',
+            title: `@${user.username}${user.full_name ? ' — ' + user.full_name : ''}`,
+            engagement: Number(user.follower_count || 0),
+            likes: Number(user.follower_count || 0),
+            comments: 0,
+            hashtags: [tag],
+          });
+        }
+      } catch (err) {
+        console.warn(`[Discovery] Instagram RapidAPI #${tag}: ${err.message}`);
+      }
+    }
+    if (results.length > 0) {
+      return results.sort((a, b) => b.engagement - a.engagement).slice(0, 20);
+    }
+  }
+
+  // 1b. Fallback Apify
   if (!hasApify()) return [];
   const items = await runApifySync('apify/instagram-hashtag-scraper', {
     hashtags: hashtags.slice(0, 5),
@@ -77,38 +119,77 @@ async function scrapeInstagram(hashtags = []) {
     .slice(0, 20);
 }
 
-// ─── 2. TikTok Creative Center + Apify fallback ───────────────────────────────
+// ─── 2. TikTok via RapidAPI (preferido) + CC + Apify fallbacks ────────────────
 
 async function scrapeTikTok(hashtags = []) {
   const results = [];
 
-  try {
-    const res = await axios.get(
-      'https://ads.tiktok.com/business/creativecenter/api/v1/trending/hashtags/list',
-      {
-        params: { period: 7, region: 'BR', count: 30, cursor: 0, lang: 'pt' },
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          Referer: 'https://ads.tiktok.com/business/creativecenter/inspiration/trending/hashtag/pc/pt',
-        },
-        timeout: 12000,
+  // 2a. RapidAPI tiktok-scraper7/feed/search (mesma key, funciona de qualquer IP)
+  if (hasRapidApi() && hashtags.length > 0) {
+    const apiKey = process.env.RAPIDAPI_KEY;
+    for (const tag of hashtags.slice(0, 4)) {
+      try {
+        const res = await axios.get('https://tiktok-scraper7.p.rapidapi.com/feed/search', {
+          params: { keywords: tag, region: 'br', count: 15, cursor: 0, publish_time: '30', sort_type: '1' },
+          headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com' },
+          timeout: 15000,
+        });
+        const list = res.data?.data?.videos || [];
+        for (const v of list) {
+          const authorObj = typeof v.author === 'object' && v.author !== null ? v.author : null;
+          const handle = authorObj ? (authorObj.unique_id || authorObj.id || '') : String(v.author || '');
+          const views = Number(v.play_count || 0);
+          const likes = Number(v.digg_count || 0);
+          if (views < 5000 && likes < 200) continue;
+          results.push({
+            platform: 'tiktok',
+            title: String(v.title || v.desc || '').replace(/\n/g, ' ').substring(0, 200),
+            engagement: likes + Number(v.comment_count || 0) * 3 + Number(v.share_count || 0) * 5,
+            likes,
+            views,
+            comments: Number(v.comment_count || 0),
+            shares: Number(v.share_count || 0),
+            author: handle,
+            hashtag: tag,
+          });
+        }
+      } catch (err) {
+        console.warn(`[Discovery] TikTok RapidAPI #${tag}: ${err.message}`);
       }
-    );
-    const list = res.data?.data?.list || [];
-    for (const tag of list.slice(0, 20)) {
-      results.push({
-        platform: 'tiktok_cc',
-        title: `#${tag.hashtag_name} — ${(tag.video_views || 0).toLocaleString()} views (${tag.rank_diff > 0 ? '↑' : tag.rank_diff < 0 ? '↓' : '='} ${Math.abs(tag.rank_diff || 0)} posições)`,
-        engagement: tag.video_views || tag.publish_cnt || 0,
-        hashtag: tag.hashtag_name,
-        videoCount: tag.publish_cnt || 0,
-        views: tag.video_views || 0,
-      });
     }
-  } catch (err) {
-    console.warn('[Discovery] TikTok Creative Center:', err.message);
   }
 
+  // 2b. Creative Center (gratuito; bloqueia em IPs de cloud)
+  if (results.length < 10) {
+    try {
+      const res = await axios.get(
+        'https://ads.tiktok.com/business/creativecenter/api/v1/trending/hashtags/list',
+        {
+          params: { period: 7, region: 'BR', count: 30, cursor: 0, lang: 'pt' },
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            Referer: 'https://ads.tiktok.com/business/creativecenter/inspiration/trending/hashtag/pc/pt',
+          },
+          timeout: 12000,
+        }
+      );
+      const list = res.data?.data?.list || [];
+      for (const tag of list.slice(0, 20)) {
+        results.push({
+          platform: 'tiktok_cc',
+          title: `#${tag.hashtag_name} — ${(tag.video_views || 0).toLocaleString()} views`,
+          engagement: tag.video_views || tag.publish_cnt || 0,
+          hashtag: tag.hashtag_name,
+          videoCount: tag.publish_cnt || 0,
+          views: tag.video_views || 0,
+        });
+      }
+    } catch (err) {
+      console.warn('[Discovery] TikTok Creative Center:', err.message);
+    }
+  }
+
+  // 2c. Apify fallback se nada veio
   if (results.length < 5 && hasApify()) {
     const items = await runApifySync('clockworks/tiktok-scraper', {
       hashtags: hashtags.slice(0, 4),
@@ -378,6 +459,7 @@ module.exports = {
   scrapeReddit,
   scrapeYoutube,
   hasApify,
+  hasRapidApi,
   hasRedditOAuth,
   hasYoutube,
 };
