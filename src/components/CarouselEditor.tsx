@@ -1618,12 +1618,14 @@ export default function CarouselEditor({
   async function reapplyFmteamTemplate() {
     setReapplyLoading(true);
     try {
-      const minimalHtml = `<!DOCTYPE html><html><head>${head}</head><body></body></html>`;
+      // Manda o HTML completo (head + body com slides) — o backend precisa
+      // do body pra atualizar avatar, nome e handle dentro das badges.
+      const fullHtml = rebuildHtml();
       const res = await fetch(`${API}/api/carousel/re-apply-fmteam-css`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          html: minimalHtml,
+          html: fullHtml,
           profilePhotoUrl: (config as any)?.profilePhotoUrl || '',
           creatorName: (config as any)?.creatorName || '',
           instagramHandle: (config as any)?.instagramHandle || '',
@@ -1631,11 +1633,17 @@ export default function CarouselEditor({
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(data.html, 'text/html');
-      const newHead = doc.head.innerHTML;
-      setHead(newHead);
-      toast.success('Template fmteam atualizado (cores e tamanhos)');
+      // Re-parse o HTML retornado pra extrair head atualizado + slides com avatar/nome novos.
+      const parsed = parseSlides(data.html);
+      setHead(parsed.head);
+      // Atualiza outerHtml/html de cada slide preservando o index. Edições
+      // inline em editedTexts permanecem aplicadas via rebuildSlideOuterHtml.
+      setSlides(prev => prev.map((s, i) => {
+        const updated = parsed.slides[i];
+        if (!updated) return s;
+        return { ...s, outerHtml: updated.outerHtml, html: updated.html, texts: updated.texts };
+      }));
+      toast.success('Template fmteam atualizado');
     } catch (err: unknown) {
       toast.error('Erro ao atualizar template: ' + (err instanceof Error ? err.message : String(err)));
     } finally {

@@ -982,7 +982,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
 
     /* ── TAG ── */
     .tag {
-      font-family:var(--F-BODY); font-size:20px; font-weight:900;
+      font-family:var(--F-BODY); font-size:32px; font-weight:900;
       letter-spacing:3px; text-transform:uppercase; margin-bottom:20px;
     }
     .on-dark  .tag { color:var(--PL); }
@@ -1053,8 +1053,8 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       background-clip:text;
     }
     .dark-body {
-      font-family:var(--F-BODY); font-size:33px; font-weight:300;
-      line-height:1.52; color:rgba(255,255,255,0.75);
+      font-family:var(--F-BODY); font-size:42px; font-weight:300;
+      line-height:1.45; color:rgba(255,255,255,0.78);
     }
     .dark-body + .dark-body { margin-top:18px; }
     .dark-body strong { color:#fff; font-weight:500; }
@@ -1073,8 +1073,8 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       background-clip:text;
     }
     .light-body {
-      font-family:var(--F-BODY); font-size:33px; font-weight:300;
-      line-height:1.54; color:rgba(15,13,8,0.75);
+      font-family:var(--F-BODY); font-size:42px; font-weight:300;
+      line-height:1.45; color:rgba(15,13,8,0.78);
     }
     .light-body + .light-body { margin-top:18px; }
     .light-body strong { color:var(--DB); font-weight:600; }
@@ -1100,9 +1100,9 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       display:flex; align-items:center; justify-content:center;
       text-align:center; line-height:1.2; letter-spacing:-0.5px;
     }
-    .stat-content { padding:18px 22px; display:flex; flex-direction:column; justify-content:center; }
-    .stat-title { font-family:var(--F-BODY); font-size:26px; font-weight:800; color:var(--DB); margin-bottom:6px; line-height:1.25; }
-    .stat-desc  { font-family:var(--F-BODY); font-size:20px; font-weight:400; color:rgba(15,13,8,0.62); line-height:1.4; }
+    .stat-content { padding:20px 24px; display:flex; flex-direction:column; justify-content:center; }
+    .stat-title { font-family:var(--F-BODY); font-size:28px; font-weight:800; color:var(--DB); margin-bottom:8px; line-height:1.25; }
+    .stat-desc  { font-family:var(--F-BODY); font-size:24px; font-weight:400; color:rgba(15,13,8,0.62); line-height:1.4; }
 
     /* ── CAPA HEADLINE ── */
     .capa-headline-area {
