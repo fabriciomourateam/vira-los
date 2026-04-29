@@ -299,6 +299,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const [config, setConfig] = useState<CarouselConfig>(DEFAULT_CONFIG);
   const [configReady, setConfigReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState('');
   const [result, setResult] = useState<CarouselResult | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -528,6 +529,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
       return;
     }
     setLoading(true);
+    setLoadingStep('Iniciando...');
     setResult(null);
     setCurrentSlide(0);
     try {
@@ -601,13 +603,13 @@ ${stats ? `- Stats: ${stats}` : ''}
 
       // ── Passo 2: polling até completar ───────────────────────────────────────
       const POLL_INTERVAL = 4000;   // 4s entre cada check
-      const POLL_TIMEOUT  = 600000; // 10 min máximo total
+      const POLL_TIMEOUT  = 900000; // 15 min máximo total
       const pollStart = Date.now();
       let data: any = null;
 
       while (true) {
         if (Date.now() - pollStart > POLL_TIMEOUT) {
-          throw new Error('Tempo limite de 10 minutos excedido. O servidor pode estar lento — tente novamente.');
+          throw new Error('Tempo limite de 15 minutos excedido. O servidor pode estar lento — tente novamente.');
         }
         await new Promise(r => setTimeout(r, POLL_INTERVAL));
         const pollRes = await fetch(`${API}/api/carousel/jobs/${jobId}`);
@@ -616,7 +618,8 @@ ${stats ? `- Stats: ${stats}` : ''}
 
         if (job.status === 'error') throw new Error(job.error || 'Erro na geração');
         if (job.status === 'done') { data = job.result; break; }
-        // status === 'processing': continua polling
+        // status === 'processing': mostra etapa atual e continua polling
+        if (job.step) setLoadingStep(job.step);
       }
 
       const carouselId = `c_${Date.now()}`;
@@ -1831,7 +1834,7 @@ document.addEventListener('DOMContentLoaded', function() {
             className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 transition-colors"
           >
             {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Gerando carrossel…</>
+              <><Loader2 className="w-4 h-4 animate-spin" /> {loadingStep || 'Gerando carrossel…'}</>
             ) : beforeAfterMode ? (
               <><span className="text-base">🏆</span> Gerar Carrossel Antes/Depois</>
             ) : selectedTemplateId ? (

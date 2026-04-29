@@ -94,6 +94,12 @@ router.post('/generate', (req, res) => {
   const jobId = createJob();
   res.json({ jobId });
 
+  // Callback para atualizar o step visível ao cliente durante o polling
+  const setStep = (step) => {
+    const job = jobs.get(jobId);
+    if (job) jobs.set(jobId, { ...job, step });
+  };
+
   // Processa em background (sem bloquear o HTTP)
   generateCarousel({
     topic, instructions, niche, primaryColor, accentColor, bgColor,
@@ -103,7 +109,7 @@ router.post('/generate', (req, res) => {
     titleFontSize, bodyFontSize, bannerFontSize,
     titleFontWeight, bodyFontWeight, titleTextTransform,
     titleFontFamily, bodyFontFamily,
-  }).then(result => {
+  }, setStep).then(result => {
     jobs.set(jobId, { ...jobs.get(jobId), status: 'done', result, step: 'Concluído!' });
     console.log(`[Job ${jobId}] Concluído.`);
   }).catch(err => {

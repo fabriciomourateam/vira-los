@@ -21,12 +21,19 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ─── Retry automático para erros de sobrecarga da Anthropic ──────────────────
 // HTTP 529 / overloaded_error: tenta novamente com backoff exponencial
-async function anthropicWithRetry(params, maxRetries = 4) {
+// callTimeoutMs: timeout por chamada individual (default 5 min) — evita travar indefinidamente
+async function anthropicWithRetry(params, maxRetries = 4, callTimeoutMs = 5 * 60 * 1000) {
   let delay = 5000; // começa com 5s
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await anthropic.messages.create(params); // linha interna do retry — não alterar
+      // AbortSignal.timeout() cancela a chamada se o Anthropic não responder dentro do prazo
+      const signal = AbortSignal.timeout(callTimeoutMs);
+      return await anthropic.messages.create(params, { signal });
     } catch (err) {
+      // Timeout da chamada individual → falha rápida, sem retry (seria inútil)
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+        throw new Error(`Anthropic não respondeu em ${callTimeoutMs / 60000} minutos. Tente novamente em alguns instantes.`);
+      }
       const isOverload =
         err?.status === 529 ||
         err?.error?.type === 'overloaded_error' ||
@@ -1875,7 +1882,7 @@ async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, f
 
 // ─── Função principal ─────────────────────────────────────────────────────────
 
-async function generateCarousel(config) {
+async function generateCarousel(config, setStep = () => {}) {
   const {
     topic,
     instructions = '',             // foco / diretrizes de conteúdo (opcional)
@@ -1916,6 +1923,7 @@ async function generateCarousel(config) {
   }
 
   // Passo 1: Reddit (skip se tiver roteiro) + queries por slide, em paralelo
+  setStep('Pesquisando tendências e buscando imagens...');
   console.log(`[GenerateCarousel] Passo 1 — buscando tendências Reddit + queries de imagem...`);
   const [redditTrends, slideQueries] = await Promise.all([
     roteiro ? Promise.resolve([]) : fetchRedditTrends(topic),
@@ -1923,6 +1931,7 @@ async function generateCarousel(config) {
   ]);
 
   // Passo 2: busca imagem específica para cada slide em paralelo
+  setStep('Selecionando imagens para os slides...');
   console.log(`[GenerateCarousel] Passo 2 — buscando imagens Unsplash (${slideQueries?.length ?? 0} queries)...`);
   // fmteam 9-slide: retorna 8 queries (sem CTA) — aceita length >= slidesCount - 1
   const minQueriesRequired = (layoutStyle === 'fmteam' && slidesCount === 9) ? slidesCount - 1 : slidesCount;
@@ -1979,6 +1988,7 @@ async function generateCarousel(config) {
     });
   }
 
+  setStep(`Gerando conteúdo com IA (prompt ~${Math.round(htmlPrompt.length / 1000)}k chars)...`);
   console.log(`[GenerateCarousel] Passo 3 — chamando Anthropic (HTML + legenda em paralelo, prompt ~${htmlPrompt.length} chars)...`);
   const t0 = Date.now();
   // fmteam: sem CSS no output → ~8.000 tokens suficientes (HTML puro dos 9 slides)
@@ -2073,6 +2083,7 @@ async function generateCarousel(config) {
   }
 
   // Passo 4: Salvar arquivos (output/<slug>-<ts>/)
+  setStep('Salvando arquivos...');
   console.log(`[GenerateCarousel] Passo 4 — salvando arquivos em disco...`);
   const slug = topic.trim().toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
