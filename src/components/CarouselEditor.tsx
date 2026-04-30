@@ -467,7 +467,8 @@ function parseSlides(html: string): { slides: EditableSlide[]; head: string } {
   doc.querySelectorAll(
     '.capa-headline-area > div:not(.capa-badge):not(.capa-headline):not(.capa-sub):not(.capa-context)'
   ).forEach(div => {
-    div.removeAttribute('style');
+    // Mantém o inline style como fallback visual para carrosseis antigos
+    // (CSS de versões antigas não tinha .capa-context definido)
     div.classList.add('capa-context');
   });
   const head = doc.head.innerHTML;
@@ -1418,14 +1419,15 @@ function RichTextEditor({
     editorRef.current?.focus();
   }
 
-  // Aplica gradiente dourado fmteam ao texto selecionado
+  // Aplica gradiente dourado fmteam (var(--G)) ao texto selecionado
+  // Cor exata: linear-gradient(165deg,#B8860B 0%,#FFC300 50%,#FFD54F 100%)
   function applyGoldGradient() {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
     const range = sel.getRangeAt(0);
     const fragment = range.extractContents();
     const span = document.createElement('span');
-    span.style.cssText = 'background:linear-gradient(135deg,#FFC300,#FF8C00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:inherit;';
+    span.style.cssText = 'background:linear-gradient(165deg,#B8860B 0%,#FFC300 50%,#FFD54F 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:inherit;font-style:normal;';
     span.appendChild(fragment);
     range.insertNode(span);
     sel.removeAllRanges();
@@ -1506,7 +1508,7 @@ function RichTextEditor({
         <button type="button" onMouseDown={e => e.preventDefault()}
           onClick={applyGoldGradient}
           className="px-1.5 py-1 rounded text-[11px] font-bold transition-colors bg-secondary hover:bg-border"
-          style={{ background: 'linear-gradient(135deg,#FFC300,#FF8C00)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
+          style={{ background: 'linear-gradient(165deg,#B8860B 0%,#FFC300 50%,#FFD54F 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
           title="Dourado gradiente (selecione a palavra primeiro)">✦</button>
         {/* Remover formatação */}
         <button type="button" onMouseDown={e => e.preventDefault()}
