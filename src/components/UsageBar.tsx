@@ -11,8 +11,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, X, DollarSign, Clock, BarChart3 } from 'lucide-react';
 
-const API = (import.meta as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE
-  || (typeof window !== 'undefined' && window.location?.hostname === 'localhost' ? 'http://localhost:3001' : '');
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 type CategoryStats = { brl: number; savedBrl: number; count: number; minSaved: number };
 

@@ -459,14 +459,17 @@ function extractTextBlocks(el: Element): TextBlock[] {
 }
 
 function parseSlides(html: string): { slides: EditableSlide[]; head: string } {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
   // Auto-migra carrosseis fmteam antigos: a 3ª linha da capa (texto entre parênteses)
   // era um <div style="..."> inline; agora usa class="capa-context" para ser editável.
-  const migrated = html.replace(
-    /<div\s+style="[^"]*color:rgba\(255,255,255,0\.52\)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-    '<div class="capa-context">$1</div>'
-  );
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(migrated, 'text/html');
+  // Detecção via DOM: qualquer div em .capa-headline-area que não seja badge/headline/sub.
+  doc.querySelectorAll(
+    '.capa-headline-area > div:not(.capa-badge):not(.capa-headline):not(.capa-sub):not(.capa-context)'
+  ).forEach(div => {
+    div.removeAttribute('style');
+    div.classList.add('capa-context');
+  });
   const head = doc.head.innerHTML;
   const slideEls = Array.from(doc.querySelectorAll(
     '.slide, .slide-editorial, .clean-cover, .clean-content, .clean-cta, .clean-split, .fmt-slide'
