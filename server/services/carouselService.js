@@ -1149,12 +1149,12 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     /* ── BADGE DA CAPA ── */
     .capa-badge { display:flex; align-items:center; gap:18px; width:fit-content; margin-bottom:28px; }
     .badge-ring {
-      width:80px; height:80px; flex-shrink:0; border-radius:50%;
+      width:88px; height:88px; flex-shrink:0; border-radius:50%;
       background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
       padding:3px; display:flex; align-items:center; justify-content:center;
     }
     .badge-avatar {
-      width:74px; height:74px; border-radius:50%; overflow:hidden;
+      width:82px; height:82px; border-radius:50%; overflow:hidden;
       border:3px solid #000;
       background:#1a1a1a; display:flex; align-items:center; justify-content:center;
       font-family:var(--F-HEAD); font-size:28px; font-weight:800; color:#fff;
@@ -1162,9 +1162,9 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     .badge-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
     .badge-info { display:flex; flex-direction:column; gap:10px; }
     .badge-name-row { display:flex; align-items:center; gap:10px; }
-    .badge-name   { font-family:var(--F-BODY); font-size:26px; font-weight:800; color:#fff; line-height:1; }
-    .badge-verified svg { width:22px; height:22px; display:block; flex-shrink:0; }
-    .badge-handle { font-family:var(--F-BODY); font-size:19px; font-weight:400; color:rgba(255,255,255,0.55); line-height:1; }
+    .badge-name   { font-family:var(--F-BODY); font-size:34px; font-weight:800; color:#fff; line-height:1; }
+    .badge-verified svg { width:26px; height:26px; display:block; flex-shrink:0; }
+    .badge-handle { font-family:var(--F-BODY); font-size:24px; font-weight:400; color:rgba(255,255,255,0.55); line-height:1; }
 
     /* ── CTA SLIDE ── */
     .cta-bridge {
@@ -1206,12 +1206,12 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       display:flex; align-items:center; justify-content:center; gap:14px;
     }
     .cta-badge-ring {
-      width:58px; height:58px; border-radius:50%;
+      width:62px; height:62px; border-radius:50%;
       background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
       padding:2px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
     }
     .cta-badge-avatar {
-      width:54px; height:54px; border-radius:50%; overflow:hidden;
+      width:58px; height:58px; border-radius:50%; overflow:hidden;
       border:2px solid var(--LB);
       background:#1a1a1a; display:flex; align-items:center; justify-content:center;
       font-family:var(--F-HEAD); font-size:20px; font-weight:800; color:#fff;
@@ -1219,11 +1219,11 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     .cta-badge-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
     .cta-badge-info { display:flex; flex-direction:column; gap:4px; }
     .cta-badge-name {
-      font-family:var(--F-BODY); font-size:22px; font-weight:800; color:var(--DB);
+      font-family:var(--F-BODY); font-size:26px; font-weight:800; color:var(--DB);
       display:flex; align-items:center; gap:6px;
     }
-    .cta-badge-name svg { width:20px; height:20px; flex-shrink:0; }
-    .cta-badge-handle { font-family:var(--F-BODY); font-size:16px; font-weight:400; color:rgba(15,13,8,0.42); }
+    .cta-badge-name svg { width:22px; height:22px; flex-shrink:0; }
+    .cta-badge-handle { font-family:var(--F-BODY); font-size:18px; font-weight:400; color:rgba(15,13,8,0.42); }
 
     /* ── ARROW ROWS (listas de pontos no gradient/dark) ── */
     .arrow-row {
