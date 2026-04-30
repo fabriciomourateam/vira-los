@@ -970,10 +970,18 @@ function buildDragScript(displayScale: number): string {
     if(t.classList&&(t.classList.contains('bg')||t.classList.contains('slide-bg'))){
       return {el:t,sel:'.bg'};
     }
+    // Prefere o elemento mais específico (mais próximo do clique no DOM)
+    // Em vez de retornar o primeiro match da lista, compara profundidade
+    var bestMatch=null, bestDepth=Infinity;
     for(var i=0;i<SELS.length;i++){
       var el=t.closest(SELS[i]);
-      if(el) return {el:el,sel:SELS[i]};
+      if(el){
+        var depth=0, cur=t;
+        while(cur&&cur!==el){depth++;cur=cur.parentElement;}
+        if(depth<bestDepth){bestDepth=depth;bestMatch={el:el,sel:SELS[i]};}
+      }
     }
+    if(bestMatch) return bestMatch;
     // Last resort: if clicked inside a slide but not on any draggable, try to find .bg
     var slideEl=t.closest('.slide,.slide-dark,.slide-light,.slide-grad,.slide-editorial,.clean-cover,.clean-content,.clean-cta,.clean-split');
     if(slideEl){
@@ -1410,6 +1418,21 @@ function RichTextEditor({
     editorRef.current?.focus();
   }
 
+  // Aplica gradiente dourado fmteam ao texto selecionado
+  function applyGoldGradient() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    const fragment = range.extractContents();
+    const span = document.createElement('span');
+    span.style.cssText = 'background:linear-gradient(135deg,#FFC300,#FF8C00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:inherit;';
+    span.appendChild(fragment);
+    range.insertNode(span);
+    sel.removeAllRanges();
+    handleInput();
+    editorRef.current?.focus();
+  }
+
   // Aplica tamanho de fonte (em px) ao texto selecionado usando mark-then-replace
   function applyFontSize(px: number) {
     const sel = window.getSelection();
@@ -1479,6 +1502,12 @@ function RichTextEditor({
             onChange={e => exec('hiliteColor', e.target.value)}
             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
         </label>
+        {/* Gradiente dourado fmteam */}
+        <button type="button" onMouseDown={e => e.preventDefault()}
+          onClick={applyGoldGradient}
+          className="px-1.5 py-1 rounded text-[11px] font-bold transition-colors bg-secondary hover:bg-border"
+          style={{ background: 'linear-gradient(135deg,#FFC300,#FF8C00)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
+          title="Dourado gradiente (selecione a palavra primeiro)">✦</button>
         {/* Remover formatação */}
         <button type="button" onMouseDown={e => e.preventDefault()}
           onClick={() => exec('removeFormat')}
@@ -1514,6 +1543,7 @@ export default function CarouselEditor({
   const [slideBgColors, setSlideBgColors] = useState<Record<number, string>>({});
   const [followBannerConfigs, setFollowBannerConfigs] = useState<Record<number, FollowBannerConfig>>({});
   const [badgeVisible, setBadgeVisible] = useState<Record<number, boolean>>({});
+  const [badgeSizes, setBadgeSizes] = useState<Record<number, number>>({}); // slide idx → ring size px
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editMode, setEditMode] = useState<'text' | 'visual'>('text');
   const [screenshotLoading, setScreenshotLoading] = useState(false);
@@ -2409,6 +2439,21 @@ export default function CarouselEditor({
       b[bi] = { ...b[bi], highlights: hls };
       return { ...prev, [si]: b };
     });
+  }
+
+  function updateBadgeSize(si: number, size: number) {
+    setBadgeSizes(prev => ({ ...prev, [si]: size }));
+    setSlides(prev => prev.map((s, i) => {
+      if (i !== si) return s;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
+      const el = doc.body.firstElementChild!;
+      const ring = el.querySelector('.badge-ring') as HTMLElement;
+      const avatar = el.querySelector('.badge-avatar') as HTMLElement;
+      if (ring) { ring.style.width = `${size}px`; ring.style.height = `${size}px`; }
+      if (avatar) { const av = size - 6; avatar.style.width = `${av}px`; avatar.style.height = `${av}px`; }
+      return { ...s, outerHtml: el.outerHTML, html: el.innerHTML };
+    }));
   }
 
   function addTextBlock(si: number) {
@@ -3697,6 +3742,26 @@ export default function CarouselEditor({
                                 >Reset</button>
                               )}
                             </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Badge fmteam (só aparece na capa) ── */}
+                      {sel?.outerHtml.includes('capa-badge') && (
+                        <div className="pt-2 border-t border-border space-y-1.5">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Badge (círculo do perfil)</p>
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] text-muted-foreground">Tamanho</label>
+                            <span className="text-[11px] font-mono text-muted-foreground">{badgeSizes[selectedIndex] ?? 80}px</span>
+                          </div>
+                          <input
+                            type="range" min={48} max={160} step={4}
+                            value={badgeSizes[selectedIndex] ?? 80}
+                            onChange={e => updateBadgeSize(selectedIndex, Number(e.target.value))}
+                            className="w-full accent-purple-500"
+                          />
+                          <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                            <span>Pequeno</span><span>Normal</span><span>Grande</span>
                           </div>
                         </div>
                       )}
