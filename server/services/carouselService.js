@@ -1129,7 +1129,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
     .capa-context {
       font-family:var(--F-HEAD); font-size:64px; font-weight:800;
       line-height:1; letter-spacing:-2px; text-transform:uppercase;
-      text-align:justify; text-align-last:justify;
+      text-align:left;
       color:rgba(255,255,255,0.52); margin-top:16px;
     }
     .capa-context em {

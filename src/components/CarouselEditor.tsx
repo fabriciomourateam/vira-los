@@ -557,9 +557,11 @@ function rebuildSlideOuterHtml(
         newStyle = `${newStyle}; text-transform: ${tb.textTransform || 'none'};`.replace(/^;\s*/, '');
       }
       // Apply text-align override
+      // Também limpa text-align-last (pode ser definido no CSS, ex: .capa-context tem justify)
+      const TEXT_ALIGN_LAST_REGEX = /text-align-last\s*:\s*[^;]+/i;
       if (tb.textAlign) {
-        newStyle = newStyle.replace(TEXT_ALIGN_REGEX, '').replace(/\s{2,}/g, ' ').trim();
-        newStyle = `${newStyle}; text-align: ${tb.textAlign};`.replace(/^;\s*/, '');
+        newStyle = newStyle.replace(TEXT_ALIGN_REGEX, '').replace(TEXT_ALIGN_LAST_REGEX, '').replace(/\s{2,}/g, ' ').trim();
+        newStyle = `${newStyle}; text-align: ${tb.textAlign}; text-align-last: ${tb.textAlign};`.replace(/^;\s*/, '');
       }
       // Apply font-family override (globalFont takes precedence over per-block font)
       const effectiveFont = globalFont || tb.fontFamily;
