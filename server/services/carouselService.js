@@ -1630,7 +1630,7 @@ SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
     </div>
     <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>
     <div class="capa-sub">[SUBTÍTULO COMPLEMENTAR — mesma escala, sem em — omitir se não couber]</div>
-    <div class="capa-context">[(TEXTO ENTRE PARÊNTESES OPCIONAL — ex: A VERDADE QUE NINGUÉM TE CONTA — pode usar <em>palavra</em> para destacar com gradiente dourado, ou adicionar a classe "gradient" no div para todo o texto receber o gradiente)]</div>
+    <div class="capa-context">[(CONTEXTO EM PARÊNTESES — 3–6 palavras em CAIXA ALTA — ex: A VERDADE QUE NINGUÉM TE CONTA — pode usar <em>palavra</em> para destacar com gradiente dourado, ou adicionar a classe "gradient" no div para todo o texto receber o gradiente — OBRIGATÓRIO, nunca omitir)]</div>
   </div>
   ${progFor(1, 'dark')}
 </div>
@@ -1742,7 +1742,7 @@ Gradient:     .grad-num (número decorativo de fundo)
 Listas:       .arrow-row > .arrow-icon + .arrow-text  (strong=bold)
 Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
 Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
-Capa:         .capa-headline-area > .capa-badge (.badge-ring > .badge-avatar | .badge-info > .badge-name-row (.badge-name + .badge-verified) + .badge-handle) + .capa-headline (em=destaque) + .capa-sub
+Capa:         .capa-headline-area > .capa-badge (.badge-ring > .badge-avatar | .badge-info > .badge-name-row (.badge-name + .badge-verified) + .badge-handle) + .capa-headline (em=destaque) + .capa-sub + .capa-context (OBRIGATÓRIO — contexto entre parênteses, em=dourado)
 CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
 IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s8 (slides internos)  |  CTA sem ID
 

@@ -433,14 +433,20 @@ function extractTextBlocks(el: Element): TextBlock[] {
     for (const node of Array.from(el.querySelectorAll(selector))) {
       if (seen.has(node)) continue;
       seen.add(node);
-      const className = node.className || selector.slice(1);
+      // Normaliza className: usa a classe do seletor como identificador canônico.
+      // Isso corrige artefatos de migração, ex.: elemento com class="badge-handle capa-context"
+      // encontrado pelo seletor '.capa-context' deve ser classificado como 'capa-context', não 'badge-handle'.
+      const selectorClass = selector.includes(' ') ? selector.split(' ').pop()!.slice(1) : selector.slice(1);
+      const rawClass = typeof node.className === 'string' ? node.className.trim() : '';
+      const firstClass = rawClass.split(/\s+/)[0];
+      const className = (firstClass === selectorClass || !rawClass) ? (rawClass || selectorClass) : selectorClass;
       const highlights = extractWordHighlights(node);
       // Para elementos com position:absolute (como custom-text), extrai top/left
       // Isso garante que re-parse do HTML reconstruído preserve as posições do drag
       const posTop = extractPosTop(node);
       const posLeft = extractPosLeft(node);
       blocks.push({
-        className: typeof className === 'string' ? className : selector.slice(1),
+        className,
         text: getTextWithLineBreaks(node),
         isMain,
         fontSize: extractFontSize(node),
