@@ -506,6 +506,7 @@ function rebuildSlideOuterHtml(
   followBannerConfig?: FollowBannerConfig,
   globalFont?: string,
   slideBgColor?: string,
+  ctaFullBleed?: boolean,
 ): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
@@ -805,6 +806,66 @@ function rebuildSlideOuterHtml(
         nameEl.insertAdjacentHTML('beforeend', VERIFIED_BADGE_HTML);
       } else if (!showBadge && existing) {
         existing.remove();
+      }
+    }
+  }
+
+  // ── CTA fmteam full-bleed ─────────────────────────────────────────────────
+  // Quando ativado: substitui o .img-box-top por uma foto cobrindo todo o slide.
+  // Aplica overlay-shadow-up para legibilidade e ajusta tema p/ on-dark.
+  if (ctaFullBleed) {
+    const isCta = !!el.querySelector('.cta-bridge') || !!el.querySelector('.cta-kbox');
+    if (isCta) {
+      const imgBox = el.querySelector('.img-box-top') as HTMLElement | null;
+      const existingImg = imgBox?.querySelector('img') as HTMLImageElement | null;
+      // Foto: preferir newBgUrl (upload novo); senão usar src já existente do img-box-top
+      const photoUrl = newBgUrl || existingImg?.getAttribute('src') || '';
+      if (photoUrl) {
+        // Remove img-box-top
+        imgBox?.remove();
+        // Troca tema light → dark no slide root e no .content
+        const cls = (el.getAttribute('class') || '');
+        el.setAttribute('class', cls
+          .replace(/\bslide-light\b/g, 'slide-dark')
+          .replace(/\bon-light\b/g, 'on-dark')
+          + (/\bslide-with-bg\b/.test(cls) ? '' : ' slide-with-bg'));
+        const contentEl = el.querySelector('.content') as HTMLElement | null;
+        if (contentEl) {
+          contentEl.setAttribute('class',
+            (contentEl.getAttribute('class') || '').replace(/\bon-light\b/g, 'on-dark'));
+        }
+        // Insere photo-bg + overlay-shadow-up logo após a brand-bar
+        const brandBar = el.querySelector('.brand-bar');
+        const photoBg = doc.createElement('div');
+        photoBg.className = 'photo-bg';
+        photoBg.innerHTML = `<img src="${photoUrl}" alt="">`;
+        const overlay = doc.createElement('div');
+        overlay.className = 'overlay-shadow-up';
+        if (brandBar?.parentNode) {
+          brandBar.parentNode.insertBefore(overlay, brandBar.nextSibling);
+          brandBar.parentNode.insertBefore(photoBg, overlay);
+        } else {
+          el.insertBefore(overlay, el.firstChild);
+          el.insertBefore(photoBg, el.firstChild);
+        }
+        // Sobrescreve cores claras do CTA para serem legíveis em fundo escuro
+        const ctaBridge = el.querySelector('.cta-bridge') as HTMLElement | null;
+        if (ctaBridge) {
+          const cur = ctaBridge.getAttribute('style') || '';
+          ctaBridge.setAttribute('style', `${cur}; color: rgba(255,255,255,0.85);`.replace(/^;\s*/, ''));
+          ctaBridge.querySelectorAll('strong').forEach(s =>
+            (s as HTMLElement).setAttribute('style', 'color:#fff; font-weight:800;'));
+        }
+        const badgeName = el.querySelector('.cta-badge-name') as HTMLElement | null;
+        if (badgeName) {
+          const cur = badgeName.getAttribute('style') || '';
+          badgeName.setAttribute('style', `${cur}; color: #fff;`.replace(/^;\s*/, ''));
+        }
+        const badgeHandle = el.querySelector('.cta-badge-handle') as HTMLElement | null;
+        if (badgeHandle) {
+          const cur = badgeHandle.getAttribute('style') || '';
+          badgeHandle.setAttribute('style', `${cur}; color: rgba(255,255,255,0.65);`.replace(/^;\s*/, ''));
+        }
       }
     }
   }
@@ -1550,6 +1611,7 @@ export default function CarouselEditor({
   const [elementOverrides, setElementOverrides] = useState<Record<number, Record<string, ElementOverride>>>({});
   const [overlayConfigs, setOverlayConfigs] = useState<Record<number, OverlayConfig>>({});
   const [bgImageConfigs, setBgImageConfigs] = useState<Record<number, BgImageConfig>>({});
+  const [ctaFullBleedConfigs, setCtaFullBleedConfigs] = useState<Record<number, boolean>>({});
   const [slideBgColors, setSlideBgColors] = useState<Record<number, string>>({});
   const [followBannerConfigs, setFollowBannerConfigs] = useState<Record<number, FollowBannerConfig>>({});
   const [badgeVisible, setBadgeVisible] = useState<Record<number, boolean>>({});
@@ -1577,6 +1639,7 @@ export default function CarouselEditor({
     bgImageConfigs: Record<number, BgImageConfig>;
     followBannerConfigs: Record<number, FollowBannerConfig>;
     badgeVisible: Record<number, boolean>;
+    ctaFullBleedConfigs: Record<number, boolean>;
     slides: EditableSlide[];
   };
   const historyRef = useRef<Snapshot[]>([]);
@@ -1881,7 +1944,7 @@ export default function CarouselEditor({
   useEffect(() => {
     if (isRestoringRef.current || slides.length === 0) return;
     const timer = setTimeout(() => {
-      const snap: Snapshot = { editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, slides };
+      const snap: Snapshot = { editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, ctaFullBleedConfigs, slides };
       historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
       historyRef.current.push(snap);
       if (historyRef.current.length > 20) historyRef.current.shift();
@@ -1890,7 +1953,7 @@ export default function CarouselEditor({
       setCanRedo(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, slides]); // eslint-disable-line
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, ctaFullBleedConfigs, slides]); // eslint-disable-line
 
   // ── Undo / Redo: Ctrl+Z / Ctrl+Y ─────────────────────────────────────────────
 
@@ -1914,6 +1977,7 @@ export default function CarouselEditor({
       setBgImageConfigs(snap.bgImageConfigs);
       setFollowBannerConfigs(snap.followBannerConfigs);
       setBadgeVisible(snap.badgeVisible);
+      setCtaFullBleedConfigs(snap.ctaFullBleedConfigs ?? {});
       setSlides(snap.slides);
       setCanUndo(historyIndexRef.current > 0);
       setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
@@ -1934,12 +1998,12 @@ export default function CarouselEditor({
       try {
         localStorage.setItem(DRAFT_KEY, JSON.stringify({
           editedTexts, editedBgUrls, elementOverrides, overlayConfigs,
-          bgImageConfigs, followBannerConfigs, badgeVisible, savedAt: Date.now(),
+          bgImageConfigs, followBannerConfigs, badgeVisible, ctaFullBleedConfigs, savedAt: Date.now(),
         }));
       } catch (_) { /* quota exceeded — ignora */ }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, slides]); // eslint-disable-line
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, ctaFullBleedConfigs, slides]); // eslint-disable-line
 
   // ── Parse inicial ────────────────────────────────────────────────────────────
 
@@ -2034,6 +2098,7 @@ export default function CarouselEditor({
               if (draft.bgImageConfigs)    setBgImageConfigs(draft.bgImageConfigs);
               if (draft.followBannerConfigs) setFollowBannerConfigs(draft.followBannerConfigs);
               if (draft.badgeVisible)      setBadgeVisible(draft.badgeVisible);
+              if (draft.ctaFullBleedConfigs) setCtaFullBleedConfigs(draft.ctaFullBleedConfigs);
               requestAnimationFrame(() => { isRestoringRef.current = false; });
               toast.success('Rascunho restaurado', { duration: 3000 });
             }, 150);
@@ -2067,6 +2132,7 @@ export default function CarouselEditor({
     setOverlayConfigs(reorder);
     setBgImageConfigs(reorder);
     setBadgeVisible(reorder);
+    setCtaFullBleedConfigs(reorder);
     setSelectedIndex(to);
   }
 
@@ -2094,6 +2160,7 @@ export default function CarouselEditor({
     setBgImageConfigs(prev => shiftUp(prev));
     setFollowBannerConfigs(prev => shiftUp(prev));
     setBadgeVisible(prev => shiftUp(prev));
+    setCtaFullBleedConfigs(prev => shiftUp(prev));
     setSelectedIndex(idx + 1);
     toast.success('Slide duplicado');
   }
@@ -2304,6 +2371,7 @@ export default function CarouselEditor({
     setOverlayConfigs(reindex);
     setBgImageConfigs(reindex);
     setBadgeVisible(reindex);
+    setCtaFullBleedConfigs(reindex);
     setSelectedIndex(prev => {
       if (prev === null) return null;
       if (prev >= count - 1) return Math.max(0, count - 2);
@@ -2667,12 +2735,13 @@ export default function CarouselEditor({
       followBannerConfigs[s.index],
       globalFont || undefined,
       slideBgColors[s.index],
+      ctaFullBleedConfigs[s.index],
     ));
     const fontOverrideCss = globalFont
       ? `<style>*:not(.verified-badge):not(.verified-badge *){font-family:'${globalFont}',sans-serif!important}</style>`
       : '';
     return `<!DOCTYPE html><html><head>${head}${fontOverrideCss}</head><body>\n${built.join('\n')}\n</body></html>`;
-  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, globalFont, slideBgColors]);
+  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, ctaFullBleedConfigs, globalFont, slideBgColors]);
 
   // ── Persistência: avisa o pai sempre que o HTML reconstruído mudar ───────────
 
@@ -2687,7 +2756,7 @@ export default function CarouselEditor({
       onHtmlUpdatedRef.current?.(built);
     }, 600);
     return () => clearTimeout(timer);
-  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, slides, rebuildHtml]);
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, ctaFullBleedConfigs, slides, rebuildHtml]);
 
   function liveSlideHtml(idx: number): string {
     const s = slides[idx]; if (!s) return '';
@@ -2702,6 +2771,7 @@ export default function CarouselEditor({
       followBannerConfigs[idx],
       globalFont || undefined,
       slideBgColors[idx],
+      ctaFullBleedConfigs[idx],
     );
   }
 
@@ -3864,6 +3934,26 @@ export default function CarouselEditor({
                             </div>
                           )}
                         </div>
+
+                        {/* CTA fmteam: toggle "foto cobrindo todo o slide" — só visível se for slide CTA */}
+                        {sel?.outerHtml.includes('cta-bridge') && (
+                          <label className="flex items-start gap-2 px-2.5 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/5 cursor-pointer hover:bg-purple-500/10 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={!!ctaFullBleedConfigs[selectedIndex!]}
+                              onChange={e => {
+                                if (selectedIndex === null) return;
+                                setCtaFullBleedConfigs(prev => ({ ...prev, [selectedIndex]: e.target.checked }));
+                              }}
+                              className="mt-0.5 accent-purple-600 cursor-pointer"
+                            />
+                            <span className="text-[11px] text-foreground leading-tight">
+                              <strong>Foto cobrindo todo o slide</strong>
+                              <br/>
+                              <span className="text-muted-foreground">Remove a foto do topo e usa a imagem como fundo full-bleed (com sombra para legibilidade).</span>
+                            </span>
+                          </label>
+                        )}
 
                         {selBg && imgTarget === 'bg' && (
                           <div className="rounded-lg overflow-hidden border border-border" style={{ maxHeight: 60 }}>
