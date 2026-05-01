@@ -905,8 +905,11 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bo
 //   - Progress bar .prog no rodapé de todos os slides
 //   - Sem swipe hint
 //
-function buildFmteamCSSTemplate({ primaryColor }) {
+function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 42, contextSize = 64 }) {
   const P  = primaryColor || '#FFC300';
+  const HS = Number(headlineSize) || 114;
+  const BS = Number(bodySize)    || 42;
+  const CS = Number(contextSize) || 64;
   const PL = '#FFD54F';
   const PD = '#B8860B';
   const LB = '#F2F2F0';
@@ -1043,7 +1046,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
 
     /* ── TIPOGRAFIA DARK ── */
     .dark-h1 {
-      font-family:var(--F-HEAD); font-size:114px; font-weight:800;
+      font-family:var(--F-HEAD); font-size:${HS}px; font-weight:800;
       line-height:0.90; letter-spacing:-4px; text-transform:uppercase;
       color:#fff; margin-bottom:28px;
     }
@@ -1054,7 +1057,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       background-clip:text;
     }
     .dark-body {
-      font-family:var(--F-BODY); font-size:42px; font-weight:300;
+      font-family:var(--F-BODY); font-size:${BS}px; font-weight:300;
       line-height:1.45; color:rgba(255,255,255,0.78);
     }
     .dark-body + .dark-body { margin-top:18px; }
@@ -1063,7 +1066,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
 
     /* ── TIPOGRAFIA LIGHT ── */
     .light-h1 {
-      font-family:var(--F-HEAD); font-size:108px; font-weight:800;
+      font-family:var(--F-HEAD); font-size:${Math.max(60, HS - 6)}px; font-weight:800;
       line-height:0.90; letter-spacing:-4px; text-transform:uppercase;
       color:var(--DB); margin-bottom:22px;
     }
@@ -1074,7 +1077,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       background-clip:text;
     }
     .light-body {
-      font-family:var(--F-BODY); font-size:42px; font-weight:300;
+      font-family:var(--F-BODY); font-size:${BS}px; font-weight:300;
       line-height:1.45; color:rgba(15,13,8,0.78);
     }
     .light-body + .light-body { margin-top:18px; }
@@ -1111,7 +1114,7 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       padding:0 52px; z-index:10;
     }
     .capa-headline {
-      font-family:var(--F-HEAD); font-size:116px; font-weight:800;
+      font-family:var(--F-HEAD); font-size:${HS + 2}px; font-weight:800;
       line-height:0.90; letter-spacing:-4px; text-transform:uppercase; color:#fff;
     }
     .capa-headline em {
@@ -1121,13 +1124,13 @@ function buildFmteamCSSTemplate({ primaryColor }) {
       background-clip:text;
     }
     .capa-sub {
-      font-family:var(--F-HEAD); font-size:116px; font-weight:800;
+      font-family:var(--F-HEAD); font-size:${HS + 2}px; font-weight:800;
       line-height:0.92; color:rgba(255,255,255,0.88);
       margin-top:14px; letter-spacing:-4px; text-transform:uppercase;
     }
     /* Texto opcional entre parênteses (linha 3 da capa) */
     .capa-context {
-      font-family:var(--F-HEAD); font-size:64px; font-weight:800;
+      font-family:var(--F-HEAD); font-size:${CS}px; font-weight:800;
       line-height:1; letter-spacing:-2px; text-transform:uppercase;
       text-align:left;
       color:rgba(255,255,255,0.52); margin-top:16px;
@@ -2081,6 +2084,7 @@ async function generateCarousel(config, setStep = () => {}) {
     titleTextTransform = '',
     titleFontFamily = '',
     bodyFontFamily = '',
+    fmteamFontSizes = {},
   } = config;
 
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
@@ -2315,7 +2319,12 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
   // Aqui removemos qualquer <style>/<link> que Claude possa ter gerado e
   // injetamos o CSS correto + substituímos o placeholder __CREATOR_PHOTO__.
   if (layoutStyle === 'fmteam') {
-    const fmteamCss = buildFmteamCSSTemplate({ primaryColor: '#FFC300' });
+    const fmteamCss = buildFmteamCSSTemplate({
+      primaryColor: '#FFC300',
+      headlineSize: fmteamFontSizes.headlineSize,
+      bodySize:     fmteamFontSizes.bodySize,
+      contextSize:  fmteamFontSizes.contextSize,
+    });
     // Remove qualquer <style> e <link> de fontes que Claude gerou por engano
     html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
     html = html.replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, '');

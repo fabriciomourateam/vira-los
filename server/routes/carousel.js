@@ -457,7 +457,7 @@ router.post('/regenerate-slide', async (req, res) => {
 
 // ── Re-aplica o CSS fmteam atual + atualiza avatar/nome em HTML já gerado ─────
 router.post('/re-apply-fmteam-css', (req, res) => {
-  const { html, profilePhotoUrl, creatorName, instagramHandle } = req.body || {};
+  const { html, profilePhotoUrl, creatorName, instagramHandle, fmteamFontSizes = {} } = req.body || {};
   if (!html || typeof html !== 'string') {
     return res.status(400).json({ error: 'html obrigatório' });
   }
@@ -477,7 +477,12 @@ router.post('/re-apply-fmteam-css', (req, res) => {
   );
 
   // 2. Injeta CSS fmteam atual com gold #FFC300 fixo
-  const fmteamCss = buildFmteamCSSTemplate({ primaryColor: '#FFC300' });
+  const fmteamCss = buildFmteamCSSTemplate({
+    primaryColor: '#FFC300',
+    headlineSize: fmteamFontSizes.headlineSize,
+    bodySize:     fmteamFontSizes.bodySize,
+    contextSize:  fmteamFontSizes.contextSize,
+  });
   if (updated.includes('</head>')) {
     updated = updated.replace('</head>', `${fmteamCss}\n</head>`);
   } else {

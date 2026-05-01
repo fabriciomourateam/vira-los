@@ -1713,6 +1713,7 @@ export default function CarouselEditor({
           profilePhotoUrl: photo,
           creatorName: (config as any)?.creatorName || '',
           instagramHandle: (config as any)?.instagramHandle || '',
+          fmteamFontSizes: (config as any)?.fmteamFontSizes || {},
         }),
       });
       const data = await res.json();

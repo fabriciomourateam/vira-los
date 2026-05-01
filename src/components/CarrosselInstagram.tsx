@@ -40,6 +40,7 @@ interface CarouselConfig {
   titleTextTransform: string;  // '' = auto, 'uppercase', 'none'
   titleFontFamily: string;     // '' = global fontFamily, or specific override
   bodyFontFamily: string;      // '' = global fontFamily, or specific override
+  fmteamFontSizes: { headlineSize: number; bodySize: number; contextSize: number };
 }
 
 interface CarouselResult {
@@ -237,6 +238,7 @@ const DEFAULT_CONFIG: CarouselConfig = {
   titleTextTransform: '',
   titleFontFamily: '',
   bodyFontFamily: '',
+  fmteamFontSizes: { headlineSize: 114, bodySize: 42, contextSize: 64 },
 };
 
 // ─── Prévia de cores ──────────────────────────────────────────────────────────
@@ -1201,15 +1203,88 @@ document.addEventListener('DOMContentLoaded', function() {
             </button>
           </div>
           {config.layoutStyle === 'fmteam' && (
-            <div className="mt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowPromptEditor(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-yellow-500/40 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-xs font-semibold transition-colors"
-              >
-                <Code2 className="w-3.5 h-3.5" />
-                Prompt
-              </button>
+            <div className="mt-3 space-y-3">
+              {/* Botão Prompt */}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowPromptEditor(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-yellow-500/40 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-xs font-semibold transition-colors"
+                >
+                  <Code2 className="w-3.5 h-3.5" />
+                  Prompt
+                </button>
+              </div>
+
+              {/* Número de slides fmteam */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+                  <Layers className="w-3.5 h-3.5" /> Nº de slides fmteam
+                </label>
+                <div className="flex gap-2">
+                  {[5, 7, 9].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => set('numSlides', n)}
+                      className={`flex-1 py-1.5 rounded-lg border text-sm font-bold transition-colors ${
+                        config.numSlides === n
+                          ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400'
+                          : 'border-border bg-background text-muted-foreground hover:border-yellow-500/50 hover:text-yellow-400'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tamanhos de fonte fmteam */}
+              <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-3">
+                <p className="text-[10px] font-semibold text-yellow-400 uppercase tracking-wide">Fontes fmteam</p>
+
+                {/* Headline */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] text-muted-foreground">Headline (títulos)</label>
+                    <span className="text-[11px] font-bold text-yellow-400">{config.fmteamFontSizes.headlineSize}px</span>
+                  </div>
+                  <input
+                    type="range" min={72} max={160} step={2}
+                    value={config.fmteamFontSizes.headlineSize}
+                    onChange={e => set('fmteamFontSizes', { ...config.fmteamFontSizes, headlineSize: Number(e.target.value) })}
+                    className="w-full accent-yellow-500"
+                  />
+                </div>
+
+                {/* Body */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] text-muted-foreground">Body (texto de apoio)</label>
+                    <span className="text-[11px] font-bold text-yellow-400">{config.fmteamFontSizes.bodySize}px</span>
+                  </div>
+                  <input
+                    type="range" min={28} max={72} step={2}
+                    value={config.fmteamFontSizes.bodySize}
+                    onChange={e => set('fmteamFontSizes', { ...config.fmteamFontSizes, bodySize: Number(e.target.value) })}
+                    className="w-full accent-yellow-500"
+                  />
+                </div>
+
+                {/* Context */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] text-muted-foreground">Contexto (linha 3 da capa)</label>
+                    <span className="text-[11px] font-bold text-yellow-400">{config.fmteamFontSizes.contextSize}px</span>
+                  </div>
+                  <input
+                    type="range" min={32} max={100} step={2}
+                    value={config.fmteamFontSizes.contextSize}
+                    onChange={e => set('fmteamFontSizes', { ...config.fmteamFontSizes, contextSize: Number(e.target.value) })}
+                    className="w-full accent-yellow-500"
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1779,8 +1854,8 @@ document.addEventListener('DOMContentLoaded', function() {
           })()}
         </div>
 
-        {/* Nº de Slides */}
-        <div>
+        {/* Nº de Slides — oculto no fmteam (controle próprio no bloco de layout) */}
+        {config.layoutStyle !== 'fmteam' && <div>
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
             <Layers className="w-3.5 h-3.5" /> Nº de Slides
           </label>
@@ -1793,7 +1868,7 @@ document.addEventListener('DOMContentLoaded', function() {
             />
             <span className="text-sm font-bold w-5 text-center text-foreground">{config.numSlides}</span>
           </div>
-        </div>
+        </div>}
 
         {/* Roteiro (opcional) */}
         <div>
