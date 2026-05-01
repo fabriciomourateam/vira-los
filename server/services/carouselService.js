@@ -1749,6 +1749,155 @@ IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s8 (slides internos)  |  
 Gere o HTML completo agora (apenas HTML, nada mais):`;
 }
 
+// ─── Bloco de estrutura HTML obrigatória (separado para uso com templates) ────
+
+/**
+ * Retorna apenas a seção "━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━" do prompt fmteam.
+ * É sempre adicionada pelo servidor ao final do preamble (template ou padrão),
+ * garantindo que o usuário não possa quebrar a estrutura técnica dos slides.
+ */
+function buildFmteamHTMLStructureBlock({ topic, numSlides, handleAt, displayName, badgeAvatarInner, ctaPhotoSrc, header, verifiedSvg, progFor }) {
+  return `━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
+
+SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img id="img-capa" src="FOTO_1" alt="${topic}"></div>
+  <div class="overlay-capa"></div>
+  <div class="capa-headline-area">
+    <div class="capa-badge">
+      <div class="badge-ring">
+        <div class="badge-avatar">${badgeAvatarInner}</div>
+      </div>
+      <div class="badge-info">
+        <div class="badge-name-row">
+          <span class="badge-name">${displayName}</span>
+          <span class="badge-verified">${verifiedSvg}</span>
+        </div>
+        <div class="badge-handle">${handleAt}</div>
+      </div>
+    </div>
+    <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>
+    <div class="capa-sub">[SUBTÍTULO COMPLEMENTAR — mesma escala, sem em — omitir se não couber]</div>
+    <div class="capa-context">[(CONTEXTO EM PARÊNTESES — 3–6 palavras em CAIXA ALTA — ex: A VERDADE QUE NINGUÉM TE CONTA — pode usar <em>palavra</em> para destacar com gradiente dourado, ou adicionar a classe "gradient" no div para todo o texto receber o gradiente — OBRIGATÓRIO, nunca omitir)]</div>
+  </div>
+  ${progFor(1, 'dark')}
+</div>
+
+SLIDES DARK INTERNOS (slides 2, 3, 6, 8):
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
+  <div class="overlay-shadow-up"></div>
+  <div class="content on-dark">
+    <div class="tag">[CATEGORIA EM 1–2 PALAVRAS]</div>
+    <div class="dark-h1"><em>PALAVRA-CHAVE</em><br>COMPLEMENTO</div>
+    <div class="dark-body">[corpo — até 30 palavras — <em>destaques</em> em amarelo]</div>
+  </div>
+NOTA: quando o conteúdo for uma lista de pontos, substitua dark-body por arrow-rows:
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto</strong> explicação</span></div>
+  [PROG_N]
+</div>
+
+SLIDE 4 — GRADIENT (slide-grad on-light — fundo dourado, texto SEMPRE escuro, nunca branco):
+<div class="slide slide-grad on-light">
+  ${header}
+  <div class="grad-num">4</div>
+  <div class="content on-light">
+    <div class="img-box-top" style="height:580px"><img id="img-s4" src="FOTO_4" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">TÍTULO<br>DO PONTO</div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 1</strong> — detalhe do argumento</span></div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 2</strong> — consequência ou dado</span></div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text">Ponto 3 — conclusão ou solução</span></div>
+  </div>
+  [PROG_4]
+</div>
+
+SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 500px + stat-rows para dados numéricos):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:500px"><img id="img-s5" src="FOTO_5" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">DADO<br><em>REAL</em></div>
+    <div class="stat-row">
+      <div class="stat-num">00%</div>
+      <div class="stat-content">
+        <div class="stat-title">[Título do dado]</div>
+        <div class="stat-desc">[Fonte ou contexto do dado]</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-num">00x</div>
+      <div class="stat-content">
+        <div class="stat-title">[Outro dado]</div>
+        <div class="stat-desc">[Explicação breve]</div>
+      </div>
+    </div>
+  </div>
+  [PROG_5]
+</div>
+
+SLIDE 7 — LIGHT CONTEÚDO (img-box 620px + light-h1 + light-body):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:620px"><img id="img-s7" src="FOTO_7" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
+    <div class="light-body">[corpo — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
+  </div>
+  [PROG_7]
+</div>
+
+SLIDE ${numSlides} — CTA (slide-light, on-light, com foto portrait 380px no topo):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:380px"><img src="${ctaPhotoSrc}" alt="${displayName}" style="object-position:top"></div>
+    <div class="cta-bridge">[frase-ponte conectando o conteúdo ao CTA — <strong>palavra forte</strong> em negrito]</div>
+    <div class="cta-kbox">
+      <div class="cta-kbox-label">Comenta a palavra abaixo:</div>
+      <div class="cta-kbox-keyword">[KEYWORD]</div>
+      <div class="cta-kbox-divider"></div>
+      <div class="cta-kbox-benefit">[benefício direto — 1 linha]</div>
+      <div class="cta-kbox-sub">[detalhe extra opcional — itálico]</div>
+    </div>
+    <div class="cta-footer-badge">
+      <div class="cta-badge-ring">
+        <div class="cta-badge-avatar">${badgeAvatarInner}</div>
+      </div>
+      <div class="cta-badge-info">
+        <div class="cta-badge-name">${displayName} ${verifiedSvg}</div>
+        <div class="cta-badge-handle">${handleAt}</div>
+      </div>
+    </div>
+  </div>
+  ${progFor(numSlides, 'light')}
+</div>
+
+Instrução de progresso: Para cada slide interno substitua [PROG_N] pela tag:
+<div class="prog"><div class="prog-track"><div class="prog-fill" style="width:[PERCENT]%"></div></div><div class="prog-num">[N]/${numSlides}</div></div>
+Onde [N] é o número do slide e [PERCENT] = round(N/${numSlides}*100).
+
+━━━ CLASSES DISPONÍVEIS (use exatamente esses nomes) ━━━
+Slides:       .slide  .slide-dark  .slide-light  .slide-grad  .slide-with-bg  .on-dark  .on-light
+Fundo:        .photo-bg > img  |  .img-box-top > img  |  .overlay-capa  |  .overlay-shadow-up
+Header:       .accent-bar  |  .brand-bar (2 spans: handle + ano)
+Textos dark:  .dark-h1 (em=amarelo)  |  .dark-body (em=amarelo)  |  .tag
+Textos light: .light-h1 (em=dourado escuro)  |  .light-body (em=dourado escuro)  |  .tag
+Gradient:     .grad-num (número decorativo de fundo)
+Listas:       .arrow-row > .arrow-icon + .arrow-text  (strong=bold)
+Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
+Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
+Capa:         .capa-headline-area > .capa-badge (.badge-ring > .badge-avatar | .badge-info > .badge-name-row (.badge-name + .badge-verified) + .badge-handle) + .capa-headline (em=destaque) + .capa-sub + .capa-context (OBRIGATÓRIO — contexto entre parênteses, em=dourado)
+CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
+IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s8 (slides internos)  |  CTA sem ID
+
+Gere o HTML completo agora (apenas HTML, nada mais):`;
+}
+
 // ─── Passo 4: Legenda via Claude ──────────────────────────────────────────────
 
 function buildLegendaPrompt({ topic, instagramHandle, niche }) {
@@ -1999,15 +2148,122 @@ async function generateCarousel(config, setStep = () => {}) {
     });
   } else if (layoutStyle === 'fmteam') {
     // Layout Fmteam usa paleta própria — ignora cores do usuário
-    htmlPrompt = buildFmteamHTMLPrompt({
-      topic: topic.trim(), instructions: instructions.trim(), niche,
-      primaryColor: '#FFC300', // cor fixa do Fmteam (amarelo dourado da identidade)
-      fontFamily,
-      instagramHandle, creatorName, profilePhotoUrl: safeProfilePhotoUrl, numSlides: slidesCount,
-      contentTone, dominantEmotion, roteiro, unsplashImages,
-      titleFontSize, bodyFontSize,
-      titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
-    });
+    // Verifica se há template ativo para usar no preamble
+    const promptTplSvc = require('./promptTemplateService');
+    const activeTemplate = promptTplSvc.getActiveTemplate();
+    if (activeTemplate) {
+      // Reconstrói as variáveis que buildFmteamHTMLPrompt calcularia internamente
+      const fmHandle = (instagramHandle || 'fabriciomourateam').replace('@', '');
+      const fmHandleAt = `@${fmHandle}`;
+      const fmHandleUpper = fmHandleAt.toUpperCase();
+      const isFmteamHandle = /fabriciomoura/i.test(fmHandle);
+      const fmDisplayName = creatorName
+        || (isFmteamHandle ? 'Fabricio Moura' : null)
+        || fmHandle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+             .replace(/\b\w/g, c => c.toUpperCase())
+        || fmHandle;
+      const fmTotalContent = slidesCount - 2;
+      const fmCurrentYear = new Date().getFullYear();
+
+      const fmValidImages = unsplashImages.filter(img => img.url);
+      const fmImageSlots = slidesCount === 9 ? slidesCount - 1 : slidesCount;
+      const fmImagesSection = fmValidImages.length
+        ? `\nImagens — use a URL exata na ordem indicada:\n${unsplashImages.slice(0, fmImageSlots).map((img, i) =>
+            img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}${slidesCount === 9 ? `\nSlide 9 (CTA): usa foto do criador — NÃO substitua o src desta imagem` : ''}`
+        : '\n(Sem imagens fornecidas)';
+
+      const fmRoteiroSection = roteiro && roteiro.trim()
+        ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${slidesCount - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${slidesCount} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        : '';
+
+      const fmInstructionsSection = instructions && instructions.trim()
+        ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        : '';
+
+      const fmSlideDistText = slidesCount === 9
+        ? `DISTRIBUIÇÃO FIXA DOS 9 SLIDES (estrutura fmteam v2 — siga exatamente):
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 3: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 580px, arrow-rows, grad-num
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 500px, stat-rows (dados/prova)
+- Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 7: LIGHT — slide-light on-light — img-box-top 620px, light-h1 + light-body
+- Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 9 (CTA): LIGHT — slide-light on-light — img-box-top 380px (object-position:top) + .cta-bridge + .cta-kbox + .cta-footer-badge
+
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.`
+        : `DISTRIBUIÇÃO DOS ${slidesCount} SLIDES:
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top)
+- Inclua 1 slide gradient (slide-grad on-light) no meio do carrossel (virada narrativa)
+- Slide ${slidesCount} (CTA): slide-light on-light — img-box-top 380px + .cta-bridge + .cta-kbox + .cta-footer-badge
+- IDs: id="img-capa" (slide 1), id="img-s2" até id="img-s${slidesCount - 1}" (slides internos). CTA sem ID.`;
+
+      const fmViralStructureText = buildViralStructure({ numSlides: slidesCount, dominantEmotion, handleAt: fmHandleAt, roteiro });
+
+      const fmVars = {
+        TOPIC: topic.trim(),
+        NICHE: niche,
+        TONE: contentTone,
+        EMOTION: dominantEmotion,
+        HANDLE_AT: fmHandleAt,
+        HANDLE_UPPER: fmHandleUpper,
+        DISPLAY_NAME: fmDisplayName,
+        NUM_SLIDES: String(slidesCount),
+        TOTAL_CONTENT: String(fmTotalContent),
+        YEAR: String(fmCurrentYear),
+        INSTRUCTIONS_BLOCK: fmInstructionsSection,
+        IMAGES_BLOCK: fmImagesSection,
+        ROTEIRO_BLOCK: fmRoteiroSection,
+        SLIDE_DISTRIBUTION: fmSlideDistText,
+        VIRAL_STRUCTURE: fmViralStructureText,
+      };
+
+      const fmPreamble = promptTplSvc.instantiateTemplate(activeTemplate.content, fmVars);
+
+      // Reconstrói os helpers para o bloco de estrutura (iguais ao buildFmteamHTMLPrompt)
+      const fmAvatarSrc = (safeProfilePhotoUrl && safeProfilePhotoUrl.trim()) ? safeProfilePhotoUrl.trim() : '__CREATOR_PHOTO__';
+      const fmBadgeAvatarInner = `<img src="${fmAvatarSrc}" alt="${fmDisplayName}">`;
+      const fmCtaPhotoSrc = fmAvatarSrc;
+      const fmProgFor = (current, _ctx = 'dark') => {
+        const pct = Math.round((current / slidesCount) * 100);
+        return `<div class="prog">
+    <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+    <div class="prog-num">${current}/${slidesCount}</div>
+  </div>`;
+      };
+      const fmHeader = `<div class="accent-bar"></div>
+  <div class="brand-bar">
+    <span>${fmHandleUpper}</span>
+    <span>${fmCurrentYear}</span>
+  </div>`;
+      const fmVerifiedSvg = `<svg viewBox="0 0 24 24" fill="#1D9BF0" xmlns="http://www.w3.org/2000/svg"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>`;
+
+      const fmStructure = buildFmteamHTMLStructureBlock({
+        topic: topic.trim(),
+        numSlides: slidesCount,
+        handleAt: fmHandleAt,
+        displayName: fmDisplayName,
+        badgeAvatarInner: fmBadgeAvatarInner,
+        ctaPhotoSrc: fmCtaPhotoSrc,
+        header: fmHeader,
+        verifiedSvg: fmVerifiedSvg,
+        progFor: fmProgFor,
+      });
+
+      htmlPrompt = fmPreamble + '\n\n' + fmStructure;
+    } else {
+      htmlPrompt = buildFmteamHTMLPrompt({
+        topic: topic.trim(), instructions: instructions.trim(), niche,
+        primaryColor: '#FFC300', // cor fixa do Fmteam (amarelo dourado da identidade)
+        fontFamily,
+        instagramHandle, creatorName, profilePhotoUrl: safeProfilePhotoUrl, numSlides: slidesCount,
+        contentTone, dominantEmotion, roteiro, unsplashImages,
+        titleFontSize, bodyFontSize,
+        titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
+      });
+    }
   } else {
     htmlPrompt = buildHTMLPrompt({
       topic: topic.trim(), instructions: instructions.trim(), niche, primaryColor, accentColor, bgColor,
@@ -2285,4 +2541,4 @@ async function takeScreenshotsPixelPerfect(html, outputDir) {
   }
 }
 
-module.exports = { generateCarousel, takeScreenshots, takeScreenshotsPixelPerfect, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate };
+module.exports = { generateCarousel, takeScreenshots, takeScreenshotsPixelPerfect, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, buildFmteamHTMLStructureBlock };

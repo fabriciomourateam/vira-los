@@ -15,7 +15,8 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const multer = require('multer');
-const { generateCarousel, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, takeScreenshotsPixelPerfect } = require('../services/carouselService');
+const { generateCarousel, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, takeScreenshotsPixelPerfect, buildFmteamHTMLStructureBlock } = require('../services/carouselService');
+const promptTplSvc = require('../services/promptTemplateService');
 const { FABRICIO_AVATAR_DATA_URL } = require('../services/fmteamAssets');
 const db = require('../db/database');
 
@@ -63,6 +64,47 @@ const uploadPhoto = multer({
     if (/^image\//.test(file.mimetype)) cb(null, true);
     else cb(new Error('Apenas imagens são permitidas'));
   },
+});
+
+// ─── Template de prompt fmteam ───────────────────────────────────────────────
+
+// GET /api/carousel/fmteam-prompt-templates
+router.get('/fmteam-prompt-templates', (req, res) => {
+  const { activeId, templates } = promptTplSvc.listTemplates();
+  res.json({ activeId, templates, baseTemplate: promptTplSvc.BASE_PREAMBLE_TEMPLATE });
+});
+
+// POST /api/carousel/fmteam-prompt-templates (clonar base ou criar)
+router.post('/fmteam-prompt-templates', (req, res) => {
+  const { name, content } = req.body || {};
+  const tpl = promptTplSvc.createTemplate({ name: name || 'Template customizado', content: content || promptTplSvc.BASE_PREAMBLE_TEMPLATE });
+  res.json(tpl);
+});
+
+// POST /api/carousel/fmteam-prompt-templates/deactivate  (antes do :id para não colidir)
+router.post('/fmteam-prompt-templates/deactivate', (req, res) => {
+  promptTplSvc.deactivate();
+  res.json({ ok: true });
+});
+
+// PUT /api/carousel/fmteam-prompt-templates/:id
+router.put('/fmteam-prompt-templates/:id', (req, res) => {
+  const updated = promptTplSvc.updateTemplate(req.params.id, req.body || {});
+  if (!updated) return res.status(404).json({ error: 'Template não encontrado' });
+  res.json(updated);
+});
+
+// DELETE /api/carousel/fmteam-prompt-templates/:id
+router.delete('/fmteam-prompt-templates/:id', (req, res) => {
+  const ok = promptTplSvc.deleteTemplate(req.params.id);
+  res.json({ ok });
+});
+
+// POST /api/carousel/fmteam-prompt-templates/:id/activate
+router.post('/fmteam-prompt-templates/:id/activate', (req, res) => {
+  const ok = promptTplSvc.setActiveTemplate(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Template não encontrado' });
+  res.json({ ok });
 });
 
 // ─── Upload foto de perfil ────────────────────────────────────────────────────

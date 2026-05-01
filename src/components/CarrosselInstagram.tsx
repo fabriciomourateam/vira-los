@@ -6,9 +6,10 @@ import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
-  Archive, ArchiveRestore, Save, X,
+  Archive, ArchiveRestore, Save, X, Code2,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
+import PromptTemplateModal from './PromptTemplateModal';
 import { generateAndSaveScreenshots as libGenerateScreenshots } from '@/lib/clientScreenshots';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -320,6 +321,7 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic }: Carr
   const photoInputRef = useRef<HTMLInputElement>(null);
   const htmlImportRef  = useRef<HTMLInputElement>(null);
   const [importingHtml, setImportingHtml] = useState(false);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
 
   // ── Modo Antes/Depois ──────────────────────────────────────────────────────
   const [beforeAfterMode, setBeforeAfterMode] = useState(false);
@@ -1198,6 +1200,18 @@ document.addEventListener('DOMContentLoaded', function() {
               <span className="text-[10px] opacity-70 text-center leading-tight">Amarelo #FFC300 + brand bar + número decor</span>
             </button>
           </div>
+          {config.layoutStyle === 'fmteam' && (
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPromptEditor(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-yellow-500/40 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-xs font-semibold transition-colors"
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                Prompt
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Tema */}
@@ -2417,6 +2431,12 @@ document.addEventListener('DOMContentLoaded', function() {
           apiBase={API}
         />
       )}
+
+      {/* ── Modal: editor de templates de prompt fmteam ─────────────────── */}
+      <PromptTemplateModal
+        open={showPromptEditor}
+        onClose={() => setShowPromptEditor(false)}
+      />
     </div>
   );
 }
