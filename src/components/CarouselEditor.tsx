@@ -75,6 +75,34 @@ interface FollowBannerConfig {
   color: string;  // hex da cor de fundo do banner
 }
 
+interface CtaCardStyle {
+  bgColor: string;        // hex, ex: '#ffffff'
+  bgOpacity: number;      // 0–1
+  borderColor: string;    // hex, ex: '#B8860B'
+  borderOpacity: number;  // 0–1
+  borderWidth: number;    // px
+  borderRadius: number;   // px
+  shadowOpacity: number;  // 0–1
+}
+
+const DEFAULT_CTA_CARD_STYLE: CtaCardStyle = {
+  bgColor: '#ffffff',
+  bgOpacity: 1,
+  borderColor: '#B8860B',
+  borderOpacity: 0.20,
+  borderWidth: 2,
+  borderRadius: 20,
+  shadowOpacity: 0.10,
+};
+
+function hexToRgb(hex: string): string {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  return `${r},${g},${b}`;
+}
+
 const OVERLAY_PRESETS: { label: string; value: OverlayConfig['direction'] }[] = [
   { label: 'Escurecer baixo ↓', value: 'to bottom' },
   { label: 'Escurecer cima ↑', value: 'to top' },
@@ -507,6 +535,7 @@ function rebuildSlideOuterHtml(
   globalFont?: string,
   slideBgColor?: string,
   ctaFullBleed?: boolean,
+  ctaCardStyle?: CtaCardStyle,
 ): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
@@ -867,6 +896,20 @@ function rebuildSlideOuterHtml(
           badgeHandle.setAttribute('style', `${cur}; color: rgba(255,255,255,0.65);`.replace(/^;\s*/, ''));
         }
       }
+    }
+  }
+
+  // ── CTA Card style override ──────────────────────────────────────────────────
+  if (ctaCardStyle) {
+    const box = el.querySelector('.cta-kbox') as HTMLElement | null;
+    if (box) {
+      const { bgColor, bgOpacity, borderColor, borderOpacity, borderWidth, borderRadius, shadowOpacity } = ctaCardStyle;
+      const bgRgb  = hexToRgb(bgColor);
+      const bdRgb  = hexToRgb(borderColor);
+      box.style.background    = `rgba(${bgRgb},${bgOpacity.toFixed(2)})`;
+      box.style.border        = `${borderWidth}px solid rgba(${bdRgb},${borderOpacity.toFixed(2)})`;
+      box.style.borderRadius  = `${borderRadius}px`;
+      box.style.boxShadow     = `0 2px 16px rgba(${bdRgb},${shadowOpacity.toFixed(2)})`;
     }
   }
 
@@ -1616,6 +1659,7 @@ export default function CarouselEditor({
   const [followBannerConfigs, setFollowBannerConfigs] = useState<Record<number, FollowBannerConfig>>({});
   const [badgeVisible, setBadgeVisible] = useState<Record<number, boolean>>({});
   const [badgeSizes, setBadgeSizes] = useState<Record<number, number>>({}); // slide idx → ring size px
+  const [ctaCardStyles, setCtaCardStyles] = useState<Record<number, CtaCardStyle>>({});
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editMode, setEditMode] = useState<'text' | 'visual'>('text');
   const [screenshotLoading, setScreenshotLoading] = useState(false);
@@ -1640,6 +1684,7 @@ export default function CarouselEditor({
     followBannerConfigs: Record<number, FollowBannerConfig>;
     badgeVisible: Record<number, boolean>;
     ctaFullBleedConfigs: Record<number, boolean>;
+    ctaCardStyles: Record<number, CtaCardStyle>;
     slides: EditableSlide[];
   };
   const historyRef = useRef<Snapshot[]>([]);
@@ -1944,7 +1989,7 @@ export default function CarouselEditor({
   useEffect(() => {
     if (isRestoringRef.current || slides.length === 0) return;
     const timer = setTimeout(() => {
-      const snap: Snapshot = { editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, ctaFullBleedConfigs, slides };
+      const snap: Snapshot = { editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, ctaFullBleedConfigs, ctaCardStyles, slides };
       historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
       historyRef.current.push(snap);
       if (historyRef.current.length > 20) historyRef.current.shift();
@@ -1953,7 +1998,7 @@ export default function CarouselEditor({
       setCanRedo(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, ctaFullBleedConfigs, slides]); // eslint-disable-line
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, bgImageConfigs, followBannerConfigs, badgeVisible, ctaFullBleedConfigs, ctaCardStyles, slides]); // eslint-disable-line
 
   // ── Undo / Redo: Ctrl+Z / Ctrl+Y ─────────────────────────────────────────────
 
@@ -1978,6 +2023,7 @@ export default function CarouselEditor({
       setFollowBannerConfigs(snap.followBannerConfigs);
       setBadgeVisible(snap.badgeVisible);
       setCtaFullBleedConfigs(snap.ctaFullBleedConfigs ?? {});
+      setCtaCardStyles(snap.ctaCardStyles ?? {});
       setSlides(snap.slides);
       setCanUndo(historyIndexRef.current > 0);
       setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
@@ -2736,12 +2782,13 @@ export default function CarouselEditor({
       globalFont || undefined,
       slideBgColors[s.index],
       ctaFullBleedConfigs[s.index],
+      ctaCardStyles[s.index],
     ));
     const fontOverrideCss = globalFont
       ? `<style>*:not(.verified-badge):not(.verified-badge *){font-family:'${globalFont}',sans-serif!important}</style>`
       : '';
     return `<!DOCTYPE html><html><head>${head}${fontOverrideCss}</head><body>\n${built.join('\n')}\n</body></html>`;
-  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, ctaFullBleedConfigs, globalFont, slideBgColors]);
+  }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, ctaFullBleedConfigs, ctaCardStyles, globalFont, slideBgColors]);
 
   // ── Persistência: avisa o pai sempre que o HTML reconstruído mudar ───────────
 
@@ -2756,7 +2803,7 @@ export default function CarouselEditor({
       onHtmlUpdatedRef.current?.(built);
     }, 600);
     return () => clearTimeout(timer);
-  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, ctaFullBleedConfigs, slides, rebuildHtml]);
+  }, [editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, ctaFullBleedConfigs, ctaCardStyles, slides, rebuildHtml]);
 
   function liveSlideHtml(idx: number): string {
     const s = slides[idx]; if (!s) return '';
@@ -2772,6 +2819,7 @@ export default function CarouselEditor({
       globalFont || undefined,
       slideBgColors[idx],
       ctaFullBleedConfigs[idx],
+      ctaCardStyles[idx],
     );
   }
 
@@ -4238,6 +4286,120 @@ export default function CarouselEditor({
                         })()}
                       </div>}
                       </div>
+
+                      {/* ── Card CTA (fmteam) ── */}
+                      {sel?.outerHtml.includes('cta-kbox') && (() => {
+                        const cta: CtaCardStyle = ctaCardStyles[selectedIndex] ?? DEFAULT_CTA_CARD_STYLE;
+                        const setCta = (patch: Partial<CtaCardStyle>) =>
+                          setCtaCardStyles(prev => ({ ...prev, [selectedIndex]: { ...cta, ...patch } }));
+                        return (
+                          <div className="pt-2 border-t border-border">
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-1.5 py-0.5 text-left"
+                              onClick={() => toggleSection('ctaCard')}
+                            >
+                              <ChevronDown className={`w-3 h-3 text-muted-foreground shrink-0 transition-transform duration-200 ${collapsedSections['ctaCard'] ? '-rotate-90' : 'rotate-0'}`} />
+                              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Card CTA</span>
+                              <div className="ml-auto w-5 h-5 rounded border border-border" style={{ background: `rgba(${hexToRgb(cta.bgColor)},${cta.bgOpacity})` }} />
+                            </button>
+
+                            {!collapsedSections['ctaCard'] && (
+                              <div className="space-y-3 mt-2">
+
+                                {/* Fundo */}
+                                <div>
+                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Fundo</p>
+                                  <div className="flex items-center gap-2">
+                                    <LazyColorInput
+                                      value={cta.bgColor}
+                                      onChange={v => setCta({ bgColor: v })}
+                                      className="w-8 h-8 rounded cursor-pointer border border-border"
+                                      title="Cor de fundo"
+                                    />
+                                    <div className="flex-1 space-y-0.5">
+                                      <div className="flex justify-between">
+                                        <label className="text-[10px] text-muted-foreground">Opacidade</label>
+                                        <span className="text-[10px] font-mono text-muted-foreground">{Math.round(cta.bgOpacity * 100)}%</span>
+                                      </div>
+                                      <input type="range" min={0} max={100} value={Math.round(cta.bgOpacity * 100)}
+                                        onChange={e => setCta({ bgOpacity: Number(e.target.value) / 100 })}
+                                        className="w-full accent-yellow-500"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Borda */}
+                                <div>
+                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Borda</p>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <LazyColorInput
+                                      value={cta.borderColor}
+                                      onChange={v => setCta({ borderColor: v })}
+                                      className="w-8 h-8 rounded cursor-pointer border border-border"
+                                      title="Cor da borda"
+                                    />
+                                    <div className="flex-1 space-y-0.5">
+                                      <div className="flex justify-between">
+                                        <label className="text-[10px] text-muted-foreground">Opacidade borda</label>
+                                        <span className="text-[10px] font-mono text-muted-foreground">{Math.round(cta.borderOpacity * 100)}%</span>
+                                      </div>
+                                      <input type="range" min={0} max={100} value={Math.round(cta.borderOpacity * 100)}
+                                        onChange={e => setCta({ borderOpacity: Number(e.target.value) / 100 })}
+                                        className="w-full accent-yellow-500"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <div className="flex justify-between mb-0.5">
+                                        <label className="text-[10px] text-muted-foreground">Espessura</label>
+                                        <span className="text-[10px] font-mono text-muted-foreground">{cta.borderWidth}px</span>
+                                      </div>
+                                      <input type="range" min={0} max={8} value={cta.borderWidth}
+                                        onChange={e => setCta({ borderWidth: Number(e.target.value) })}
+                                        className="w-full accent-yellow-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <div className="flex justify-between mb-0.5">
+                                        <label className="text-[10px] text-muted-foreground">Arredondamento</label>
+                                        <span className="text-[10px] font-mono text-muted-foreground">{cta.borderRadius}px</span>
+                                      </div>
+                                      <input type="range" min={0} max={60} value={cta.borderRadius}
+                                        onChange={e => setCta({ borderRadius: Number(e.target.value) })}
+                                        className="w-full accent-yellow-500"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Sombra */}
+                                <div>
+                                  <div className="flex justify-between mb-0.5">
+                                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sombra</label>
+                                    <span className="text-[10px] font-mono text-muted-foreground">{Math.round(cta.shadowOpacity * 100)}%</span>
+                                  </div>
+                                  <input type="range" min={0} max={60} value={Math.round(cta.shadowOpacity * 100)}
+                                    onChange={e => setCta({ shadowOpacity: Number(e.target.value) / 100 })}
+                                    className="w-full accent-yellow-500"
+                                  />
+                                </div>
+
+                                {/* Reset */}
+                                <button
+                                  type="button"
+                                  onClick={() => setCta(DEFAULT_CTA_CARD_STYLE)}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  Restaurar padrão
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* ── Banner "Me Siga" ── */}
                       {(() => {
