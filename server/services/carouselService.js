@@ -1014,18 +1014,18 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     .overlay-capa {
       position:absolute; inset:0; z-index:1;
       background:linear-gradient(to bottom,
-        rgba(15,13,8,0.35) 0%, rgba(15,13,8,0.06) 20%,
-        rgba(15,13,8,0.10) 38%, rgba(15,13,8,0.72) 58%,
-        rgba(15,13,8,0.96) 76%, rgba(15,13,8,0.99) 100%);
+        rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.06) 20%,
+        rgba(0,0,0,0.10) 38%, rgba(0,0,0,0.72) 58%,
+        rgba(0,0,0,0.96) 76%, rgba(0,0,0,0.99) 100%);
     }
 
     /* overlay slides internos dark — escurece de baixo até o meio */
     .overlay-shadow-up {
       position:absolute; inset:0; z-index:1;
       background:linear-gradient(to top,
-        rgba(15,13,8,0.99) 0%, rgba(15,13,8,0.98) 30%,
-        rgba(15,13,8,0.90) 50%, rgba(15,13,8,0.50) 67%,
-        rgba(15,13,8,0.00) 82%);
+        rgba(0,0,0,0.99) 0%, rgba(0,0,0,0.98) 30%,
+        rgba(0,0,0,0.90) 50%, rgba(0,0,0,0.50) 67%,
+        rgba(0,0,0,0.00) 82%);
     }
 
     /* z-index boost para slides com foto de fundo */
