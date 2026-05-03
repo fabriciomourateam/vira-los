@@ -81,10 +81,17 @@ async function generateIdeas(scrapedData, config) {
     sections.push(`GOOGLE TRENDS — buscas em alta no Brasil hoje:\n  ${trends.join(' • ')}`);
   }
 
-  const dataSection = hasScrapeData
-    ? `Dados coletados em tempo real (${totalPosts} posts + ${trends.length} trending topics):\n\n` +
-      sections.join('\n\n')
-    : `[Sem dados de APIs externas disponíveis nesta rodada. Use seu conhecimento profundo e atualizado sobre o nicho "${niche}" — você foi treinado em milhões de posts, vídeos e discussões sobre fitness, nutrição esportiva e hormônios, e sabe quais formatos e ângulos geram mais engajamento no Instagram e TikTok brasileiros.]`;
+  if (!hasScrapeData) {
+    throw new Error(
+      'Nenhuma plataforma retornou dados nesta rodada. Verifique as chaves de API ' +
+      '(RAPIDAPI_KEY para TikTok/Instagram, YOUTUBE_API_KEY para YouTube) ou tente ' +
+      'novamente em alguns minutos. Geração sem dados reais foi desativada.'
+    );
+  }
+
+  const dataSection =
+    `Dados coletados em tempo real (${totalPosts} posts + ${trends.length} trending topics):\n\n` +
+    sections.join('\n\n');
 
   const prompt = `Você é um estrategista de conteúdo viral especializado em Instagram para o nicho de ${niche}.
 
