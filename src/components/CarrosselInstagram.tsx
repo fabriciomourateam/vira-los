@@ -41,6 +41,7 @@ interface CarouselConfig {
   titleFontFamily: string;     // '' = global fontFamily, or specific override
   bodyFontFamily: string;      // '' = global fontFamily, or specific override
   fmteamFontSizes: { headlineSize: number; bodySize: number; contextSize: number };
+  ctaStyle: 'dark-fullbleed' | 'light-card';
 }
 
 interface CarouselResult {
@@ -239,6 +240,7 @@ const DEFAULT_CONFIG: CarouselConfig = {
   titleFontFamily: '',
   bodyFontFamily: '',
   fmteamFontSizes: { headlineSize: 114, bodySize: 42, contextSize: 64 },
+  ctaStyle: 'dark-fullbleed',
 };
 
 // ─── Prévia de cores ──────────────────────────────────────────────────────────
@@ -1214,6 +1216,39 @@ document.addEventListener('DOMContentLoaded', function() {
                   <Code2 className="w-3.5 h-3.5" />
                   Prompt
                 </button>
+              </div>
+
+              {/* Estilo do CTA fmteam */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+                  Estilo do último slide (CTA)
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => set('ctaStyle', 'dark-fullbleed')}
+                    className={`flex-1 py-2 px-2.5 rounded-lg border text-[11px] font-bold transition-colors text-left leading-tight ${
+                      config.ctaStyle === 'dark-fullbleed'
+                        ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400'
+                        : 'border-border bg-background text-muted-foreground hover:border-yellow-500/50'
+                    }`}
+                  >
+                    Foto full-bleed
+                    <span className="block text-[10px] font-normal opacity-75 mt-0.5">"COMENTA: SHAPE" fixo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => set('ctaStyle', 'light-card')}
+                    className={`flex-1 py-2 px-2.5 rounded-lg border text-[11px] font-bold transition-colors text-left leading-tight ${
+                      config.ctaStyle === 'light-card'
+                        ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400'
+                        : 'border-border bg-background text-muted-foreground hover:border-yellow-500/50'
+                    }`}
+                  >
+                    Card claro
+                    <span className="block text-[10px] font-normal opacity-75 mt-0.5">keyword + benefit dinâmicos</span>
+                  </button>
+                </div>
               </div>
 
               {/* Número de slides fmteam */}

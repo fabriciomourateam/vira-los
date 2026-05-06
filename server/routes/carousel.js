@@ -127,6 +127,7 @@ router.post('/generate', (req, res) => {
     titleFontSize, bodyFontSize, bannerFontSize,
     titleFontWeight, bodyFontWeight, titleTextTransform,
     titleFontFamily, bodyFontFamily,
+    ctaStyle,
   } = req.body;
 
   if (!topic || !String(topic).trim()) {
@@ -152,6 +153,7 @@ router.post('/generate', (req, res) => {
     titleFontSize, bodyFontSize, bannerFontSize,
     titleFontWeight, bodyFontWeight, titleTextTransform,
     titleFontFamily, bodyFontFamily,
+    ctaStyle,
   }, setStep).then(result => {
     jobs.set(jobId, { ...jobs.get(jobId), status: 'done', result, step: 'Concluído!' });
     console.log(`[Job ${jobId}] Concluído.`);
