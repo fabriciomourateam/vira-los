@@ -1228,6 +1228,24 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     .cta-badge-name svg { width:22px; height:22px; flex-shrink:0; }
     .cta-badge-handle { font-family:var(--F-BODY); font-size:18px; font-weight:400; color:rgba(15,13,8,0.42); }
 
+    /* ── CTA DARK VARIANT (slide-with-bg = foto full-bleed atrás) ── */
+    .slide-with-bg .cta-bridge { color:rgba(255,255,255,0.85); }
+    .slide-with-bg .cta-bridge strong { color:#fff; font-weight:800; }
+    .slide-with-bg .cta-kbox {
+      background:rgba(0,0,0,0.55);
+      border:2px solid rgba(255,195,0,0.55);
+      box-shadow:0 4px 24px rgba(0,0,0,0.4);
+      backdrop-filter:blur(2px);
+    }
+    .slide-with-bg .cta-kbox-label { color:rgba(255,255,255,0.55); }
+    .slide-with-bg .cta-kbox-divider {
+      background:linear-gradient(to right, transparent, rgba(255,195,0,0.45) 30%, rgba(255,195,0,0.45) 70%, transparent);
+    }
+    .slide-with-bg .cta-kbox-benefit { color:rgba(255,255,255,0.85); }
+    .slide-with-bg .cta-kbox-sub { color:rgba(255,255,255,0.55); }
+    .slide-with-bg .cta-badge-name { color:#fff; }
+    .slide-with-bg .cta-badge-handle { color:rgba(255,255,255,0.65); }
+
     /* ── ARROW ROWS (listas de pontos no gradient/dark) ── */
     .arrow-row {
       display:flex; align-items:flex-start; gap:16px; padding:8px 0;
@@ -1599,13 +1617,13 @@ ${numSlides === 9 ? `DISTRIBUIÇÃO FIXA DOS 9 SLIDES (estrutura fmteam v2 — s
 - Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
 - Slide 7: LIGHT — slide-light on-light — img-box-top 620px, light-h1 + light-body
 - Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
-- Slide 9 (CTA): LIGHT — slide-light on-light — img-box-top 380px (object-position:top) + .cta-bridge + .cta-kbox + .cta-footer-badge
+- Slide 9 (CTA): DARK FULL-BLEED — slide-dark slide-with-bg on-dark — foto full-bleed do criador + overlay-shadow-up + .cta-bridge (DINÂMICO) + .cta-kbox (FIXO: label "COMENTA:", keyword "SHAPE", benefit "Pra garantir um Bônus exclusivo no meu Acompanhamento") + .cta-footer-badge
 
 IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.` : `DISTRIBUIÇÃO DOS ${numSlides} SLIDES:
 - Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
 - Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top)
 - Inclua 1 slide gradient (slide-grad on-light) no meio do carrossel (virada narrativa)
-- Slide ${numSlides} (CTA): slide-light on-light — img-box-top 380px + .cta-bridge + .cta-kbox + .cta-footer-badge
+- Slide ${numSlides} (CTA): slide-dark slide-with-bg on-dark — foto full-bleed do criador + overlay-shadow-up + .cta-bridge (DINÂMICO) + .cta-kbox (label/keyword/benefit FIXOS) + .cta-footer-badge
 - IDs: id="img-capa" (slide 1), id="img-s2" até id="img-s${numSlides - 1}" (slides internos). CTA sem ID.`}
 Máximo 35 palavras por slide de conteúdo.
 
@@ -1705,18 +1723,24 @@ SLIDE 7 — LIGHT CONTEÚDO (img-box 620px + light-h1 + light-body):
   [PROG_7]
 </div>
 
-SLIDE ${numSlides} — CTA (slide-light, on-light, com foto portrait 380px no topo):
-<div class="slide slide-light on-light">
+SLIDE ${numSlides} — CTA (slide-dark, slide-with-bg, on-dark — foto full-bleed do criador):
+ATENÇÃO — O conteúdo deste slide tem PARTES FIXAS que NÃO podem ser alteradas:
+  • .cta-kbox-label deve ser EXATAMENTE: "COMENTA:"
+  • .cta-kbox-keyword deve ser EXATAMENTE: "SHAPE"
+  • .cta-kbox-benefit deve ser EXATAMENTE: "Pra garantir um Bônus exclusivo no meu Acompanhamento"
+  • NÃO inclua .cta-kbox-sub
+A ÚNICA parte dinâmica é a .cta-bridge (frase-ponte conectando o tema do carrossel ao CTA).
+<div class="slide slide-dark slide-with-bg on-dark">
   ${header}
-  <div class="content on-light">
-    <div class="img-box-top" style="height:380px"><img src="${ctaPhotoSrc}" alt="${displayName}" style="object-position:top"></div>
-    <div class="cta-bridge">[frase-ponte conectando o conteúdo ao CTA — <strong>palavra forte</strong> em negrito]</div>
+  <div class="photo-bg"><img src="${ctaPhotoSrc}" alt="${displayName}"></div>
+  <div class="overlay-shadow-up"></div>
+  <div class="content on-dark">
+    <div class="cta-bridge">[FRASE-PONTE DINÂMICA — conecta o tema do carrossel ao CTA — <strong>palavra forte</strong> em negrito — máx 2 linhas]</div>
     <div class="cta-kbox">
-      <div class="cta-kbox-label">Comenta a palavra abaixo:</div>
-      <div class="cta-kbox-keyword">[KEYWORD]</div>
+      <div class="cta-kbox-label">COMENTA:</div>
+      <div class="cta-kbox-keyword">SHAPE</div>
       <div class="cta-kbox-divider"></div>
-      <div class="cta-kbox-benefit">[benefício direto — 1 linha]</div>
-      <div class="cta-kbox-sub">[detalhe extra opcional — itálico]</div>
+      <div class="cta-kbox-benefit">Pra garantir um Bônus exclusivo no meu Acompanhamento</div>
     </div>
     <div class="cta-footer-badge">
       <div class="cta-badge-ring">
@@ -1728,7 +1752,7 @@ SLIDE ${numSlides} — CTA (slide-light, on-light, com foto portrait 380px no to
       </div>
     </div>
   </div>
-  ${progFor(numSlides, 'light')}
+  ${progFor(numSlides, 'dark')}
 </div>
 
 Instrução de progresso: Para cada slide interno substitua [PROG_N] pela tag:
@@ -1854,18 +1878,24 @@ SLIDE 7 — LIGHT CONTEÚDO (img-box 620px + light-h1 + light-body):
   [PROG_7]
 </div>
 
-SLIDE ${numSlides} — CTA (slide-light, on-light, com foto portrait 380px no topo):
-<div class="slide slide-light on-light">
+SLIDE ${numSlides} — CTA (slide-dark, slide-with-bg, on-dark — foto full-bleed do criador):
+ATENÇÃO — O conteúdo deste slide tem PARTES FIXAS que NÃO podem ser alteradas:
+  • .cta-kbox-label deve ser EXATAMENTE: "COMENTA:"
+  • .cta-kbox-keyword deve ser EXATAMENTE: "SHAPE"
+  • .cta-kbox-benefit deve ser EXATAMENTE: "Pra garantir um Bônus exclusivo no meu Acompanhamento"
+  • NÃO inclua .cta-kbox-sub
+A ÚNICA parte dinâmica é a .cta-bridge (frase-ponte conectando o tema do carrossel ao CTA).
+<div class="slide slide-dark slide-with-bg on-dark">
   ${header}
-  <div class="content on-light">
-    <div class="img-box-top" style="height:380px"><img src="${ctaPhotoSrc}" alt="${displayName}" style="object-position:top"></div>
-    <div class="cta-bridge">[frase-ponte conectando o conteúdo ao CTA — <strong>palavra forte</strong> em negrito]</div>
+  <div class="photo-bg"><img src="${ctaPhotoSrc}" alt="${displayName}"></div>
+  <div class="overlay-shadow-up"></div>
+  <div class="content on-dark">
+    <div class="cta-bridge">[FRASE-PONTE DINÂMICA — conecta o tema do carrossel ao CTA — <strong>palavra forte</strong> em negrito — máx 2 linhas]</div>
     <div class="cta-kbox">
-      <div class="cta-kbox-label">Comenta a palavra abaixo:</div>
-      <div class="cta-kbox-keyword">[KEYWORD]</div>
+      <div class="cta-kbox-label">COMENTA:</div>
+      <div class="cta-kbox-keyword">SHAPE</div>
       <div class="cta-kbox-divider"></div>
-      <div class="cta-kbox-benefit">[benefício direto — 1 linha]</div>
-      <div class="cta-kbox-sub">[detalhe extra opcional — itálico]</div>
+      <div class="cta-kbox-benefit">Pra garantir um Bônus exclusivo no meu Acompanhamento</div>
     </div>
     <div class="cta-footer-badge">
       <div class="cta-badge-ring">
@@ -1877,7 +1907,7 @@ SLIDE ${numSlides} — CTA (slide-light, on-light, com foto portrait 380px no to
       </div>
     </div>
   </div>
-  ${progFor(numSlides, 'light')}
+  ${progFor(numSlides, 'dark')}
 </div>
 
 Instrução de progresso: Para cada slide interno substitua [PROG_N] pela tag:
@@ -2194,14 +2224,14 @@ async function generateCarousel(config, setStep = () => {}) {
 - Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
 - Slide 7: LIGHT — slide-light on-light — img-box-top 620px, light-h1 + light-body
 - Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
-- Slide 9 (CTA): LIGHT — slide-light on-light — img-box-top 380px (object-position:top) + .cta-bridge + .cta-kbox + .cta-footer-badge
+- Slide 9 (CTA): DARK FULL-BLEED — slide-dark slide-with-bg on-dark — foto full-bleed do criador + overlay-shadow-up + .cta-bridge (DINÂMICO) + .cta-kbox (FIXO: label "COMENTA:", keyword "SHAPE", benefit "Pra garantir um Bônus exclusivo no meu Acompanhamento") + .cta-footer-badge
 
 IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.`
         : `DISTRIBUIÇÃO DOS ${slidesCount} SLIDES:
 - Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
 - Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top)
 - Inclua 1 slide gradient (slide-grad on-light) no meio do carrossel (virada narrativa)
-- Slide ${slidesCount} (CTA): slide-light on-light — img-box-top 380px + .cta-bridge + .cta-kbox + .cta-footer-badge
+- Slide ${slidesCount} (CTA): slide-dark slide-with-bg on-dark — foto full-bleed do criador + overlay-shadow-up + .cta-bridge (DINÂMICO) + .cta-kbox (label/keyword/benefit FIXOS) + .cta-footer-badge
 - IDs: id="img-capa" (slide 1), id="img-s2" até id="img-s${slidesCount - 1}" (slides internos). CTA sem ID.`;
 
       const fmViralStructureText = buildViralStructure({ numSlides: slidesCount, dominantEmotion, handleAt: fmHandleAt, roteiro });
