@@ -2157,10 +2157,10 @@ async function generateCarousel(config, setStep = () => {}) {
   console.log(`[GenerateCarousel] Iniciando: layout="${layoutStyle}" topic="${topic.substring(0, 60)}" numSlides=${numSlides} roteiroLen=${(roteiro||'').length} instructionsLen=${(instructions||'').length} profilePhotoIsUrl=${!!safeProfilePhotoUrl}`);
 
   // Conta slides reais se roteiro tiver marcadores "SLIDE N"
-  let slidesCount = Math.min(10, Math.max(5, Number(numSlides)));
+  let slidesCount = Math.min(12, Math.max(5, Number(numSlides)));
   if (roteiro) {
     const count = (roteiro.match(/^SLIDE\s+\d+/gim) || []).length;
-    if (count >= 3) slidesCount = Math.min(10, count);
+    if (count >= 3) slidesCount = Math.min(12, count);
   }
 
   // Passo 1: Reddit (skip se tiver roteiro) + queries por slide, em paralelo

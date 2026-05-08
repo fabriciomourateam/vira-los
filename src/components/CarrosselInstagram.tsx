@@ -1256,13 +1256,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
                   <Layers className="w-3.5 h-3.5" /> Nº de slides fmteam
                 </label>
-                <div className="flex gap-2">
-                  {[5, 7, 9].map(n => (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[5, 6, 7, 8, 9, 10, 11, 12].map(n => (
                     <button
                       key={n}
                       type="button"
                       onClick={() => set('numSlides', n)}
-                      className={`flex-1 py-1.5 rounded-lg border text-sm font-bold transition-colors ${
+                      className={`py-1.5 rounded-lg border text-sm font-bold transition-colors ${
                         config.numSlides === n
                           ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400'
                           : 'border-border bg-background text-muted-foreground hover:border-yellow-500/50 hover:text-yellow-400'
