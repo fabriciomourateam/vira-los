@@ -2407,14 +2407,12 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
       const creatorPhoto = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : FABRICIO_AVATAR_DATA_URL;
       html = html.replace(/__CREATOR_PHOTO__/g, creatorPhoto);
     }
-    // Substitui placeholder da foto de fundo do CTA por URL absoluta servida via express.
-    // Usamos URL absoluta (não /assets/) porque takeScreenshotsPixelPerfect usa page.setContent
-    // (sem baseURL) — URLs relativas não resolveriam para http://localhost ali. URLs absolutas
-    // funcionam em todos os contextos: editor iframe, page.goto e page.setContent.
+    // Substitui placeholder da foto de fundo do CTA por URL relativa servida via express.
+    // URL relativa funciona em qualquer host (localhost dev ou produção). Para
+    // takeScreenshotsPixelPerfect (page.setContent sem baseURL), o próprio método
+    // injeta uma <base> tag apontando para localhost:PORT antes do setContent.
     if (html.includes('__CTA_BG_PHOTO__')) {
-      const port = process.env.PORT || 3001;
-      const ctaBgUrl = `http://localhost:${port}/assets/fmteam-cta-bg.png`;
-      html = html.replace(/__CTA_BG_PHOTO__/g, ctaBgUrl);
+      html = html.replace(/__CTA_BG_PHOTO__/g, '/assets/fmteam-cta-bg.png');
     }
   }
 
@@ -2587,8 +2585,16 @@ async function takeScreenshotsPixelPerfect(html, outputDir) {
   const page = await context.newPage();
 
   try {
-    // setContent com baseURL não importa — todas Pexels são URLs absolutas
-    await page.setContent(html, { waitUntil: 'load', timeout: 30000 });
+    // page.setContent não usa baseURL do context para resolver URLs relativas em <img>.
+    // Injetamos uma <base> tag apontando para o próprio servidor (localhost) — Playwright
+    // roda sempre na mesma máquina do express, então localhost:PORT é acessível.
+    // Isso permite que URLs relativas (ex.: /assets/fmteam-cta-bg.png) resolvam corretamente.
+    const port = process.env.PORT || 3001;
+    const baseTag = `<base href="http://localhost:${port}/">`;
+    const htmlWithBase = html.includes('<head>')
+      ? html.replace('<head>', `<head>${baseTag}`)
+      : `${baseTag}${html}`;
+    await page.setContent(htmlWithBase, { waitUntil: 'load', timeout: 30000 });
 
     // Garante que TODA <img> chegou (timeout individual de 8s por imagem)
     await page.evaluate(() => Promise.all(
