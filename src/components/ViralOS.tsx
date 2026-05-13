@@ -34,6 +34,7 @@ import ProdutosEscalaveis from './ProdutosEscalaveis';
 import PesquisaConteudo from './PesquisaConteudo';
 import AgenteAutonomo from './AgenteAutonomo';
 import CarrosselInstagram from './CarrosselInstagram';
+import CriarTabs from './CriarTabs';
 import AnalisadorReels from './AnalisadorReels';
 import TrendRadar from './TrendRadar';
 import ViralScore from './ViralScore';
@@ -351,6 +352,7 @@ export default function ViralOS() {
   const [avaliarSubTab,   setAvaliarSubTab]   = useState<'analisador' | 'score'>('analisador');
   const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
   const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
+  const [reelsInitialCarouselId, setReelsInitialCarouselId] = useState<string | null>(null);
   const [state, setState] = useState<AppState>(initialState);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -681,9 +683,11 @@ export default function ViralOS() {
 
         {/* ── CRIAR (Básico | Máquina | Brand Kits) ── */}
         {activeTab === 'criar' && (
-          <CarrosselInstagram
+          <CriarTabs
             prefillScript={carouselPrefill?.script}
             prefillTopic={carouselPrefill?.topic}
+            initialReelsCarouselId={reelsInitialCarouselId}
+            onClearReelsCarouselId={() => setReelsInitialCarouselId(null)}
           />
         )}
 

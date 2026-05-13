@@ -1,24 +1,22 @@
 /**
  * CriarTabs.tsx
- * Wrapper com 3 subtabs dentro da aba "Criar":
- *   - Básico: <CarrosselInstagram /> (gerador atual, intacto)
- *   - Máquina: <Maquina /> (modo BrandsDecoded com pipeline editorial em etapas)
- *   - Brand Kits: <BrandKits /> (movido da aba Studio)
+ * Wrapper com 2 subtabs dentro da aba "Criar":
+ *   - Básico: <CarrosselInstagram /> (gerador de carrosseis)
+ *   - Reels:  <ReelsGerador /> (converte carrosseis salvos em roteiros de Reels)
  */
 
-import React, { useState } from 'react';
-import { Layers, Wand2, Palette } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Layers, Video } from 'lucide-react';
 import CarrosselInstagram from './CarrosselInstagram';
-import Maquina, { MaquinaInitialIdea } from './Maquina';
-import BrandKits from './BrandKits';
+import ReelsGerador from './ReelsGerador';
 
-type SubTabId = 'basico' | 'maquina' | 'brandkits';
+type SubTabId = 'basico' | 'reels';
 
 interface CriarTabsProps {
   prefillScript?: string;
   prefillTopic?: string;
-  initialMaquinaIdea?: MaquinaInitialIdea | null;
-  onClearMaquinaIdea?: () => void;
+  initialReelsCarouselId?: string | null;
+  onClearReelsCarouselId?: () => void;
 }
 
 function SubTabBar({
@@ -43,7 +41,7 @@ function SubTabBar({
           }`}
         >
           <Icon size={13} />
-          <span className="hidden sm:inline">{label}</span>
+          <span>{label}</span>
         </button>
       ))}
     </div>
@@ -53,38 +51,48 @@ function SubTabBar({
 export default function CriarTabs({
   prefillScript,
   prefillTopic,
-  initialMaquinaIdea,
-  onClearMaquinaIdea,
+  initialReelsCarouselId,
+  onClearReelsCarouselId,
 }: CriarTabsProps) {
-  // Se a aba foi aberta com uma ideia para a Máquina, abre direto na subtab Máquina
-  const [subTab, setSubTab] = useState<SubTabId>(initialMaquinaIdea ? 'maquina' : 'basico');
+  const [subTab, setSubTab] = useState<SubTabId>(initialReelsCarouselId ? 'reels' : 'basico');
+  const [internalReelsCarouselId, setInternalReelsCarouselId] = useState<string | null>(null);
+
+  // Quando vem um carouselId de fora (botão "Gerar Reels" via deep-link), abre direto a Reels
+  useEffect(() => {
+    if (initialReelsCarouselId) setSubTab('reels');
+  }, [initialReelsCarouselId]);
+
+  // Disparado pelo botão "Gerar Reels" no card de cada carrossel salvo do Básico
+  function handleGenerateReelsFromCarousel(carouselId: string) {
+    setInternalReelsCarouselId(carouselId);
+    setSubTab('reels');
+  }
 
   return (
     <>
       <SubTabBar
         tabs={[
-          { id: 'basico',    label: 'Básico',    icon: Layers },
-          { id: 'maquina',   label: 'Máquina',   icon: Wand2 },
-          { id: 'brandkits', label: 'Brand Kits', icon: Palette },
+          { id: 'basico', label: 'Básico', icon: Layers },
+          { id: 'reels',  label: 'Reels',  icon: Video },
         ]}
         active={subTab}
         onChange={setSubTab}
       />
-
-      {/*
-        Renderiza os 3 sempre montados e alterna visibilidade com display:none.
-        Isso preserva o React state em memória ao trocar de subtab — sem perder
-        o que o usuário já fez na Máquina (briefing, headlines, estrutura, html).
-        A persistência em localStorage continua valendo entre sessões/refresh.
-      */}
       <div style={{ display: subTab === 'basico' ? 'block' : 'none' }}>
-        <CarrosselInstagram prefillScript={prefillScript} prefillTopic={prefillTopic} />
+        <CarrosselInstagram
+          prefillScript={prefillScript}
+          prefillTopic={prefillTopic}
+          onGenerateReels={handleGenerateReelsFromCarousel}
+        />
       </div>
-      <div style={{ display: subTab === 'maquina' ? 'block' : 'none' }}>
-        <Maquina initialIdea={initialMaquinaIdea} onClearInitialIdea={onClearMaquinaIdea} />
-      </div>
-      <div style={{ display: subTab === 'brandkits' ? 'block' : 'none' }}>
-        <BrandKits />
+      <div style={{ display: subTab === 'reels' ? 'block' : 'none' }}>
+        <ReelsGerador
+          initialCarouselId={initialReelsCarouselId || internalReelsCarouselId}
+          onConsumeInitialCarouselId={() => {
+            setInternalReelsCarouselId(null);
+            onClearReelsCarouselId?.();
+          }}
+        />
       </div>
     </>
   );
