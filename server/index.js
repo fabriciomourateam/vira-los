@@ -52,6 +52,9 @@ server.headersTimeout = 70000;
 // Serve arquivos de upload estaticamente (para Instagram consumir a URL pública)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Assets estáticos do app (ex.: foto de fundo do CTA fmteam)
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
+
 // Serve slides PNG e HTML dos carrosseis gerados
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 app.use('/output', express.static(path.join(DATA_DIR, 'output')));
