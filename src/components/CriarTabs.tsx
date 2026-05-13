@@ -72,7 +72,7 @@ export default function CriarTabs({
     <>
       <SubTabBar
         tabs={[
-          { id: 'basico', label: 'Básico', icon: Layers },
+          { id: 'basico', label: 'Carrossel', icon: Layers },
           { id: 'reels',  label: 'Reels',  icon: Video },
         ]}
         active={subTab}
