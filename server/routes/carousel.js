@@ -24,6 +24,13 @@ const router = express.Router();
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
 const UPLOADS_DIR = path.join(__dirname, '../uploads');
 
+// Aceita só nomes de pasta gerados internamente: letras/dígitos/`.`/`_`/`-`.
+// Bloqueia `..`, `/`, `\`, espaços — evita gravar fora do OUTPUT_DIR.
+const SAFE_FOLDER_RE = /^[A-Za-z0-9._-]{1,120}$/;
+function isSafeFolderName(name) {
+  return typeof name === 'string' && SAFE_FOLDER_RE.test(name);
+}
+
 // ─── Job store em memória ─────────────────────────────────────────────────────
 // Mantém jobs de geração em andamento. Cada job dura no máx 15 min em memória.
 // { [jobId]: { status: 'processing'|'done'|'error', step, result?, error? } }
@@ -202,6 +209,7 @@ router.put('/config', (req, res) => {
 router.put('/save-html', (req, res) => {
   const { html, folderName } = req.body;
   if (!html || !folderName) return res.status(400).json({ error: 'html e folderName obrigatórios' });
+  if (!isSafeFolderName(folderName)) return res.status(400).json({ error: 'folderName inválido' });
 
   const folderPath = path.join(OUTPUT_DIR, folderName);
   if (!fs.existsSync(folderPath)) {
@@ -218,6 +226,7 @@ router.put('/save-html', (req, res) => {
 router.post('/screenshots', async (req, res) => {
   const { html, folderName } = req.body;
   if (!html || !folderName) return res.status(400).json({ error: 'html e folderName obrigatórios' });
+  if (!isSafeFolderName(folderName)) return res.status(400).json({ error: 'folderName inválido' });
 
   const folderPath = path.join(OUTPUT_DIR, folderName);
   if (!fs.existsSync(folderPath)) {
@@ -367,6 +376,7 @@ router.get('/proxy-image', async (req, res) => {
 router.post('/save-screenshots', (req, res) => {
   const { folderName, screenshots } = req.body; // screenshots: [{slideNum, dataUrl}]
   if (!folderName || !Array.isArray(screenshots)) return res.status(400).json({ error: 'folderName e screenshots obrigatórios' });
+  if (!isSafeFolderName(folderName)) return res.status(400).json({ error: 'folderName inválido' });
 
   const folderPath = path.join(OUTPUT_DIR, folderName);
   fs.mkdirSync(folderPath, { recursive: true });
@@ -397,6 +407,7 @@ router.post('/save-screenshots', (req, res) => {
 router.post('/screenshots-pp', async (req, res) => {
   const { html, folderName } = req.body || {};
   if (!html || !folderName) return res.status(400).json({ error: 'html e folderName obrigatórios' });
+  if (!isSafeFolderName(folderName)) return res.status(400).json({ error: 'folderName inválido' });
   const folderPath = path.join(OUTPUT_DIR, folderName);
   try {
     const t0 = Date.now();
@@ -577,6 +588,9 @@ router.delete('/saved-slides/:id', (req, res) => {
 // ─── Listar arquivos de um carrossel ──────────────────────────────────────────
 
 router.get('/output/:name', (req, res) => {
+  if (!isSafeFolderName(req.params.name)) {
+    return res.status(400).json({ error: 'name inválido' });
+  }
   const folderPath = path.join(OUTPUT_DIR, req.params.name);
   if (!fs.existsSync(folderPath)) {
     return res.status(404).json({ error: 'Carrossel não encontrado' });

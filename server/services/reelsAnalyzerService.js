@@ -9,7 +9,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const os = require('os');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -143,8 +143,9 @@ function ytDlpAvailable() {
 
 function downloadVideoViaYtDlp(postUrl, outputPath) {
   try {
-    execSync(
-      `yt-dlp -o "${outputPath}" --format "best[ext=mp4]/best" --no-playlist --no-warnings "${postUrl}"`,
+    execFileSync(
+      'yt-dlp',
+      ['-o', outputPath, '--format', 'best[ext=mp4]/best', '--no-playlist', '--no-warnings', postUrl],
       { timeout: 120000, stdio: ['ignore', 'ignore', 'ignore'] }
     );
     return fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0;
@@ -188,16 +189,20 @@ async function extractFrames(videoUrl, tempDir) {
 
   // Extrair 3 frames em momentos diferentes (início, meio, quase-fim)
   const framesPattern = path.join(tempDir, 'frame%03d.jpg');
-  const cmd = `ffmpeg -i "${videoPath}" -vf "select=eq(n\\,0)+eq(n\\,25)+eq(n\\,55)" -vsync vfr "${framesPattern}" -y 2>/dev/null`;
 
   try {
-    execSync(cmd, { timeout: 30000 });
+    execFileSync(
+      'ffmpeg',
+      ['-i', videoPath, '-vf', 'select=eq(n\\,0)+eq(n\\,25)+eq(n\\,55)', '-vsync', 'vfr', framesPattern, '-y'],
+      { timeout: 30000, stdio: ['ignore', 'ignore', 'ignore'] }
+    );
   } catch {
     // Fallback: extrai 1 frame por segundo, pega os 3 primeiros
     try {
-      execSync(
-        `ffmpeg -i "${videoPath}" -r 0.3 -frames:v 3 "${framesPattern}" -y 2>/dev/null`,
-        { timeout: 30000 }
+      execFileSync(
+        'ffmpeg',
+        ['-i', videoPath, '-r', '0.3', '-frames:v', '3', framesPattern, '-y'],
+        { timeout: 30000, stdio: ['ignore', 'ignore', 'ignore'] }
       );
     } catch { /* segue sem frames */ }
   }
@@ -220,9 +225,10 @@ async function transcribeAudio(videoPath) {
 
   const audioPath = videoPath.replace('.mp4', '.mp3');
   try {
-    execSync(
-      `ffmpeg -i "${videoPath}" -vn -ar 16000 -ac 1 -b:a 96k "${audioPath}" -y 2>/dev/null`,
-      { timeout: 30000 }
+    execFileSync(
+      'ffmpeg',
+      ['-i', videoPath, '-vn', '-ar', '16000', '-ac', '1', '-b:a', '96k', audioPath, '-y'],
+      { timeout: 30000, stdio: ['ignore', 'ignore', 'ignore'] }
     );
   } catch { return null; }
 
@@ -479,15 +485,17 @@ async function analyzeReel(url) {
           // Extrair frames do vídeo baixado
           const framesPattern = path.join(tempDir, 'frame%03d.jpg');
           try {
-            execSync(
-              `ffmpeg -i "${videoPath}" -vf "select=eq(n\\,0)+eq(n\\,25)+eq(n\\,55)" -vsync vfr "${framesPattern}" -y 2>/dev/null`,
-              { timeout: 30000 }
+            execFileSync(
+              'ffmpeg',
+              ['-i', videoPath, '-vf', 'select=eq(n\\,0)+eq(n\\,25)+eq(n\\,55)', '-vsync', 'vfr', framesPattern, '-y'],
+              { timeout: 30000, stdio: ['ignore', 'ignore', 'ignore'] }
             );
           } catch {
             try {
-              execSync(
-                `ffmpeg -i "${videoPath}" -r 0.3 -frames:v 3 "${framesPattern}" -y 2>/dev/null`,
-                { timeout: 30000 }
+              execFileSync(
+                'ffmpeg',
+                ['-i', videoPath, '-r', '0.3', '-frames:v', '3', framesPattern, '-y'],
+                { timeout: 30000, stdio: ['ignore', 'ignore', 'ignore'] }
               );
             } catch { /* segue sem frames extras */ }
           }
