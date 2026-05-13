@@ -6,7 +6,7 @@ import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
-  Archive, ArchiveRestore, Save, X, Code2,
+  Archive, ArchiveRestore, Save, X, Code2, Video,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 import PromptTemplateModal from './PromptTemplateModal';
@@ -298,9 +298,10 @@ interface SavedCarousel {
 interface CarrosselInstagramProps {
   prefillScript?: string;
   prefillTopic?: string;
+  onGenerateReels?: (carouselId: string) => void;
 }
 
-export default function CarrosselInstagram({ prefillScript, prefillTopic }: CarrosselInstagramProps = {}) {
+export default function CarrosselInstagram({ prefillScript, prefillTopic, onGenerateReels }: CarrosselInstagramProps = {}) {
   const [config, setConfig] = useState<CarouselConfig>(DEFAULT_CONFIG);
   const [configReady, setConfigReady] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -2454,6 +2455,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         >
                           <FileText className="w-3.5 h-3.5" />
                         </a>
+                        {onGenerateReels && (
+                          <button
+                            onClick={() => onGenerateReels(saved.id)}
+                            className="p-1 rounded text-muted-foreground hover:text-rose-500 transition-colors"
+                            title="Gerar Reels a partir deste carrossel"
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => toggleArchive(saved)}
                           className={`p-1 rounded transition-colors ${saved.archived ? 'text-amber-400 hover:text-foreground' : 'text-muted-foreground hover:text-amber-400'}`}

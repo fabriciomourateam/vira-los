@@ -250,6 +250,13 @@ const saveCarousel    = (c) => { const db = readDb('carousels'); db.push({ ...c,
 const updateCarousel  = (id, data) => { const db = readDb('carousels').map((c) => c.id === id ? { ...c, ...data } : c); writeDb('carousels', db); };
 const deleteCarousel  = (id) => writeDb('carousels', readDb('carousels').filter((c) => c.id !== id));
 
+// ── Reels (roteiros gerados a partir de carrosseis salvos) ────────────────────
+const getAllReels = () => readDb('reels').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const getReel    = (id) => readDb('reels').find((r) => r.id === id) || null;
+const saveReel   = (r) => { const db = readDb('reels'); db.push({ ...r, created_at: now() }); writeDb('reels', db); };
+const updateReel = (id, data) => { const db = readDb('reels').map((r) => r.id === id ? { ...r, ...data } : r); writeDb('reels', db); };
+const deleteReel = (id) => writeDb('reels', readDb('reels').filter((r) => r.id !== id));
+
 // ── Brand Kits ────────────────────────────────────────────────────────────────
 const getAllBrandKits  = () => readDb('brand_kits').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const getBrandKit     = (id) => readDb('brand_kits').find((k) => k.id === id) || null;
@@ -307,6 +314,8 @@ module.exports = {
   getSavedSlides, saveSlide, deleteSavedSlide,
   getCarouselConfig, setCarouselConfig,
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
+  // Reels
+  getAllReels, getReel, saveReel, updateReel, deleteReel,
   // Brand Kits
   getAllBrandKits, getBrandKit, createBrandKit, updateBrandKit, deleteBrandKit,
   // Studio
