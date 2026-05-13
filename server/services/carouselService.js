@@ -1639,8 +1639,9 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   const avatarSrc = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : '__CREATOR_PHOTO__';
   // Badge avatar: sempre <img> (fmteam tem foto default embutida — nunca cai em iniciais)
   const badgeAvatarInner = `<img src="${avatarSrc}" alt="${displayName}">`;
-  // Foto do CTA (portrait do criador): mesma fonte
-  const ctaPhotoSrc = avatarSrc;
+  // Foto de fundo do slide CTA — placeholder; pós-processado para /assets/fmteam-cta-bg.png
+  // (servido via express; evita embutir ~1.7MB de base64 no JS e no prompt)
+  const ctaPhotoSrc = '__CTA_BG_PHOTO__';
 
   // Progress bar — .on-dark ou .on-light conforme tipo de slide
   const progFor = (current, ctx = 'dark') => {
@@ -2292,7 +2293,8 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
       // Reconstrói os helpers para o bloco de estrutura (iguais ao buildFmteamHTMLPrompt)
       const fmAvatarSrc = (safeProfilePhotoUrl && safeProfilePhotoUrl.trim()) ? safeProfilePhotoUrl.trim() : '__CREATOR_PHOTO__';
       const fmBadgeAvatarInner = `<img src="${fmAvatarSrc}" alt="${fmDisplayName}">`;
-      const fmCtaPhotoSrc = fmAvatarSrc;
+      // Foto de fundo do CTA: placeholder pós-processado para /assets/fmteam-cta-bg.png
+      const fmCtaPhotoSrc = '__CTA_BG_PHOTO__';
       const fmProgFor = (current, _ctx = 'dark') => {
         const pct = Math.round((current / slidesCount) * 100);
         return `<div class="prog">
@@ -2404,6 +2406,15 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
     if (html.includes('__CREATOR_PHOTO__')) {
       const creatorPhoto = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : FABRICIO_AVATAR_DATA_URL;
       html = html.replace(/__CREATOR_PHOTO__/g, creatorPhoto);
+    }
+    // Substitui placeholder da foto de fundo do CTA por URL absoluta servida via express.
+    // Usamos URL absoluta (não /assets/) porque takeScreenshotsPixelPerfect usa page.setContent
+    // (sem baseURL) — URLs relativas não resolveriam para http://localhost ali. URLs absolutas
+    // funcionam em todos os contextos: editor iframe, page.goto e page.setContent.
+    if (html.includes('__CTA_BG_PHOTO__')) {
+      const port = process.env.PORT || 3001;
+      const ctaBgUrl = `http://localhost:${port}/assets/fmteam-cta-bg.png`;
+      html = html.replace(/__CTA_BG_PHOTO__/g, ctaBgUrl);
     }
   }
 
