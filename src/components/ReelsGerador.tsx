@@ -30,6 +30,10 @@ type ReelsSegment = {
   fala: string;
   legenda: string;
   imagem: string;
+  curiosity_gap?: string;
+  tipo?: string;
+  palavra_chave?: string;
+  acao?: string;
 };
 
 type SavedReel = {
@@ -38,6 +42,8 @@ type SavedReel = {
   carouselTopic: string;
   title: string;
   duration: number;
+  formato?: string;
+  emocao?: string;
   hook: ReelsSegment;
   body: ReelsSegment[];
   cta: ReelsSegment;
@@ -302,6 +308,20 @@ function ReelCard({ reel, onTeleprompter, onClose }: {
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider">{reel.duration}s · Reels</p>
           <p className="text-base font-bold truncate">{reel.title}</p>
+          {(reel.formato || reel.emocao) && (
+            <div className="flex gap-1.5 mt-1.5 flex-wrap">
+              {reel.formato && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-500 font-semibold uppercase tracking-wider">
+                  {reel.formato}
+                </span>
+              )}
+              {reel.emocao && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-semibold uppercase tracking-wider">
+                  {reel.emocao}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <button
           onClick={onTeleprompter}
@@ -419,6 +439,12 @@ function SegmentRow({ segment, copy }: { segment: ReelsSegment; copy: (text: str
   if (!segment) return null;
   return (
     <div className="space-y-2 text-sm">
+      {segment.tipo && (
+        <div className="flex items-start gap-2">
+          <span className="text-[10px] font-bold text-amber-500 mt-0.5 shrink-0 w-14">TIPO</span>
+          <span className="flex-1 text-amber-500 text-xs uppercase tracking-wider font-semibold">{segment.tipo}</span>
+        </div>
+      )}
       <div className="flex items-start gap-2">
         <span className="text-[10px] font-bold text-rose-500 mt-0.5 shrink-0 w-14">FALA</span>
         <span className="flex-1 text-foreground">{segment.fala}</span>
@@ -438,6 +464,21 @@ function SegmentRow({ segment, copy }: { segment: ReelsSegment; copy: (text: str
         <span className="text-[10px] font-bold text-rose-500 mt-0.5 shrink-0 w-14">IMAGEM</span>
         <span className="flex-1 text-muted-foreground text-xs">{segment.imagem}</span>
       </div>
+      {segment.curiosity_gap && (
+        <div className="flex items-start gap-2 pt-2 mt-2 border-t border-dashed border-amber-500/30">
+          <span className="text-[10px] font-bold text-amber-500 mt-0.5 shrink-0 w-14">GANCHO</span>
+          <span className="flex-1 text-amber-500/90 text-xs italic">→ {segment.curiosity_gap}</span>
+        </div>
+      )}
+      {segment.palavra_chave && (
+        <div className="flex items-start gap-2 pt-2 mt-2 border-t border-dashed border-emerald-500/30">
+          <span className="text-[10px] font-bold text-emerald-500 mt-0.5 shrink-0 w-14">PALAVRA</span>
+          <span className="flex-1 text-emerald-500 font-extrabold tracking-wider">{segment.palavra_chave}</span>
+          {segment.acao && (
+            <span className="text-[10px] text-emerald-500/70 uppercase">({segment.acao})</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

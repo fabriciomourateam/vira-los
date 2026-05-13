@@ -78,15 +78,35 @@ ${slidesText}
 ━━━ CRIADOR ━━━
 ${handleAt} · Nicho: ${niche}
 
-━━━ REGRAS DO ROTEIRO ━━━
-• Hook nos 2-3 primeiros segundos: pergunta provocadora, dor real, estatística surpreendente. SEM "olá", apresentação ou frase motivacional genérica.
-• Linguagem: conversa direta, como falando com um amigo inteligente. Tom de descoberta, não de aula.
-• 1 ideia central — não cobre o carrossel inteiro, escolhe o ponto MAIS forte.
-• Ritmo: cortes a cada 3-5 segundos, frases curtas (máx 12-15 palavras por frase).
-• Legenda na tela: máx 5 palavras por tela, GRANDE e legível, marca SÓ pontos-chave (não duplica fala inteira).
-• CTA final natural, ligado ao tema. Sem "siga para mais conteúdo".
-• Proibido: "saiba", "descubra", "você sabia que", clichês motivacionais.
+━━━ CRITÉRIOS DE VIRALIDADE (não-negociáveis) ━━━
+
+1. HOOK (0-3s) — peso 30%:
+   • OBRIGATORIAMENTE um destes: (a) número específico/estatística surpreendente, (b) dor real e concreta da audiência, (c) pergunta provocadora que desafia crença comum, (d) afirmação polêmica.
+   • PROIBIDO: "olá", apresentação, "você sabia", motivacional genérico ("sucesso é...", "a chave para...").
+
+2. CURIOSITY GAPS — peso 20%:
+   • Cada segmento do body termina com lacuna que força ouvir o próximo ("mas tem algo pior...", "espera que vai virar a chave...", "e o que ninguém te conta é...").
+   • Sem isso, o espectador trafega.
+
+3. EMOÇÃO DOMINANTE — peso 20%:
+   • Escolha UMA: medo de perder | curiosidade | urgência | surpresa | aspiração | indignação.
+   • Mantida do hook ao CTA. Não mistura emoções.
+
+4. CTA — peso 15%:
+   • Ação CONCRETA + palavra-chave específica para comentar (ex: "comenta SHAPE pra receber X", "salva pra não esquecer").
+   • Ligado ao tema. PROIBIDO: "siga para mais conteúdo", "curte se gostou".
+
+5. FORMATO VIRAL — peso 15%:
+   • Escolha UM e siga: lista numerada | revelação | mito-busting | antes-depois | tutorial | polêmica.
+   • Declare no JSON. Estrutura facilita compartilhamento.
+
+━━━ REGRAS TÉCNICAS ━━━
+• Linguagem: conversa direta, amigo inteligente. Tom de descoberta, não de aula.
+• 1 ideia central — escolha o ponto MAIS forte do carrossel, não cobre tudo.
+• Ritmo: cortes a cada 3-5s, frases curtas (máx 12-15 palavras).
+• Legenda na tela: máx 5 palavras, GRANDE, marca SÓ ponto-chave (não duplica fala inteira).
 • ${bodySegments} segmentos no body (sem contar hook e cta).
+• Vocabulário proibido: "saiba", "descubra", "você sabia que", "isso vai mudar sua vida".
 
 ━━━ FORMATO DE SAÍDA ━━━
 RESPONDA APENAS com JSON válido, nada antes ou depois.
@@ -94,22 +114,28 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
 {
   "title": "Título curto do reels (máx 60 caracteres) — para o histórico",
   "duration": ${duration},
+  "formato": "lista|revelação|mito-busting|antes-depois|tutorial|polêmica",
+  "emocao": "medo de perder|curiosidade|urgência|surpresa|aspiração|indignação",
   "hook": {
-    "fala": "exatamente o que você fala no hook (0-3s)",
+    "tipo": "número|dor|pergunta|polêmica",
+    "fala": "exatamente o que você fala no hook (0-3s) — deve respeitar o tipo escolhido",
     "legenda": "texto na tela (máx 5 palavras)",
     "imagem": "descrição curta da imagem que aparece embaixo"
   },
   "body": [
     {
       "timestamp": "3-12s",
-      "fala": "o que falar nesse segmento",
+      "fala": "o que falar nesse segmento — máx 15 palavras",
       "legenda": "texto na tela (máx 5 palavras)",
-      "imagem": "imagem que aparece embaixo"
+      "imagem": "imagem que aparece embaixo",
+      "curiosity_gap": "frase de transição que cria lacuna para o próximo segmento — ex: 'mas tem algo pior'"
     }
   ],
   "cta": {
-    "fala": "frase final ligada ao conteúdo, sem siga genérico",
-    "legenda": "texto na tela",
+    "palavra_chave": "PALAVRA EM MAIÚSCULAS que o espectador comenta (ex: SHAPE, ROTINA, FOCO)",
+    "acao": "comentar|salvar|seguir|clicar-link",
+    "fala": "frase final pedindo a ação específica + entregando o benefício de quem responder",
+    "legenda": "texto na tela com a palavra-chave em destaque",
     "imagem": "imagem do CTA"
   },
   "teleprompter": "TEXTO CORRIDO pronto para ler — hook+body+cta concatenados, uma frase por linha, pontuação para pausa natural, sem timestamps, sem 'HOOK:' ou 'CTA:'",
