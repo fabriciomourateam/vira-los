@@ -1099,13 +1099,13 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     }
     .stat-num {
       background:var(--G); color:#0D0D0F;
-      font-family:var(--F-HEAD); font-size:29px; font-weight:900;
+      font-family:var(--F-HEAD); font-size:48px; font-weight:900;
       padding:16px 20px; min-width:140px; flex-shrink:0;
       display:flex; align-items:center; justify-content:center;
       text-align:center; line-height:1.2; letter-spacing:-0.5px;
     }
     .stat-content { padding:20px 24px; display:flex; flex-direction:column; justify-content:center; }
-    .stat-title { font-family:var(--F-BODY); font-size:28px; font-weight:800; color:var(--DB); margin-bottom:8px; line-height:1.25; }
+    .stat-title { font-family:var(--F-BODY); font-size:30px; font-weight:800; color:var(--DB); margin-bottom:8px; line-height:1.25; }
     .stat-desc  { font-family:var(--F-BODY); font-size:24px; font-weight:400; color:rgba(15,13,8,0.62); line-height:1.4; }
 
     /* ── CAPA HEADLINE ── */
@@ -1171,7 +1171,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── CTA SLIDE ── */
     .cta-bridge {
-      font-family:var(--F-BODY); font-size:30px; font-weight:500;
+      font-family:var(--F-BODY); font-size:32px; font-weight:500;
       line-height:1.5; color:rgba(15,13,8,0.50); margin-bottom:28px;
     }
     .cta-bridge strong { color:var(--DB); font-weight:800; }
@@ -1181,7 +1181,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
       box-shadow:0 2px 16px rgba(184,134,11,0.10);
     }
     .cta-kbox-label {
-      font-family:var(--F-BODY); font-size:17px; font-weight:500;
+      font-family:var(--F-BODY); font-size:30px; font-weight:500;
       letter-spacing:4px; text-transform:uppercase; color:rgba(15,13,8,0.35);
       margin-bottom:12px; text-align:center;
     }
