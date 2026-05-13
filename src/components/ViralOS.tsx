@@ -16,7 +16,6 @@ import {
   Play,
   Calculator,
   ShoppingBag,
-  Calendar,
   BookOpen,
   Bot,
   Layers,
@@ -32,7 +31,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
 import MetricasCalculadora from './MetricasCalculadora';
 import ProdutosEscalaveis from './ProdutosEscalaveis';
-import Agendador from './Agendador';
 import PesquisaConteudo from './PesquisaConteudo';
 import AgenteAutonomo from './AgenteAutonomo';
 import CarrosselInstagram from './CarrosselInstagram';
@@ -42,15 +40,13 @@ import ViralScore from './ViralScore';
 import ProfileSettings from './ProfileSettings';
 import IdeasGenerator from './IdeasGenerator';
 import InstagramAnalytics from './InstagramAnalytics';
-import CriarTabs from './CriarTabs';
-import type { MaquinaInitialIdea } from './Maquina';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
 import UsageBar from './UsageBar';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'agendar' | 'analytics';
+type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'analytics';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'metodo',    label: 'Método',    icon: Zap },
@@ -58,7 +54,6 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'ideias',    label: 'Ideias',    icon: Sparkles },
   { id: 'criar',     label: 'Criar',     icon: Layers },
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
-  { id: 'agendar',   label: 'Agendar',   icon: Calendar },
   { id: 'analytics', label: 'Analytics', icon: Instagram },
 ];
 
@@ -351,12 +346,11 @@ function SubTabBar<T extends string>({
 
 export default function ViralOS() {
   const [activeTab, setActiveTab] = useState<TabId>('metodo');
-  const [metodoSubTab,    setMetodoSubTab]    = useState<'roteiro' | 'produtos'>('roteiro');
+  const [metodoSubTab,    setMetodoSubTab]    = useState<'roteiro' | 'produtos' | 'metricas'>('roteiro');
   const [descobrirSubTab, setDescobrirSubTab] = useState<'pesquisa' | 'radar' | 'agente'>('pesquisa');
-  const [avaliarSubTab,   setAvaliarSubTab]   = useState<'analisador' | 'score' | 'metricas'>('analisador');
+  const [avaliarSubTab,   setAvaliarSubTab]   = useState<'analisador' | 'score'>('analisador');
   const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
   const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
-  const [maquinaInitialIdea, setMaquinaInitialIdea] = useState<MaquinaInitialIdea | null>(null);
   const [state, setState] = useState<AppState>(initialState);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -540,17 +534,6 @@ export default function ViralOS() {
     setTimeout(() => setCarouselPrefill(null), 500);
   };
 
-  const handleUseInMaquina = (idea: { title: string; hook: string; cta?: string; numSlides?: number }) => {
-    setMaquinaInitialIdea({
-      title: idea.title,
-      hook: idea.hook,
-      cta: idea.cta,
-      numSlides: idea.numSlides,
-    });
-    setActiveTab('criar');
-    toast.success('Ideia carregada na Máquina!');
-  };
-
   async function handleAIRoteiro(targetId: string) {
     if (!aiRoteiro.tema.trim()) {
       toast.error('Informe o tema do roteiro');
@@ -693,17 +676,14 @@ export default function ViralOS() {
               setCarouselPrefill({ topic, script });
               setActiveTab('criar');
             }}
-            onUseInMaquina={handleUseInMaquina}
           />
         )}
 
         {/* ── CRIAR (Básico | Máquina | Brand Kits) ── */}
         {activeTab === 'criar' && (
-          <CriarTabs
+          <CarrosselInstagram
             prefillScript={carouselPrefill?.script}
             prefillTopic={carouselPrefill?.topic}
-            initialMaquinaIdea={maquinaInitialIdea}
-            onClearMaquinaIdea={() => setMaquinaInitialIdea(null)}
           />
         )}
 
@@ -714,7 +694,6 @@ export default function ViralOS() {
               tabs={[
                 { id: 'analisador', label: 'Analisar Reels', icon: ScanSearch },
                 { id: 'score',      label: 'Score Script',   icon: Gauge },
-                { id: 'metricas',   label: 'Métricas',       icon: Calculator },
               ]}
               active={avaliarSubTab}
               onChange={(id) => setAvaliarSubTab(id as typeof avaliarSubTab)}
@@ -725,12 +704,8 @@ export default function ViralOS() {
               prefillType={scorePrefill?.type}
               onUseInCarrossel={(script) => handleUseInCarrossel(script, 'Script Melhorado do Score')}
             />}
-            {avaliarSubTab === 'metricas'   && <MetricasCalculadora />}
           </>
         )}
-
-        {/* ── AGENDAR ── */}
-        {activeTab === 'agendar' && <Agendador />}
 
         {/* ── ANALYTICS ── */}
         {activeTab === 'analytics' && (
@@ -765,11 +740,13 @@ export default function ViralOS() {
               tabs={[
                 { id: 'roteiro',  label: 'Roteiro',  icon: Zap },
                 { id: 'produtos', label: 'Produtos', icon: ShoppingBag },
+                { id: 'metricas', label: 'Métricas', icon: Calculator },
               ]}
               active={metodoSubTab}
               onChange={(id) => setMetodoSubTab(id as typeof metodoSubTab)}
             />
             {metodoSubTab === 'produtos' && <ProdutosEscalaveis />}
+            {metodoSubTab === 'metricas' && <MetricasCalculadora />}
           </>
         )}
         {activeTab === 'metodo' && metodoSubTab === 'roteiro' && (<>
