@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Video, Sparkles, Loader2, Play, Pause, X, Trash2, Copy, Clock,
-  ChevronDown, ChevronUp, Image as ImageIcon, FileText, Mic,
+  ChevronDown, ChevronUp, Image as ImageIcon, FileText, Mic, Save,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -233,6 +233,10 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
           reel={activeReel}
           onTeleprompter={() => setTeleprompterOpen(true)}
           onClose={() => setActiveReel(null)}
+          onUpdate={(updated) => {
+            setActiveReel(updated);
+            setReels(prev => prev.map(r => r.id === updated.id ? updated : r));
+          }}
         />
       )}
 
@@ -290,12 +294,40 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
 
 // ─── Card de detalhes do reel ────────────────────────────────────────────────
 
-function ReelCard({ reel, onTeleprompter, onClose }: {
+function ReelCard({ reel, onTeleprompter, onClose, onUpdate }: {
   reel: SavedReel;
   onTeleprompter: () => void;
   onClose: () => void;
+  onUpdate: (updated: SavedReel) => void;
 }) {
-  const [expanded, setExpanded] = useState<'hook' | 'body' | 'cta' | 'caption' | null>('hook');
+  const [expanded, setExpanded] = useState<'hook' | 'body' | 'cta' | 'roteiro' | 'caption' | null>('hook');
+  const [roteiroDraft, setRoteiroDraft] = useState(reel.teleprompter || '');
+  const [savingRoteiro, setSavingRoteiro] = useState(false);
+
+  // Sincroniza draft quando troca de reel ativo
+  useEffect(() => {
+    setRoteiroDraft(reel.teleprompter || '');
+  }, [reel.id, reel.teleprompter]);
+
+  const roteiroDirty = roteiroDraft !== (reel.teleprompter || '');
+
+  async function handleSaveRoteiro() {
+    setSavingRoteiro(true);
+    try {
+      const res = await fetch(`${API}/api/reels/saved/${reel.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teleprompter: roteiroDraft }),
+      });
+      if (!res.ok) throw new Error('Falha ao salvar');
+      onUpdate({ ...reel, teleprompter: roteiroDraft });
+      toast.success('Roteiro salvo');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar');
+    } finally {
+      setSavingRoteiro(false);
+    }
+  }
 
   function copy(text: string, label = 'Texto') {
     navigator.clipboard.writeText(text);
@@ -372,6 +404,48 @@ function ReelCard({ reel, onTeleprompter, onClose }: {
           onToggle={() => setExpanded(expanded === 'cta' ? null : 'cta')}
         >
           <SegmentRow segment={reel.cta} copy={copy} />
+        </Section>
+
+        <Section
+          label="ROTEIRO COMPLETO (editável)"
+          icon={<Mic className="w-3.5 h-3.5" />}
+          open={expanded === 'roteiro'}
+          onToggle={() => setExpanded(expanded === 'roteiro' ? null : 'roteiro')}
+        >
+          <div className="space-y-2">
+            <p className="text-[10px] text-muted-foreground">
+              Texto que o teleprompter vai mostrar. Edite à vontade — uma frase por linha funciona melhor pra pausas naturais.
+            </p>
+            <textarea
+              value={roteiroDraft}
+              onChange={e => setRoteiroDraft(e.target.value)}
+              rows={Math.min(20, Math.max(8, roteiroDraft.split('\n').length + 1))}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-rose-500/50 resize-y"
+              placeholder="Hook → body → CTA, uma frase por linha..."
+            />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-muted-foreground">
+                {roteiroDraft.length} caracteres · {roteiroDraft.split(/\s+/).filter(Boolean).length} palavras
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => copy(roteiroDraft, 'Roteiro')}
+                  className="text-[11px] px-2.5 py-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+                  title="Copiar roteiro"
+                >
+                  <Copy className="w-3 h-3" /> Copiar
+                </button>
+                <button
+                  onClick={handleSaveRoteiro}
+                  disabled={!roteiroDirty || savingRoteiro}
+                  className="text-[11px] font-bold px-3 py-1.5 rounded-md bg-rose-500 hover:bg-rose-600 text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  {savingRoteiro ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  {savingRoteiro ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
         </Section>
 
         {reel.legendaPost && (
