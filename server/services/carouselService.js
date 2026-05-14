@@ -2632,4 +2632,4 @@ async function takeScreenshotsPixelPerfect(html, outputDir) {
   }
 }
 
-module.exports = { generateCarousel, takeScreenshots, takeScreenshotsPixelPerfect, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, buildFmteamHTMLStructureBlock };
+module.exports = { generateCarousel, takeScreenshots, takeScreenshotsPixelPerfect, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, buildFmteamHTMLStructureBlock, fetchOneImage };
