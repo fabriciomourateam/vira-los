@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Video, Sparkles, Loader2, Play, Pause, X, Trash2, Copy, Clock,
-  ChevronDown, ChevronUp, Image as ImageIcon, FileText, Mic, Save,
+  ChevronDown, ChevronUp, Image as ImageIcon, FileText, Mic, Save, Download,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -362,6 +362,15 @@ function ReelCard({ reel, onTeleprompter, onClose, onUpdate }: {
           <Mic className="w-3.5 h-3.5" />
           Teleprompter
         </button>
+        <a
+          href={`${API}/api/reels/saved/${reel.id}/zip`}
+          download
+          className="shrink-0 px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs flex items-center gap-1.5"
+          title="Baixa um .zip com roteiro.txt + timings.json + 1 imagem por segmento — pronto pra CapCut"
+        >
+          <Download className="w-3.5 h-3.5" />
+          ZIP
+        </a>
         <button
           onClick={onClose}
           className="shrink-0 p-2 rounded-lg text-muted-foreground hover:bg-secondary"
