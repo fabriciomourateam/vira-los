@@ -144,6 +144,57 @@ router.delete('/saved/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Sessões de gravação (fila de reels pra gravar em batch) ──────────────────
+//
+// Cada sessão = { id, name, reelIds: [], recordedReelIds: [], created_at }
+// recordedReelIds rastreia quais reels da sessão já foram marcados como gravados.
+
+router.get('/sessions', (req, res) => {
+  res.json(db.getAllReelsSessions());
+});
+
+router.post('/sessions', (req, res) => {
+  const { name, reelIds } = req.body || {};
+  if (!Array.isArray(reelIds) || reelIds.length === 0) {
+    return res.status(400).json({ error: 'reelIds deve ser um array não vazio' });
+  }
+  const id = `session_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const session = {
+    id,
+    name: (typeof name === 'string' && name.trim()) ? name.trim() : `Sessão ${new Date().toLocaleDateString('pt-BR')}`,
+    reelIds,
+    recordedReelIds: [],
+  };
+  db.saveReelsSession(session);
+  res.json(session);
+});
+
+router.get('/sessions/:id', (req, res) => {
+  const session = db.getReelsSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Sessão não encontrada' });
+  // Hidrata reels — front recebe a lista pronta sem precisar de N requests
+  const allReels = db.getAllReels();
+  const reelsById = new Map(allReels.map(r => [r.id, r]));
+  const reels = session.reelIds
+    .map(id => reelsById.get(id))
+    .filter(Boolean); // descarta reels que foram deletados
+  res.json({ ...session, reels });
+});
+
+router.patch('/sessions/:id', (req, res) => {
+  const allowed = ['name', 'reelIds', 'recordedReelIds', 'archived'];
+  const update = {};
+  for (const k of allowed) if (req.body?.[k] !== undefined) update[k] = req.body[k];
+  if (Object.keys(update).length === 0) return res.status(400).json({ error: 'Nenhum campo válido' });
+  db.updateReelsSession(req.params.id, update);
+  res.json({ ok: true });
+});
+
+router.delete('/sessions/:id', (req, res) => {
+  db.deleteReelsSession(req.params.id);
+  res.json({ ok: true });
+});
+
 // ─── Pacote ZIP (imagens + roteiro + timings) ─────────────────────────────────
 // GET /api/reels/saved/:id/zip
 //

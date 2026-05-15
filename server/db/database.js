@@ -257,6 +257,13 @@ const saveReel   = (r) => { const db = readDb('reels'); db.push({ ...r, created_
 const updateReel = (id, data) => { const db = readDb('reels').map((r) => r.id === id ? { ...r, ...data } : r); writeDb('reels', db); };
 const deleteReel = (id) => writeDb('reels', readDb('reels').filter((r) => r.id !== id));
 
+// ── Sessões de gravação de Reels (fila pra gravação em batch) ─────────────────
+const getAllReelsSessions = () => readDb('reels_sessions').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const getReelsSession    = (id) => readDb('reels_sessions').find((s) => s.id === id) || null;
+const saveReelsSession   = (s) => { const db = readDb('reels_sessions'); db.push({ ...s, created_at: now() }); writeDb('reels_sessions', db); };
+const updateReelsSession = (id, data) => { const db = readDb('reels_sessions').map((s) => s.id === id ? { ...s, ...data, updated_at: now() } : s); writeDb('reels_sessions', db); };
+const deleteReelsSession = (id) => writeDb('reels_sessions', readDb('reels_sessions').filter((s) => s.id !== id));
+
 // ── Brand Kits ────────────────────────────────────────────────────────────────
 const getAllBrandKits  = () => readDb('brand_kits').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const getBrandKit     = (id) => readDb('brand_kits').find((k) => k.id === id) || null;
@@ -316,6 +323,8 @@ module.exports = {
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
+  // Reels Sessions (fila de gravação)
+  getAllReelsSessions, getReelsSession, saveReelsSession, updateReelsSession, deleteReelsSession,
   // Brand Kits
   getAllBrandKits, getBrandKit, createBrandKit, updateBrandKit, deleteBrandKit,
   // Studio

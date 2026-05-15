@@ -12,6 +12,7 @@ import {
   Video, Sparkles, Loader2, Play, Pause, X, Trash2, Copy, Clock,
   ChevronDown, ChevronUp, Image as ImageIcon, FileText, Mic, Save, Download,
 } from 'lucide-react';
+import { SessionList } from './ReelsRecordingSession';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -239,6 +240,9 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
           }}
         />
       )}
+
+      {/* Sessões de gravação */}
+      <SessionList savedReels={reels} onRefresh={fetchAll} />
 
       {/* Histórico */}
       {reels.length > 0 && (
