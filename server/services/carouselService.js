@@ -226,25 +226,40 @@ async function fetchImagenImage(query, fallbackQuery, opts = {}) {
   }
 
   try {
+    console.log(`[CarouselService/Imagen] POST ${model} para "${query.slice(0, 60)}"${nonce ? ` (nonce ${opts.nonce})` : ''}`);
     const r = await axios.post(url, {
       instances: [{ prompt }],
       parameters: { sampleCount: 1, aspectRatio: '9:16', personGeneration: 'ALLOW_ADULT' },
-    }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
+    }, { timeout: 60000, headers: { 'Content-Type': 'application/json' } });
 
-    const b64 = r.data?.predictions?.[0]?.bytesBase64Encoded;
+    // Tenta os 3 caminhos conhecidos pra base64 (formato varia por versão da API)
+    const pred = r.data?.predictions?.[0];
+    const b64 = pred?.bytesBase64Encoded
+      || pred?.image?.bytesBase64Encoded
+      || pred?.imageBytes;
     if (!b64) {
-      console.warn(`[CarouselService/Imagen] resposta sem bytesBase64Encoded para "${query}"`);
-      return null;
+      // Log estrutura recebida pra diagnosticar — Google às vezes retorna em formato diferente
+      const keys = pred ? Object.keys(pred).join(',') : '(nenhum prediction)';
+      console.warn(`[CarouselService/Imagen] resposta sem bytes para "${query}". Chaves de prediction[0]: ${keys}. Resposta completa (primeiros 500 chars): ${JSON.stringify(r.data).slice(0, 500)}`);
+      // Lança erro pra propagar a mensagem útil pro frontend em vez de retornar null silenciosamente
+      const reason = pred?.raiFilteredReason || pred?.safetyAttributes?.blocked ? 'bloqueado por política de conteúdo' : 'sem bytes na resposta';
+      throw new Error(`Imagen: ${reason} (chaves: ${keys})`);
     }
     fs.writeFileSync(cacheFile, Buffer.from(b64, 'base64'));
     console.log(`[CarouselService/Imagen] gerou "${query}"${nonce ? ` (nonce ${opts.nonce})` : ''} → ${hash}.jpg`);
     return { url: `/imagen-cache/${hash}.jpg`, alt: query };
   } catch (err) {
     const status = err.response?.status;
-    const detail = err.response?.data?.error?.message || err.message;
-    console.warn(`[CarouselService/Imagen] erro ${status || ''} para "${query}": ${detail}`);
+    const apiErr = err.response?.data?.error;
+    const detail = apiErr?.message || err.message;
+    const reason = apiErr?.status || apiErr?.details?.[0]?.reason || '';
+    console.warn(`[CarouselService/Imagen] erro ${status || ''} ${reason} para "${query}": ${detail}`);
     if (fallbackQuery && fallbackQuery !== query) return fetchImagenImage(fallbackQuery, null, opts);
-    return null;
+    // Re-throw pra propagar pro caller em vez de cair silenciosamente em null
+    const wrapped = new Error(`Imagen ${status || ''}: ${detail}`);
+    wrapped.imagenStatus = status;
+    wrapped.imagenReason = reason;
+    throw wrapped;
   }
 }
 
@@ -263,9 +278,13 @@ async function fetchImages(query, count = 12) {
 async function fetchOneImage(query, fallbackQuery) {
   try {
     if (process.env.GOOGLE_AI_API_KEY) {
-      const ai = await fetchImagenImage(query, fallbackQuery);
-      if (ai) return ai;
-      console.log(`[CarouselService] Imagen falhou para "${query}", caindo pra Unsplash`);
+      // Imagen pode throw — wrap separado pra não interromper cascade em geração inicial
+      try {
+        const ai = await fetchImagenImage(query, fallbackQuery);
+        if (ai) return ai;
+      } catch (e) {
+        console.log(`[CarouselService] Imagen falhou para "${query}", caindo pra Unsplash: ${e.message}`);
+      }
     }
     let imgs = await fetchUnsplashImages(query, 1);
     if (!imgs.length) imgs = await fetchPexelsImages(query, 1);
