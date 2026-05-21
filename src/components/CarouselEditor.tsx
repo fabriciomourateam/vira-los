@@ -2278,6 +2278,38 @@ export default function CarouselEditor({
     toast.success('Imagem aplicada');
   }
 
+  // ── Altura do .img-box-top (caixa de imagem no topo dos slides fmteam) ────────
+
+  /** Lê altura inline do .img-box-top no slide; null se o slide não tem img-box. */
+  function getImgBoxHeight(slideIdx: number): number | null {
+    const slide = slides[slideIdx];
+    if (!slide) return null;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${slide.outerHtml}</body>`, 'text/html');
+    const box = doc.body.firstElementChild?.querySelector('.img-box-top') as HTMLElement | null;
+    if (!box) return null;
+    const style = box.getAttribute('style') || '';
+    const m = /height\s*:\s*(\d+)px/i.exec(style);
+    return m ? parseInt(m[1], 10) : 380; // 380 é o default usado no template
+  }
+
+  /** Aplica nova altura (px) ao .img-box-top do slide e salva no outerHtml. */
+  function setImgBoxHeight(slideIdx: number, heightPx: number) {
+    setSlides(prev => prev.map((s, i) => {
+      if (i !== slideIdx) return s;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<body>${s.outerHtml}</body>`, 'text/html');
+      const el = doc.body.firstElementChild;
+      if (!el) return s;
+      const box = el.querySelector('.img-box-top') as HTMLElement | null;
+      if (!box) return s;
+      const oldStyle = (box.getAttribute('style') || '').replace(/height\s*:\s*\d+px\s*;?/gi, '').trim();
+      const newStyle = `${oldStyle ? oldStyle + (oldStyle.endsWith(';') ? '' : ';') + ' ' : ''}height:${heightPx}px`;
+      box.setAttribute('style', newStyle);
+      return { ...s, outerHtml: el.outerHTML };
+    }));
+  }
+
   // ── Posição de img.split-img via object-position ──────────────────────────────
 
   /** Lê o offset calc(50% ± Npx) atual de uma img dentro de .split-panel no outerHtml */
@@ -3222,7 +3254,7 @@ export default function CarouselEditor({
     : '';
 
   return (
-    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+    <div className="rounded-2xl border border-border bg-card">
       {/* ── Cabeçalho ── */}
       <div className="px-3 sm:px-4 py-2.5 border-b border-border">
         {/* Linha 1: Título + Undo/Redo + Salvar */}
@@ -3620,14 +3652,14 @@ export default function CarouselEditor({
               <motion.div key={`${selectedIndex}-${editMode}`}
                 initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}
-                className="flex-1 flex flex-col overflow-hidden min-h-0"
+                className="flex-1 flex flex-col min-h-0"
               >
                 {/* ── MODO TEXTO ── */}
                 {editMode === 'text' && (
-                  <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+                  <div className="flex-1 flex flex-col md:flex-row min-h-0 md:items-start">
 
-                    {/* Preview — coluna esquerda fixa */}
-                    <div className="md:w-[44%] shrink-0 border-b md:border-b-0 md:border-r border-border bg-secondary/10 overflow-hidden flex flex-col">
+                    {/* Preview — coluna esquerda, sticky pra seguir scroll da página */}
+                    <div className="md:w-[44%] shrink-0 border-b md:border-b-0 md:border-r border-border bg-secondary/10 flex flex-col sticky top-0 z-10 max-h-[60vh] md:max-h-[calc(100vh-2rem)] md:top-2 md:self-start overflow-hidden">
                       <div className="px-3 pt-3 pb-2 border-b border-border/50">
                         <div className="flex items-center gap-2">
                           <Eye className="w-3.5 h-3.5 text-muted-foreground" />
@@ -3643,7 +3675,7 @@ export default function CarouselEditor({
                     </div>
 
                     {/* Controles — coluna direita rolável */}
-                    <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 space-y-3">
+                    <div className="flex-1 px-3 sm:px-4 py-3 space-y-3 min-w-0">
 
                       {/* ── Selo Verificado ── */}
                       {sel.outerHtml.includes('profile-name') && (
@@ -4056,6 +4088,31 @@ export default function CarouselEditor({
                             </div>
                           )}
                         </div>
+
+                        {/* Altura do img-box-top — só aparece quando o slide tem essa caixa */}
+                        {(() => {
+                          const currentH = selectedIndex !== null ? getImgBoxHeight(selectedIndex) : null;
+                          if (currentH === null) return null;
+                          return (
+                            <div className="space-y-2 pt-2 border-t border-border">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Altura da caixa de imagem
+                                </label>
+                                <span className="text-[11px] font-mono text-muted-foreground">{currentH}px</span>
+                              </div>
+                              <input
+                                type="range" min={200} max={900} step={10}
+                                value={currentH}
+                                onChange={e => selectedIndex !== null && setImgBoxHeight(selectedIndex, Number(e.target.value))}
+                                className="w-full accent-purple-500"
+                              />
+                              <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                                <span>Pequena</span><span>Padrão</span><span>Grande</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* CTA fmteam: toggle "foto cobrindo todo o slide" — só visível se for slide CTA */}
                         {sel?.outerHtml.includes('cta-bridge') && (
