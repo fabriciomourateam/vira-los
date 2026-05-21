@@ -206,73 +206,73 @@ const IMAGEN_CACHE_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, 
 if (!fs.existsSync(IMAGEN_CACHE_DIR)) fs.mkdirSync(IMAGEN_CACHE_DIR, { recursive: true });
 
 async function fetchImagenImage(query, fallbackQuery, opts = {}) {
-  const key = process.env.GOOGLE_AI_API_KEY;
-  if (!key) return null;
-
   // Prompt enxuto pra fitness/lifestyle vertical (1080x1350 ~ 9:16 portrait)
   const prompt = `Professional photography, ${query}, cinematic lighting, high detail, photorealistic, no text, vertical composition`;
 
-  // Default: gemini-2.5-flash-image (Nano Banana) — gratuito no AI Studio.
-  // Imagen 4 (imagen-4.0-generate-001) tem qualidade superior MAS exige plano pago.
-  // Override via env IMAGEN_MODEL — chame GET /api/carousel/imagen-models pra listar.
-  // O nome do env é histórico (era só Imagen no início) mas aceita qualquer modelo de imagem da Google.
-  const model = process.env.IMAGEN_MODEL || 'gemini-2.5-flash-image';
-  const isGeminiImage = /^gemini-/.test(model);
+  // Provider: 'pollinations' (default, gratuito sem auth) ou 'google' (Imagen/Nano Banana — exige billing).
+  // Override via env IMAGE_PROVIDER. Quando 'google', usa IMAGEN_MODEL (default: gemini-2.5-flash-image).
+  const provider = (process.env.IMAGE_PROVIDER || 'pollinations').toLowerCase();
+  const model = provider === 'google' ? (process.env.IMAGEN_MODEL || 'gemini-2.5-flash-image') : 'pollinations-flux';
 
-  // Cache: hash do prompt → reuso entre carrosseis com mesma query (economia de quota).
+  // Cache: hash do prompt → reuso entre carrosseis com mesma query (economia de quota/banda).
   const nonce = opts.nonce ? `:${opts.nonce}` : '';
-  const hash = crypto.createHash('sha256').update(`${model}:${prompt}${nonce}`).digest('hex').slice(0, 24);
+  const hash = crypto.createHash('sha256').update(`${provider}:${model}:${prompt}${nonce}`).digest('hex').slice(0, 24);
   const cacheFile = path.join(IMAGEN_CACHE_DIR, `${hash}.jpg`);
   if (fs.existsSync(cacheFile)) {
     return { url: `/imagen-cache/${hash}.jpg`, alt: query };
   }
 
-  // Endpoint + body shape diferem entre Imagen (:predict) e Nano Banana/Gemini (:generateContent)
-  const endpoint = isGeminiImage ? 'generateContent' : 'predict';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${key}`;
-  const body = isGeminiImage
-    ? { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'] } }
-    : { instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: '9:16', personGeneration: 'ALLOW_ADULT' } };
-
   try {
-    console.log(`[CarouselService/AiImage] POST ${model} (${endpoint}) para "${query.slice(0, 60)}"${nonce ? ` (nonce ${opts.nonce})` : ''}`);
-    const r = await axios.post(url, body, { timeout: 60000, headers: { 'Content-Type': 'application/json' } });
-
-    // Extrai base64 do formato apropriado
     let b64;
-    let blockedReason = '';
-    if (isGeminiImage) {
-      // Nano Banana: candidates[0].content.parts[*].inlineData.data (procura a parte com imagem)
-      const cand = r.data?.candidates?.[0];
-      const parts = cand?.content?.parts || [];
-      const imgPart = parts.find(p => p?.inlineData?.data);
-      b64 = imgPart?.inlineData?.data;
-      blockedReason = cand?.finishReason === 'SAFETY' ? 'bloqueado por política de conteúdo (SAFETY)' : '';
+    if (provider === 'pollinations') {
+      // Pollinations: URL-based, retorna a imagem direta. Seed pra cache-bust por nonce.
+      const seed = opts.nonce ? `&seed=${encodeURIComponent(opts.nonce)}` : '';
+      const pUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1350&model=flux&nologo=true${seed}`;
+      console.log(`[CarouselService/AiImage] Pollinations Flux para "${query.slice(0, 60)}"${nonce ? ` (nonce ${opts.nonce})` : ''}`);
+      const r = await axios.get(pUrl, { responseType: 'arraybuffer', timeout: 90000 });
+      b64 = Buffer.from(r.data).toString('base64');
     } else {
-      // Imagen: predictions[0].bytesBase64Encoded (3 variantes conhecidas)
-      const pred = r.data?.predictions?.[0];
-      b64 = pred?.bytesBase64Encoded || pred?.image?.bytesBase64Encoded || pred?.imageBytes;
-      blockedReason = pred?.raiFilteredReason || pred?.safetyAttributes?.blocked ? 'bloqueado por política de conteúdo' : '';
+      // Google AI: Imagen (:predict) ou Nano Banana/Gemini (:generateContent).
+      // EXIGE billing ativo no Google Cloud — free tier do AI Studio retorna 429 quota:0.
+      const key = process.env.GOOGLE_AI_API_KEY;
+      if (!key) throw new Error('GOOGLE_AI_API_KEY não configurada (necessária pra provider=google)');
+      const isGeminiImage = /^gemini-/.test(model);
+      const endpoint = isGeminiImage ? 'generateContent' : 'predict';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${key}`;
+      const body = isGeminiImage
+        ? { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'] } }
+        : { instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: '9:16', personGeneration: 'ALLOW_ADULT' } };
+      console.log(`[CarouselService/AiImage] Google ${model} (${endpoint}) para "${query.slice(0, 60)}"${nonce ? ` (nonce ${opts.nonce})` : ''}`);
+      const r = await axios.post(url, body, { timeout: 60000, headers: { 'Content-Type': 'application/json' } });
+      let blockedReason = '';
+      if (isGeminiImage) {
+        const cand = r.data?.candidates?.[0];
+        const parts = cand?.content?.parts || [];
+        const imgPart = parts.find(p => p?.inlineData?.data);
+        b64 = imgPart?.inlineData?.data;
+        blockedReason = cand?.finishReason === 'SAFETY' ? 'bloqueado por política de conteúdo (SAFETY)' : '';
+      } else {
+        const pred = r.data?.predictions?.[0];
+        b64 = pred?.bytesBase64Encoded || pred?.image?.bytesBase64Encoded || pred?.imageBytes;
+        blockedReason = pred?.raiFilteredReason || pred?.safetyAttributes?.blocked ? 'bloqueado por política de conteúdo' : '';
+      }
+      if (!b64) {
+        console.warn(`[CarouselService/AiImage] resposta sem bytes para "${query}". Preview: ${JSON.stringify(r.data).slice(0, 400)}`);
+        throw new Error(blockedReason || 'sem bytes na resposta (formato inesperado)');
+      }
     }
 
-    if (!b64) {
-      const dataPreview = JSON.stringify(r.data).slice(0, 400);
-      console.warn(`[CarouselService/AiImage] resposta sem bytes para "${query}". Preview: ${dataPreview}`);
-      throw new Error(blockedReason || 'sem bytes na resposta (formato inesperado)');
-    }
     fs.writeFileSync(cacheFile, Buffer.from(b64, 'base64'));
-    console.log(`[CarouselService/AiImage] gerou "${query}"${nonce ? ` (nonce ${opts.nonce})` : ''} → ${hash}.jpg`);
+    console.log(`[CarouselService/AiImage] gerou "${query}"${nonce ? ` (nonce ${opts.nonce})` : ''} → ${hash}.jpg (${provider})`);
     return { url: `/imagen-cache/${hash}.jpg`, alt: query };
   } catch (err) {
     const status = err.response?.status;
     const apiErr = err.response?.data?.error;
     const detail = apiErr?.message || err.message;
-    const reason = apiErr?.status || apiErr?.details?.[0]?.reason || '';
-    console.warn(`[CarouselService/AiImage] erro ${status || ''} ${reason} para "${query}": ${detail}`);
+    console.warn(`[CarouselService/AiImage] erro ${status || ''} (${provider}) para "${query}": ${detail}`);
     if (fallbackQuery && fallbackQuery !== query) return fetchImagenImage(fallbackQuery, null, opts);
-    const wrapped = new Error(`AI image ${status || ''}: ${detail}`);
+    const wrapped = new Error(`AI image ${status || ''} (${provider}): ${detail}`);
     wrapped.imagenStatus = status;
-    wrapped.imagenReason = reason;
     throw wrapped;
   }
 }
@@ -288,16 +288,17 @@ async function fetchImages(query, count = 12) {
 }
 
 // Busca uma imagem por slide com query específica (fallback para o tema geral)
-// Cascata: Imagen (se GOOGLE_AI_API_KEY setado) → Unsplash → Pexels
+// Cascata: AI image (Pollinations free ou Google paid) → Unsplash → Pexels
 async function fetchOneImage(query, fallbackQuery) {
   try {
-    if (process.env.GOOGLE_AI_API_KEY) {
-      // Imagen pode throw — wrap separado pra não interromper cascade em geração inicial
+    const provider = (process.env.IMAGE_PROVIDER || 'pollinations').toLowerCase();
+    const aiEnabled = provider === 'pollinations' || (provider === 'google' && !!process.env.GOOGLE_AI_API_KEY);
+    if (aiEnabled) {
       try {
         const ai = await fetchImagenImage(query, fallbackQuery);
         if (ai) return ai;
       } catch (e) {
-        console.log(`[CarouselService] Imagen falhou para "${query}", caindo pra Unsplash: ${e.message}`);
+        console.log(`[CarouselService] AI image falhou para "${query}", caindo pra Unsplash: ${e.message}`);
       }
     }
     let imgs = await fetchUnsplashImages(query, 1);

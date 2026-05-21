@@ -493,14 +493,15 @@ router.post('/regenerate-image-ai', async (req, res) => {
   if (!query || typeof query !== 'string') {
     return res.status(400).json({ error: 'query obrigatória' });
   }
-  if (!process.env.GOOGLE_AI_API_KEY) {
-    return res.status(503).json({ error: 'GOOGLE_AI_API_KEY não configurada — Imagen indisponível' });
+  const provider = (process.env.IMAGE_PROVIDER || 'pollinations').toLowerCase();
+  if (provider === 'google' && !process.env.GOOGLE_AI_API_KEY) {
+    return res.status(503).json({ error: 'GOOGLE_AI_API_KEY não configurada (provider=google requer key)' });
   }
   try {
     const finalNonce = nonce || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const img = await fetchImagenImage(query, null, { nonce: finalNonce });
     if (!img) {
-      return res.status(502).json({ error: 'Imagen recusou ou retornou vazio. Tente reformular a query.' });
+      return res.status(502).json({ error: 'AI recusou ou retornou vazio. Tente reformular a query.' });
     }
     res.json(img);
   } catch (err) {
