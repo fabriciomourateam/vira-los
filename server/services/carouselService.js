@@ -205,7 +205,7 @@ const crypto = require('crypto');
 const IMAGEN_CACHE_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, '../data'), 'imagen-cache');
 if (!fs.existsSync(IMAGEN_CACHE_DIR)) fs.mkdirSync(IMAGEN_CACHE_DIR, { recursive: true });
 
-async function fetchImagenImage(query, fallbackQuery) {
+async function fetchImagenImage(query, fallbackQuery, opts = {}) {
   const key = process.env.GOOGLE_AI_API_KEY;
   if (!key) return null;
 
@@ -215,8 +215,11 @@ async function fetchImagenImage(query, fallbackQuery) {
   const model = process.env.IMAGEN_MODEL || 'imagen-3.0-generate-002';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${key}`;
 
-  // Cache: hash do prompt → reuso entre carrosseis com mesma query (economia de quota)
-  const hash = crypto.createHash('sha256').update(`${model}:${prompt}`).digest('hex').slice(0, 24);
+  // Cache: hash do prompt → reuso entre carrosseis com mesma query (economia de quota).
+  // nonce permite bypass do cache pra regenerar uma imagem que o usuário não gostou —
+  // cada nonce diferente gera um hash diferente e portanto uma nova chamada à API.
+  const nonce = opts.nonce ? `:${opts.nonce}` : '';
+  const hash = crypto.createHash('sha256').update(`${model}:${prompt}${nonce}`).digest('hex').slice(0, 24);
   const cacheFile = path.join(IMAGEN_CACHE_DIR, `${hash}.jpg`);
   if (fs.existsSync(cacheFile)) {
     return { url: `/imagen-cache/${hash}.jpg`, alt: query };
@@ -234,13 +237,13 @@ async function fetchImagenImage(query, fallbackQuery) {
       return null;
     }
     fs.writeFileSync(cacheFile, Buffer.from(b64, 'base64'));
-    console.log(`[CarouselService/Imagen] gerou "${query}" → ${hash}.jpg`);
+    console.log(`[CarouselService/Imagen] gerou "${query}"${nonce ? ` (nonce ${opts.nonce})` : ''} → ${hash}.jpg`);
     return { url: `/imagen-cache/${hash}.jpg`, alt: query };
   } catch (err) {
     const status = err.response?.status;
     const detail = err.response?.data?.error?.message || err.message;
     console.warn(`[CarouselService/Imagen] erro ${status || ''} para "${query}": ${detail}`);
-    if (fallbackQuery && fallbackQuery !== query) return fetchImagenImage(fallbackQuery);
+    if (fallbackQuery && fallbackQuery !== query) return fetchImagenImage(fallbackQuery, null, opts);
     return null;
   }
 }
@@ -2686,4 +2689,4 @@ async function takeScreenshotsPixelPerfect(html, outputDir) {
   }
 }
 
-module.exports = { generateCarousel, takeScreenshots, takeScreenshotsPixelPerfect, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, buildFmteamHTMLStructureBlock, fetchOneImage };
+module.exports = { generateCarousel, takeScreenshots, takeScreenshotsPixelPerfect, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, buildFmteamHTMLStructureBlock, fetchOneImage, fetchImagenImage };

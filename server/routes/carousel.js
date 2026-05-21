@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const multer = require('multer');
-const { generateCarousel, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, takeScreenshotsPixelPerfect, buildFmteamHTMLStructureBlock } = require('../services/carouselService');
+const { generateCarousel, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, takeScreenshotsPixelPerfect, buildFmteamHTMLStructureBlock, fetchImagenImage } = require('../services/carouselService');
 const promptTplSvc = require('../services/promptTemplateService');
 const { FABRICIO_AVATAR_DATA_URL } = require('../services/fmteamAssets');
 const db = require('../db/database');
@@ -445,6 +445,35 @@ router.get('/unsplash-search', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.response?.data?.errors?.[0] || err.message });
+  }
+});
+
+// ─── Regenerar imagem AI (Imagen 3) com nonce pra bypass do cache ────────────
+//
+// POST /api/carousel/regenerate-image-ai  { query, nonce? }
+// → { url, alt }  (URL relativa servida via /imagen-cache/<hash>.jpg)
+//
+// Cada chamada com nonce diferente força nova geração — usado quando o usuário
+// não gostou da imagem atual e quer outra versão. Sem GOOGLE_AI_API_KEY,
+// retorna 503 (cliente deve cair pro Unsplash search que já existe).
+router.post('/regenerate-image-ai', async (req, res) => {
+  const { query, nonce } = req.body || {};
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ error: 'query obrigatória' });
+  }
+  if (!process.env.GOOGLE_AI_API_KEY) {
+    return res.status(503).json({ error: 'GOOGLE_AI_API_KEY não configurada — Imagen indisponível' });
+  }
+  try {
+    const finalNonce = nonce || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const img = await fetchImagenImage(query, null, { nonce: finalNonce });
+    if (!img) {
+      return res.status(502).json({ error: 'Imagen recusou ou retornou vazio. Tente reformular a query.' });
+    }
+    res.json(img);
+  } catch (err) {
+    console.error('[Carousel/RegenImageAI]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

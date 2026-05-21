@@ -1954,6 +1954,10 @@ export default function CarouselEditor({
   const [imgSearch, setImgSearch] = useState('');
   const [imgSearchResults, setImgSearchResults] = useState<{id:string;url:string;thumb:string;alt:string}[]>([]);
   const [imgSearchLoading, setImgSearchLoading] = useState(false);
+  // ── Imagen 3 (regenerar imagem com IA) ──
+  const [aiQuery, setAiQuery] = useState('');
+  const [aiPreview, setAiPreview] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const [imgSearchPage, setImgSearchPage] = useState(1);
   const [imgTarget, setImgTarget] = useState<'bg' | number>('bg');
   // Posição local dos sliders para img.split-img (objeto = {x,y} em px offset de 50%)
@@ -2227,6 +2231,28 @@ export default function CarouselEditor({
       toast.error('Busca falhou: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setImgSearchLoading(false);
+    }
+  }
+
+  // ── Imagen 3: gera nova imagem AI (com nonce pra forçar versão diferente da cached) ──
+  async function generateAiImage(q: string) {
+    const query = q.trim();
+    if (!query) return;
+    setAiLoading(true);
+    setAiPreview(null);
+    try {
+      const r = await fetch(`${API}/api/carousel/regenerate-image-ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, nonce: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Falha ao gerar');
+      setAiPreview(data.url);
+    } catch (err: unknown) {
+      toast.error('Imagen falhou: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setAiLoading(false);
     }
   }
 
@@ -3979,6 +4005,54 @@ export default function CarouselEditor({
                                 className="w-full py-1 rounded text-[11px] text-muted-foreground hover:text-foreground bg-secondary hover:bg-border transition-colors disabled:opacity-50">
                                 {imgSearchLoading ? 'Carregando…' : 'Ver mais'}
                               </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Gerar com IA (Imagen 3) */}
+                        <div className="space-y-2 pt-2 border-t border-border">
+                          <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" /> Gerar com IA
+                          </p>
+                          <div className="flex gap-1.5">
+                            <input
+                              value={aiQuery}
+                              onChange={e => setAiQuery(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && generateAiImage(aiQuery)}
+                              placeholder="Descreva a imagem que quer gerar…"
+                              className="flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                            />
+                            <button
+                              onClick={() => generateAiImage(aiQuery)}
+                              disabled={aiLoading || !aiQuery.trim()}
+                              className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 disabled:opacity-50 transition-colors"
+                              title="Gerar imagem com Imagen 3 (~5-15s)"
+                            >
+                              {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                          {aiPreview && (
+                            <div className="space-y-1.5">
+                              <div className="rounded-lg overflow-hidden border border-amber-500/30">
+                                <img src={`${API}${aiPreview}`} alt="Preview AI" className="w-full object-cover" style={{ maxHeight: 240 }} />
+                              </div>
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={() => { applyImageUrl(`${API}${aiPreview}`); toast.success('Imagem AI aplicada'); }}
+                                  className="flex-1 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors"
+                                >
+                                  Aplicar
+                                </button>
+                                <button
+                                  onClick={() => generateAiImage(aiQuery)}
+                                  disabled={aiLoading}
+                                  className="flex-1 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-[11px] font-bold disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                                  title="Gerar outra versão"
+                                >
+                                  {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                  Outra
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
