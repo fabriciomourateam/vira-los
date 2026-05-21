@@ -468,7 +468,7 @@ router.get('/imagen-models', async (req, res) => {
         supportedGenerationMethods: m.supportedGenerationMethods,
       }));
     res.json({
-      defaultModel: process.env.IMAGEN_MODEL || 'imagen-4.0-generate-001',
+      defaultModel: process.env.IMAGEN_MODEL || 'gemini-2.5-flash-image',
       imagenModels: imagen,
       totalModels: all.length,
       hint: 'Pra usar outro modelo: fly secrets set IMAGEN_MODEL=<name sem o prefixo "models/"> -a vira-los',

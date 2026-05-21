@@ -210,18 +210,16 @@ async function fetchImagenImage(query, fallbackQuery, opts = {}) {
   if (!key) return null;
 
   // Prompt enxuto pra fitness/lifestyle vertical (1080x1350 ~ 9:16 portrait)
-  // Adiciona "professional photography" pra puxar o estilo de stock no lugar do "AI render"
   const prompt = `Professional photography, ${query}, cinematic lighting, high detail, photorealistic, no text, vertical composition`;
-  // Default: imagen-4.0-generate-001 (Imagen 4 standard — qualidade alta, ~5-10s).
-  // Alternativas: imagen-4.0-ultra-generate-001 (top quality, mais lento),
-  //                imagen-4.0-fast-generate-001 (~2-5s, qualidade ligeiramente menor).
+
+  // Default: gemini-2.5-flash-image (Nano Banana) — gratuito no AI Studio.
+  // Imagen 4 (imagen-4.0-generate-001) tem qualidade superior MAS exige plano pago.
   // Override via env IMAGEN_MODEL — chame GET /api/carousel/imagen-models pra listar.
-  const model = process.env.IMAGEN_MODEL || 'imagen-4.0-generate-001';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${key}`;
+  // O nome do env é histórico (era só Imagen no início) mas aceita qualquer modelo de imagem da Google.
+  const model = process.env.IMAGEN_MODEL || 'gemini-2.5-flash-image';
+  const isGeminiImage = /^gemini-/.test(model);
 
   // Cache: hash do prompt → reuso entre carrosseis com mesma query (economia de quota).
-  // nonce permite bypass do cache pra regenerar uma imagem que o usuário não gostou —
-  // cada nonce diferente gera um hash diferente e portanto uma nova chamada à API.
   const nonce = opts.nonce ? `:${opts.nonce}` : '';
   const hash = crypto.createHash('sha256').update(`${model}:${prompt}${nonce}`).digest('hex').slice(0, 24);
   const cacheFile = path.join(IMAGEN_CACHE_DIR, `${hash}.jpg`);
@@ -229,38 +227,50 @@ async function fetchImagenImage(query, fallbackQuery, opts = {}) {
     return { url: `/imagen-cache/${hash}.jpg`, alt: query };
   }
 
-  try {
-    console.log(`[CarouselService/Imagen] POST ${model} para "${query.slice(0, 60)}"${nonce ? ` (nonce ${opts.nonce})` : ''}`);
-    const r = await axios.post(url, {
-      instances: [{ prompt }],
-      parameters: { sampleCount: 1, aspectRatio: '9:16', personGeneration: 'ALLOW_ADULT' },
-    }, { timeout: 60000, headers: { 'Content-Type': 'application/json' } });
+  // Endpoint + body shape diferem entre Imagen (:predict) e Nano Banana/Gemini (:generateContent)
+  const endpoint = isGeminiImage ? 'generateContent' : 'predict';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${key}`;
+  const body = isGeminiImage
+    ? { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'] } }
+    : { instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: '9:16', personGeneration: 'ALLOW_ADULT' } };
 
-    // Tenta os 3 caminhos conhecidos pra base64 (formato varia por versão da API)
-    const pred = r.data?.predictions?.[0];
-    const b64 = pred?.bytesBase64Encoded
-      || pred?.image?.bytesBase64Encoded
-      || pred?.imageBytes;
+  try {
+    console.log(`[CarouselService/AiImage] POST ${model} (${endpoint}) para "${query.slice(0, 60)}"${nonce ? ` (nonce ${opts.nonce})` : ''}`);
+    const r = await axios.post(url, body, { timeout: 60000, headers: { 'Content-Type': 'application/json' } });
+
+    // Extrai base64 do formato apropriado
+    let b64;
+    let blockedReason = '';
+    if (isGeminiImage) {
+      // Nano Banana: candidates[0].content.parts[*].inlineData.data (procura a parte com imagem)
+      const cand = r.data?.candidates?.[0];
+      const parts = cand?.content?.parts || [];
+      const imgPart = parts.find(p => p?.inlineData?.data);
+      b64 = imgPart?.inlineData?.data;
+      blockedReason = cand?.finishReason === 'SAFETY' ? 'bloqueado por política de conteúdo (SAFETY)' : '';
+    } else {
+      // Imagen: predictions[0].bytesBase64Encoded (3 variantes conhecidas)
+      const pred = r.data?.predictions?.[0];
+      b64 = pred?.bytesBase64Encoded || pred?.image?.bytesBase64Encoded || pred?.imageBytes;
+      blockedReason = pred?.raiFilteredReason || pred?.safetyAttributes?.blocked ? 'bloqueado por política de conteúdo' : '';
+    }
+
     if (!b64) {
-      // Log estrutura recebida pra diagnosticar — Google às vezes retorna em formato diferente
-      const keys = pred ? Object.keys(pred).join(',') : '(nenhum prediction)';
-      console.warn(`[CarouselService/Imagen] resposta sem bytes para "${query}". Chaves de prediction[0]: ${keys}. Resposta completa (primeiros 500 chars): ${JSON.stringify(r.data).slice(0, 500)}`);
-      // Lança erro pra propagar a mensagem útil pro frontend em vez de retornar null silenciosamente
-      const reason = pred?.raiFilteredReason || pred?.safetyAttributes?.blocked ? 'bloqueado por política de conteúdo' : 'sem bytes na resposta';
-      throw new Error(`Imagen: ${reason} (chaves: ${keys})`);
+      const dataPreview = JSON.stringify(r.data).slice(0, 400);
+      console.warn(`[CarouselService/AiImage] resposta sem bytes para "${query}". Preview: ${dataPreview}`);
+      throw new Error(blockedReason || 'sem bytes na resposta (formato inesperado)');
     }
     fs.writeFileSync(cacheFile, Buffer.from(b64, 'base64'));
-    console.log(`[CarouselService/Imagen] gerou "${query}"${nonce ? ` (nonce ${opts.nonce})` : ''} → ${hash}.jpg`);
+    console.log(`[CarouselService/AiImage] gerou "${query}"${nonce ? ` (nonce ${opts.nonce})` : ''} → ${hash}.jpg`);
     return { url: `/imagen-cache/${hash}.jpg`, alt: query };
   } catch (err) {
     const status = err.response?.status;
     const apiErr = err.response?.data?.error;
     const detail = apiErr?.message || err.message;
     const reason = apiErr?.status || apiErr?.details?.[0]?.reason || '';
-    console.warn(`[CarouselService/Imagen] erro ${status || ''} ${reason} para "${query}": ${detail}`);
+    console.warn(`[CarouselService/AiImage] erro ${status || ''} ${reason} para "${query}": ${detail}`);
     if (fallbackQuery && fallbackQuery !== query) return fetchImagenImage(fallbackQuery, null, opts);
-    // Re-throw pra propagar pro caller em vez de cair silenciosamente em null
-    const wrapped = new Error(`Imagen ${status || ''}: ${detail}`);
+    const wrapped = new Error(`AI image ${status || ''}: ${detail}`);
     wrapped.imagenStatus = status;
     wrapped.imagenReason = reason;
     throw wrapped;
