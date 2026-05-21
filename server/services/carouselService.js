@@ -212,10 +212,11 @@ async function fetchImagenImage(query, fallbackQuery, opts = {}) {
   // Prompt enxuto pra fitness/lifestyle vertical (1080x1350 ~ 9:16 portrait)
   // Adiciona "professional photography" pra puxar o estilo de stock no lugar do "AI render"
   const prompt = `Professional photography, ${query}, cinematic lighting, high detail, photorealistic, no text, vertical composition`;
-  // Default: imagen-3.0-generate-001 (modelo lançado no Gemini API, suporta :predict).
-  // Override via env IMAGEN_MODEL — chame GET /api/carousel/imagen-models pra listar
-  // os modelos disponíveis na sua chave.
-  const model = process.env.IMAGEN_MODEL || 'imagen-3.0-generate-001';
+  // Default: imagen-4.0-generate-001 (Imagen 4 standard — qualidade alta, ~5-10s).
+  // Alternativas: imagen-4.0-ultra-generate-001 (top quality, mais lento),
+  //                imagen-4.0-fast-generate-001 (~2-5s, qualidade ligeiramente menor).
+  // Override via env IMAGEN_MODEL — chame GET /api/carousel/imagen-models pra listar.
+  const model = process.env.IMAGEN_MODEL || 'imagen-4.0-generate-001';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${key}`;
 
   // Cache: hash do prompt → reuso entre carrosseis com mesma query (economia de quota).
