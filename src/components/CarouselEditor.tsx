@@ -2246,11 +2246,21 @@ export default function CarouselEditor({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, nonce: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Falha ao gerar');
+      const data = await r.json().catch(() => ({}));
+      console.log('[Imagen] response', r.status, data);
+      if (!r.ok) {
+        // Mensagem útil com status code visível pro user (pra reportar)
+        throw new Error(`HTTP ${r.status} — ${data?.error || 'sem detalhes'}`);
+      }
+      if (!data?.url) {
+        throw new Error('Resposta vazia (sem url). Veja console pra detalhes.');
+      }
       setAiPreview(data.url);
+      toast.success('Imagem AI gerada');
     } catch (err: unknown) {
-      toast.error('Imagen falhou: ' + (err instanceof Error ? err.message : String(err)));
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[Imagen] falhou:', msg);
+      toast.error(`Imagen: ${msg}`, { duration: 8000 });
     } finally {
       setAiLoading(false);
     }
@@ -3650,8 +3660,8 @@ export default function CarouselEditor({
           <AnimatePresence mode="wait">
             {sel !== null && selectedIndex !== null ? (
               <motion.div key={`${selectedIndex}-${editMode}`}
-                initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
                 className="flex-1 flex flex-col min-h-0"
               >
                 {/* ── MODO TEXTO ── */}
