@@ -1971,6 +1971,25 @@ export default function CarouselEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imgTarget, selectedIndex]);
 
+  // Auto-preenche query do gerador AI com o alt da imagem alvo (cada slide tem queries diferentes)
+  useEffect(() => {
+    if (selectedIndex === null || !slides[selectedIndex]) return;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${slides[selectedIndex].outerHtml}</body>`, 'text/html');
+    const el = doc.body.firstElementChild;
+    if (!el) return;
+    let alt = '';
+    if (imgTarget === 'bg') {
+      const bgImg = el.querySelector('img');
+      alt = bgImg?.getAttribute('alt') || '';
+    } else {
+      const imgs = Array.from(el.querySelectorAll('img'));
+      alt = imgs[imgTarget]?.getAttribute('alt') || '';
+    }
+    setAiQuery(alt);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imgTarget, selectedIndex]);
+
   // Tecla Delete/Backspace deleta o bloco de texto focado
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

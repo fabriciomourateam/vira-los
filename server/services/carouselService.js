@@ -288,9 +288,21 @@ async function fetchImages(query, count = 12) {
 }
 
 // Busca uma imagem por slide com query específica (fallback para o tema geral)
-// Cascata: AI image (Pollinations free ou Google paid) → Unsplash → Pexels
+// Cascata: Unsplash → Pexels → AI (Pollinations free ou Google paid).
+// AI fica por último porque Unsplash entrega fotos reais com anatomia/iluminação
+// melhores pra fitness na maioria das queries genéricas. O usuário pode usar o
+// botão "Gerar com IA" no editor pra forçar AI quando o stock não der bom.
 async function fetchOneImage(query, fallbackQuery) {
   try {
+    let imgs = await fetchUnsplashImages(query, 1);
+    if (!imgs.length) imgs = await fetchPexelsImages(query, 1);
+    if (!imgs.length && fallbackQuery) {
+      imgs = await fetchUnsplashImages(fallbackQuery, 1);
+      if (!imgs.length) imgs = await fetchPexelsImages(fallbackQuery, 1);
+    }
+    if (imgs.length) return imgs[0];
+
+    // Último recurso: AI (não cai aqui se Unsplash/Pexels entregaram).
     const provider = (process.env.IMAGE_PROVIDER || 'pollinations').toLowerCase();
     const aiEnabled = provider === 'pollinations' || (provider === 'google' && !!process.env.GOOGLE_AI_API_KEY);
     if (aiEnabled) {
@@ -298,16 +310,10 @@ async function fetchOneImage(query, fallbackQuery) {
         const ai = await fetchImagenImage(query, fallbackQuery);
         if (ai) return ai;
       } catch (e) {
-        console.log(`[CarouselService] AI image falhou para "${query}", caindo pra Unsplash: ${e.message}`);
+        console.log(`[CarouselService] AI fallback falhou para "${query}": ${e.message}`);
       }
     }
-    let imgs = await fetchUnsplashImages(query, 1);
-    if (!imgs.length) imgs = await fetchPexelsImages(query, 1);
-    if (!imgs.length && fallbackQuery) {
-      imgs = await fetchUnsplashImages(fallbackQuery, 1);
-      if (!imgs.length) imgs = await fetchPexelsImages(fallbackQuery, 1);
-    }
-    return imgs[0] || null;
+    return null;
   } catch {
     return null;
   }
