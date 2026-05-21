@@ -199,8 +199,56 @@ async function fetchPexelsImages(query, count = 12) {
   }
 }
 
-// Cascata: tenta Unsplash → Pexels (1 imagem por query)
+// ─── Passo 2c: Google Imagen 3 (AI image gen — primary quando GOOGLE_AI_API_KEY setado) ──
+
+const crypto = require('crypto');
+const IMAGEN_CACHE_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, '../data'), 'imagen-cache');
+if (!fs.existsSync(IMAGEN_CACHE_DIR)) fs.mkdirSync(IMAGEN_CACHE_DIR, { recursive: true });
+
+async function fetchImagenImage(query, fallbackQuery) {
+  const key = process.env.GOOGLE_AI_API_KEY;
+  if (!key) return null;
+
+  // Prompt enxuto pra fitness/lifestyle vertical (1080x1350 ~ 9:16 portrait)
+  // Adiciona "professional photography" pra puxar o estilo de stock no lugar do "AI render"
+  const prompt = `Professional photography, ${query}, cinematic lighting, high detail, photorealistic, no text, vertical composition`;
+  const model = process.env.IMAGEN_MODEL || 'imagen-3.0-generate-002';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${key}`;
+
+  // Cache: hash do prompt → reuso entre carrosseis com mesma query (economia de quota)
+  const hash = crypto.createHash('sha256').update(`${model}:${prompt}`).digest('hex').slice(0, 24);
+  const cacheFile = path.join(IMAGEN_CACHE_DIR, `${hash}.jpg`);
+  if (fs.existsSync(cacheFile)) {
+    return { url: `/imagen-cache/${hash}.jpg`, alt: query };
+  }
+
+  try {
+    const r = await axios.post(url, {
+      instances: [{ prompt }],
+      parameters: { sampleCount: 1, aspectRatio: '9:16', personGeneration: 'ALLOW_ADULT' },
+    }, { timeout: 30000, headers: { 'Content-Type': 'application/json' } });
+
+    const b64 = r.data?.predictions?.[0]?.bytesBase64Encoded;
+    if (!b64) {
+      console.warn(`[CarouselService/Imagen] resposta sem bytesBase64Encoded para "${query}"`);
+      return null;
+    }
+    fs.writeFileSync(cacheFile, Buffer.from(b64, 'base64'));
+    console.log(`[CarouselService/Imagen] gerou "${query}" → ${hash}.jpg`);
+    return { url: `/imagen-cache/${hash}.jpg`, alt: query };
+  } catch (err) {
+    const status = err.response?.status;
+    const detail = err.response?.data?.error?.message || err.message;
+    console.warn(`[CarouselService/Imagen] erro ${status || ''} para "${query}": ${detail}`);
+    if (fallbackQuery && fallbackQuery !== query) return fetchImagenImage(fallbackQuery);
+    return null;
+  }
+}
+
+// Cascata: tenta Imagen (se configurado) → Unsplash → Pexels (1 imagem por query)
 async function fetchImages(query, count = 12) {
+  // Imagen gera 1 por vez — só usa quando count=1 (single-slide) ou quando preferir AI quality
+  // Para count>1 (galeria), mantém o fluxo Unsplash→Pexels que devolve N de uma vez
   const images = await fetchUnsplashImages(query, count);
   if (images.length) return images;
   console.log('[CarouselService] Unsplash vazio, tentando Pexels...');
@@ -208,8 +256,14 @@ async function fetchImages(query, count = 12) {
 }
 
 // Busca uma imagem por slide com query específica (fallback para o tema geral)
+// Cascata: Imagen (se GOOGLE_AI_API_KEY setado) → Unsplash → Pexels
 async function fetchOneImage(query, fallbackQuery) {
   try {
+    if (process.env.GOOGLE_AI_API_KEY) {
+      const ai = await fetchImagenImage(query, fallbackQuery);
+      if (ai) return ai;
+      console.log(`[CarouselService] Imagen falhou para "${query}", caindo pra Unsplash`);
+    }
     let imgs = await fetchUnsplashImages(query, 1);
     if (!imgs.length) imgs = await fetchPexelsImages(query, 1);
     if (!imgs.length && fallbackQuery) {

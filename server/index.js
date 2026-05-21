@@ -55,6 +55,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Assets estáticos do app (ex.: foto de fundo do CTA fmteam)
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
+// Cache de imagens geradas pelo Imagen 3 (Google AI)
+const IMAGEN_CACHE_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'imagen-cache');
+app.use('/imagen-cache', express.static(IMAGEN_CACHE_DIR));
+
 // Serve slides PNG e HTML dos carrosseis gerados
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 app.use('/output', express.static(path.join(DATA_DIR, 'output')));
