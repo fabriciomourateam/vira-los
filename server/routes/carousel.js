@@ -448,6 +448,38 @@ router.get('/unsplash-search', async (req, res) => {
   }
 });
 
+// ─── Diagnóstico: lista modelos Imagen disponíveis pra GOOGLE_AI_API_KEY ─────
+// GET /api/carousel/imagen-models  → { models: [{name, supportedMethods}], default }
+router.get('/imagen-models', async (req, res) => {
+  if (!process.env.GOOGLE_AI_API_KEY) {
+    return res.status(503).json({ error: 'GOOGLE_AI_API_KEY não configurada' });
+  }
+  try {
+    const r = await axios.get(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GOOGLE_AI_API_KEY}`,
+      { timeout: 15000 }
+    );
+    const all = r.data?.models || [];
+    const imagen = all
+      .filter(m => /imagen|image/i.test(m.name || ''))
+      .map(m => ({
+        name: m.name,
+        displayName: m.displayName,
+        supportedGenerationMethods: m.supportedGenerationMethods,
+      }));
+    res.json({
+      defaultModel: process.env.IMAGEN_MODEL || 'imagen-3.0-generate-001',
+      imagenModels: imagen,
+      totalModels: all.length,
+      hint: 'Pra usar outro modelo: fly secrets set IMAGEN_MODEL=<name sem o prefixo "models/"> -a vira-los',
+    });
+  } catch (err) {
+    const status = err.response?.status;
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(status || 500).json({ error: `Falha ao listar modelos: ${detail}` });
+  }
+});
+
 // ─── Regenerar imagem AI (Imagen 3) com nonce pra bypass do cache ────────────
 //
 // POST /api/carousel/regenerate-image-ai  { query, nonce? }
