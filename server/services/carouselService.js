@@ -2513,6 +2513,21 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
     }
   }
 
+  // Pós-processamento: reescreve alt das imagens fmteam pra refletir a query em inglês
+  // que foi usada na busca. Importante pro auto-fill do "Gerar com IA" no editor —
+  // o user vê a keyword real (em inglês) em vez do tópico genérico em português.
+  if (Array.isArray(slideQueries) && slideQueries.length > 0) {
+    let queryIdx = 0;
+    html = html.replace(/<img\b[^>]*\bid="img-[^"]+"[^>]*>/g, (tag) => {
+      if (queryIdx >= slideQueries.length) return tag;
+      const q = String(slideQueries[queryIdx++]).replace(/"/g, '&quot;').slice(0, 200);
+      if (/\balt="[^"]*"/.test(tag)) {
+        return tag.replace(/\balt="[^"]*"/, `alt="${q}"`);
+      }
+      return tag.replace(/(\s*\/?>)$/, ` alt="${q}"$1`);
+    });
+  }
+
   // Pós-processamento: injeta foto de perfil no avatar-circle (evita passar base64 enorme pro Claude)
   if (profilePhotoUrl && profilePhotoUrl.trim()) {
     const imgTag = `<img src="${profilePhotoUrl}" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`;
