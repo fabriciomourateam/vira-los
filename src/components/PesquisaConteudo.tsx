@@ -119,7 +119,7 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
   const [igError, setIgError] = useState('');
   const [igMinLikes, setIgMinLikes] = useState('');
   const [igMinComments, setIgMinComments] = useState('');
-  const [igSortBy, setIgSortBy] = useState<'likes' | 'comments'>('likes');
+  const [igSortBy, setIgSortBy] = useState<'views' | 'likes' | 'comments'>('views');
 
   // IA Descoberta Viral
   const [aiNiche, setAiNiche] = useState('testosterona hormônios shape ganho muscular perda de gordura');
@@ -722,6 +722,7 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
             className="w-full bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
           <select value={igSortBy} onChange={(e) => setIgSortBy(e.target.value as any)}
             className="col-span-2 sm:w-auto bg-secondary border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+            <option value="views">Ordenar: Alcance (views)</option>
             <option value="likes">Ordenar: Curtidas</option>
             <option value="comments">Ordenar: Comentários</option>
           </select>
@@ -750,6 +751,12 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
             ))}
           </div>
         ) : filteredIg.length > 0 ? (
+          <>
+          {igMode === 'username' && (
+            <p className="text-xs text-muted-foreground mb-2">
+              {filteredIg.length} reels de <span className="font-semibold text-foreground">@{igQuery.replace(/^@/, '')}</span> · ordenados por {igSortBy === 'views' ? 'alcance' : igSortBy === 'likes' ? 'curtidas' : 'comentários'}
+            </p>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
             {filteredIg.map((v) => (
               <div key={v.id} className="bg-card border border-border rounded-xl overflow-hidden group" style={{ boxShadow: 'var(--shadow-card)' }}>
@@ -793,6 +800,7 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
               </div>
             ))}
           </div>
+          </>
         ) : !igLoading && (
           <div className="py-6 text-center text-muted-foreground">
             <Heart size={24} className="mx-auto mb-2 opacity-30" />
