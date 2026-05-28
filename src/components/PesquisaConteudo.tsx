@@ -69,7 +69,7 @@ function parseTagsSafe(str: string): string[] {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: (data: { references: string }) => void } = {}) {
+export default function PesquisaConteudo({ onUseInRoteiro, onAnalyzeReel }: { onUseInRoteiro?: (data: { references: string }) => void; onAnalyzeReel?: (url: string) => void } = {}) {
   const [references, setReferences] = useState<ViralReference[]>([]);
   const [hooks, setHooks] = useState<HookTemplate[]>([]);
   const [ideas, setIdeas] = useState<ContentIdea[]>([]);
@@ -794,6 +794,12 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Copiar legenda">
                       {copiedId === v.id ? <CheckCircle2 size={16} /> : <FileText size={16} />}
                     </button>
+                    {onAnalyzeReel && (
+                      <button onClick={() => onAnalyzeReel(v.url)}
+                        className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Analisar no Analisador de Vídeos">
+                        <Zap size={16} />
+                      </button>
+                    )}
                     <button onClick={() => saveAsReference(v)}
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Salvar como referência">
                       <Plus size={16} />
@@ -813,6 +819,12 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40" title="Copiar legenda">
                       {copiedId === v.id ? <CheckCircle2 size={16} /> : <FileText size={16} />}
                     </button>
+                    {onAnalyzeReel && (
+                      <button onClick={() => onAnalyzeReel(v.url)}
+                        className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40" title="Analisar no Analisador de Vídeos">
+                        <Zap size={16} />
+                      </button>
+                    )}
                     <button onClick={() => saveAsReference(v)}
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40" title="Salvar como referência">
                       <Plus size={16} />

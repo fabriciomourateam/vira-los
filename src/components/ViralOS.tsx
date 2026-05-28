@@ -352,6 +352,7 @@ export default function ViralOS() {
   const [avaliarSubTab,   setAvaliarSubTab]   = useState<'analisador' | 'score'>('analisador');
   const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
   const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
+  const [analyzerPrefillUrl, setAnalyzerPrefillUrl] = useState<string | null>(null);
   const [reelsInitialCarouselId, setReelsInitialCarouselId] = useState<string | null>(null);
   const [state, setState] = useState<AppState>(initialState);
   const [teleprompter, setTeleprompter] = useState<TeleprompterState>(initialTeleprompterState);
@@ -516,6 +517,14 @@ export default function ViralOS() {
     setTimeout(() => setScorePrefill(null), 500);
   };
 
+  const handleAnalyzeReel = (url: string) => {
+    setAnalyzerPrefillUrl(url);
+    setActiveTab('avaliar');
+    setAvaliarSubTab('analisador');
+    toast.success('Link enviado pro Analisador de Vídeos!');
+    setTimeout(() => setAnalyzerPrefillUrl(null), 500);
+  };
+
   const handleUseHookInRoteiro = (hook: string) => {
     setState(prev => ({
       ...prev,
@@ -665,7 +674,7 @@ export default function ViralOS() {
               active={descobrirSubTab}
               onChange={(id) => setDescobrirSubTab(id as typeof descobrirSubTab)}
             />
-            {descobrirSubTab === 'pesquisa' && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} />}
+            {descobrirSubTab === 'pesquisa' && <PesquisaConteudo onUseInRoteiro={handleAgenteUseInRoteiro} onAnalyzeReel={handleAnalyzeReel} />}
             {descobrirSubTab === 'radar'    && <TrendRadar onUseAsScript={handleUseHookInRoteiro} onUseAsCarrossel={handleRadarCarrossel} />}
             {descobrirSubTab === 'agente'   && <AgenteAutonomo onUseInRoteiro={handleAgenteUseInRoteiro} />}
           </>
@@ -702,7 +711,7 @@ export default function ViralOS() {
               active={avaliarSubTab}
               onChange={(id) => setAvaliarSubTab(id as typeof avaliarSubTab)}
             />
-            {avaliarSubTab === 'analisador' && <AnalisadorReels onUseInCarrossel={handleUseInCarrossel} onEvaluate={handleEvaluateScript} />}
+            {avaliarSubTab === 'analisador' && <AnalisadorReels onUseInCarrossel={handleUseInCarrossel} onEvaluate={handleEvaluateScript} prefillUrl={analyzerPrefillUrl} />}
             {avaliarSubTab === 'score'      && <ViralScore
               prefillScript={scorePrefill?.script}
               prefillType={scorePrefill?.type}

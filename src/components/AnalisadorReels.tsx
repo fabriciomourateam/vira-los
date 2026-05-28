@@ -199,9 +199,10 @@ function StepItem({ step }: { step: AnalyzerStep }) {
 interface AnalisadorReelsProps {
   onUseInCarrossel?: (script: string, topic: string) => void;
   onEvaluate?: (script: string, type: 'carousel' | 'reels') => void;
+  prefillUrl?: string | null;
 }
 
-export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: AnalisadorReelsProps = {}) {
+export default function AnalisadorReels({ onUseInCarrossel, onEvaluate, prefillUrl }: AnalisadorReelsProps = {}) {
   const [url, setUrl]         = useState('');
   const [running, setRunning] = useState(false);
   const [steps, setSteps]     = useState<AnalyzerStep[]>([]);
@@ -226,6 +227,11 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate }: Analis
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const stepsEndRef    = useRef<HTMLDivElement | null>(null);
+
+  // Prefill da URL quando vem da aba Descobrir (botão "Analisar")
+  useEffect(() => {
+    if (prefillUrl) setUrl(prefillUrl);
+  }, [prefillUrl]);
 
   // Verifica status ao montar (caso análise esteja em andamento)
   useEffect(() => {
