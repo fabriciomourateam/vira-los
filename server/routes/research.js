@@ -486,6 +486,7 @@ router.get('/viral-instagram', async (req, res) => {
         return {
           id: m.id,
           title: m.caption?.text ? m.caption.text.substring(0, 120) : '',
+          caption: m.caption?.text || '',
           author: username,
           author_handle: username,
           views: m.play_count || m.view_count || 0,
@@ -506,6 +507,44 @@ router.get('/viral-instagram', async (req, res) => {
   } catch (e) {
     console.error('[Instagram viral] Error:', e.response?.data || e.message);
     res.status(500).json({ error: e.response?.data?.message || e.message });
+  }
+});
+
+// ── Baixar reel (vídeo) via yt-dlp ───────────────────────────────────────────
+// GET /api/research/download-reel?url=<reel_url>  → stream do .mp4 (attachment)
+router.get('/download-reel', async (req, res) => {
+  const { execFileSync } = require('child_process');
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+
+  const url = (req.query.url || '').toString().trim();
+  // Aceita só URLs de Instagram/TikTok (evita SSRF / uso indevido do yt-dlp)
+  if (!/^https?:\/\/(www\.)?(instagram\.com|tiktok\.com)\//i.test(url)) {
+    return res.status(400).json({ error: 'URL inválida (só Instagram ou TikTok)' });
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-dl-'));
+  const outPath = path.join(tmpDir, 'reel.mp4');
+  try {
+    execFileSync(
+      'yt-dlp',
+      ['-o', outPath, '--format', 'best[ext=mp4]/best', '--no-playlist', '--no-warnings', url],
+      { timeout: 120000, stdio: ['ignore', 'ignore', 'ignore'] }
+    );
+    if (!fs.existsSync(outPath) || fs.statSync(outPath).size === 0) {
+      throw new Error('Download vazio — o reel pode ser privado ou o IG bloqueou.');
+    }
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', 'attachment; filename="reel.mp4"');
+    const stream = fs.createReadStream(outPath);
+    stream.pipe(res);
+    stream.on('close', () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+    stream.on('error', () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+  } catch (e) {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    console.error('[download-reel] erro:', e.message);
+    res.status(502).json({ error: 'Falha ao baixar o reel. Pode ser privado ou bloqueado pelo Instagram.' });
   }
 });
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Search, Plus, Trash2, Copy, CheckCircle2, X, ExternalLink,
   Loader2, Lightbulb, Link2, BookOpen, TrendingUp, Eye, Heart,
-  MessageCircle, Share2, Flame, Sparkles, Zap, FileText,
+  MessageCircle, Share2, Flame, Sparkles, Zap, FileText, Download,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, checkBackend, ViralReference, HookTemplate, ContentIdea } from '../lib/api';
@@ -20,6 +20,7 @@ function proxyImg(url: string): string {
 interface ViralVideo {
   id: string;
   title: string;
+  caption?: string;
   author: string;
   author_handle: string;
   views: number;
@@ -348,6 +349,19 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
     setTimeout(() => setCopiedId(null), 2000);
     try { await api.post(`/api/research/hooks/${hook.id}/use`); } catch { /* silent */ }
     setHooks((p) => p.map((h) => h.id === hook.id ? { ...h, use_count: h.use_count + 1 } : h));
+  }
+
+  async function copyCaption(v: ViralVideo) {
+    const text = v.caption || v.title || '';
+    if (!text) { setIgError('Esse reel não tem legenda'); return; }
+    await navigator.clipboard.writeText(text);
+    setCopiedId(v.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  function downloadReel(v: ViralVideo) {
+    // Abre a rota de download numa nova aba — o browser baixa o .mp4 (Content-Disposition attachment)
+    window.open(`${BASE}/api/research/download-reel?url=${encodeURIComponent(v.url)}`, '_blank');
   }
 
   async function deleteRef(id: string) {
@@ -767,22 +781,38 @@ export default function PesquisaConteudo({ onUseInRoteiro }: { onUseInRoteiro?: 
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Sem capa</div>
                   )}
                   {/* Desktop hover overlay */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex items-center justify-center gap-2">
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex items-center justify-center gap-2 flex-wrap">
                     <a href={v.url} target="_blank" rel="noreferrer"
-                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30">
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Abrir no Instagram">
                       <ExternalLink size={16} />
                     </a>
+                    <button onClick={() => downloadReel(v)}
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Baixar vídeo">
+                      <Download size={16} />
+                    </button>
+                    <button onClick={() => copyCaption(v)}
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Copiar legenda">
+                      {copiedId === v.id ? <CheckCircle2 size={16} /> : <FileText size={16} />}
+                    </button>
                     <button onClick={() => saveAsReference(v)}
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white hover:bg-white/30" title="Salvar como referência">
                       <Plus size={16} />
                     </button>
                   </div>
                   {/* Mobile: always-visible buttons */}
-                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-5 pb-1.5 px-2 flex justify-center gap-2 sm:hidden">
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-5 pb-1.5 px-2 flex justify-center gap-1.5 flex-wrap sm:hidden">
                     <a href={v.url} target="_blank" rel="noreferrer"
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40">
                       <ExternalLink size={16} />
                     </a>
+                    <button onClick={() => downloadReel(v)}
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40" title="Baixar vídeo">
+                      <Download size={16} />
+                    </button>
+                    <button onClick={() => copyCaption(v)}
+                      className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40" title="Copiar legenda">
+                      {copiedId === v.id ? <CheckCircle2 size={16} /> : <FileText size={16} />}
+                    </button>
                     <button onClick={() => saveAsReference(v)}
                       className="p-2 bg-white/20 backdrop-blur rounded-lg text-white active:bg-white/40" title="Salvar como referência">
                       <Plus size={16} />
