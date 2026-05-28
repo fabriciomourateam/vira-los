@@ -453,15 +453,18 @@ router.get('/viral-instagram', async (req, res) => {
     const userId = userRes.data?.UserID;
     if (!userId) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-    // 2. Busca os reels do usuário — pagina até ~30 (a API devolve ~12 por página)
+    // 2. Busca os reels do usuário — pagina pra montar um pool grande de candidatos
+    //    antes de ordenar por views (a API devolve ~12 por página em ordem cronológica,
+    //    então um reel viral antigo só entra no ranking se buscarmos páginas suficientes).
     const RAPID_HOST = 'instagram-api-fast-reliable-data-scraper.p.rapidapi.com';
     const headers = { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': RAPID_HOST };
-    const TARGET = 30;
-    const MAX_PAGES = 4;
+    const TARGET = 30;          // quantos reels retornar (top por views)
+    const MAX_PAGES = 12;       // pool de candidatos (~144 reels) — cobre quase todo perfil
+    const MAX_CANDIDATES = 200; // teto de segurança
     let items = [];
     let maxId = null;
 
-    for (let page = 0; page < MAX_PAGES && items.length < TARGET; page++) {
+    for (let page = 0; page < MAX_PAGES && items.length < MAX_CANDIDATES; page++) {
       const params = { user_id: userId, include_feed_video: true };
       if (maxId) params.max_id = maxId;
       const reelsRes = await axios.get(`https://${RAPID_HOST}/reels`, {
@@ -483,6 +486,8 @@ router.get('/viral-instagram', async (req, res) => {
       .map((i) => {
         const m = i.media;
         const cover = m.image_versions2?.candidates?.[0]?.url || '';
+        // taken_at é unix timestamp em segundos — converte pra ISO pro front formatar
+        const postedAt = m.taken_at ? new Date(m.taken_at * 1000).toISOString() : null;
         return {
           id: m.id,
           title: m.caption?.text ? m.caption.text.substring(0, 120) : '',
@@ -496,12 +501,14 @@ router.get('/viral-instagram', async (req, res) => {
           cover,
           url: `https://www.instagram.com/reel/${m.code}/`,
           platform: 'instagram',
+          posted_at: postedAt,
         };
       })
       // Ordena por alcance (views) desc e limita a 30
       .sort((a, b) => b.views - a.views)
       .slice(0, TARGET);
 
+    console.log(`[Instagram viral] @${username}: ${items.length} reels analisados → top ${videos.length} por views`);
     res.set('Cache-Control', 'no-store');
     res.json(videos);
   } catch (e) {
