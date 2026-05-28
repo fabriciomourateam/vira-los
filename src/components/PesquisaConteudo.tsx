@@ -30,12 +30,20 @@ interface ViralVideo {
   cover: string;
   url: string;
   platform: string;
+  posted_at?: string | null;
 }
 
 function fmtNum(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
+}
+
+function fmtDate(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -838,6 +846,9 @@ export default function PesquisaConteudo({ onUseInRoteiro, onAnalyzeReel }: { on
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Heart size={10} className="text-pink-500" />{fmtNum(v.likes)}</div>
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><MessageCircle size={10} />{fmtNum(v.comments)}</div>
                   </div>
+                  {v.posted_at && (
+                    <p className="text-[10px] text-muted-foreground/70 mt-1">📅 {fmtDate(v.posted_at)}</p>
+                  )}
                 </div>
               </div>
             ))}
