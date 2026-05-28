@@ -453,14 +453,31 @@ router.get('/viral-instagram', async (req, res) => {
     const userId = userRes.data?.UserID;
     if (!userId) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-    // 2. Busca os reels do usuário
-    const reelsRes = await axios.get('https://instagram-api-fast-reliable-data-scraper.p.rapidapi.com/reels', {
-      params: { user_id: userId, include_feed_video: true },
-      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'instagram-api-fast-reliable-data-scraper.p.rapidapi.com' },
-      timeout: 15000,
-    });
+    // 2. Busca os reels do usuário — pagina até ~30 (a API devolve ~12 por página)
+    const RAPID_HOST = 'instagram-api-fast-reliable-data-scraper.p.rapidapi.com';
+    const headers = { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': RAPID_HOST };
+    const TARGET = 30;
+    const MAX_PAGES = 4;
+    let items = [];
+    let maxId = null;
 
-    const items = reelsRes.data?.data?.items || [];
+    for (let page = 0; page < MAX_PAGES && items.length < TARGET; page++) {
+      const params = { user_id: userId, include_feed_video: true };
+      if (maxId) params.max_id = maxId;
+      const reelsRes = await axios.get(`https://${RAPID_HOST}/reels`, {
+        params, headers, timeout: 15000,
+      });
+      const pageItems = reelsRes.data?.data?.items || [];
+      items = items.concat(pageItems);
+      // Cursor pra próxima página — nomes variam por versão da API
+      maxId = reelsRes.data?.data?.paging_info?.max_id
+        || reelsRes.data?.paging_info?.max_id
+        || reelsRes.data?.data?.max_id
+        || null;
+      const moreAvailable = reelsRes.data?.data?.paging_info?.more_available;
+      if (!maxId || moreAvailable === false || pageItems.length === 0) break;
+    }
+
     const videos = items
       .filter((i) => i.media?.media_type === 2)
       .map((i) => {
@@ -479,7 +496,10 @@ router.get('/viral-instagram', async (req, res) => {
           url: `https://www.instagram.com/reel/${m.code}/`,
           platform: 'instagram',
         };
-      });
+      })
+      // Ordena por alcance (views) desc e limita a 30
+      .sort((a, b) => b.views - a.views)
+      .slice(0, TARGET);
 
     res.set('Cache-Control', 'no-store');
     res.json(videos);
