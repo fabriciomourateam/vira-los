@@ -73,9 +73,9 @@ export default function CriarTabs({
     <>
       <SubTabBar
         tabs={[
-          { id: 'basico',    label: 'Carrossel', icon: Layers },
-          { id: 'reels',     label: 'Reels',     icon: Video },
-          { id: 'caixinhas', label: 'Caixinhas', icon: MessageCircleQuestion },
+          { id: 'basico',     label: 'Carrossel',  icon: Layers },
+          { id: 'reels',      label: 'Reels',      icon: Video },
+          { id: 'caixinhas',  label: 'Caixinhas',  icon: MessageCircleQuestion },
         ]}
         active={subTab}
         onChange={setSubTab}
