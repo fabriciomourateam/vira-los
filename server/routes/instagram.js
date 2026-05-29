@@ -17,7 +17,6 @@ const router  = express.Router();
 const {
   getConnectUrl,
   exchangeCodeForToken,
-  getIGBusinessAccount,
   getIGUserInfo,
   syncPosts,
 } = require('../services/instagramService');
@@ -40,52 +39,39 @@ router.get('/connect-url', (req, res) => {
 // ─── OAuth Callback ───────────────────────────────────────────────────────────
 
 router.get('/callback', async (req, res) => {
-  const { code, error } = req.query;
+  const { code, error, error_description } = req.query;
 
   if (error || !code) {
-    const msg = error || 'Acesso negado';
+    const msg = error_description || error || 'Acesso negado';
     return res.redirect(`${FRONTEND_URL}?ig_error=${encodeURIComponent(msg)}`);
   }
 
   try {
-    const { shortToken, longToken } = await exchangeCodeForToken(code);
-
-    // Tenta com long-lived primeiro, fallback para short-lived
-    let discovery;
-    try {
-      discovery = await getIGBusinessAccount(longToken);
-    } catch (err) {
-      console.warn('[Instagram/Callback] Long token falhou, tentando short token:', err.message);
-      discovery = await getIGBusinessAccount(shortToken);
-    }
-    const { igUserId, pageToken } = discovery;
-
-    const effectiveToken = pageToken || longToken;
-    let igInfo;
-    try {
-      igInfo = await getIGUserInfo(igUserId, effectiveToken);
-    } catch {
-      igInfo = await getIGUserInfo(igUserId, longToken);
-    }
+    // Instagram Login: a troca já devolve o token do próprio usuário IG — sem Página
+    const { accessToken, userId } = await exchangeCodeForToken(code);
+    const info = await getIGUserInfo(accessToken);
 
     const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
     db.setInstagramToken({
-      accessToken:    effectiveToken,
-      pageToken,
-      igUserId,
-      username:       igInfo.username || igInfo.name,
-      name:           igInfo.name,
-      profilePicture: igInfo.profile_picture_url,
-      followersCount: igInfo.followers_count,
+      accessToken,
+      igUserId:       info.user_id || userId,
+      username:       info.username,
+      name:           info.name || info.username,
+      profilePicture: info.profile_picture_url || null,
+      followersCount: info.followers_count ?? null,
+      accountType:    info.account_type || null,
       expiresAt,
       createdAt:      new Date().toISOString(),
     });
 
     res.redirect(`${FRONTEND_URL}?ig_connected=1`);
   } catch (err) {
-    console.error('[Instagram/Callback]', err.message);
-    res.redirect(`${FRONTEND_URL}?ig_error=${encodeURIComponent(err.message)}`);
+    const apiMsg = err.response?.data?.error_message
+      || err.response?.data?.error?.message
+      || err.message;
+    console.error('[Instagram/Callback]', apiMsg, err.response?.data || '');
+    res.redirect(`${FRONTEND_URL}?ig_error=${encodeURIComponent(apiMsg)}`);
   }
 });
 
@@ -154,7 +140,7 @@ router.post('/sync', async (req, res) => {
   }
 
   try {
-    const posts = await syncPosts(token.accessToken, token.igUserId);
+    const posts = await syncPosts(token.accessToken);
     db.saveInstagramPosts(posts);
     if (!token.fromScheduler) {
       db.setInstagramToken({ ...token, lastSync: new Date().toISOString() });

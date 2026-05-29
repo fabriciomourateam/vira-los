@@ -1,20 +1,25 @@
 /**
  * instagramService.js
- * Instagram Graph API — OAuth + data sync
+ * Instagram API com Instagram Login (graph.instagram.com) — OAuth + data sync.
  *
- * Env vars needed:
- *   FACEBOOK_APP_ID
- *   FACEBOOK_APP_SECRET
+ * Conecta DIRETO com a conta Profissional/Criador do Instagram, SEM precisar de
+ * Página do Facebook. É o fluxo recomendado pelo Meta pra criador solo.
+ *
+ * Env vars (do produto "Instagram" no app do Meta → "API setup with Instagram login"):
+ *   INSTAGRAM_APP_ID        ("Instagram app ID" — diferente do Facebook App ID)
+ *   INSTAGRAM_APP_SECRET    ("Instagram app secret")
  *   INSTAGRAM_REDIRECT_URI  (default: SERVER_URL/api/instagram/callback)
  */
 
 const axios = require('axios');
 
-const FB_API = 'https://graph.facebook.com/v22.0';
+const IG_GRAPH = 'https://graph.instagram.com';
+const IG_OAUTH = 'https://www.instagram.com/oauth/authorize';
+const IG_TOKEN = 'https://api.instagram.com/oauth/access_token';
 
 function getAppCredentials() {
-  const appId       = process.env.FACEBOOK_APP_ID;
-  const appSecret   = process.env.FACEBOOK_APP_SECRET;
+  const appId       = process.env.INSTAGRAM_APP_ID;
+  const appSecret   = process.env.INSTAGRAM_APP_SECRET;
   const serverUrl   = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3001}`;
   const redirectUri = process.env.INSTAGRAM_REDIRECT_URI || `${serverUrl}/api/instagram/callback`;
   return { appId, appSecret, redirectUri };
@@ -24,19 +29,16 @@ function getAppCredentials() {
 
 function getConnectUrl() {
   const { appId, redirectUri } = getAppCredentials();
-  if (!appId) throw new Error('FACEBOOK_APP_ID não configurado no servidor');
-  const scope = [
-    'instagram_basic',
-    'instagram_manage_insights',
-    'pages_show_list',
-    'pages_read_engagement',
-  ].join(',');
+  if (!appId) {
+    throw new Error('INSTAGRAM_APP_ID não configurado no servidor (produto "Instagram" do app no Meta).');
+  }
+  const scope = ['instagram_business_basic', 'instagram_business_manage_insights'].join(',');
   return (
-    `https://www.facebook.com/v22.0/dialog/oauth` +
+    `${IG_OAUTH}` +
     `?client_id=${appId}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&scope=${scope}` +
-    `&response_type=code`
+    `&response_type=code` +
+    `&scope=${encodeURIComponent(scope)}`
   );
 }
 
@@ -44,280 +46,142 @@ function getConnectUrl() {
 
 async function exchangeCodeForToken(code) {
   const { appId, appSecret, redirectUri } = getAppCredentials();
-  if (!appId || !appSecret) throw new Error('FACEBOOK_APP_ID ou FACEBOOK_APP_SECRET não configurados');
+  if (!appId || !appSecret) {
+    throw new Error('INSTAGRAM_APP_ID ou INSTAGRAM_APP_SECRET não configurados no servidor.');
+  }
 
-  // Step 1 — short-lived token
-  const r1 = await axios.get(`${FB_API}/oauth/access_token`, {
-    params: { client_id: appId, client_secret: appSecret, redirect_uri: redirectUri, code },
+  // Step 1 — short-lived token (POST form-encoded para api.instagram.com)
+  const form = new URLSearchParams();
+  form.append('client_id', appId);
+  form.append('client_secret', appSecret);
+  form.append('grant_type', 'authorization_code');
+  form.append('redirect_uri', redirectUri);
+  form.append('code', code);
+
+  const r1 = await axios.post(IG_TOKEN, form.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     timeout: 10000,
   });
   const shortToken = r1.data.access_token;
+  const userId     = r1.data.user_id;
+  if (!shortToken) throw new Error('Instagram não retornou access_token.');
 
-  // Step 2 — exchange for 60-day long-lived token
+  // Step 2 — troca por long-lived (60 dias)
   let longToken = shortToken;
   try {
-    const r2 = await axios.get(`${FB_API}/oauth/access_token`, {
-      params: {
-        grant_type: 'fb_exchange_token',
-        client_id: appId,
-        client_secret: appSecret,
-        fb_exchange_token: shortToken,
-      },
+    const r2 = await axios.get(`${IG_GRAPH}/access_token`, {
+      params: { grant_type: 'ig_exchange_token', client_secret: appSecret, access_token: shortToken },
       timeout: 10000,
     });
-    longToken = r2.data.access_token;
+    if (r2.data.access_token) longToken = r2.data.access_token;
   } catch (err) {
-    console.warn('[Instagram/Token] Long-lived exchange falhou, usando short-lived:', err.message);
+    console.warn('[Instagram] troca long-lived falhou, usando short-lived:', err.message);
   }
 
-  return { shortToken, longToken };
-}
-
-// ─── Account Discovery ────────────────────────────────────────────────────────
-
-/**
- * Returns { igUserId, pageToken } for the first page with an IG business account.
- */
-async function getIGBusinessAccount(longLivedToken) {
-  let pagesFound = 0;        // quantas páginas o login concedeu
-  let pagesWithoutIg = 0;    // páginas concedidas mas sem IG vinculado
-
-  // Método 1: /me/accounts (padrão)
-  try {
-    const r = await axios.get(`${FB_API}/me/accounts`, {
-      params: {
-        access_token: longLivedToken,
-        fields: 'id,name,access_token,instagram_business_account',
-      },
-      timeout: 10000,
-    });
-
-    const pages = r.data.data || [];
-    pagesFound = pages.length;
-    console.log(`[Instagram/Discovery] /me/accounts: ${pages.length} páginas`);
-
-    for (const page of pages) {
-      if (page.instagram_business_account?.id) {
-        return {
-          igUserId: page.instagram_business_account.id,
-          pageToken: page.access_token,
-        };
-      }
-      pagesWithoutIg++;
-    }
-  } catch (err) {
-    console.warn('[Instagram/Discovery] /me/accounts falhou:', err.message);
-  }
-
-  // Método 2: consulta direta pela Page ID conhecida (workaround para Login for Business)
-  // Tenta buscar todas as páginas que o usuário pode gerenciar
-  const knownPageIds = (process.env.FACEBOOK_PAGE_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-
-  // Também tenta descobrir páginas via /me?fields=accounts
-  try {
-    const meRes = await axios.get(`${FB_API}/me`, {
-      params: { fields: 'accounts{id}', access_token: longLivedToken },
-      timeout: 8000,
-    });
-    const mePages = meRes.data.accounts?.data || [];
-    for (const p of mePages) {
-      if (p.id && !knownPageIds.includes(p.id)) knownPageIds.push(p.id);
-    }
-  } catch {}
-
-  for (const pageId of knownPageIds) {
-    try {
-      const pr = await axios.get(`${FB_API}/${pageId}`, {
-        params: { fields: 'id,name,instagram_business_account', access_token: longLivedToken },
-        timeout: 8000,
-      });
-      if (pr.data.instagram_business_account?.id) {
-        console.log(`[Instagram/Discovery] IG Business encontrado via página direta ${pageId}: ${pr.data.instagram_business_account.id}`);
-        return {
-          igUserId: pr.data.instagram_business_account.id,
-          pageToken: longLivedToken,
-        };
-      }
-    } catch (err) {
-      console.warn(`[Instagram/Discovery] Página ${pageId} falhou:`, err.message);
-    }
-  }
-
-  // Mensagem precisa conforme o que foi encontrado, pra orientar a correção certa
-  if (pagesFound === 0) {
-    throw new Error(
-      'O login não concedeu nenhuma Página do Facebook. Refaça a conexão e, na tela do Facebook, marque sua Página (passo "que páginas usar com o app"). Verifique também que sua conta é Admin do app no Meta.'
-    );
-  }
-  throw new Error(
-    `Encontrei ${pagesFound} Página(s) do Facebook, mas nenhuma com Instagram Business vinculado. Vincule seu Instagram à Página: no app do Instagram → Configurações → Contas vinculadas (ou na Página do Facebook → Configurações → Instagram). Seu IG precisa ser Profissional/Criador.`
-  );
+  return { accessToken: longToken, userId };
 }
 
 // ─── User Info ────────────────────────────────────────────────────────────────
 
-async function getIGUserInfo(igUserId, token) {
-  const r = await axios.get(`${FB_API}/${igUserId}`, {
+async function getIGUserInfo(token) {
+  const r = await axios.get(`${IG_GRAPH}/me`, {
     params: {
-      fields: 'name,username,profile_picture_url,followers_count',
+      fields: 'user_id,username,name,account_type,media_count,followers_count,profile_picture_url',
       access_token: token,
     },
     timeout: 10000,
   });
-  return r.data;
+  return r.data; // { user_id, username, name, account_type, media_count, followers_count, profile_picture_url }
 }
 
 // ─── Post Insights ────────────────────────────────────────────────────────────
 
 async function getPostInsights(mediaId, mediaType, token) {
-  const isReel = mediaType === 'REELS' || mediaType === 'VIDEO';
-  const metric = isReel
-    ? 'plays,reach,saved,shares'
-    : 'impressions,reach,saved,shares';
+  // Instagram Login (2024+): views substitui impressions; métricas iguais p/ todos os tipos
+  const metric = 'reach,saved,shares,views,total_interactions';
   const result = {};
-
-  // Métricas principais
   try {
-    const r = await axios.get(`${FB_API}/${mediaId}/insights`, {
+    const r = await axios.get(`${IG_GRAPH}/${mediaId}/insights`, {
       params: { metric, access_token: token },
       timeout: 8000,
     });
     (r.data.data || []).forEach((item) => {
-      result[item.name] = item.values?.[0]?.value ?? item.value ?? 0;
+      result[item.name] = item.values?.[0]?.value ?? item.total_value?.value ?? 0;
     });
   } catch {
-    // Insights indisponíveis para este post
+    // insights indisponíveis para este post (normal em posts muito antigos)
   }
-
-  // follows (só Reels, chamada separada — pode falhar sem derrubar as outras)
-  if (isReel) {
-    try {
-      const r2 = await axios.get(`${FB_API}/${mediaId}/insights`, {
-        params: { metric: 'follows', access_token: token },
-        timeout: 5000,
-      });
-      (r2.data.data || []).forEach((item) => {
-        result[item.name] = item.values?.[0]?.value ?? item.value ?? 0;
-      });
-    } catch {
-      // follows não disponível para este reel (normal para posts antigos)
-    }
-  }
-
+  if (result.views != null && result.plays == null) result.plays = result.views; // compat
   return result;
 }
 
-// ─── Resolve IG Business Account ID from token ──────────────────────────────
-// Quando o user_id salvo é inválido (ex: ID do Facebook, não do IG Business),
-// tenta descobrir o ID correto via /me/accounts → instagram_business_account
+// ─── Sync de posts (paginado — pega reels E carrosséis) ──────────────────────
 
-async function resolveIGUserId(token, providedId) {
-  // Primeiro tenta usar o ID fornecido
-  if (providedId) {
-    try {
-      await axios.get(`${FB_API}/${providedId}`, {
-        params: { fields: 'id,username', access_token: token },
-        timeout: 8000,
-      });
-      return providedId; // ID válido
-    } catch {
-      // ID inválido — tenta resolver via Pages
-    }
-  }
-
-  // Busca Pages e encontra o IG Business Account
-  try {
-    const r = await axios.get(`${FB_API}/me/accounts`, {
-      params: { fields: 'id,name,instagram_business_account', access_token: token },
-      timeout: 10000,
-    });
-    const pages = r.data.data || [];
-    for (const page of pages) {
-      if (page.instagram_business_account?.id) {
-        return page.instagram_business_account.id;
-      }
-    }
-  } catch {
-    // Token sem permissão de pages — tenta via /me
-  }
-
-  // Última tentativa: /me com o token pode retornar o IG user
-  try {
-    const r = await axios.get(`${FB_API}/me`, {
-      params: { fields: 'id', access_token: token },
-      timeout: 8000,
-    });
-    return r.data.id;
-  } catch {
-    // Nada funcionou
-  }
-
-  return providedId; // retorna o que tem
-}
-
-// ─── Sync Posts ───────────────────────────────────────────────────────────────
-
-async function syncPosts(token, igUserId) {
-  // Resolve o ID correto (pode ser diferente do salvo no Agendador)
-  const resolvedId = await resolveIGUserId(token, igUserId);
-
-  // Fetch up to 50 most recent posts
-  const r = await axios.get(`${FB_API}/${resolvedId}/media`, {
-    params: {
-      fields: 'id,media_type,thumbnail_url,media_url,permalink,timestamp,caption,like_count,comments_count',
-      limit: 50,
-      access_token: token,
-    },
-    timeout: 15000,
-  });
-  const rawPosts = r.data.data || [];
-
+async function syncPosts(token) {
   const posts = [];
-  for (const post of rawPosts) {
-    const insights = await getPostInsights(post.id, post.media_type, token);
+  const MAX_POSTS = 150;
+  const MAX_PAGES = 6;
 
-    const rawReach = insights.reach || 0;
-    const likes    = post.like_count    || 0;
-    const comments = post.comments_count || 0;
-    const saves    = insights.saved     || 0;
-    const shares   = insights.shares    || 0;
-    const views    = insights.plays     || insights.impressions || 0;
-    const follows  = insights.follows   || 0;
+  let url = `${IG_GRAPH}/me/media`;
+  let params = {
+    fields: 'id,media_type,media_url,thumbnail_url,permalink,timestamp,caption,like_count,comments_count',
+    limit: 50,
+    access_token: token,
+  };
 
-    // Se reach=0 (insights indisponível), estima com base em likes*10 ou views
-    const reach = rawReach > 0 ? rawReach : Math.max(views, likes * 10, 1);
+  for (let page = 0; page < MAX_PAGES && posts.length < MAX_POSTS; page++) {
+    const r = await axios.get(url, params ? { params, timeout: 15000 } : { timeout: 15000 });
+    const rawPosts = r.data.data || [];
 
-    // Weighted engagement: saves×4 + shares×3 + comments×2 + likes×1
-    const rawEng         = likes + comments * 2 + saves * 4 + shares * 3;
-    const engagementRate = (rawEng / reach) * 100;
-    const saveRate       = (saves / reach) * 100;
-    const shareRate      = (shares / reach) * 100;
-    const commentRate    = (comments / reach) * 100;
-    // Reel candidate: save rate (40%) + share rate (30%) + comment rate (30%)
-    const reelCandidateScore = saveRate * 0.4 + shareRate * 0.3 + commentRate * 0.3;
+    for (const post of rawPosts) {
+      const insights = await getPostInsights(post.id, post.media_type, token);
 
-    // Normalise media type — the API returns "VIDEO" for both regular videos and Reels
-    let mediaType = post.media_type;
-    if (mediaType === 'VIDEO') mediaType = 'REELS';
+      const rawReach = insights.reach || 0;
+      const likes    = post.like_count    || 0;
+      const comments = post.comments_count || 0;
+      const saves    = insights.saved     || 0;
+      const shares   = insights.shares    || 0;
+      const views    = insights.views     || insights.plays || 0;
+      const follows  = insights.follows   || 0;
 
-    posts.push({
-      id: post.id,
-      mediaType,
-      thumbnailUrl: post.thumbnail_url || post.media_url || '',
-      permalink:    post.permalink,
-      timestamp:    post.timestamp,
-      caption:      post.caption || '',
-      likes,
-      comments,
-      saves,
-      shares,
-      views,
-      reach,
-      follows,
-      engagementRate:    Math.round(engagementRate    * 100) / 100,
-      saveRate:          Math.round(saveRate           * 100) / 100,
-      reelCandidateScore:Math.round(reelCandidateScore * 100) / 100,
-    });
+      const reach = rawReach > 0 ? rawReach : Math.max(views, likes * 10, 1);
+
+      // Weighted engagement: saves×4 + shares×3 + comments×2 + likes×1
+      const rawEng         = likes + comments * 2 + saves * 4 + shares * 3;
+      const engagementRate = (rawEng / reach) * 100;
+      const saveRate       = (saves / reach) * 100;
+      const shareRate      = (shares / reach) * 100;
+      const commentRate    = (comments / reach) * 100;
+      const reelCandidateScore = saveRate * 0.4 + shareRate * 0.3 + commentRate * 0.3;
+
+      let mediaType = post.media_type;
+      if (mediaType === 'VIDEO') mediaType = 'REELS';
+
+      posts.push({
+        id: post.id,
+        mediaType,
+        thumbnailUrl: post.thumbnail_url || post.media_url || '',
+        permalink:    post.permalink,
+        timestamp:    post.timestamp,
+        caption:      post.caption || '',
+        likes,
+        comments,
+        saves,
+        shares,
+        views,
+        reach,
+        follows,
+        engagementRate:    Math.round(engagementRate    * 100) / 100,
+        saveRate:          Math.round(saveRate           * 100) / 100,
+        reelCandidateScore:Math.round(reelCandidateScore * 100) / 100,
+      });
+      if (posts.length >= MAX_POSTS) break;
+    }
+
+    const next = r.data.paging?.next;
+    if (!next) break;
+    url = next;       // a URL "next" já carrega cursor + access_token + fields
+    params = null;
   }
 
   return posts;
@@ -326,7 +190,6 @@ async function syncPosts(token, igUserId) {
 module.exports = {
   getConnectUrl,
   exchangeCodeForToken,
-  getIGBusinessAccount,
   getIGUserInfo,
   syncPosts,
 };
