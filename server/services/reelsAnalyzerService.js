@@ -387,7 +387,14 @@ async function generateReelsScript(transcription, visualAnalysis, caption, reelI
       content: `REFERÊNCIA ANALISADA:
 ${context}
 
-TAREFA: Crie um roteiro CURTO e PRONTO PARA GRAVAR (50s-1min20) inspirado no tema acima. Meio de funil viral: gancho forte nos 3 primeiros segundos, desenvolvimento com técnica + entretenimento, CTA que gera comentário ou seguida.
+TAREFA: Crie um roteiro CURTO e PRONTO PARA GRAVAR (50s-1min20) inspirado na ESTRUTURA acima (adapte o mecanismo, não copie o assunto). Desenvolvimento com técnica + entretenimento, CTA que gera comentário ou seguida.
+
+GANCHO (0-3s) — use a técnica MAIS forte entre (escolha 1 ou 2, não force todas):
+- Pattern interrupt: quebra de expectativa, algo inesperado logo de cara
+- Tensão cognitiva: abre um loop/curiosidade que só fecha no fim do vídeo
+- Contraste: antes×depois, mito×verdade, "todo mundo faz X"×"o certo é Y"
+- Número que choca: dado específico e surpreendente
+- Identidade: chama direto o tipo de pessoa ("se você é X e sente Y...")
 
 Responda APENAS com o roteiro. Sem explicações. Formato enxuto:
 
@@ -397,7 +404,7 @@ ABERTURA (câmera mostra):
 TEXTO NA TELA:
 [frase em caixa alta — para o scroll]
 
-FALA — GANCHO (0-4s):
+FALA — GANCHO (0-4s) — técnica: [nome da técnica usada]:
 [frase exata para falar]
 
 FALA — DESENVOLVIMENTO:

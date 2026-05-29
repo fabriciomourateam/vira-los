@@ -6,13 +6,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Layers, Video, MessageCircleQuestion, PenLine } from 'lucide-react';
+import { Layers, Video, MessageCircleQuestion } from 'lucide-react';
 import CarrosselInstagram from './CarrosselInstagram';
 import ReelsGerador from './ReelsGerador';
 import CaixinhasPerguntas from './CaixinhasPerguntas';
-import Roteirista from './Roteirista';
 
-type SubTabId = 'basico' | 'reels' | 'caixinhas' | 'roteirista';
+type SubTabId = 'basico' | 'reels' | 'caixinhas';
 
 interface CriarTabsProps {
   prefillScript?: string;
@@ -77,7 +76,6 @@ export default function CriarTabs({
           { id: 'basico',     label: 'Carrossel',  icon: Layers },
           { id: 'reels',      label: 'Reels',      icon: Video },
           { id: 'caixinhas',  label: 'Caixinhas',  icon: MessageCircleQuestion },
-          { id: 'roteirista', label: 'Roteirista', icon: PenLine },
         ]}
         active={subTab}
         onChange={setSubTab}
@@ -100,9 +98,6 @@ export default function CriarTabs({
       </div>
       <div style={{ display: subTab === 'caixinhas' ? 'block' : 'none' }}>
         <CaixinhasPerguntas />
-      </div>
-      <div style={{ display: subTab === 'roteirista' ? 'block' : 'none' }}>
-        <Roteirista />
       </div>
     </>
   );
