@@ -189,9 +189,45 @@ async function syncPosts(token) {
   });
 }
 
+// ─── Demografia do público (Instagram Login) ─────────────────────────────────
+// follower_demographics: idade / gênero / país dos seguidores. Requer ~100+
+// seguidores. Best-effort — se a métrica não estiver liberada, retorna null.
+
+async function getAudienceDemographics(token, igUserId) {
+  const breakdowns = ['age', 'gender', 'country'];
+  const out = {};
+
+  for (const bd of breakdowns) {
+    try {
+      const r = await axios.get(`${IG_GRAPH}/${igUserId}/insights`, {
+        params: {
+          metric: 'follower_demographics',
+          period: 'lifetime',
+          metric_type: 'total_value',
+          breakdown: bd,
+          access_token: token,
+        },
+        timeout: 10000,
+      });
+      const results = r.data.data?.[0]?.total_value?.breakdowns?.[0]?.results || [];
+      const map = {};
+      for (const item of results) {
+        const key = (item.dimension_values || [])[0];
+        if (key != null) map[key] = item.value;
+      }
+      if (Object.keys(map).length) out[bd] = map;
+    } catch (err) {
+      console.warn(`[Instagram/Audience] ${bd} indisponível:`, err.response?.data?.error?.message || err.message);
+    }
+  }
+
+  return Object.keys(out).length ? out : null;
+}
+
 module.exports = {
   getConnectUrl,
   exchangeCodeForToken,
   getIGUserInfo,
   syncPosts,
+  getAudienceDemographics,
 };

@@ -33,6 +33,30 @@ function buildPostsBlock(posts) {
     .join('\n');
 }
 
+function topN(map, n = 3) {
+  return Object.entries(map || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+function buildAudienceLine(aud) {
+  if (!aud) return '';
+  const parts = [];
+  if (aud.gender) {
+    const g = topN(aud.gender, 3).map(([k, v]) => `${k}:${v}`).join(' ');
+    if (g) parts.push(`gênero (${g})`);
+  }
+  if (aud.age) {
+    const a = topN(aud.age, 3).map(([k]) => k).join(', ');
+    if (a) parts.push(`faixas etárias predominantes: ${a}`);
+  }
+  if (aud.country) {
+    const c = topN(aud.country, 3).map(([k]) => k).join(', ');
+    if (c) parts.push(`países: ${c}`);
+  }
+  return parts.length
+    ? `\nPÚBLICO REAL (calibre linguagem, exemplos e referências por isto): ${parts.join(' · ')}\n`
+    : '';
+}
+
 /**
  * @param {Object} params
  * @param {string} [params.note]  - Foco opcional da semana (ex: "creatina", "cutting")
@@ -49,6 +73,7 @@ async function generateQaStickers({ note, count = 6 } = {}) {
 
   const analysis = db.getInstagramAnalysis() || {};
   const ideas    = db.getIdeasConfig() || {};
+  const audience = db.getInstagramAudience() || null;
   const niche    = ideas.niche || 'fitness';
   const handle   = ideas.handle || ideas.instagramHandle || '';
 
@@ -71,12 +96,14 @@ async function generateQaStickers({ note, count = 6 } = {}) {
     ? `\nFOCO DESTA LEVA (priorize perguntas sobre isto): ${note.trim()}\n`
     : '';
 
+  const audienceLine = buildAudienceLine(audience);
+
   const prompt = `Você cria "caixinhas de perguntas" pro Instagram Stories de um criador.
 O criador posta a PERGUNTA no sticker "Faça uma pergunta" e RESPONDE ele mesmo,
 simulando dúvida de seguidor pra gerar engajamento e autoridade.
 
 NICHO: ${niche}${handle ? `\nHANDLE: @${String(handle).replace('@', '')}` : ''}
-${focoLine}
+${audienceLine}${focoLine}
 POSTS QUE MAIS ENGAJARAM (use os TEMAS reais que o público dele responde — não invente assunto fora disso):
 ${buildPostsBlock(chosen)}
 ${insightsText ? `\nLEITURA DE PADRÕES DO PERFIL:\n${insightsText}\n` : ''}
@@ -116,6 +143,7 @@ Responda APENAS com JSON, sem markdown:
       carrosseis: carousels.length,
       niche,
       temAnalise: !!insightsText,
+      temPublico: !!audience,
     },
   };
 }

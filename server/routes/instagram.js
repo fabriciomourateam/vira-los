@@ -19,6 +19,7 @@ const {
   exchangeCodeForToken,
   getIGUserInfo,
   syncPosts,
+  getAudienceDemographics,
 } = require('../services/instagramService');
 const { analyzeWithAI } = require('../services/instagramAnalyticsService');
 const db = require('../db/database');
@@ -145,6 +146,15 @@ router.post('/sync', async (req, res) => {
     if (!token.fromScheduler) {
       db.setInstagramToken({ ...token, lastSync: new Date().toISOString() });
     }
+
+    // Demografia do público — best-effort, não derruba o sync se falhar
+    try {
+      const audience = await getAudienceDemographics(token.accessToken, token.igUserId);
+      if (audience) db.setInstagramAudience(audience);
+    } catch (e) {
+      console.warn('[Instagram/Sync] demografia indisponível:', e.message);
+    }
+
     res.json({ ok: true, count: posts.length });
   } catch (err) {
     // Extrai a mensagem real do Meta API (axios encapsula em err.response.data.error)
@@ -161,6 +171,12 @@ router.post('/sync', async (req, res) => {
 
 router.get('/posts', (req, res) => {
   res.json(db.getInstagramPosts());
+});
+
+// ─── Demografia do público ──────────────────────────────────────────────────
+
+router.get('/audience', (req, res) => {
+  res.json(db.getInstagramAudience() || null);
 });
 
 // ─── Saved Analysis ───────────────────────────────────────────────────────────

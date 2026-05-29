@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import {
   Instagram, RefreshCw, Loader2, Zap, TrendingUp, BarChart3,
   Video, Image, Layers, AlertCircle, CheckCircle2, ExternalLink,
-  Sparkles, ArrowRight,
+  Sparkles, ArrowRight, Users, MapPin,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -53,6 +53,13 @@ interface AIInsights {
   hookPattern: string;
 }
 
+interface Audience {
+  age?: Record<string, number>;
+  gender?: Record<string, number>;
+  country?: Record<string, number>;
+  savedAt?: string;
+}
+
 interface Analysis {
   aiInsights: AIInsights;
   signals: {
@@ -75,6 +82,34 @@ function engColor(rate: number) {
   if (rate >= 3) return 'text-green-400';
   if (rate >= 1) return 'text-yellow-400';
   return 'text-red-400';
+}
+
+const GENDER_LABEL: Record<string, string> = { M: 'Homens', F: 'Mulheres', U: 'Não informado' };
+
+// Top-N entradas de um mapa {chave: valor}, ordenadas por valor desc
+function topEntries(map: Record<string, number> | undefined, n: number): [string, number][] {
+  if (!map) return [];
+  return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+function DemographicBars({ data, n = 5, labelMap }: { data?: Record<string, number>; n?: number; labelMap?: Record<string, string> }) {
+  const entries = topEntries(data, n);
+  if (!entries.length) return null;
+  const max = Math.max(...entries.map(([, v]) => v));
+  const total = Object.values(data || {}).reduce((s, v) => s + v, 0) || 1;
+  return (
+    <div className="space-y-1.5">
+      {entries.map(([key, val]) => (
+        <div key={key} className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-20 shrink-0">{labelMap?.[key] || key}</span>
+          <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+            <div className="h-full bg-purple-500 rounded-full" style={{ width: `${(val / max) * 100}%` }} />
+          </div>
+          <span className="text-xs text-foreground font-medium w-9 text-right">{Math.round((val / total) * 100)}%</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // Compila TODA a análise de IA num bloco único, pra enviar inteiro pro Criar
@@ -231,6 +266,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
   const [status, setStatus] = useState<IGStatus | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [posts, setPosts] = useState<IGPost[]>([]);
+  const [audience, setAudience] = useState<Audience | null>(null);
 
   const [checkedActions, setCheckedActions] = useState<Record<number, boolean>>({});
 
@@ -280,11 +316,21 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
     }
   }, []);
 
+  const fetchAudience = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/instagram/audience`);
+      if (res.ok) setAudience(await res.json());
+    } catch {
+      // silent
+    }
+  }, []);
+
   useEffect(() => {
     fetchStatus();
     fetchAnalysis();
     fetchPosts();
-  }, [fetchStatus, fetchAnalysis, fetchPosts]);
+    fetchAudience();
+  }, [fetchStatus, fetchAnalysis, fetchPosts, fetchAudience]);
 
   // Trata retorno do OAuth (?ig_connected / ?ig_error) e re-checa status ao voltar
   // pra aba — o OAuth abre em nova aba, então a aba original precisa reconferir.
@@ -337,6 +383,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
         toast.success(`${data.count} posts sincronizados!`);
         await fetchPosts();
         await fetchStatus();
+        await fetchAudience();
       } else {
         toast.error(data.error || 'Sincronização falhou.');
       }
@@ -665,6 +712,40 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
         <div className="flex items-center gap-2 text-muted-foreground py-6 justify-center">
           <Loader2 size={18} className="animate-spin" />
           Carregando análise...
+        </div>
+      )}
+
+      {audience && (audience.age || audience.gender || audience.country) && (
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2 text-purple-400 font-semibold">
+            <Users size={16} />
+            Seu público
+          </div>
+          <div className="grid sm:grid-cols-3 gap-5">
+            {audience.gender && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Gênero</p>
+                <DemographicBars data={audience.gender} n={3} labelMap={GENDER_LABEL} />
+              </div>
+            )}
+            {audience.age && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faixa etária</p>
+                <DemographicBars data={audience.age} n={5} />
+              </div>
+            )}
+            {audience.country && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
+                  <MapPin size={11} /> Países
+                </p>
+                <DemographicBars data={audience.country} n={5} />
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            As caixinhas de perguntas usam esses dados pra calibrar linguagem e exemplos.
+          </p>
         </div>
       )}
 
