@@ -236,6 +236,8 @@ const getInstagramPosts     = () => readDb('instagram_posts');
 const saveInstagramPosts    = (posts) => writeDb('instagram_posts', posts);
 const getInstagramAnalysis  = () => readObj('instagram_analysis');
 const saveInstagramAnalysis = (data) => writeObj('instagram_analysis', { ...data, savedAt: now() });
+const getInstagramAudience  = () => readObj('instagram_audience');
+const setInstagramAudience  = (data) => writeObj('instagram_audience', { ...data, savedAt: now() });
 
 // ── Carousel Config (persistente, único por usuário) ──────────────────────────
 const getCarouselConfig = () => readObj('carousel_config');
@@ -346,6 +348,7 @@ module.exports = {
   getInstagramToken, setInstagramToken, clearInstagramToken,
   getInstagramPosts, saveInstagramPosts,
   getInstagramAnalysis, saveInstagramAnalysis,
+  getInstagramAudience, setInstagramAudience,
   // Ideas Generator
   getIdeasConfig, setIdeasConfig,
   getDiscoveredIdeas, saveDiscoveredIdeas, deleteDiscoveredIdea,
