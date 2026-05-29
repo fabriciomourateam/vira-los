@@ -32,7 +32,7 @@ function getConnectUrl() {
     'pages_read_engagement',
   ].join(',');
   return (
-    `https://www.facebook.com/v19.0/dialog/oauth` +
+    `https://www.facebook.com/v22.0/dialog/oauth` +
     `?client_id=${appId}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&scope=${scope}` +
