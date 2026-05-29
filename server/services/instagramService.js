@@ -79,6 +79,9 @@ async function exchangeCodeForToken(code) {
  * Returns { igUserId, pageToken } for the first page with an IG business account.
  */
 async function getIGBusinessAccount(longLivedToken) {
+  let pagesFound = 0;        // quantas páginas o login concedeu
+  let pagesWithoutIg = 0;    // páginas concedidas mas sem IG vinculado
+
   // Método 1: /me/accounts (padrão)
   try {
     const r = await axios.get(`${FB_API}/me/accounts`, {
@@ -90,6 +93,7 @@ async function getIGBusinessAccount(longLivedToken) {
     });
 
     const pages = r.data.data || [];
+    pagesFound = pages.length;
     console.log(`[Instagram/Discovery] /me/accounts: ${pages.length} páginas`);
 
     for (const page of pages) {
@@ -99,6 +103,7 @@ async function getIGBusinessAccount(longLivedToken) {
           pageToken: page.access_token,
         };
       }
+      pagesWithoutIg++;
     }
   } catch (err) {
     console.warn('[Instagram/Discovery] /me/accounts falhou:', err.message);
@@ -138,8 +143,14 @@ async function getIGBusinessAccount(longLivedToken) {
     }
   }
 
+  // Mensagem precisa conforme o que foi encontrado, pra orientar a correção certa
+  if (pagesFound === 0) {
+    throw new Error(
+      'O login não concedeu nenhuma Página do Facebook. Refaça a conexão e, na tela do Facebook, marque sua Página (passo "que páginas usar com o app"). Verifique também que sua conta é Admin do app no Meta.'
+    );
+  }
   throw new Error(
-    'Nenhuma conta Instagram Business vinculada encontrada. Configure FACEBOOK_PAGE_IDS no servidor com o ID da sua página.'
+    `Encontrei ${pagesFound} Página(s) do Facebook, mas nenhuma com Instagram Business vinculado. Vincule seu Instagram à Página: no app do Instagram → Configurações → Contas vinculadas (ou na Página do Facebook → Configurações → Instagram). Seu IG precisa ser Profissional/Criador.`
   );
 }
 
