@@ -6,11 +6,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Layers, Video } from 'lucide-react';
+import { Layers, Video, MessageCircleQuestion } from 'lucide-react';
 import CarrosselInstagram from './CarrosselInstagram';
 import ReelsGerador from './ReelsGerador';
+import CaixinhasPerguntas from './CaixinhasPerguntas';
 
-type SubTabId = 'basico' | 'reels';
+type SubTabId = 'basico' | 'reels' | 'caixinhas';
 
 interface CriarTabsProps {
   prefillScript?: string;
@@ -72,8 +73,9 @@ export default function CriarTabs({
     <>
       <SubTabBar
         tabs={[
-          { id: 'basico', label: 'Carrossel', icon: Layers },
-          { id: 'reels',  label: 'Reels',  icon: Video },
+          { id: 'basico',    label: 'Carrossel', icon: Layers },
+          { id: 'reels',     label: 'Reels',     icon: Video },
+          { id: 'caixinhas', label: 'Caixinhas', icon: MessageCircleQuestion },
         ]}
         active={subTab}
         onChange={setSubTab}
@@ -93,6 +95,9 @@ export default function CriarTabs({
             onClearReelsCarouselId?.();
           }}
         />
+      </div>
+      <div style={{ display: subTab === 'caixinhas' ? 'block' : 'none' }}>
+        <CaixinhasPerguntas />
       </div>
     </>
   );

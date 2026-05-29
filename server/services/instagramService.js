@@ -118,73 +118,75 @@ async function getPostInsights(mediaId, mediaType, token) {
 // ─── Sync de posts (paginado — pega reels E carrosséis) ──────────────────────
 
 async function syncPosts(token) {
-  const posts = [];
-  const MAX_POSTS = 150;
-  const MAX_PAGES = 6;
+  const MAX_POSTS = 90;   // teto — equilíbrio entre cobertura de carrosséis e tempo
+  const MAX_PAGES = 4;
+  const CONCURRENCY = 8;  // insights em paralelo (sequencial estourava o timeout do Fly)
 
+  // Fase 1 — coleta a lista de mídias (rápido, só metadados)
+  const rawPosts = [];
   let url = `${IG_GRAPH}/me/media`;
   let params = {
     fields: 'id,media_type,media_url,thumbnail_url,permalink,timestamp,caption,like_count,comments_count',
     limit: 50,
     access_token: token,
   };
-
-  for (let page = 0; page < MAX_PAGES && posts.length < MAX_POSTS; page++) {
+  for (let page = 0; page < MAX_PAGES && rawPosts.length < MAX_POSTS; page++) {
     const r = await axios.get(url, params ? { params, timeout: 15000 } : { timeout: 15000 });
-    const rawPosts = r.data.data || [];
-
-    for (const post of rawPosts) {
-      const insights = await getPostInsights(post.id, post.media_type, token);
-
-      const rawReach = insights.reach || 0;
-      const likes    = post.like_count    || 0;
-      const comments = post.comments_count || 0;
-      const saves    = insights.saved     || 0;
-      const shares   = insights.shares    || 0;
-      const views    = insights.views     || insights.plays || 0;
-      const follows  = insights.follows   || 0;
-
-      const reach = rawReach > 0 ? rawReach : Math.max(views, likes * 10, 1);
-
-      // Weighted engagement: saves×4 + shares×3 + comments×2 + likes×1
-      const rawEng         = likes + comments * 2 + saves * 4 + shares * 3;
-      const engagementRate = (rawEng / reach) * 100;
-      const saveRate       = (saves / reach) * 100;
-      const shareRate      = (shares / reach) * 100;
-      const commentRate    = (comments / reach) * 100;
-      const reelCandidateScore = saveRate * 0.4 + shareRate * 0.3 + commentRate * 0.3;
-
-      let mediaType = post.media_type;
-      if (mediaType === 'VIDEO') mediaType = 'REELS';
-
-      posts.push({
-        id: post.id,
-        mediaType,
-        thumbnailUrl: post.thumbnail_url || post.media_url || '',
-        permalink:    post.permalink,
-        timestamp:    post.timestamp,
-        caption:      post.caption || '',
-        likes,
-        comments,
-        saves,
-        shares,
-        views,
-        reach,
-        follows,
-        engagementRate:    Math.round(engagementRate    * 100) / 100,
-        saveRate:          Math.round(saveRate           * 100) / 100,
-        reelCandidateScore:Math.round(reelCandidateScore * 100) / 100,
-      });
-      if (posts.length >= MAX_POSTS) break;
-    }
-
+    rawPosts.push(...(r.data.data || []));
     const next = r.data.paging?.next;
     if (!next) break;
-    url = next;       // a URL "next" já carrega cursor + access_token + fields
+    url = next;       // "next" já carrega cursor + access_token + fields
     params = null;
   }
+  const slice = rawPosts.slice(0, MAX_POSTS);
 
-  return posts;
+  // Fase 2 — busca insights em PARALELO (lotes de CONCURRENCY)
+  const insightsById = {};
+  for (let i = 0; i < slice.length; i += CONCURRENCY) {
+    const batch = slice.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map((p) => getPostInsights(p.id, p.media_type, token).catch(() => ({})))
+    );
+    batch.forEach((p, j) => { insightsById[p.id] = results[j] || {}; });
+  }
+
+  // Fase 3 — monta o shape final
+  return slice.map((post) => {
+    const insights = insightsById[post.id] || {};
+    const rawReach = insights.reach || 0;
+    const likes    = post.like_count    || 0;
+    const comments = post.comments_count || 0;
+    const saves    = insights.saved     || 0;
+    const shares   = insights.shares    || 0;
+    const views    = insights.views     || insights.plays || 0;
+    const follows  = insights.follows   || 0;
+
+    const reach = rawReach > 0 ? rawReach : Math.max(views, likes * 10, 1);
+
+    // Weighted engagement: saves×4 + shares×3 + comments×2 + likes×1
+    const rawEng         = likes + comments * 2 + saves * 4 + shares * 3;
+    const engagementRate = (rawEng / reach) * 100;
+    const saveRate       = (saves / reach) * 100;
+    const shareRate      = (shares / reach) * 100;
+    const commentRate    = (comments / reach) * 100;
+    const reelCandidateScore = saveRate * 0.4 + shareRate * 0.3 + commentRate * 0.3;
+
+    let mediaType = post.media_type;
+    if (mediaType === 'VIDEO') mediaType = 'REELS';
+
+    return {
+      id: post.id,
+      mediaType,
+      thumbnailUrl: post.thumbnail_url || post.media_url || '',
+      permalink:    post.permalink,
+      timestamp:    post.timestamp,
+      caption:      post.caption || '',
+      likes, comments, saves, shares, views, reach, follows,
+      engagementRate:    Math.round(engagementRate    * 100) / 100,
+      saveRate:          Math.round(saveRate           * 100) / 100,
+      reelCandidateScore:Math.round(reelCandidateScore * 100) / 100,
+    };
+  });
 }
 
 module.exports = {
