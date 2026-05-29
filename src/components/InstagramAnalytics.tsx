@@ -268,6 +268,31 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
     fetchPosts();
   }, [fetchStatus, fetchAnalysis, fetchPosts]);
 
+  // Trata retorno do OAuth (?ig_connected / ?ig_error) e re-checa status ao voltar
+  // pra aba — o OAuth abre em nova aba, então a aba original precisa reconferir.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const igConnected = params.get('ig_connected');
+    const igError = params.get('ig_error');
+    if (igError) {
+      toast.error(`Falha ao conectar Instagram: ${igError}`, { duration: 12000 });
+    }
+    if (igConnected) {
+      toast.success('Instagram conectado!');
+      fetchStatus();
+    }
+    if (igConnected || igError) {
+      params.delete('ig_connected');
+      params.delete('ig_error');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+    // OAuth abre em nova aba; ao voltar o foco pra esta aba, reconfere o status.
+    const onFocus = () => fetchStatus();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchStatus]);
+
   async function handleConnect() {
     setLoadingConnect(true);
     try {
