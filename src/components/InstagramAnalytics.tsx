@@ -77,6 +77,24 @@ function engColor(rate: number) {
   return 'text-red-400';
 }
 
+// Compila TODA a análise de IA num bloco único, pra enviar inteiro pro Criar
+// (antes só dava pra mandar um fragmento por vez — ação/oportunidade isolada).
+function buildFullAnalysisText(ai: AIInsights): string {
+  const parts: string[] = [];
+  if (ai.summary) parts.push(ai.summary);
+  if (ai.topFormat) parts.push(`Formato que mais funciona: ${ai.topFormat}${ai.topFormatReason ? ` — ${ai.topFormatReason}` : ''}`);
+  if (ai.hookPattern) parts.push(`Padrão de hook: ${ai.hookPattern}`);
+  if (ai.bestPostingInsight) parts.push(`Melhor horário/cadência: ${ai.bestPostingInsight}`);
+  if (ai.reelsOpportunity) parts.push(`Oportunidade de Reels: ${ai.reelsOpportunity}`);
+  if (ai.patterns?.length) {
+    parts.push('Padrões identificados:\n' + ai.patterns.map(p => `• ${p.title}: ${p.description} (impacto ${p.impact})`).join('\n'));
+  }
+  if (ai.actionPriority?.length) {
+    parts.push('Ações prioritárias:\n' + ai.actionPriority.map(a => `• ${a.action} — ${a.why} (urgência ${a.urgency})`).join('\n'));
+  }
+  return parts.join('\n\n');
+}
+
 function engBg(rate: number) {
   if (rate >= 3) return 'bg-green-500';
   if (rate >= 1) return 'bg-yellow-500';
@@ -652,9 +670,35 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
 
       {analysis?.aiInsights && (
         <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
-          <div className="flex items-center gap-2 text-purple-400 font-semibold">
-            <Sparkles size={16} />
-            Insights da IA
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 text-purple-400 font-semibold">
+              <Sparkles size={16} />
+              Insights da IA
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {onCreateCarousel && (
+                <button
+                  onClick={() => onCreateCarousel(
+                    'Estratégia do meu Instagram (análise completa)',
+                    buildFullAnalysisText(analysis.aiInsights)
+                  )}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors"
+                >
+                  <Layers size={11} /> Carrossel com a análise completa
+                </button>
+              )}
+              {onCreateScript && (
+                <button
+                  onClick={() => onCreateScript(
+                    buildFullAnalysisText(analysis.aiInsights),
+                    'Roteiro baseado na análise completa do meu Instagram'
+                  )}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+                >
+                  <Sparkles size={11} /> Roteiro com a análise completa
+                </button>
+              )}
+            </div>
           </div>
 
           <p className="text-sm text-foreground leading-relaxed">{analysis.aiInsights.summary}</p>
