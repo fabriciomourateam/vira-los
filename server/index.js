@@ -112,6 +112,7 @@ app.use('/api/instagram',       require('./routes/instagram'));
 app.use('/api/studio',          require('./routes/studio'));
 app.use('/api/brand-kits',      require('./routes/brandKits'));
 app.use('/api/maquina',         require('./routes/maquina'));
+app.use('/api/qa-stickers',     require('./routes/qaStickers'));
 app.use('/api/pexels',          require('./routes/pexels'));
 
 // Health check
