@@ -10,7 +10,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   MessageCircleQuestion, Loader2, Copy, CheckCircle2, Sparkles, Trash2, Save, RefreshCw,
-  Settings2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle,
+  Settings2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle, Eye,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -44,6 +44,11 @@ export default function CaixinhasPerguntas() {
   const [promptSaving, setPromptSaving] = useState(false);
   const [placeholders, setPlaceholders] = useState<Placeholder[]>([]);
   const promptDirty = promptLoaded && promptTpl !== promptSavedTpl;
+
+  // ─── Preview do prompt final (placeholders já substituídos) ────────────────
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewStats, setPreviewStats] = useState<Record<string, unknown> | null>(null);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -85,6 +90,20 @@ export default function CaixinhasPerguntas() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro');
     } finally { setPromptSaving(false); }
+  }
+
+  async function previewPrompt() {
+    setPreviewLoading(true);
+    try {
+      const qs = new URLSearchParams({ note: note.trim(), count: String(count) });
+      const r = await fetch(`${API}/api/qa-stickers/preview?${qs}`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Falha ao gerar preview');
+      setPreviewText(data.prompt || '');
+      setPreviewStats(data.stats || null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro no preview');
+    } finally { setPreviewLoading(false); }
   }
 
   async function resetPrompt() {
@@ -220,6 +239,14 @@ export default function CaixinhasPerguntas() {
                     Salvar
                   </button>
                   <button
+                    onClick={previewPrompt}
+                    disabled={previewLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold disabled:opacity-40 transition-colors"
+                  >
+                    {previewLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Eye className="w-3 h-3" />}
+                    Ver prompt final
+                  </button>
+                  <button
                     onClick={resetPrompt}
                     disabled={promptSaving || !promptIsCustom}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary hover:bg-border text-foreground text-xs font-bold disabled:opacity-40 transition-colors"
@@ -230,6 +257,41 @@ export default function CaixinhasPerguntas() {
                     <span className="text-[11px] text-amber-600 flex items-center">não salvo</span>
                   )}
                 </div>
+                {previewText !== null && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">
+                        Prompt final (o que vai pro Claude)
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(previewText); toast.success('Copiado'); }}
+                          className="text-[10px] font-bold px-2 py-1 rounded bg-secondary hover:bg-border text-foreground flex items-center gap-1"
+                        >
+                          <Copy className="w-3 h-3" /> Copiar
+                        </button>
+                        <button
+                          onClick={() => { setPreviewText(null); setPreviewStats(null); }}
+                          className="text-[10px] font-bold px-2 py-1 rounded bg-secondary hover:bg-border text-muted-foreground"
+                        >
+                          Fechar
+                        </button>
+                      </div>
+                    </div>
+                    {previewStats && (
+                      <div className="text-[10px] text-muted-foreground bg-secondary/40 rounded p-2 flex gap-3 flex-wrap">
+                        <span>nicho: <strong>{String(previewStats.niche)}</strong></span>
+                        <span>posts: <strong>{String(previewStats.postsUsados)}</strong></span>
+                        <span>carrosséis: <strong>{String(previewStats.carrosseis)}</strong></span>
+                        <span>análise IA: <strong>{previewStats.temAnalise ? 'sim' : 'não'}</strong></span>
+                        <span>público: <strong>{previewStats.temPublico ? 'sim' : 'não'}</strong></span>
+                      </div>
+                    )}
+                    <pre className="rounded-lg border border-border bg-background p-3 text-[11px] font-mono leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
+                      {previewText}
+                    </pre>
+                  </div>
+                )}
               </>
             )}
           </div>
