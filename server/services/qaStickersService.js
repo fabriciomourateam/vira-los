@@ -55,9 +55,19 @@ function substitute(template, vars) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => (vars[key] != null ? String(vars[key]) : ''));
 }
 
+// Captions só com CTA genérico de seguir não agregam tema — descarta.
+const LOW_VALUE_CAPTION_RE = /^siga\s+@\S+\s+para\s+mais\s+conte[uú]dos?\.?\s*$/i;
+
+function isUsefulCaption(cap) {
+  const t = (cap || '').replace(/\s+/g, ' ').trim();
+  if (t.length < 30) return false;
+  if (LOW_VALUE_CAPTION_RE.test(t)) return false;
+  return true;
+}
+
 function topPostsByEngagement(posts, limit = 12) {
   return [...posts]
-    .filter((p) => (p.caption || '').trim().length > 0)
+    .filter((p) => isUsefulCaption(p.caption))
     .sort((a, b) => (b.engagementRate || 0) - (a.engagementRate || 0))
     .slice(0, limit);
 }
@@ -73,6 +83,31 @@ function buildPostsBlock(posts) {
 
 function topN(map, n = 3) {
   return Object.entries(map || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+// aiInsights pode vir como string (texto livre) OU objeto estruturado
+// (summary, topFormat, hookPattern, etc). Renderiza como bullets legíveis
+// em vez de JSON.stringify cru — evita JSON truncado no meio de string
+// dentro do prompt, que confundia a IA.
+function formatInsights(ai) {
+  if (!ai) return '';
+  if (typeof ai === 'string') return ai.slice(0, 2000);
+  if (typeof ai !== 'object') return '';
+  const lines = [];
+  const push = (label, val) => {
+    if (!val) return;
+    const t = String(val).replace(/\s+/g, ' ').trim();
+    if (t) lines.push(`- ${label}: ${t}`);
+  };
+  push('resumo',          ai.summary);
+  push('formato top',     ai.topFormat);
+  push('por que',         ai.topFormatReason);
+  push('padrão de hook',  ai.hookPattern);
+  push('melhor horário',  ai.bestTime);
+  push('oportunidade',    ai.reelsOpportunity || ai.opportunity);
+  push('padrões',         Array.isArray(ai.patterns) ? ai.patterns.join('; ') : ai.patterns);
+  push('ações',           Array.isArray(ai.actions)  ? ai.actions.join('; ')  : ai.actions);
+  return lines.join('\n').slice(0, 2000);
 }
 
 function buildAudienceLine(aud) {
@@ -120,9 +155,7 @@ function buildPrompt({ note, count = 6 } = {}) {
     return true;
   }).slice(0, 14);
 
-  const insightsText = typeof analysis.aiInsights === 'string'
-    ? analysis.aiInsights.slice(0, 1500)
-    : (analysis.aiInsights ? JSON.stringify(analysis.aiInsights).slice(0, 1500) : '');
+  const insightsText = formatInsights(analysis.aiInsights);
 
   const vars = {
     niche,
