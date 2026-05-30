@@ -13,6 +13,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { jsonrepair } = require('jsonrepair');
 const db = require('../db/database');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -95,14 +96,10 @@ function buildAudienceLine(aud) {
 }
 
 /**
- * @param {Object} params
- * @param {string} [params.note]  - Foco opcional da semana (ex: "creatina", "cutting")
- * @param {number} [params.count] - Quantos pares gerar (default 6)
- * @returns {Promise<{ pairs: Array<{pergunta:string,resposta:string,tema:string}>, baseadoEm: object }>}
+ * Monta o prompt final (template + dados reais do IG). Usado tanto pra gerar
+ * de verdade quanto pra preview na UI.
  */
-async function generateQaStickers({ note, count = 6 } = {}) {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada.');
-
+function buildPrompt({ note, count = 6 } = {}) {
   const posts = db.getInstagramPosts() || [];
   if (!posts.length) {
     throw new Error('Nenhum post sincronizado. Conecte e sincronize seu Instagram na aba Analytics primeiro.');
@@ -114,10 +111,8 @@ async function generateQaStickers({ note, count = 6 } = {}) {
   const niche    = ideas.niche || 'fitness';
   const handle   = ideas.handle || ideas.instagramHandle || '';
 
-  // Prioriza carrosséis (legenda mais rica) + top por engajamento de qualquer tipo
   const carousels = topPostsByEngagement(posts.filter((p) => p.mediaType === 'CAROUSEL_ALBUM'), 8);
   const topAny    = topPostsByEngagement(posts, 12);
-  // Une sem duplicar, carrosséis primeiro
   const seen = new Set();
   const chosen = [...carousels, ...topAny].filter((p) => {
     if (seen.has(p.id)) return false;
@@ -129,7 +124,6 @@ async function generateQaStickers({ note, count = 6 } = {}) {
     ? analysis.aiInsights.slice(0, 1500)
     : (analysis.aiInsights ? JSON.stringify(analysis.aiInsights).slice(0, 1500) : '');
 
-  // Monta os blocos dinâmicos (cada um já vem com seu próprio prefixo/quebra)
   const vars = {
     niche,
     handleBlock:   handle ? `\nHANDLE: @${String(handle).replace('@', '')}` : '',
@@ -140,41 +134,82 @@ async function generateQaStickers({ note, count = 6 } = {}) {
     count,
   };
 
-  // Usa template customizado se o usuário salvou um pela UI; senão usa o padrão
   const customConfig = db.getCaixinhasPrompt ? db.getCaixinhasPrompt() : null;
   const template = (customConfig?.template && customConfig.template.trim())
     ? customConfig.template
     : DEFAULT_PROMPT_TEMPLATE;
-  const prompt = substitute(template, vars);
 
+  return {
+    prompt: substitute(template, vars),
+    isCustom: !!(customConfig?.template && customConfig.template.trim()),
+    chosen,
+    carousels: carousels.length,
+    niche,
+    temAnalise: !!insightsText,
+    temPublico: !!audience,
+  };
+}
+
+/**
+ * @param {Object} params
+ * @param {string} [params.note]  - Foco opcional da semana (ex: "creatina", "cutting")
+ * @param {number} [params.count] - Quantos pares gerar (default 6)
+ * @returns {Promise<{ pairs: Array<{pergunta:string,resposta:string,tema:string}>, baseadoEm: object }>}
+ */
+async function generateQaStickers({ note, count = 6 } = {}) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada.');
+
+  const built = buildPrompt({ note, count });
+  const prompt = built.prompt;
+
+  // Prefill: força a resposta a começar dentro do JSON. Elimina prosa antes,
+  // fences markdown, "Aqui está:" etc. Concatenamos com o que a IA continuar.
+  const PREFILL = '{"pairs":[';
   const res = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1500,
-    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 4000,
+    messages: [
+      { role: 'user', content: prompt },
+      { role: 'assistant', content: PREFILL },
+    ],
   });
 
-  const text = (res.content[0]?.text || '').trim();
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('A IA não retornou JSON válido.');
+  const continuation = (res.content[0]?.text || '').trim();
+  // Junta prefill + continuação. Tira qualquer prosa que tenha vindo depois do JSON fechado.
+  let raw = PREFILL + continuation;
+  // Se a IA continuou após `]}` com comentário, corta no último `]}`
+  const lastClose = raw.lastIndexOf(']}');
+  if (lastClose !== -1) raw = raw.slice(0, lastClose + 2);
+
   let parsed;
   try {
-    parsed = JSON.parse(match[0]);
+    parsed = JSON.parse(raw);
   } catch {
-    throw new Error('Falha ao interpretar a resposta da IA.');
+    // jsonrepair conserta newlines crus, vírgulas trailing, aspas mal escapadas.
+    try {
+      parsed = JSON.parse(jsonrepair(raw));
+    } catch (err) {
+      console.error('[QaStickers/Parse] falhou após repair:', err.message, '\nRaw:', raw.slice(0, 800));
+      const e = new Error('Falha ao interpretar a resposta da IA.');
+      e.rawSnippet = raw.slice(0, 1500);
+      throw e;
+    }
   }
-  const pairs = Array.isArray(parsed.pairs) ? parsed.pairs.filter((p) => p?.pergunta && p?.resposta) : [];
+  const pairs = Array.isArray(parsed.pairs)
+    ? parsed.pairs.filter((p) => p?.pergunta && (p?.resposta || p?.respostaCurta || p?.respostaAudio))
+    : [];
   if (!pairs.length) throw new Error('Nenhum par válido gerado. Tente de novo.');
 
   return {
     pairs,
     baseadoEm: {
-      postsAnalisados: chosen.length,
-      carrosseis: carousels.length,
-      niche,
-      temAnalise: !!insightsText,
-      temPublico: !!audience,
+      postsAnalisados: built.chosen.length,
+      carrosseis: built.carousels,
+      niche: built.niche,
+      temAnalise: built.temAnalise,
+      temPublico: built.temPublico,
     },
   };
 }
 
-module.exports = { generateQaStickers, DEFAULT_PROMPT_TEMPLATE, PLACEHOLDERS };
+module.exports = { generateQaStickers, buildPrompt, DEFAULT_PROMPT_TEMPLATE, PLACEHOLDERS };

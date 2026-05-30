@@ -9,7 +9,7 @@
  */
 
 const express = require('express');
-const { generateQaStickers, DEFAULT_PROMPT_TEMPLATE, PLACEHOLDERS } = require('../services/qaStickersService');
+const { generateQaStickers, buildPrompt, DEFAULT_PROMPT_TEMPLATE, PLACEHOLDERS } = require('../services/qaStickersService');
 const db = require('../db/database');
 
 const router = express.Router();
@@ -44,6 +44,30 @@ router.delete('/prompt', (req, res) => {
   res.json({ ok: true, template: DEFAULT_PROMPT_TEMPLATE });
 });
 
+// Preview do prompt final, com placeholders já substituídos pelos dados reais
+// do IG. Útil pra debug quando a IA tá retornando JSON quebrado.
+router.get('/preview', (req, res) => {
+  try {
+    const note  = typeof req.query.note  === 'string' ? req.query.note  : '';
+    const count = Math.min(10, Math.max(3, Number(req.query.count) || 6));
+    const built = buildPrompt({ note, count });
+    res.json({
+      prompt: built.prompt,
+      isCustom: built.isCustom,
+      stats: {
+        postsUsados: built.chosen.length,
+        carrosseis: built.carousels,
+        temAnalise: built.temAnalise,
+        temPublico: built.temPublico,
+        niche: built.niche,
+      },
+    });
+  } catch (err) {
+    const status = /sincroniz|Analytics/i.test(err.message) ? 409 : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
 router.post('/generate', async (req, res) => {
   const { note, count } = req.body || {};
   const n = Math.min(10, Math.max(3, Number(count) || 6));
@@ -53,7 +77,9 @@ router.post('/generate', async (req, res) => {
   } catch (err) {
     const status = /sincroniz|Analytics/i.test(err.message) ? 409 : 500;
     console.error('[QaStickers/Generate]', err.message);
-    res.status(status).json({ error: err.message });
+    const body = { error: err.message };
+    if (err.rawSnippet) body.rawSnippet = err.rawSnippet;
+    res.status(status).json(body);
   }
 });
 
