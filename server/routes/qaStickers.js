@@ -9,10 +9,40 @@
  */
 
 const express = require('express');
-const { generateQaStickers } = require('../services/qaStickersService');
+const { generateQaStickers, DEFAULT_PROMPT_TEMPLATE, PLACEHOLDERS } = require('../services/qaStickersService');
 const db = require('../db/database');
 
 const router = express.Router();
+
+// ─── Prompt editável ──────────────────────────────────────────────────────────
+
+router.get('/prompt', (req, res) => {
+  const saved = db.getCaixinhasPrompt() || null;
+  res.json({
+    template:    saved?.template || DEFAULT_PROMPT_TEMPLATE,
+    isCustom:    !!(saved?.template && saved.template.trim()),
+    default:     DEFAULT_PROMPT_TEMPLATE,
+    placeholders: PLACEHOLDERS,
+    updatedAt:   saved?.updated_at || null,
+  });
+});
+
+router.put('/prompt', (req, res) => {
+  const { template } = req.body || {};
+  if (typeof template !== 'string' || !template.trim()) {
+    return res.status(400).json({ error: 'template precisa ser uma string não-vazia' });
+  }
+  if (template.length > 20000) {
+    return res.status(400).json({ error: 'template grande demais (máx 20k chars)' });
+  }
+  db.setCaixinhasPrompt({ template });
+  res.json({ ok: true });
+});
+
+router.delete('/prompt', (req, res) => {
+  db.resetCaixinhasPrompt();
+  res.json({ ok: true, template: DEFAULT_PROMPT_TEMPLATE });
+});
 
 router.post('/generate', async (req, res) => {
   const { note, count } = req.body || {};

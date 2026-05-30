@@ -10,12 +10,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   MessageCircleQuestion, Loader2, Copy, CheckCircle2, Sparkles, Trash2, Save, RefreshCw,
+  Settings2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 type QaPair = { pergunta: string; resposta: string; tema?: string };
 type QaSet = { id: string; pairs: QaPair[]; note?: string; niche?: string; created_at?: string };
+type Placeholder = { key: string; desc: string };
 
 export default function CaixinhasPerguntas() {
   const [note, setNote] = useState('');
@@ -26,6 +28,17 @@ export default function CaixinhasPerguntas() {
   const [history, setHistory] = useState<QaSet[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
 
+  // ─── Editor do prompt ───────────────────────────────────────────────────────
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptTpl, setPromptTpl] = useState('');
+  const [promptSavedTpl, setPromptSavedTpl] = useState('');  // o que está no servidor agora
+  const [promptDefault, setPromptDefault] = useState('');
+  const [promptIsCustom, setPromptIsCustom] = useState(false);
+  const [promptLoaded, setPromptLoaded] = useState(false);
+  const [promptSaving, setPromptSaving] = useState(false);
+  const [placeholders, setPlaceholders] = useState<Placeholder[]>([]);
+  const promptDirty = promptLoaded && promptTpl !== promptSavedTpl;
+
   const fetchHistory = useCallback(async () => {
     try {
       const r = await fetch(`${API}/api/qa-stickers`);
@@ -34,7 +47,54 @@ export default function CaixinhasPerguntas() {
     } catch { /* silent */ }
   }, []);
 
+  const fetchPrompt = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/qa-stickers/prompt`);
+      const data = await r.json();
+      setPromptTpl(data.template || '');
+      setPromptSavedTpl(data.template || '');
+      setPromptDefault(data.default || '');
+      setPromptIsCustom(!!data.isCustom);
+      setPlaceholders(Array.isArray(data.placeholders) ? data.placeholders : []);
+      setPromptLoaded(true);
+    } catch { toast.error('Erro ao carregar prompt'); }
+  }, []);
+
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+  useEffect(() => { if (promptOpen && !promptLoaded) fetchPrompt(); }, [promptOpen, promptLoaded, fetchPrompt]);
+
+  async function savePrompt() {
+    if (!promptTpl.trim()) { toast.error('Template não pode ficar vazio'); return; }
+    setPromptSaving(true);
+    try {
+      const r = await fetch(`${API}/api/qa-stickers/prompt`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: promptTpl }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'Falha ao salvar');
+      setPromptSavedTpl(promptTpl);
+      setPromptIsCustom(promptTpl !== promptDefault);
+      toast.success('Prompt salvo');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro');
+    } finally { setPromptSaving(false); }
+  }
+
+  async function resetPrompt() {
+    if (!confirm('Voltar pro prompt padrão? Vai perder suas alterações salvas.')) return;
+    setPromptSaving(true);
+    try {
+      const r = await fetch(`${API}/api/qa-stickers/prompt`, { method: 'DELETE' });
+      const data = await r.json();
+      const def = data.template || promptDefault;
+      setPromptTpl(def);
+      setPromptSavedTpl(def);
+      setPromptIsCustom(false);
+      toast.success('Prompt resetado pro padrão');
+    } catch { toast.error('Erro ao resetar'); }
+    finally { setPromptSaving(false); }
+  }
 
   async function generate() {
     setLoading(true);
@@ -99,6 +159,75 @@ export default function CaixinhasPerguntas() {
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
           Perguntas + respostas baseadas no que mais engaja no seu Instagram. Você pergunta e responde no Stories.
         </p>
+      </div>
+
+      {/* Editor do prompt (recolhível) */}
+      <div className="rounded-2xl bg-card overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+        <button
+          onClick={() => setPromptOpen(o => !o)}
+          className="w-full px-4 sm:px-5 py-3 flex items-center justify-between gap-2 text-left hover:bg-secondary/50 transition-colors"
+        >
+          <span className="flex items-center gap-2 text-sm font-bold">
+            <Settings2 className="w-4 h-4 text-amber-500" />
+            Editar prompt
+            {promptIsCustom && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-semibold uppercase tracking-wider">custom</span>}
+          </span>
+          {promptOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </button>
+        {promptOpen && (
+          <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-3 border-t border-border">
+            {!promptLoaded ? (
+              <div className="py-6 flex items-center justify-center text-muted-foreground text-sm">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Carregando prompt...
+              </div>
+            ) : (
+              <>
+                <p className="text-[11px] text-muted-foreground mt-3">
+                  Edite o template do prompt que vai pro Claude. Use os placeholders abaixo — eles são substituídos pelos dados reais do seu IG na hora de gerar.
+                </p>
+                <div className="rounded-lg bg-secondary/40 p-2.5 text-[11px] space-y-0.5">
+                  {placeholders.map(p => (
+                    <div key={p.key} className="flex items-start gap-2">
+                      <code className="font-mono text-amber-600 font-semibold shrink-0">{`{{${p.key}}}`}</code>
+                      <span className="text-muted-foreground">— {p.desc}</span>
+                    </div>
+                  ))}
+                </div>
+                <textarea
+                  value={promptTpl}
+                  onChange={e => setPromptTpl(e.target.value)}
+                  rows={20}
+                  spellCheck={false}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12.5px] font-mono leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                />
+                <div className="flex items-start gap-2 rounded-md bg-amber-500/5 border border-amber-500/20 p-2.5 text-[11px] text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>Se você tirar a instrução de retornar JSON no final, as caixinhas vão quebrar — Claude precisa devolver no formato <code className="font-mono">{`{"pairs":[...]}`}</code>.</span>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={savePrompt}
+                    disabled={promptSaving || !promptDirty}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold disabled:opacity-40 transition-colors"
+                  >
+                    {promptSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    Salvar
+                  </button>
+                  <button
+                    onClick={resetPrompt}
+                    disabled={promptSaving || !promptIsCustom}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary hover:bg-border text-foreground text-xs font-bold disabled:opacity-40 transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Restaurar padrão
+                  </button>
+                  {promptDirty && (
+                    <span className="text-[11px] text-amber-600 flex items-center">não salvo</span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Form */}

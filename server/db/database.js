@@ -264,6 +264,10 @@ const getAllQaStickers = () => readDb('qa_stickers').sort((a, b) => b.created_at
 const saveQaStickers   = (s) => { const db = readDb('qa_stickers'); db.push({ ...s, created_at: now() }); writeDb('qa_stickers', db); };
 const updateQaStickers = (id, data) => { const db = readDb('qa_stickers').map((s) => s.id === id ? { ...s, ...data } : s); writeDb('qa_stickers', db); };
 const deleteQaStickers = (id) => writeDb('qa_stickers', readDb('qa_stickers').filter((s) => s.id !== id));
+// Template customizado do prompt das caixinhas (editável pela UI)
+const getCaixinhasPrompt = () => readObj('caixinhas_prompt');
+const setCaixinhasPrompt = (data) => writeObj('caixinhas_prompt', { ...data, updated_at: now() });
+const resetCaixinhasPrompt = () => { const p = dbPath('caixinhas_prompt'); if (fs.existsSync(p)) fs.unlinkSync(p); };
 
 // ── Sessões de gravação de Reels (fila pra gravação em batch) ─────────────────
 const getAllReelsSessions = () => readDb('reels_sessions').sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -335,6 +339,7 @@ module.exports = {
   getAllReelsSessions, getReelsSession, saveReelsSession, updateReelsSession, deleteReelsSession,
   // Caixinhas de perguntas
   getAllQaStickers, saveQaStickers, updateQaStickers, deleteQaStickers,
+  getCaixinhasPrompt, setCaixinhasPrompt, resetCaixinhasPrompt,
   // Brand Kits
   getAllBrandKits, getBrandKit, createBrandKit, updateBrandKit, deleteBrandKit,
   // Studio
