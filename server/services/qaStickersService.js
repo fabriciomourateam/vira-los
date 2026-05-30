@@ -13,6 +13,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { jsonrepair } = require('jsonrepair');
 const db = require('../db/database');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -154,13 +155,22 @@ async function generateQaStickers({ note, count = 6 } = {}) {
   });
 
   const text = (res.content[0]?.text || '').trim();
-  const match = text.match(/\{[\s\S]*\}/);
+  // Tira fences de markdown se a IA insistir em devolver ```json ... ```
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('A IA não retornou JSON válido.');
   let parsed;
   try {
     parsed = JSON.parse(match[0]);
   } catch {
-    throw new Error('Falha ao interpretar a resposta da IA.');
+    // LLM costuma quebrar JSON com newlines crus em strings longas (roteiros),
+    // vírgula sobrando, aspas mal escapadas. jsonrepair conserta o comum.
+    try {
+      parsed = JSON.parse(jsonrepair(match[0]));
+    } catch (err) {
+      console.error('[QaStickers/Parse] falhou mesmo após repair:', err.message, '\nRaw:', match[0].slice(0, 500));
+      throw new Error('Falha ao interpretar a resposta da IA.');
+    }
   }
   const pairs = Array.isArray(parsed.pairs)
     ? parsed.pairs.filter((p) => p?.pergunta && (p?.resposta || p?.respostaCurta || p?.respostaAudio))
