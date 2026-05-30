@@ -195,24 +195,28 @@ async function generateQaStickers({ note, count = 6 } = {}) {
   const built = buildPrompt({ note, count });
   const prompt = built.prompt;
 
-  // Prefill: força a resposta a começar dentro do JSON. Elimina prosa antes,
-  // fences markdown, "Aqui está:" etc. Concatenamos com o que a IA continuar.
-  const PREFILL = '{"pairs":[';
+  // System prompt reforça o formato de saída — alguns modelos não aceitam
+  // prefill de assistant, então usamos system + instrução no user prompt.
+  const SYSTEM = 'Você responde sempre em JSON puro, sem markdown, sem fences ```, sem prosa antes ou depois. A resposta começa com { e termina com }. Use \\n para quebras de linha dentro de strings.';
   const res = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 4000,
-    messages: [
-      { role: 'user', content: prompt },
-      { role: 'assistant', content: PREFILL },
-    ],
+    system: SYSTEM,
+    messages: [{ role: 'user', content: prompt }],
   });
 
-  const continuation = (res.content[0]?.text || '').trim();
-  // Junta prefill + continuação. Tira qualquer prosa que tenha vindo depois do JSON fechado.
-  let raw = PREFILL + continuation;
-  // Se a IA continuou após `]}` com comentário, corta no último `]}`
-  const lastClose = raw.lastIndexOf(']}');
-  if (lastClose !== -1) raw = raw.slice(0, lastClose + 2);
+  const text = (res.content[0]?.text || '').trim();
+  // Tira fences de markdown ```json ... ``` se a IA insistir
+  const cleaned = text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+  // Extrai do primeiro `{` ao último `}` — ignora prosa antes/depois
+  const first = cleaned.indexOf('{');
+  const last  = cleaned.lastIndexOf('}');
+  const raw = (first !== -1 && last !== -1 && last > first)
+    ? cleaned.slice(first, last + 1)
+    : cleaned;
 
   let parsed;
   try {
