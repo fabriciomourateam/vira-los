@@ -148,28 +148,37 @@ async function generateQaStickers({ note, count = 6 } = {}) {
     : DEFAULT_PROMPT_TEMPLATE;
   const prompt = substitute(template, vars);
 
+  // Prefill: força a resposta a começar dentro do JSON. Elimina prosa antes,
+  // fences markdown, "Aqui está:" etc. Concatenamos com o que a IA continuar.
+  const PREFILL = '{"pairs":[';
   const res = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 4000,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [
+      { role: 'user', content: prompt },
+      { role: 'assistant', content: PREFILL },
+    ],
   });
 
-  const text = (res.content[0]?.text || '').trim();
-  // Tira fences de markdown se a IA insistir em devolver ```json ... ```
-  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('A IA não retornou JSON válido.');
+  const continuation = (res.content[0]?.text || '').trim();
+  // Junta prefill + continuação. Tira qualquer prosa que tenha vindo depois do JSON fechado.
+  let raw = PREFILL + continuation;
+  // Se a IA continuou após `]}` com comentário, corta no último `]}`
+  const lastClose = raw.lastIndexOf(']}');
+  if (lastClose !== -1) raw = raw.slice(0, lastClose + 2);
+
   let parsed;
   try {
-    parsed = JSON.parse(match[0]);
+    parsed = JSON.parse(raw);
   } catch {
-    // LLM costuma quebrar JSON com newlines crus em strings longas (roteiros),
-    // vírgula sobrando, aspas mal escapadas. jsonrepair conserta o comum.
+    // jsonrepair conserta newlines crus, vírgulas trailing, aspas mal escapadas.
     try {
-      parsed = JSON.parse(jsonrepair(match[0]));
+      parsed = JSON.parse(jsonrepair(raw));
     } catch (err) {
-      console.error('[QaStickers/Parse] falhou mesmo após repair:', err.message, '\nRaw:', match[0].slice(0, 500));
-      throw new Error('Falha ao interpretar a resposta da IA.');
+      console.error('[QaStickers/Parse] falhou após repair:', err.message, '\nRaw:', raw.slice(0, 800));
+      const e = new Error('Falha ao interpretar a resposta da IA.');
+      e.rawSnippet = raw.slice(0, 1500);
+      throw e;
     }
   }
   const pairs = Array.isArray(parsed.pairs)

@@ -53,7 +53,9 @@ router.post('/generate', async (req, res) => {
   } catch (err) {
     const status = /sincroniz|Analytics/i.test(err.message) ? 409 : 500;
     console.error('[QaStickers/Generate]', err.message);
-    res.status(status).json({ error: err.message });
+    const body = { error: err.message };
+    if (err.rawSnippet) body.rawSnippet = err.rawSnippet;
+    res.status(status).json(body);
   }
 });
 
