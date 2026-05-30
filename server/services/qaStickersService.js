@@ -162,7 +162,9 @@ async function generateQaStickers({ note, count = 6 } = {}) {
   } catch {
     throw new Error('Falha ao interpretar a resposta da IA.');
   }
-  const pairs = Array.isArray(parsed.pairs) ? parsed.pairs.filter((p) => p?.pergunta && p?.resposta) : [];
+  const pairs = Array.isArray(parsed.pairs)
+    ? parsed.pairs.filter((p) => p?.pergunta && (p?.resposta || p?.respostaCurta || p?.respostaAudio))
+    : [];
   if (!pairs.length) throw new Error('Nenhum par válido gerado. Tente de novo.');
 
   return {

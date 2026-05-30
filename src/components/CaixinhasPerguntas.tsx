@@ -15,7 +15,13 @@ import {
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type QaPair = { pergunta: string; resposta: string; tema?: string };
+type QaPair = {
+  pergunta: string;
+  resposta?: string;        // fallback / template padrão (uma versão só)
+  respostaCurta?: string;   // pro sticker do Stories — 1-3 frases
+  respostaAudio?: string;   // roteiro pra áudio/Reels — com hook
+  tema?: string;
+};
 type QaSet = { id: string; pairs: QaPair[]; note?: string; niche?: string; created_at?: string };
 type Placeholder = { key: string; desc: string };
 
@@ -288,13 +294,24 @@ export default function CaixinhasPerguntas() {
                   {copied === `q${i}` ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
               </div>
-              <div className="flex items-start gap-2 pt-2 border-t border-border">
-                <span className="text-[10px] font-bold text-emerald-500 mt-1 shrink-0 w-16">RESPOSTA</span>
-                <p className="flex-1 text-sm text-muted-foreground">{p.resposta}</p>
-                <button onClick={() => copy(p.resposta, `a${i}`)} className="shrink-0 p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Copiar resposta">
-                  {copied === `a${i}` ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              </div>
+              {(p.respostaCurta || p.resposta) && (
+                <div className="flex items-start gap-2 pt-2 border-t border-border">
+                  <span className="text-[10px] font-bold text-emerald-500 mt-1 shrink-0 w-16">{p.respostaAudio ? 'STICKER' : 'RESPOSTA'}</span>
+                  <p className="flex-1 text-sm text-muted-foreground">{p.respostaCurta || p.resposta}</p>
+                  <button onClick={() => copy(p.respostaCurta || p.resposta || '', `a${i}`)} className="shrink-0 p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Copiar">
+                    {copied === `a${i}` ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              )}
+              {p.respostaAudio && (
+                <div className="flex items-start gap-2 pt-2 border-t border-border">
+                  <span className="text-[10px] font-bold text-sky-500 mt-1 shrink-0 w-16">ROTEIRO</span>
+                  <p className="flex-1 text-sm text-muted-foreground whitespace-pre-wrap">{p.respostaAudio}</p>
+                  <button onClick={() => copy(p.respostaAudio || '', `r${i}`)} className="shrink-0 p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Copiar roteiro">
+                    {copied === `r${i}` ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -320,7 +337,18 @@ export default function CaixinhasPerguntas() {
                   {s.pairs.map((p, i) => (
                     <div key={i} className="text-xs border-t border-border pt-2">
                       <p className="font-semibold">{p.pergunta}</p>
-                      <p className="text-muted-foreground mt-0.5">{p.resposta}</p>
+                      {(p.respostaCurta || p.resposta) && (
+                        <p className="text-muted-foreground mt-0.5">
+                          {p.respostaAudio && <span className="text-[9px] font-bold text-emerald-500 mr-1">STICKER:</span>}
+                          {p.respostaCurta || p.resposta}
+                        </p>
+                      )}
+                      {p.respostaAudio && (
+                        <p className="text-muted-foreground mt-0.5 whitespace-pre-wrap">
+                          <span className="text-[9px] font-bold text-sky-500 mr-1">ROTEIRO:</span>
+                          {p.respostaAudio}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
