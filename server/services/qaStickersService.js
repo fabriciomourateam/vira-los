@@ -17,6 +17,43 @@ const db = require('../db/database');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// ─── Template padrão (placeholders {{...}} são substituídos por dados reais) ──
+// O usuário pode sobrescrever pela UI → vira db.getCaixinhasPrompt(). Reset
+// volta pra essa string. Lista de placeholders disponíveis em PLACEHOLDERS abaixo.
+const DEFAULT_PROMPT_TEMPLATE = `Você cria "caixinhas de perguntas" pro Instagram Stories de um criador.
+O criador posta a PERGUNTA no sticker "Faça uma pergunta" e RESPONDE ele mesmo,
+simulando dúvida de seguidor pra gerar engajamento e autoridade.
+
+NICHO: {{niche}}{{handleBlock}}
+{{audienceBlock}}{{focusBlock}}
+POSTS QUE MAIS ENGAJARAM (use os TEMAS reais que o público dele responde — não invente assunto fora disso):
+{{postsBlock}}
+{{insightsBlock}}
+REGRAS:
+- Gere {{count}} pares pergunta+resposta.
+- A PERGUNTA: curta (cabe no sticker, máx ~12 palavras), na voz de um seguidor real, dúvida genuína do nicho.
+- A RESPOSTA: voz de especialista do criador, direta e com valor real, 1-3 frases, sem enrolação, tom de quem entende do assunto. Termine puxando autoridade ou um micro-CTA quando fizer sentido (sem ser vendedor demais).
+- Ancore nos temas que JÁ engajam no perfil (acima). Nada genérico/fora do nicho.
+- Sem hashtags, sem emojis em excesso (no máx 1 por resposta).
+- Português do Brasil.
+
+Responda APENAS com JSON, sem markdown:
+{"pairs":[{"pergunta":"...","resposta":"...","tema":"palavra-chave do tema"}]}`;
+
+const PLACEHOLDERS = [
+  { key: 'niche',          desc: 'Seu nicho (de Configurações)' },
+  { key: 'handleBlock',    desc: '"\\nHANDLE: @seu_handle" ou vazio' },
+  { key: 'audienceBlock',  desc: 'Demografia real do público ou vazio' },
+  { key: 'focusBlock',     desc: 'Foco da semana digitado na UI ou vazio' },
+  { key: 'postsBlock',     desc: 'Top posts (carrosséis priorizados + engajamento)' },
+  { key: 'insightsBlock',  desc: 'Análise de IA (aiInsights) ou vazio' },
+  { key: 'count',          desc: 'Quantos pares (slider da UI, 3-10)' },
+];
+
+function substitute(template, vars) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => (vars[key] != null ? String(vars[key]) : ''));
+}
+
 function topPostsByEngagement(posts, limit = 12) {
   return [...posts]
     .filter((p) => (p.caption || '').trim().length > 0)
@@ -92,31 +129,23 @@ async function generateQaStickers({ note, count = 6 } = {}) {
     ? analysis.aiInsights.slice(0, 1500)
     : (analysis.aiInsights ? JSON.stringify(analysis.aiInsights).slice(0, 1500) : '');
 
-  const focoLine = note && note.trim()
-    ? `\nFOCO DESTA LEVA (priorize perguntas sobre isto): ${note.trim()}\n`
-    : '';
+  // Monta os blocos dinâmicos (cada um já vem com seu próprio prefixo/quebra)
+  const vars = {
+    niche,
+    handleBlock:   handle ? `\nHANDLE: @${String(handle).replace('@', '')}` : '',
+    audienceBlock: buildAudienceLine(audience),
+    focusBlock:    note && note.trim() ? `\nFOCO DESTA LEVA (priorize perguntas sobre isto): ${note.trim()}\n` : '',
+    postsBlock:    buildPostsBlock(chosen),
+    insightsBlock: insightsText ? `\nLEITURA DE PADRÕES DO PERFIL:\n${insightsText}\n` : '',
+    count,
+  };
 
-  const audienceLine = buildAudienceLine(audience);
-
-  const prompt = `Você cria "caixinhas de perguntas" pro Instagram Stories de um criador.
-O criador posta a PERGUNTA no sticker "Faça uma pergunta" e RESPONDE ele mesmo,
-simulando dúvida de seguidor pra gerar engajamento e autoridade.
-
-NICHO: ${niche}${handle ? `\nHANDLE: @${String(handle).replace('@', '')}` : ''}
-${audienceLine}${focoLine}
-POSTS QUE MAIS ENGAJARAM (use os TEMAS reais que o público dele responde — não invente assunto fora disso):
-${buildPostsBlock(chosen)}
-${insightsText ? `\nLEITURA DE PADRÕES DO PERFIL:\n${insightsText}\n` : ''}
-REGRAS:
-- Gere ${count} pares pergunta+resposta.
-- A PERGUNTA: curta (cabe no sticker, máx ~12 palavras), na voz de um seguidor real, dúvida genuína do nicho.
-- A RESPOSTA: voz de especialista do criador, direta e com valor real, 1-3 frases, sem enrolação, tom de quem entende do assunto. Termine puxando autoridade ou um micro-CTA quando fizer sentido (sem ser vendedor demais).
-- Ancore nos temas que JÁ engajam no perfil (acima). Nada genérico/fora do nicho.
-- Sem hashtags, sem emojis em excesso (no máx 1 por resposta).
-- Português do Brasil.
-
-Responda APENAS com JSON, sem markdown:
-{"pairs":[{"pergunta":"...","resposta":"...","tema":"palavra-chave do tema"}]}`;
+  // Usa template customizado se o usuário salvou um pela UI; senão usa o padrão
+  const customConfig = db.getCaixinhasPrompt ? db.getCaixinhasPrompt() : null;
+  const template = (customConfig?.template && customConfig.template.trim())
+    ? customConfig.template
+    : DEFAULT_PROMPT_TEMPLATE;
+  const prompt = substitute(template, vars);
 
   const res = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
@@ -148,4 +177,4 @@ Responda APENAS com JSON, sem markdown:
   };
 }
 
-module.exports = { generateQaStickers };
+module.exports = { generateQaStickers, DEFAULT_PROMPT_TEMPLATE, PLACEHOLDERS };
