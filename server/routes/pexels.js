@@ -6,10 +6,12 @@
  * Endpoints:
  *   GET  /api/pexels?query=...&orientation=portrait&per_page=5
  *   POST /api/pexels/batch  body: { queries: [{id, query, orientation}] }
+ *   POST /api/pexels/download-zip  body: { photos: [{id, url, theme}] }
  */
 
 const express = require('express');
 const axios = require('axios');
+const archiver = require('archiver');
 const router = express.Router();
 
 router.get('/', async (req, res) => {
@@ -98,6 +100,35 @@ router.post('/batch', async (req, res) => {
   } catch (err) {
     console.error('[Pexels Batch Error]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/download-zip', async (req, res) => {
+  try {
+    const { photos = [] } = req.body;
+    if (!photos.length) return res.status(400).json({ error: 'Nenhuma foto informada' });
+    if (photos.length > 30) return res.status(400).json({ error: 'Máximo de 30 fotos por download' });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="fotos-pexels.zip"');
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', err => { throw err; });
+    archive.pipe(res);
+
+    await Promise.all(photos.map(async ({ id, url, theme }, index) => {
+      try {
+        const imgRes = await axios.get(url, { responseType: 'stream', timeout: 15000 });
+        const ext = 'jpg';
+        const safeName = (theme || 'foto').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
+        archive.append(imgRes.data, { name: `${String(index + 1).padStart(2, '0')}_${safeName}_${id}.${ext}` });
+      } catch {}
+    }));
+
+    await archive.finalize();
+  } catch (err) {
+    console.error('[Pexels ZIP Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
