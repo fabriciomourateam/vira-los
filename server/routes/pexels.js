@@ -12,6 +12,7 @@
 const express = require('express');
 const axios = require('axios');
 const archiver = require('archiver');
+const sharp = require('sharp');
 const router = express.Router();
 
 router.get('/', async (req, res) => {
@@ -100,6 +101,25 @@ router.post('/batch', async (req, res) => {
   } catch (err) {
     console.error('[Pexels Batch Error]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Baixa uma imagem e converte para PNG
+router.get('/download-png', async (req, res) => {
+  try {
+    const { url, filename = 'foto' } = req.query;
+    if (!url) return res.status(400).json({ error: 'url obrigatória' });
+
+    const imgRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 });
+    const pngBuffer = await sharp(Buffer.from(imgRes.data)).png().toBuffer();
+
+    const safeName = String(filename).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.png"`);
+    res.send(pngBuffer);
+  } catch (err) {
+    console.error('[Pexels PNG Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 

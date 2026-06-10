@@ -468,28 +468,30 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
     toast.success(`${selectedPhotos.size} URL${selectedPhotos.size !== 1 ? 's' : ''} copiada${selectedPhotos.size !== 1 ? 's' : ''}!`);
   }
 
-  const [downloadingZip, setDownloadingZip] = useState(false);
+  const [downloadingPngs, setDownloadingPngs] = useState(false);
 
-  async function downloadSelectedAsZip() {
-    if (selectedPhotos.size === 0) return;
-    setDownloadingZip(true);
+  async function downloadAsPngs(photos: PhotoResult[]) {
+    if (photos.length === 0) return;
+    setDownloadingPngs(true);
     try {
-      const selected = photoResults.filter(p => selectedPhotos.has(String(p.id)));
-      const res = await fetch(`${API}/api/pexels/download-zip`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photos: selected.map(p => ({ id: p.id, url: p.url, theme: p.theme })) }),
-      });
-      if (!res.ok) throw new Error('Erro no servidor');
-      const blob = await res.blob();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'fotos-pexels.zip';
-      link.click();
-      URL.revokeObjectURL(link.href);
-      toast.success(`${selected.length} foto${selected.length !== 1 ? 's' : ''} baixada${selected.length !== 1 ? 's' : ''}!`);
+      for (let i = 0; i < photos.length; i++) {
+        const p = photos[i];
+        const safeName = `${String(i + 1).padStart(2, '0')}_${p.theme.replace(/[^a-zA-Z0-9]/g, '_')}_${p.id}`;
+        const url = `${API}/api/pexels/download-png?url=${encodeURIComponent(p.url)}&filename=${encodeURIComponent(safeName)}`;
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${safeName}.png`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        // Pequeno intervalo para o browser não bloquear downloads consecutivos
+        if (i < photos.length - 1) await new Promise(r => setTimeout(r, 300));
+      }
+      toast.success(`${photos.length} foto${photos.length !== 1 ? 's' : ''} baixada${photos.length !== 1 ? 's' : ''} em PNG!`);
     } catch { toast.error('Erro ao baixar fotos'); }
-    finally { setDownloadingZip(false); }
+    finally { setDownloadingPngs(false); }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -1158,29 +1160,11 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                     {selectedPhotos.size === photoResults.length ? 'Desmarcar todas' : 'Selecionar todas'}
                   </button>
                   <button
-                    onClick={async () => {
-                      setDownloadingZip(true);
-                      try {
-                        const res = await fetch(`${API}/api/pexels/download-zip`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ photos: photoResults.map(p => ({ id: p.id, url: p.url, theme: p.theme })) }),
-                        });
-                        if (!res.ok) throw new Error();
-                        const blob = await res.blob();
-                        const link = document.createElement('a');
-                        link.href = URL.createObjectURL(blob);
-                        link.download = 'fotos-pexels.zip';
-                        link.click();
-                        URL.revokeObjectURL(link.href);
-                        toast.success(`${photoResults.length} fotos baixadas!`);
-                      } catch { toast.error('Erro ao baixar fotos'); }
-                      finally { setDownloadingZip(false); }
-                    }}
-                    disabled={downloadingZip}
+                    onClick={() => downloadAsPngs(photoResults)}
+                    disabled={downloadingPngs}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-300 text-xs font-semibold transition-colors disabled:opacity-50"
                   >
-                    {downloadingZip ? <Loader2 className="w-3 h-3 animate-spin" /> : '⬇️'} Baixar todas
+                    {downloadingPngs ? <Loader2 className="w-3 h-3 animate-spin" /> : '⬇️'} Baixar todas
                   </button>
                 </div>
               </div>
@@ -1233,11 +1217,11 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                     <Copy className="w-3.5 h-3.5" /> Copiar URLs
                   </button>
                   <button
-                    onClick={downloadSelectedAsZip}
-                    disabled={downloadingZip}
+                    onClick={() => downloadAsPngs(photoResults.filter(p => selectedPhotos.has(String(p.id))))}
+                    disabled={downloadingPngs}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
                   >
-                    {downloadingZip ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '⬇️'} ZIP
+                    {downloadingPngs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '⬇️'} Baixar PNG
                   </button>
                   <button
                     onClick={() => setSelectedPhotos(new Set())}
