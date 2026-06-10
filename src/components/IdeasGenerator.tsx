@@ -1144,7 +1144,7 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                     <span className="ml-2 text-orange-400">· {selectedPhotos.size} selecionada{selectedPhotos.size !== 1 ? 's' : ''}</span>
                   )}
                 </p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <button
                     onClick={() => {
                       if (selectedPhotos.size === photoResults.length) {
@@ -1156,6 +1156,31 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {selectedPhotos.size === photoResults.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setDownloadingZip(true);
+                      try {
+                        const res = await fetch(`${API}/api/pexels/download-zip`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ photos: photoResults.map(p => ({ id: p.id, url: p.url, theme: p.theme })) }),
+                        });
+                        if (!res.ok) throw new Error();
+                        const blob = await res.blob();
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = 'fotos-pexels.zip';
+                        link.click();
+                        URL.revokeObjectURL(link.href);
+                        toast.success(`${photoResults.length} fotos baixadas!`);
+                      } catch { toast.error('Erro ao baixar fotos'); }
+                      finally { setDownloadingZip(false); }
+                    }}
+                    disabled={downloadingZip}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-300 text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {downloadingZip ? <Loader2 className="w-3 h-3 animate-spin" /> : '⬇️'} Baixar todas
                   </button>
                 </div>
               </div>
