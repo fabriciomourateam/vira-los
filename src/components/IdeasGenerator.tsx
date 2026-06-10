@@ -468,6 +468,30 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
     toast.success(`${selectedPhotos.size} URL${selectedPhotos.size !== 1 ? 's' : ''} copiada${selectedPhotos.size !== 1 ? 's' : ''}!`);
   }
 
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
+  async function downloadSelectedAsZip() {
+    if (selectedPhotos.size === 0) return;
+    setDownloadingZip(true);
+    try {
+      const selected = photoResults.filter(p => selectedPhotos.has(String(p.id)));
+      const res = await fetch(`${API}/api/pexels/download-zip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photos: selected.map(p => ({ id: p.id, url: p.url, theme: p.theme })) }),
+      });
+      if (!res.ok) throw new Error('Erro no servidor');
+      const blob = await res.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'fotos-pexels.zip';
+      link.click();
+      URL.revokeObjectURL(link.href);
+      toast.success(`${selected.length} foto${selected.length !== 1 ? 's' : ''} baixada${selected.length !== 1 ? 's' : ''}!`);
+    } catch { toast.error('Erro ao baixar fotos'); }
+    finally { setDownloadingZip(false); }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────────
@@ -1182,6 +1206,13 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border border border-border text-xs font-semibold transition-colors"
                   >
                     <Copy className="w-3.5 h-3.5" /> Copiar URLs
+                  </button>
+                  <button
+                    onClick={downloadSelectedAsZip}
+                    disabled={downloadingZip}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
+                  >
+                    {downloadingZip ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '⬇️'} ZIP
                   </button>
                   <button
                     onClick={() => setSelectedPhotos(new Set())}
