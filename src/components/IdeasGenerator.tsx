@@ -77,6 +77,15 @@ interface ScrapedData {
   };
 }
 
+interface PhotoResult {
+  id: string | number;
+  url: string;
+  thumb: string;
+  alt: string;
+  photographer: string;
+  theme: string;
+}
+
 interface JobStatus {
   status: 'running' | 'scraped' | 'done' | 'error';
   progress: number;
@@ -139,7 +148,7 @@ interface Props {
 }
 
 export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Props) {
-  const [subTab, setSubTab] = useState<'ideias' | 'semana' | 'performance'>('ideias');
+  const [subTab, setSubTab] = useState<'ideias' | 'semana' | 'performance' | 'fotos'>('ideias');
   const [showConfig, setShowConfig] = useState(false);
 
   // Config
@@ -174,6 +183,13 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
   const [trackedPosts, setTrackedPosts] = useState<TrackedPost[]>([]);
   const [addingPost, setAddingPost] = useState(false);
   const [newPost, setNewPost] = useState<Partial<TrackedPost>>({ title: '', postedAt: new Date().toISOString().split('T')[0] });
+
+  // Fotos
+  const [photoThemes, setPhotoThemes] = useState<string[]>([]);
+  const [photoThemeInput, setPhotoThemeInput] = useState('');
+  const [searchingPhotos, setSearchingPhotos] = useState(false);
+  const [photoResults, setPhotoResults] = useState<PhotoResult[]>([]);
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
 
   // Reels converter
   const [reelsIdea, setReelsIdea] = useState<ContentIdea | null>(null);
@@ -404,6 +420,54 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
     setIdeas(prev => prev.filter(i => i.id !== id));
   }
 
+  function addPhotoTheme() {
+    const t = photoThemeInput.trim();
+    if (!t || photoThemes.includes(t)) return;
+    setPhotoThemes(prev => [...prev, t]);
+    setPhotoThemeInput('');
+  }
+
+  async function searchPhotos() {
+    if (photoThemes.length === 0) { toast.error('Adicione ao menos um tema'); return; }
+    setSearchingPhotos(true);
+    setPhotoResults([]);
+    setSelectedPhotos(new Set());
+    try {
+      const perTheme = Math.ceil(30 / photoThemes.length);
+      const allPhotos: PhotoResult[] = [];
+      await Promise.all(photoThemes.map(async (theme) => {
+        try {
+          const r = await fetch(`${API}/api/pexels?query=${encodeURIComponent(theme)}&per_page=${perTheme}&orientation=landscape`);
+          if (r.ok) {
+            const data = await r.json();
+            const photos = (data.photos || []).map((p: { id: string | number; url: string; thumb: string; alt: string; photographer: string }) => ({ ...p, theme }));
+            allPhotos.push(...photos);
+          }
+        } catch {}
+      }));
+      setPhotoResults(allPhotos.slice(0, 30));
+      if (allPhotos.length === 0) toast.error('Nenhuma foto encontrada. Tente outros temas.');
+    } catch { toast.error('Erro ao buscar fotos'); }
+    finally { setSearchingPhotos(false); }
+  }
+
+  function togglePhotoSelection(id: string) {
+    setSelectedPhotos(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function copySelectedPhotoUrls() {
+    const urls = photoResults
+      .filter(p => selectedPhotos.has(String(p.id)))
+      .map(p => p.url)
+      .join('\n');
+    navigator.clipboard.writeText(urls);
+    toast.success(`${selectedPhotos.size} URL${selectedPhotos.size !== 1 ? 's' : ''} copiada${selectedPhotos.size !== 1 ? 's' : ''}!`);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────────
@@ -423,6 +487,7 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
               { id: 'ideias',      label: '💡 Ideias',      },
               { id: 'semana',      label: '📅 Semana',      },
               { id: 'performance', label: '📊 Performance', },
+              { id: 'fotos',       label: '🖼️ Fotos',       },
             ] as const).map(t => (
               <button
                 key={t.id}
@@ -976,6 +1041,170 @@ export default function IdeasGenerator({ onCreateCarousel, onUseInMaquina }: Pro
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Tab Fotos ── */}
+      {subTab === 'fotos' && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+          {/* Busca de temas */}
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🖼️</span>
+              <h3 className="text-sm font-bold">Buscar Fotos por Tema</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Adicione temas e busque até 30 fotos do Pexels para usar nos seus slides.
+            </p>
+
+            {/* Input de tema */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={photoThemeInput}
+                onChange={e => setPhotoThemeInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPhotoTheme(); } }}
+                placeholder="Ex: natureza, fitness, motivação..."
+                className="flex-1 px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+              />
+              <button
+                onClick={addPhotoTheme}
+                className="px-3 py-2 rounded-lg bg-secondary hover:bg-border border border-border transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Chips de temas */}
+            {photoThemes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {photoThemes.map(theme => (
+                  <span
+                    key={theme}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 text-xs font-medium"
+                  >
+                    {theme}
+                    <button
+                      onClick={() => setPhotoThemes(prev => prev.filter(t => t !== theme))}
+                      className="ml-0.5 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Botão buscar */}
+            <button
+              onClick={searchPhotos}
+              disabled={searchingPhotos || photoThemes.length === 0}
+              className="w-full py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+            >
+              {searchingPhotos ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Buscando fotos...</>
+              ) : (
+                <>🔍 Buscar {photoThemes.length > 0 ? `~30 fotos` : 'Fotos'}</>
+              )}
+            </button>
+          </div>
+
+          {/* Grid de resultados */}
+          {photoResults.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground font-semibold">
+                  {photoResults.length} fotos encontradas
+                  {selectedPhotos.size > 0 && (
+                    <span className="ml-2 text-orange-400">· {selectedPhotos.size} selecionada{selectedPhotos.size !== 1 ? 's' : ''}</span>
+                  )}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (selectedPhotos.size === photoResults.length) {
+                        setSelectedPhotos(new Set());
+                      } else {
+                        setSelectedPhotos(new Set(photoResults.map(p => String(p.id))));
+                      }
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {selectedPhotos.size === photoResults.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {photoResults.map(photo => {
+                  const pid = String(photo.id);
+                  const selected = selectedPhotos.has(pid);
+                  return (
+                    <div
+                      key={pid}
+                      onClick={() => togglePhotoSelection(pid)}
+                      className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${selected ? 'border-orange-500 scale-[0.97]' : 'border-transparent hover:border-border'}`}
+                    >
+                      <img
+                        src={photo.thumb}
+                        alt={photo.alt || photo.theme}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      {/* Overlay seleção */}
+                      {selected && (
+                        <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center">
+                          <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center shadow-lg">
+                            <Check className="w-3.5 h-3.5 text-white" />
+                          </div>
+                        </div>
+                      )}
+                      {/* Badge tema */}
+                      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-gradient-to-t from-black/70 to-transparent">
+                        <p className="text-[9px] text-white/80 truncate">{photo.theme}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Barra de ações para selecionadas */}
+              {selectedPhotos.size > 0 && (
+                <div className="sticky bottom-2 flex gap-2 bg-background/95 backdrop-blur border border-border rounded-xl p-3 shadow-lg">
+                  <div className="flex-1 flex items-center gap-2">
+                    <span className="text-xs font-semibold text-foreground">
+                      {selectedPhotos.size} foto{selectedPhotos.size !== 1 ? 's' : ''} selecionada{selectedPhotos.size !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <button
+                    onClick={copySelectedPhotoUrls}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border border border-border text-xs font-semibold transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copiar URLs
+                  </button>
+                  <button
+                    onClick={() => setSelectedPhotos(new Set())}
+                    className="px-3 py-1.5 rounded-lg bg-secondary hover:bg-border border border-border text-xs text-muted-foreground transition-colors"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Estado vazio */}
+          {!searchingPhotos && photoResults.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+              <span className="text-4xl">🖼️</span>
+              <p className="text-sm font-semibold text-foreground">Busque fotos para seus slides</p>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Adicione temas acima (ex: "academia", "saúde", "motivação") e clique em Buscar.
+              </p>
+            </div>
+          )}
+
         </div>
       )}
 
