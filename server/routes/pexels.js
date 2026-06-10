@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
       params: {
         query,
         orientation,
-        per_page: Math.min(parseInt(per_page, 10) || 5, 15),
+        per_page: Math.min(parseInt(per_page, 10) || 5, 30),
         page: parseInt(page, 10) || 1,
       },
       timeout: 8000,
