@@ -42,6 +42,15 @@ interface CarouselConfig {
   bodyFontFamily: string;      // '' = global fontFamily, or specific override
   fmteamFontSizes: { headlineSize: number; bodySize: number; contextSize: number };
   ctaStyle: 'dark-fullbleed' | 'light-card';
+  // Personalização da capa fmteam: cores por linha, toggles e imagem do último slide.
+  fmteamCover: {
+    headlineColor: string;   // '' = padrão (branco)
+    subColor: string;        // '' = padrão (branco 88%)
+    contextColor: string;    // '' = padrão (branco 52%)
+    showSub: boolean;        // mostrar subtítulo da capa (linha 2)
+    showContext: boolean;    // mostrar contexto/linha 3 da capa
+    ctaImageUrl: string;     // '' = foto padrão; URL = sua imagem no último slide
+  };
 }
 
 interface CarouselResult {
@@ -241,7 +250,73 @@ const DEFAULT_CONFIG: CarouselConfig = {
   bodyFontFamily: '',
   fmteamFontSizes: { headlineSize: 114, bodySize: 42, contextSize: 64 },
   ctaStyle: 'dark-fullbleed',
+  fmteamCover: {
+    headlineColor: '',
+    subColor: '',
+    contextColor: '',
+    showSub: true,
+    showContext: true,
+    ctaImageUrl: '',
+  },
 };
+
+// ─── Linha de cor por texto da capa (com reset ao padrão) ────────────────────
+
+function CoverColorRow({
+  label, value, fallback, onChange,
+}: { label: string; value: string; fallback: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <label className="text-[11px] text-muted-foreground leading-tight">{label}</label>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <input
+          type="color"
+          value={value || fallback}
+          onChange={e => onChange(e.target.value)}
+          className="w-7 h-7 rounded cursor-pointer bg-transparent border border-border p-0"
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-[10px] text-muted-foreground hover:text-yellow-400 underline"
+          >
+            padrão
+          </button>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/60 w-[38px] text-center">auto</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Toggle simples (switch) ─────────────────────────────────────────────────
+
+function ToggleRow({
+  label, checked, onChange,
+}: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex items-center justify-between gap-2 w-full text-left"
+    >
+      <span className="text-[11px] text-muted-foreground leading-tight">{label}</span>
+      <span
+        className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${
+          checked ? 'bg-yellow-500' : 'bg-border'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            checked ? 'translate-x-4' : ''
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
 
 // ─── Prévia de cores ──────────────────────────────────────────────────────────
 
@@ -322,8 +397,10 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic, onGene
   const [editingSavedHtml, setEditingSavedHtml] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [ctaImgUploading, setCtaImgUploading] = useState(false);
   const [showPersonalization, setShowPersonalization] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const ctaImgInputRef = useRef<HTMLInputElement>(null);
   const htmlImportRef  = useRef<HTMLInputElement>(null);
   const [importingHtml, setImportingHtml] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
@@ -451,6 +528,43 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic, onGene
     reader.onerror = () => {
       toast.error('Erro ao ler o arquivo');
       setPhotoUploading(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Upload da imagem do último slide (CTA) do fmteam. Redimensiona para 1080px de
+  // largura (mantendo proporção) para servir como foto full-bleed sem inflar demais.
+  function handleCtaImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCtaImgUploading(true);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        const MAX_W = 1080;
+        const scale = Math.min(1, MAX_W / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        set('fmteamCover', { ...config.fmteamCover, ctaImageUrl: dataUrl });
+        setCtaImgUploading(false);
+        toast.success('Imagem do último slide carregada!');
+        if (ctaImgInputRef.current) ctaImgInputRef.current.value = '';
+      };
+      img.onerror = () => {
+        toast.error('Não foi possível ler a imagem');
+        setCtaImgUploading(false);
+      };
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => {
+      toast.error('Erro ao ler o arquivo');
+      setCtaImgUploading(false);
     };
     reader.readAsDataURL(file);
   }
@@ -1320,6 +1434,86 @@ document.addEventListener('DOMContentLoaded', function() {
                     className="w-full accent-yellow-500"
                   />
                 </div>
+              </div>
+
+              {/* Personalização da capa fmteam */}
+              <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-3">
+                <p className="text-[10px] font-semibold text-yellow-400 uppercase tracking-wide">Capa fmteam</p>
+
+                {/* Cores por linha */}
+                <CoverColorRow
+                  label="Cor da headline (linha 1)"
+                  value={config.fmteamCover.headlineColor}
+                  fallback="#ffffff"
+                  onChange={v => set('fmteamCover', { ...config.fmteamCover, headlineColor: v })}
+                />
+                {config.fmteamCover.showSub && (
+                  <CoverColorRow
+                    label="Cor do subtítulo (linha 2)"
+                    value={config.fmteamCover.subColor}
+                    fallback="#ffffff"
+                    onChange={v => set('fmteamCover', { ...config.fmteamCover, subColor: v })}
+                  />
+                )}
+                {config.fmteamCover.showContext && (
+                  <CoverColorRow
+                    label="Cor do contexto (linha 3)"
+                    value={config.fmteamCover.contextColor}
+                    fallback="#ffffff"
+                    onChange={v => set('fmteamCover', { ...config.fmteamCover, contextColor: v })}
+                  />
+                )}
+
+                {/* Toggles de linhas */}
+                <ToggleRow
+                  label="Incluir subtítulo da capa (linha 2)"
+                  checked={config.fmteamCover.showSub}
+                  onChange={v => set('fmteamCover', { ...config.fmteamCover, showSub: v })}
+                />
+                <ToggleRow
+                  label="Incluir linha 3 / contexto da capa"
+                  checked={config.fmteamCover.showContext}
+                  onChange={v => set('fmteamCover', { ...config.fmteamCover, showContext: v })}
+                />
+              </div>
+
+              {/* Imagem do último slide (CTA) */}
+              <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-2">
+                <p className="text-[10px] font-semibold text-yellow-400 uppercase tracking-wide">Imagem do último slide</p>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  Por padrão usa a foto fmteam. Envie uma imagem para usar a sua no último slide.
+                </p>
+                <div className="flex items-center gap-2">
+                  {config.fmteamCover.ctaImageUrl ? (
+                    <img
+                      src={config.fmteamCover.ctaImageUrl}
+                      alt="Imagem do último slide"
+                      className="w-12 h-12 rounded-lg object-cover border border-yellow-500/40"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg border border-dashed border-yellow-500/40 flex items-center justify-center text-yellow-500/60">
+                      <Image className="w-5 h-5" />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => ctaImgInputRef.current?.click()}
+                    disabled={ctaImgUploading}
+                    className="flex-1 py-2 px-2.5 rounded-lg border border-yellow-500/40 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-[11px] font-bold transition-colors disabled:opacity-50"
+                  >
+                    {ctaImgUploading ? 'Carregando…' : config.fmteamCover.ctaImageUrl ? 'Trocar imagem' : 'Enviar imagem'}
+                  </button>
+                  {config.fmteamCover.ctaImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => set('fmteamCover', { ...config.fmteamCover, ctaImageUrl: '' })}
+                      className="py-2 px-2.5 rounded-lg border border-border bg-background hover:border-yellow-500/50 text-muted-foreground text-[11px] font-bold transition-colors"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+                <input ref={ctaImgInputRef} type="file" accept="image/*" className="hidden" onChange={handleCtaImageUpload} />
               </div>
             </div>
           )}
