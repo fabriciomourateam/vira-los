@@ -1002,11 +1002,16 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bo
 //   - Progress bar .prog no rodapé de todos os slides
 //   - Sem swipe hint
 //
-function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 42, contextSize = 64 }) {
+function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 42, contextSize = 64, coverColors = {} }) {
   const P  = primaryColor || '#FFC300';
   const HS = Number(headlineSize) || 114;
   const BS = Number(bodySize)    || 42;
   const CS = Number(contextSize) || 64;
+  // Cores customizáveis dos textos da capa (vazio = default da identidade fmteam).
+  // Os <em> internos mantêm o gradiente dourado — só a cor base do texto muda.
+  const headlineColor = (coverColors.headlineColor || '').trim() || '#fff';
+  const subColor      = (coverColors.subColor || '').trim()      || 'rgba(255,255,255,0.88)';
+  const contextColor  = (coverColors.contextColor || '').trim()  || 'rgba(255,255,255,0.52)';
   const PL = '#FFD54F';
   const PD = '#B8860B';
   const LB = '#F2F2F0';
@@ -1212,7 +1217,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     }
     .capa-headline {
       font-family:var(--F-HEAD); font-size:${HS + 2}px; font-weight:800;
-      line-height:0.90; letter-spacing:-4px; text-transform:uppercase; color:#fff;
+      line-height:0.90; letter-spacing:-4px; text-transform:uppercase; color:${headlineColor};
     }
     .capa-headline em {
       font-style:normal;
@@ -1222,7 +1227,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     }
     .capa-sub {
       font-family:var(--F-HEAD); font-size:${HS + 2}px; font-weight:800;
-      line-height:0.92; color:rgba(255,255,255,0.88);
+      line-height:0.92; color:${subColor};
       margin-top:14px; letter-spacing:-4px; text-transform:uppercase;
     }
     /* Texto opcional entre parênteses (linha 3 da capa) */
@@ -1230,7 +1235,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
       font-family:var(--F-HEAD); font-size:${CS}px; font-weight:800;
       line-height:1; letter-spacing:-2px; text-transform:uppercase;
       text-align:left;
-      color:rgba(255,255,255,0.52); margin-top:16px;
+      color:${contextColor}; margin-top:16px;
     }
     .capa-context em {
       font-style:normal;
@@ -1616,6 +1621,32 @@ Gere o HTML completo agora (apenas HTML, nada mais):`;
 
 // ─── CTA fmteam: 2 variantes selecionáveis (dark-fullbleed default ou light-card) ─
 
+// Linhas opcionais da capa (subtítulo + contexto/linha 3). Quando o usuário
+// desativa uma delas no briefing, o div correspondente é omitido do prompt para
+// que o Claude não o gere. A headline (linha 1) é sempre obrigatória.
+function buildFmteamCapaSubContext({ showCoverSub = true, showCoverContext = true } = {}) {
+  let out = '';
+  if (showCoverSub) {
+    out += `\n    <div class="capa-sub">[SUBTÍTULO COMPLEMENTAR — mesma escala, sem em]</div>`;
+  }
+  if (showCoverContext) {
+    out += `\n    <div class="capa-context">[(CONTEXTO EM PARÊNTESES — 3–6 palavras em CAIXA ALTA — ex: A VERDADE QUE NINGUÉM TE CONTA — pode usar <em>palavra</em> para destacar com gradiente dourado, ou adicionar a classe "gradient" no div para todo o texto receber o gradiente — incluir SEMPRE)]</div>`;
+  }
+  return out;
+}
+
+// Descrição da capa na seção "CLASSES DISPONÍVEIS" — reflete os toggles para
+// não induzir o Claude a recriar linhas que o usuário desativou.
+function buildFmteamCapaClassesNote({ showCoverSub = true, showCoverContext = true } = {}) {
+  let note = `Capa:         .capa-headline-area > .capa-badge (.badge-ring > .badge-avatar | .badge-info > .badge-name-row (.badge-name + .badge-verified) + .badge-handle) + .capa-headline (em=destaque)`;
+  if (showCoverSub) note += ` + .capa-sub`;
+  if (showCoverContext) note += ` + .capa-context (contexto entre parênteses, em=dourado)`;
+  if (!showCoverSub && !showCoverContext) note += ` (use APENAS a headline na capa — NÃO inclua .capa-sub nem .capa-context)`;
+  else if (!showCoverSub) note += ` (NÃO inclua .capa-sub)`;
+  else if (!showCoverContext) note += ` (NÃO inclua .capa-context)`;
+  return note;
+}
+
 function buildFmteamCtaTemplate({ ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor }) {
   // Default: foto cobre todo o slide, card preto com borda dourada,
   // "COMENTA: / SHAPE / Pra garantir um Bônus exclusivo..." FIXOS.
@@ -1697,7 +1728,7 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro,
   titleFontSize = 0, bodyFontSize = 0,
   titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '',
-  ctaStyle = 'dark-fullbleed' }) {
+  ctaStyle = 'dark-fullbleed', showCoverSub = true, showCoverContext = true }) {
 
   const handle = (instagramHandle || 'fabriciomourateam').replace('@', '');
   const handleAt = `@${handle}`;
@@ -1765,6 +1796,9 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
     ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor,
   });
 
+  const capaSubContext = buildFmteamCapaSubContext({ showCoverSub, showCoverContext });
+  const capaClassesNote = buildFmteamCapaClassesNote({ showCoverSub, showCoverContext });
+
   return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo fmteam (Fabricio Moura): identidade visual dourada, slides dark com foto full-bleed e headline grande, slides light com imagem no topo e texto escuro, slide gradient com texto escuro, CTA com card branco.
 
 Tema: "${topic}"
@@ -1831,9 +1865,7 @@ SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
         <div class="badge-handle">${handleAt}</div>
       </div>
     </div>
-    <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>
-    <div class="capa-sub">[SUBTÍTULO COMPLEMENTAR — mesma escala, sem em — omitir se não couber]</div>
-    <div class="capa-context">[(CONTEXTO EM PARÊNTESES — 3–6 palavras em CAIXA ALTA — ex: A VERDADE QUE NINGUÉM TE CONTA — pode usar <em>palavra</em> para destacar com gradiente dourado, ou adicionar a classe "gradient" no div para todo o texto receber o gradiente — OBRIGATÓRIO, nunca omitir)]</div>
+    <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>${capaSubContext}
   </div>
   ${progFor(1, 'dark')}
 </div>
@@ -1921,7 +1953,7 @@ Gradient:     .grad-num (número decorativo de fundo)
 Listas:       .arrow-row > .arrow-icon + .arrow-text  (strong=bold)
 Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
 Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
-Capa:         .capa-headline-area > .capa-badge (.badge-ring > .badge-avatar | .badge-info > .badge-name-row (.badge-name + .badge-verified) + .badge-handle) + .capa-headline (em=destaque) + .capa-sub + .capa-context (OBRIGATÓRIO — contexto entre parênteses, em=dourado)
+${capaClassesNote}
 CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
 IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s8 (slides internos)  |  CTA sem ID
 
@@ -1935,10 +1967,12 @@ Gere o HTML completo agora (apenas HTML, nada mais):`;
  * É sempre adicionada pelo servidor ao final do preamble (template ou padrão),
  * garantindo que o usuário não possa quebrar a estrutura técnica dos slides.
  */
-function buildFmteamHTMLStructureBlock({ topic, numSlides, handleAt, displayName, badgeAvatarInner, ctaPhotoSrc, header, verifiedSvg, progFor, ctaStyle = 'dark-fullbleed' }) {
+function buildFmteamHTMLStructureBlock({ topic, numSlides, handleAt, displayName, badgeAvatarInner, ctaPhotoSrc, header, verifiedSvg, progFor, ctaStyle = 'dark-fullbleed', showCoverSub = true, showCoverContext = true }) {
   const { ctaSlideTemplate } = buildFmteamCtaTemplate({
     ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor,
   });
+  const capaSubContext = buildFmteamCapaSubContext({ showCoverSub, showCoverContext });
+  const capaClassesNote = buildFmteamCapaClassesNote({ showCoverSub, showCoverContext });
   return `━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
 
 SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
@@ -1959,9 +1993,7 @@ SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
         <div class="badge-handle">${handleAt}</div>
       </div>
     </div>
-    <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>
-    <div class="capa-sub">[SUBTÍTULO COMPLEMENTAR — mesma escala, sem em — omitir se não couber]</div>
-    <div class="capa-context">[(CONTEXTO EM PARÊNTESES — 3–6 palavras em CAIXA ALTA — ex: A VERDADE QUE NINGUÉM TE CONTA — pode usar <em>palavra</em> para destacar com gradiente dourado, ou adicionar a classe "gradient" no div para todo o texto receber o gradiente — OBRIGATÓRIO, nunca omitir)]</div>
+    <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>${capaSubContext}
   </div>
   ${progFor(1, 'dark')}
 </div>
@@ -2049,7 +2081,7 @@ Gradient:     .grad-num (número decorativo de fundo)
 Listas:       .arrow-row > .arrow-icon + .arrow-text  (strong=bold)
 Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
 Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
-Capa:         .capa-headline-area > .capa-badge (.badge-ring > .badge-avatar | .badge-info > .badge-name-row (.badge-name + .badge-verified) + .badge-handle) + .capa-headline (em=destaque) + .capa-sub + .capa-context (OBRIGATÓRIO — contexto entre parênteses, em=dourado)
+${capaClassesNote}
 CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
 IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s8 (slides internos)  |  CTA sem ID
 
@@ -2241,7 +2273,23 @@ async function generateCarousel(config, setStep = () => {}) {
     bodyFontFamily = '',
     fmteamFontSizes = {},
     ctaStyle = 'dark-fullbleed',  // 'dark-fullbleed' (default) | 'light-card'
+    fmteamCover = {},             // personalização da capa fmteam (cores + toggles + imagem do CTA)
   } = config;
+
+  // Opções de personalização da capa fmteam (com defaults seguros)
+  const fmCoverShowSub     = fmteamCover.showSub !== false;      // default: mostra subtítulo
+  const fmCoverShowContext = fmteamCover.showContext !== false;  // default: mostra linha 3
+  const fmCoverColors = {
+    headlineColor: fmteamCover.headlineColor || '',
+    subColor:      fmteamCover.subColor || '',
+    contextColor:  fmteamCover.contextColor || '',
+  };
+  // Imagem customizada do último slide (CTA) — aceita http(s) ou data URI.
+  // Diferente do prompt (onde data URIs inflam tokens), aqui a imagem só entra no
+  // HTML via pós-processamento do placeholder __CTA_BG_PHOTO__, então data: é ok.
+  const fmCtaImageUrl = (fmteamCover.ctaImageUrl && /^(https?:\/\/|data:image\/)/i.test(String(fmteamCover.ctaImageUrl).trim()))
+    ? String(fmteamCover.ctaImageUrl).trim()
+    : '';
 
   if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
@@ -2417,6 +2465,8 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
         verifiedSvg: fmVerifiedSvg,
         progFor: fmProgFor,
         ctaStyle,
+        showCoverSub: fmCoverShowSub,
+        showCoverContext: fmCoverShowContext,
       });
 
       htmlPrompt = fmPreamble + '\n\n' + fmStructure;
@@ -2430,6 +2480,8 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
         titleFontSize, bodyFontSize,
         titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
         ctaStyle,
+        showCoverSub: fmCoverShowSub,
+        showCoverContext: fmCoverShowContext,
       });
     }
   } else {
@@ -2488,6 +2540,7 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
       headlineSize: fmteamFontSizes.headlineSize,
       bodySize:     fmteamFontSizes.bodySize,
       contextSize:  fmteamFontSizes.contextSize,
+      coverColors:  fmCoverColors,
     });
     // Remove qualquer <style> e <link> de fontes que Claude gerou por engano
     html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
@@ -2509,7 +2562,10 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
     // takeScreenshotsPixelPerfect (page.setContent sem baseURL), o próprio método
     // injeta uma <base> tag apontando para localhost:PORT antes do setContent.
     if (html.includes('__CTA_BG_PHOTO__')) {
-      html = html.replace(/__CTA_BG_PHOTO__/g, '/assets/fmteam-cta-bg.png');
+      // Usa a imagem customizada do usuário no último slide quando fornecida;
+      // caso contrário, mantém a foto padrão fmteam servida via express.
+      const ctaPhoto = fmCtaImageUrl || '/assets/fmteam-cta-bg.png';
+      html = html.replace(/__CTA_BG_PHOTO__/g, ctaPhoto);
     }
   }
 
