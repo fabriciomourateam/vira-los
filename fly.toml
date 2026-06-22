@@ -11,11 +11,12 @@ primary_region = 'ams'
 [http_service]
   internal_port = 8080
   force_https = true
-  # Máquina sempre de pé (min 1) pro cron das 09h (rotina diária) disparar.
-  # Com auto_stop=true e min=0 a máquina dormia por inatividade e o cron não rodava.
-  auto_stop_machines = false
+  # Máquina dorme por inatividade (economia). É ACORDADA por HTTP — a rotina
+  # diária roda via cron externo (GitHub Actions) que bate em /api/daily-content
+  # e fica fazendo polling até concluir, mantendo a máquina viva durante a geração.
+  auto_stop_machines = true
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   max_machines_running = 1
   processes = ['app']
 

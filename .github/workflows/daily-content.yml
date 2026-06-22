@@ -1,0 +1,42 @@
+name: Conteúdo diário (09h BRT)
+
+# Roda todo dia às 12:00 UTC = 09:00 America/Sao_Paulo (Brasil não tem horário de verão).
+# Acorda a máquina do Fly (que dorme por inatividade), dispara a geração de 2 carrosséis
+# + 2 reels e fica fazendo polling até concluir — o polling mantém a máquina viva durante
+# a geração. Depois ela dorme de novo sozinha.
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch: {}   # permite rodar manualmente pelo botão do GitHub
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar e aguardar a geração diária
+        env:
+          BASE: https://vira-los.fly.dev
+          KEY: ${{ secrets.DAILY_CRON_SECRET }}   # opcional; só é exigida se setada no Fly
+        run: |
+          set -e
+          today=$(TZ=America/Sao_Paulo date +%F)
+          echo "Acordando a máquina e disparando a geração de $today..."
+          curl -sS -m 60 -X POST "$BASE/api/daily-content/generate" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-key: $KEY" \
+            -d '{"trigger":"cron"}' || true
+
+          echo "Aguardando o batch ficar pronto (mantém a máquina acordada)..."
+          for i in $(seq 1 40); do
+            sleep 30
+            resp=$(curl -sS -m 30 "$BASE/api/daily-content" || echo '{}')
+            status=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d)][0].status // "none"')
+            echo "  tentativa $i — status de hoje: $status"
+            if [ "$status" = "done" ] || [ "$status" = "partial" ]; then
+              echo "✅ Conteúdo de $today gerado (status: $status)."
+              exit 0
+            fi
+          done
+          echo "⚠️ Timeout aguardando concluir — a geração pode ainda estar rodando no servidor."
+          exit 0

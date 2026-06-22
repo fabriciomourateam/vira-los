@@ -173,12 +173,20 @@ async function buildOne(theme) {
 // Gera o batch do dia (2 temas). Resiliente: falha de 1 tema não derruba o outro.
 async function generateDailyBatch({ trigger = 'manual' } = {}) {
   if (state.generating) throw new Error('Já existe uma geração em andamento.');
+
+  const date = new Date().toISOString().slice(0, 10);
+  // Cron é idempotente por dia: se já existe batch de hoje (não-erro), não regera.
+  // O botão "Gerar agora" (manual) ignora essa trava e sempre gera.
+  if (trigger !== 'manual') {
+    const already = db.getAllDailyBatches().some((b) => b.date === date && b.status !== 'error');
+    if (already) { console.log('[DailyContent] batch de hoje já existe — cron ignorado.'); return null; }
+  }
+
   state.generating = true;
   state.startedAt = new Date().toISOString();
   state.lastError = null;
 
   const batchId = `daily_${Date.now()}`;
-  const date = new Date().toISOString().slice(0, 10);
   const themes = pickThemes();
   const carouselIds = [];
   const reelIds = [];
