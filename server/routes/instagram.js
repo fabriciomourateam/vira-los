@@ -194,9 +194,15 @@ router.post('/sync', async (req, res) => {
       });
     }
 
-    // Snapshot de evolução — 1 ponto no gráfico por sync (atualiza se mesmo dia)
-    const snapshot = buildSnapshot(posts, accountInfo);
-    db.appendInstagramHistory(snapshot);
+    // Snapshot de evolução — 1 ponto no gráfico por sync (atualiza se mesmo dia).
+    // Best-effort: NUNCA derruba o sync se algo aqui falhar.
+    let snapshot = null;
+    try {
+      snapshot = buildSnapshot(posts, accountInfo);
+      db.appendInstagramHistory(snapshot);
+    } catch (e) {
+      console.warn('[Instagram/Sync] snapshot de evolução falhou:', e.message);
+    }
 
     // Demografia do público — best-effort, não derruba o sync se falhar
     try {

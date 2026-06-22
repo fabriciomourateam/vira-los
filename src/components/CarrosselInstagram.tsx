@@ -6,7 +6,7 @@ import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
   Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
-  Archive, ArchiveRestore, Save, X, Code2, Video,
+  Archive, ArchiveRestore, Save, X, Code2, Video, CalendarClock,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 import PromptTemplateModal from './PromptTemplateModal';
@@ -2551,6 +2551,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     {saved.isTemplate && (
                       <div className="absolute top-2 left-2 flex items-center gap-1 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
                         <LayoutTemplate className="w-2.5 h-2.5" /> Modelo
+                      </div>
+                    )}
+                    {/* Badge da rotina diária */}
+                    {(saved as any).source === 'daily' && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                        <CalendarClock className="w-2.5 h-2.5" /> Diário
                       </div>
                     )}
                     {/* Desktop: overlay on hover — só renderiza quando há thumb,
