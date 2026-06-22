@@ -23,19 +23,20 @@ const NICHE = 'Saúde hormonal e performance masculina';
 
 // ── Banco de temas (ângulos comprovados do PERFORMANCE-LOG, por SINTOMA = ban-safe) ──
 // O cérebro editorial (fmteamEditorial.js) cuida da voz/anti-ban; aqui é só O QUE falar.
+// `keywords` = termos pra casar com legendas dos posts reais (ponderação por performance).
 const THEMES = [
-  { id: 'testo-baixa', topic: 'Sinais de testosterona baixa no homem', tone: 'investigativo', emotion: 'preocupação' },
-  { id: 'energia',     topic: 'Falta de energia que não passa nem dormindo', tone: 'direto', emotion: 'cansaço' },
-  { id: 'rotina',      topic: 'Por que você não consegue encaixar treino e dieta na rotina', tone: 'direto', emotion: 'frustração' },
-  { id: 'cortisol',    topic: 'Estresse e cortisol travando o seu shape', tone: 'investigativo', emotion: 'frustração' },
-  { id: 'falso-magro', topic: 'Falso magro: magro por fora, gordo por dentro', tone: 'provocativo', emotion: 'surpresa' },
-  { id: 'plato',       topic: 'Treina pesado e não cresce: o que está travando', tone: 'direto', emotion: 'frustração' },
-  { id: 'alcool',      topic: 'Como o álcool sabota seu shape e sua testosterona', tone: 'provocativo', emotion: 'surpresa' },
-  { id: 'glp1',        topic: 'Emagrecimento rápido que rouba o seu músculo', tone: 'investigativo', emotion: 'alerta' },
-  { id: 'vitd-zinco',  topic: 'Vitamina D, zinco e magnésio baixos derrubam sua testosterona', tone: 'investigativo', emotion: 'curiosidade' },
-  { id: 'depois-30',   topic: 'Depois dos 30 o shape fica mais difícil — e por quê', tone: 'direto', emotion: 'preocupação' },
-  { id: 'sono',        topic: 'Sono ruim sabotando sua testosterona e seu shape', tone: 'investigativo', emotion: 'preocupação' },
-  { id: 'cardio',      topic: 'Cardio em excesso comendo o seu músculo', tone: 'provocativo', emotion: 'contra-intuição' },
+  { id: 'testo-baixa', topic: 'Sinais de testosterona baixa no homem', tone: 'investigativo', emotion: 'preocupação', keywords: ['testosterona', 'testo', 'libido', 'hormonal', 'hormônio'] },
+  { id: 'energia',     topic: 'Falta de energia que não passa nem dormindo', tone: 'direto', emotion: 'cansaço', keywords: ['energia', 'disposição', 'cansaço', 'cansado', 'fadiga'] },
+  { id: 'rotina',      topic: 'Por que você não consegue encaixar treino e dieta na rotina', tone: 'direto', emotion: 'frustração', keywords: ['rotina', 'tempo', 'consistência', 'hábito', 'agenda'] },
+  { id: 'cortisol',    topic: 'Estresse e cortisol travando o seu shape', tone: 'investigativo', emotion: 'frustração', keywords: ['cortisol', 'estresse', 'estressado', 'ansiedade'] },
+  { id: 'falso-magro', topic: 'Falso magro: magro por fora, gordo por dentro', tone: 'provocativo', emotion: 'surpresa', keywords: ['falso magro', 'gordura visceral', 'magro'] },
+  { id: 'plato',       topic: 'Treina pesado e não cresce: o que está travando', tone: 'direto', emotion: 'frustração', keywords: ['não cresce', 'platô', 'estagnado', 'hipertrofia', 'massa muscular'] },
+  { id: 'alcool',      topic: 'Como o álcool sabota seu shape e sua testosterona', tone: 'provocativo', emotion: 'surpresa', keywords: ['álcool', 'bebida', 'cerveja', 'beber'] },
+  { id: 'glp1',        topic: 'Emagrecimento rápido que rouba o seu músculo', tone: 'investigativo', emotion: 'alerta', keywords: ['mounjaro', 'ozempic', 'glp', 'semaglutida', 'tirzepatida', 'emagrecimento rápido'] },
+  { id: 'vitd-zinco',  topic: 'Vitamina D, zinco e magnésio baixos derrubam sua testosterona', tone: 'investigativo', emotion: 'curiosidade', keywords: ['vitamina d', 'zinco', 'magnésio', 'suplemento'] },
+  { id: 'depois-30',   topic: 'Depois dos 30 o shape fica mais difícil — e por quê', tone: 'direto', emotion: 'preocupação', keywords: ['depois dos 30', 'idade', 'metabolismo', 'envelhec'] },
+  { id: 'sono',        topic: 'Sono ruim sabotando sua testosterona e seu shape', tone: 'investigativo', emotion: 'preocupação', keywords: ['sono', 'dormir', 'dorme', 'insônia'] },
+  { id: 'cardio',      topic: 'Cardio em excesso comendo o seu músculo', tone: 'provocativo', emotion: 'contra-intuição', keywords: ['cardio', 'corrida', 'aeróbico', 'esteira'] },
 ];
 
 // Estado em memória (só 1 geração por vez)
@@ -58,8 +59,47 @@ function pickThemes() {
   const recent = recentThemeIds();
   let pool = THEMES.filter((t) => !recent.has(t.id));
   if (pool.length < 2) pool = THEMES.slice(); // todos recentes → libera geral
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, 2);
+
+  // Ponderação por performance real (Analytics): temas cujos posts performaram
+  // melhor (saves/shares/follows) têm mais chance. Sem dados = pesos iguais (sorteio puro).
+  const scores = scoreThemes();
+  const maxScore = Math.max(0, ...pool.map((t) => scores[t.id] || 0));
+  const weights = pool.map((t) => 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4);
+  return weightedSample(pool, weights, 2);
+}
+
+// Score de cada tema a partir dos posts reais do Instagram (Analytics).
+// Casa keywords do tema nas legendas; pontua saves/shares/follows acima de likes.
+function scoreThemes() {
+  const posts = (db.getInstagramPosts && db.getInstagramPosts()) || [];
+  const scores = {};
+  for (const t of THEMES) {
+    const matched = posts.filter((p) => {
+      const cap = (p.caption || '').toLowerCase();
+      return (t.keywords || []).some((k) => cap.includes(k));
+    });
+    if (!matched.length) { scores[t.id] = 0; continue; }
+    const sum = matched.reduce((s, p) =>
+      s + (p.saves || 0) * 4 + (p.shares || 0) * 3 + (p.follows || 0) * 5 + (p.comments || 0) * 2 + (p.likes || 0), 0);
+    scores[t.id] = sum / matched.length;
+  }
+  return scores;
+}
+
+// Amostragem ponderada sem reposição (k itens).
+function weightedSample(items, weights, k) {
+  const pool = items.map((it, i) => ({ it, w: Math.max(weights[i], 0.0001) }));
+  const chosen = [];
+  while (chosen.length < k && pool.length) {
+    const total = pool.reduce((s, p) => s + p.w, 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    for (; idx < pool.length; idx++) { r -= pool[idx].w; if (r <= 0) break; }
+    idx = Math.min(idx, pool.length - 1);
+    chosen.push(pool[idx].it);
+    pool.splice(idx, 1);
+  }
+  return chosen;
 }
 
 async function buildOne(theme) {
