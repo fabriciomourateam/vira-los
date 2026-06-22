@@ -71,6 +71,7 @@ const FEATURE_PATTERNS = [
   // [pathPrefix, feature] — primeiro match ganha
   ['/api/carousel/regenerate-slide',  'regenerate-slide'],
   ['/api/carousel/generate',          'carousel'],
+  ['/api/daily-content/generate',     'daily-content'],
   ['/api/maquina/headlines',          'maquina-headlines'],
   ['/api/maquina/structure',          'maquina-structure'],
   ['/api/maquina/generate',           'maquina-html'],
@@ -102,6 +103,7 @@ app.use('/api/platforms',       require('./routes/platforms'));
 app.use('/api/research',        require('./routes/research'));
 app.use('/api/agent',           require('./routes/agent'));
 app.use('/api/carousel',        require('./routes/carousel'));
+app.use('/api/daily-content',   require('./routes/dailyContent'));
 app.use('/api/reels',           require('./routes/reels'));
 app.use('/api/reels-analyzer',  require('./routes/reelsAnalyzer'));
 app.use('/api/viral-score',     require('./routes/viralScore'));

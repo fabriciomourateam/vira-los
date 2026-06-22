@@ -17,6 +17,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { FABRICIO_AVATAR_DATA_URL } = require('./fmteamAssets');
+const { FMTEAM_EDITORIAL } = require('./fmteamEditorial');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -1810,6 +1811,8 @@ Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
 ${instructionsSection}
 ${imagesSection}
 ${roteiroSection}
+
+${FMTEAM_EDITORIAL}
 
 ━━━ REGRAS ABSOLUTAS — FMTEAM v2 ━━━
 - Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>

@@ -117,6 +117,10 @@ function start() {
     }
   });
 
+  // Rotina diária de conteúdo: roda via cron EXTERNO (GitHub Actions) batendo em
+  // POST /api/daily-content/generate — a máquina dorme e é acordada por HTTP, então
+  // um cron interno (node-cron) não dispararia de forma confiável.
+
   console.log('⏰ Scheduler iniciado — verificando a cada minuto');
 }
 

@@ -26,6 +26,40 @@ const db = require('../db/database');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
+// ─── Helper: monta um snapshot agregado das métricas da conta ────────────────
+// Roda a cada sync. Captura nº de seguidores + médias/totais dos posts, datado,
+// pra alimentar o gráfico de evolução (1 ponto por sync).
+function buildSnapshot(posts, accountInfo) {
+  const sum = (f) => posts.reduce((s, p) => s + (Number(p[f]) || 0), 0);
+  const avg = (f) => (posts.length ? sum(f) / posts.length : 0);
+  const r2  = (x) => Math.round(x * 100) / 100;
+
+  const reels     = posts.filter((p) => p.mediaType === 'REELS' || p.mediaType === 'VIDEO');
+  const carousels = posts.filter((p) => p.mediaType === 'CAROUSEL_ALBUM');
+  const images    = posts.filter((p) => p.mediaType === 'IMAGE');
+
+  return {
+    date:              new Date().toISOString(),
+    followers:         accountInfo?.followers_count ?? null,
+    mediaCount:        accountInfo?.media_count ?? null,
+    postsAnalyzed:     posts.length,
+    avgEngagementRate: r2(avg('engagementRate')),
+    avgSaveRate:       r2(avg('saveRate')),
+    avgShareRate:      r2(avg('shareRate')),
+    avgCommentRate:    r2(avg('commentRate')),
+    totalReach:        sum('reach'),
+    totalLikes:        sum('likes'),
+    totalComments:     sum('comments'),
+    totalSaves:        sum('saves'),
+    totalShares:       sum('shares'),
+    totalViews:        sum('views'),
+    totalFollows:      sum('follows'),
+    reelsCount:        reels.length,
+    carouselsCount:    carousels.length,
+    imagesCount:       images.length,
+  };
+}
+
 // ─── OAuth Connect URL ────────────────────────────────────────────────────────
 
 router.get('/connect-url', (req, res) => {
@@ -143,9 +177,26 @@ router.post('/sync', async (req, res) => {
   try {
     const posts = await syncPosts(token.accessToken);
     db.saveInstagramPosts(posts);
-    if (!token.fromScheduler) {
-      db.setInstagramToken({ ...token, lastSync: new Date().toISOString() });
+
+    // Refresca os dados da conta (seguidores atualizados) — best-effort
+    let accountInfo = null;
+    try {
+      accountInfo = await getIGUserInfo(token.accessToken);
+    } catch (e) {
+      console.warn('[Instagram/Sync] info da conta indisponível:', e.message);
     }
+
+    if (!token.fromScheduler) {
+      db.setInstagramToken({
+        ...token,
+        followersCount: accountInfo?.followers_count ?? token.followersCount ?? null,
+        lastSync: new Date().toISOString(),
+      });
+    }
+
+    // Snapshot de evolução — 1 ponto no gráfico por sync (atualiza se mesmo dia)
+    const snapshot = buildSnapshot(posts, accountInfo);
+    db.appendInstagramHistory(snapshot);
 
     // Demografia do público — best-effort, não derruba o sync se falhar
     try {
@@ -155,7 +206,7 @@ router.post('/sync', async (req, res) => {
       console.warn('[Instagram/Sync] demografia indisponível:', e.message);
     }
 
-    res.json({ ok: true, count: posts.length });
+    res.json({ ok: true, count: posts.length, snapshot });
   } catch (err) {
     // Extrai a mensagem real do Meta API (axios encapsula em err.response.data.error)
     const metaError = err.response?.data?.error;
@@ -177,6 +228,12 @@ router.get('/posts', (req, res) => {
 
 router.get('/audience', (req, res) => {
   res.json(db.getInstagramAudience() || null);
+});
+
+// ─── Histórico de métricas (gráfico de evolução) ─────────────────────────────
+
+router.get('/history', (req, res) => {
+  res.json(db.getInstagramHistory());
 });
 
 // ─── Saved Analysis ───────────────────────────────────────────────────────────
