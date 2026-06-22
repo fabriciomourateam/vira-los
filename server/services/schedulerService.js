@@ -117,7 +117,19 @@ function start() {
     }
   });
 
-  console.log('⏰ Scheduler iniciado — verificando a cada minuto');
+  // Rotina diária de conteúdo — 09h (horário de Brasília): 2 carrosséis + 2 reels
+  const daily = require('./dailyContentService');
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      console.log('🗓️  Rotina diária 09h — gerando 2 carrosséis + 2 reels...');
+      const batch = await daily.generateDailyBatch({ trigger: 'cron' });
+      console.log(`🗓️  Rotina diária concluída: ${batch.id} (${batch.status})`);
+    } catch (e) {
+      console.error('Rotina diária falhou:', e.message);
+    }
+  }, { timezone: 'America/Sao_Paulo' });
+
+  console.log('⏰ Scheduler iniciado — posts a cada minuto · conteúdo diário às 09h (BRT)');
 }
 
 module.exports = { start, processSchedule };

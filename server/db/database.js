@@ -272,6 +272,11 @@ const saveReel   = (r) => { const db = readDb('reels'); db.push({ ...r, created_
 const updateReel = (id, data) => { const db = readDb('reels').map((r) => r.id === id ? { ...r, ...data } : r); writeDb('reels', db); };
 const deleteReel = (id) => writeDb('reels', readDb('reels').filter((r) => r.id !== id));
 
+// ── Conteúdo diário (rotina automática: 2 carrosséis + 2 reels/dia) ───────────
+const getAllDailyBatches = () => readDb('daily_content').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const saveDailyBatch    = (b) => { const db = readDb('daily_content'); db.push({ ...b, created_at: now() }); writeDb('daily_content', db); };
+const updateDailyBatch  = (id, data) => { const db = readDb('daily_content').map((b) => b.id === id ? { ...b, ...data } : b); writeDb('daily_content', db); };
+
 // ── Caixinhas de perguntas (Q&A stickers gerados a partir do IG do usuário) ───
 const getAllQaStickers = () => readDb('qa_stickers').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const saveQaStickers   = (s) => { const db = readDb('qa_stickers'); db.push({ ...s, created_at: now() }); writeDb('qa_stickers', db); };
@@ -348,7 +353,7 @@ module.exports = {
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
-  // Reels Sessions (fila de gravação)
+  getAllDailyBatches, saveDailyBatch, updateDailyBatch,  // Reels Sessions (fila de gravação)
   getAllReelsSessions, getReelsSession, saveReelsSession, updateReelsSession, deleteReelsSession,
   // Caixinhas de perguntas
   getAllQaStickers, saveQaStickers, updateQaStickers, deleteQaStickers,
