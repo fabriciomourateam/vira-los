@@ -104,6 +104,7 @@ app.use('/api/research',        require('./routes/research'));
 app.use('/api/agent',           require('./routes/agent'));
 app.use('/api/carousel',        require('./routes/carousel'));
 app.use('/api/daily-content',   require('./routes/dailyContent'));
+app.use('/api/docs',            require('./routes/docs'));
 app.use('/api/reels',           require('./routes/reels'));
 app.use('/api/reels-analyzer',  require('./routes/reelsAnalyzer'));
 app.use('/api/viral-score',     require('./routes/viralScore'));

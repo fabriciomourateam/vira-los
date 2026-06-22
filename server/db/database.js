@@ -277,6 +277,11 @@ const getAllDailyBatches = () => readDb('daily_content').sort((a, b) => b.create
 const saveDailyBatch    = (b) => { const db = readDb('daily_content'); db.push({ ...b, created_at: now() }); writeDb('daily_content', db); };
 const updateDailyBatch  = (id, data) => { const db = readDb('daily_content').map((b) => b.id === id ? { ...b, ...data } : b); writeDb('daily_content', db); };
 
+// ── Documentos vivos (painéis editáveis: Público / SEO) ───────────────────────
+// Guarda só o override do usuário; se não existir, o frontend usa o default dele.
+const getDoc = (id) => { const d = readObj(`doc_${id}`); return d && Object.keys(d).length ? d : null; };
+const setDoc = (id, data) => writeObj(`doc_${id}`, { ...data, updated_at: now() });
+
 // ── Caixinhas de perguntas (Q&A stickers gerados a partir do IG do usuário) ───
 const getAllQaStickers = () => readDb('qa_stickers').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const saveQaStickers   = (s) => { const db = readDb('qa_stickers'); db.push({ ...s, created_at: now() }); writeDb('qa_stickers', db); };
@@ -353,7 +358,8 @@ module.exports = {
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
-  getAllDailyBatches, saveDailyBatch, updateDailyBatch,  // Reels Sessions (fila de gravação)
+  getAllDailyBatches, saveDailyBatch, updateDailyBatch,
+  getDoc, setDoc,  // Reels Sessions (fila de gravação)
   getAllReelsSessions, getReelsSession, saveReelsSession, updateReelsSession, deleteReelsSession,
   // Caixinhas de perguntas
   getAllQaStickers, saveQaStickers, updateQaStickers, deleteQaStickers,
