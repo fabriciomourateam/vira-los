@@ -36,6 +36,23 @@ Estas regras SOBREPÕEM qualquer orientação de tom jornalístico ou de 3ª pes
 - SEM hashtag de substância e SEM citar nome comercial de droga como produto.
 - SEM antes/depois agressivo e SEM promessa milagrosa com prazo.
 - Ataca o PROBLEMA do homem (sintoma, risco, o que está acontecendo no corpo), não o produto.
-- Se algum slide violar qualquer item acima, REESCREVER antes de entregar.`;
+- Se algum slide violar qualquer item acima, REESCREVER antes de entregar.
+
+## ÂNGULOS QUE BATEM NA DOR (comprovados no nicho — priorize, sempre por SINTOMA)
+Falar de hormônio anda numa linha tênue, mas é o que engaja: bate direto na dor masculina. Use estes ângulos comprovados (todos enquadrados por sintoma = ban-safe):
+- Sinais de testosterona baixa: cansaço, libido baixa, barriga, névoa mental, recuperação ruim.
+- Falta de energia / disposição que não volta nem dormindo.
+- Não conseguir adaptar nada à própria rotina (treino, dieta, sono) — e por que o shape não anda.
+- Estresse/cortisol travando o shape: gordura abdominal, perda de músculo, fome de doce.
+- "Falso magro": pouco músculo, gordura visceral, insulina.
+- Treina pesado e não cresce: platô, recuperação, sono, hormônio.
+- Álcool travando o shape: testosterona, sono profundo, barriga.
+- GLP-1 / emagrecimento rápido roubando músculo: "magro mole", proteína, metabolismo.
+- Vitamina D + zinco/magnésio baixos: testosterona, energia, libido, sono.
+- Depois dos 30 o shape fica mais difícil: testo caindo, perda de músculo, insulina.
+- Sono ruim sabotando testosterona; cardio em excesso comendo músculo.
+
+Ganchos que mais prendem: número ("3 sinais", "5 erros"), contra-intuição ("pare de fazer X"), dor específica nomeada.
+Por etapa de funil — TOPO: erros que ele comete + mitos (jejum, low carb, abdômen). MEIO: passo a passo aplicável hoje, o que comer/treinar. FUNDO: "faz tudo certo e não anda" + mecanismo + prova de aluno + CTA pra DM.`;
 
 module.exports = { FMTEAM_EDITORIAL };
