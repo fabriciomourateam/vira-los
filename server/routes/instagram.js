@@ -12,6 +12,7 @@
  */
 
 const express = require('express');
+const axios   = require('axios');
 const router  = express.Router();
 
 const {
@@ -190,6 +191,7 @@ router.post('/sync', async (req, res) => {
       db.setInstagramToken({
         ...token,
         followersCount: accountInfo?.followers_count ?? token.followersCount ?? null,
+        profilePicture: accountInfo?.profile_picture_url || token.profilePicture || null,
         lastSync: new Date().toISOString(),
       });
     }
@@ -228,6 +230,25 @@ router.post('/sync', async (req, res) => {
 
 router.get('/posts', (req, res) => {
   res.json(db.getInstagramPosts());
+});
+
+// ─── Proxy de imagens do Instagram ────────────────────────────────────────────
+// As URLs do CDN do Meta (cdninstagram/fbcdn) bloqueiam/expiram quando carregadas
+// direto pelo navegador de outro domínio (403). O servidor busca e re-serve.
+router.get('/image', async (req, res) => {
+  const u = req.query.u;
+  if (!u) return res.status(400).end();
+  let host;
+  try { host = new URL(u).hostname; } catch { return res.status(400).end(); }
+  if (!/(\.cdninstagram\.com|\.fbcdn\.net)$/i.test(host)) return res.status(400).end();
+  try {
+    const r = await axios.get(u, { responseType: 'arraybuffer', timeout: 10000 });
+    res.set('Content-Type', r.headers['content-type'] || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(r.data));
+  } catch {
+    res.status(404).end();
+  }
 });
 
 // ─── Demografia do público ──────────────────────────────────────────────────

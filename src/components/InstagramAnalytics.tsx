@@ -11,6 +11,14 @@ import {
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// Imagens do CDN do Meta (cdninstagram/fbcdn) bloqueiam no browser (403) — passa pelo proxy do servidor.
+function igImg(url?: string): string {
+  if (!url) return '';
+  return /(\.cdninstagram\.com|\.fbcdn\.net)/i.test(url)
+    ? `${API}/api/instagram/image?u=${encodeURIComponent(url)}`
+    : url;
+}
+
 interface Props {
   onCreateReels: (idea: { title: string; hook: string }) => void;
   onCreateCarousel?: (topic: string, instructions: string) => void;
@@ -349,7 +357,7 @@ const PostCard = ({
     <div className="relative aspect-square bg-secondary">
       {post.thumbnailUrl ? (
         <img
-          src={post.thumbnailUrl}
+          src={igImg(post.thumbnailUrl)}
           alt=""
           className="w-full h-full object-cover"
           loading="lazy"
@@ -677,7 +685,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
             <div className="flex items-center gap-3">
               {status.profilePicture ? (
                 <img
-                  src={status.profilePicture}
+                  src={igImg(status.profilePicture)}
                   alt={status.username}
                   className="w-12 h-12 rounded-full object-cover border-2 border-purple-500"
                 />
@@ -1204,7 +1212,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
                   <div className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-secondary">
                     {post.thumbnailUrl ? (
                       <img
-                        src={post.thumbnailUrl}
+                        src={igImg(post.thumbnailUrl)}
                         alt=""
                         className="w-full h-full object-cover"
                         loading="lazy"
