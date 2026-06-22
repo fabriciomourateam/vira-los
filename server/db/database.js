@@ -239,6 +239,19 @@ const saveInstagramAnalysis = (data) => writeObj('instagram_analysis', { ...data
 const getInstagramAudience  = () => readObj('instagram_audience');
 const setInstagramAudience  = (data) => writeObj('instagram_audience', { ...data, savedAt: now() });
 
+// ── Instagram History (snapshots de métricas — 1 por dia, append-only) ────────
+const getInstagramHistory   = () => readDb('instagram_history');
+const appendInstagramHistory = (snapshot) => {
+  const hist = readDb('instagram_history');
+  const day = (snapshot.date || now()).slice(0, 10);
+  const idx = hist.findIndex((h) => (h.date || '').slice(0, 10) === day);
+  if (idx >= 0) hist[idx] = snapshot;   // mesma data → atualiza o registro do dia
+  else hist.push(snapshot);
+  hist.sort((a, b) => new Date(a.date) - new Date(b.date));
+  writeDb('instagram_history', hist);
+  return hist;
+};
+
 // ── Carousel Config (persistente, único por usuário) ──────────────────────────
 const getCarouselConfig = () => readObj('carousel_config');
 const setCarouselConfig = (config) => {
@@ -354,6 +367,7 @@ module.exports = {
   getInstagramPosts, saveInstagramPosts,
   getInstagramAnalysis, saveInstagramAnalysis,
   getInstagramAudience, setInstagramAudience,
+  getInstagramHistory, appendInstagramHistory,
   // Ideas Generator
   getIdeasConfig, setIdeasConfig,
   getDiscoveredIdeas, saveDiscoveredIdeas, deleteDiscoveredIdea,

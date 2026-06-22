@@ -3,8 +3,11 @@ import { toast } from 'sonner';
 import {
   Instagram, RefreshCw, Loader2, Zap, TrendingUp, BarChart3,
   Video, Image, Layers, AlertCircle, CheckCircle2, ExternalLink,
-  Sparkles, ArrowRight, Users, MapPin,
+  Sparkles, ArrowRight, Users, MapPin, LineChart as LineChartIcon, ArrowUp, ArrowDown,
 } from 'lucide-react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -76,6 +79,27 @@ interface Analysis {
     avgCarouselEng: number;
   };
   generatedAt: string;
+}
+
+interface IGHistoryPoint {
+  date: string;
+  followers: number | null;
+  mediaCount: number | null;
+  postsAnalyzed: number;
+  avgEngagementRate: number;
+  avgSaveRate: number;
+  avgShareRate: number;
+  avgCommentRate: number;
+  totalReach: number;
+  totalLikes: number;
+  totalComments: number;
+  totalSaves: number;
+  totalShares: number;
+  totalViews: number;
+  totalFollows: number;
+  reelsCount: number;
+  carouselsCount: number;
+  imagesCount: number;
 }
 
 function engColor(rate: number) {
@@ -177,6 +201,109 @@ function formatFollowers(n: number) {
   return String(n);
 }
 
+// ── Gráfico de Evolução da Conta ──────────────────────────────────────────────
+// Plota um histórico de métricas (1 ponto por sync). O usuário escolhe a métrica.
+const GROWTH_METRICS: { key: keyof IGHistoryPoint; label: string; color: string; pct?: boolean }[] = [
+  { key: 'followers',         label: 'Seguidores',            color: '#ec4899' },
+  { key: 'avgEngagementRate', label: 'Engajamento médio',     color: '#a855f7', pct: true },
+  { key: 'totalReach',        label: 'Alcance (total)',       color: '#3b82f6' },
+  { key: 'totalViews',        label: 'Views (total)',         color: '#06b6d4' },
+  { key: 'totalSaves',        label: 'Saves (total)',         color: '#22c55e' },
+  { key: 'totalShares',       label: 'Shares (total)',        color: '#f97316' },
+  { key: 'avgSaveRate',       label: 'Save rate médio',       color: '#14b8a6', pct: true },
+  { key: 'avgShareRate',      label: 'Share rate médio',      color: '#eab308', pct: true },
+  { key: 'totalFollows',      label: 'Seguidores ganhos (posts)', color: '#8b5cf6' },
+];
+
+function compactNum(n: number) {
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(Math.round(n * 100) / 100);
+}
+
+function GrowthChart({ history }: { history: IGHistoryPoint[] }) {
+  const [metricKey, setMetricKey] = useState<keyof IGHistoryPoint>('followers');
+  const metric = GROWTH_METRICS.find((m) => m.key === metricKey) || GROWTH_METRICS[0];
+
+  if (history.length === 0) {
+    return (
+      <div className="bg-card border border-border rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <LineChartIcon size={18} className="text-purple-400" />
+          <h3 className="font-semibold text-foreground">Evolução da Conta</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Clique em <span className="text-foreground font-medium">Sincronizar</span> para registrar o primeiro
+          ponto. A cada sync gravamos um snapshot das suas métricas — em poucos dias você verá o gráfico de crescimento aqui.
+        </p>
+      </div>
+    );
+  }
+
+  const fmtVal = (v: number | null) => (v == null ? '—' : metric.pct ? `${compactNum(v)}%` : compactNum(v));
+
+  const data = history
+    .filter((h) => h[metric.key] != null)
+    .map((h) => ({
+      label: new Date(h.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      value: Number(h[metric.key]),
+    }));
+
+  const last = data[data.length - 1]?.value ?? null;
+  const prev = data.length > 1 ? data[data.length - 2].value : null;
+  const delta = last != null && prev != null ? last - prev : null;
+  const deltaPct = delta != null && prev ? (delta / prev) * 100 : null;
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-5">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <LineChartIcon size={18} className="text-purple-400" />
+          <h3 className="font-semibold text-foreground">Evolução da Conta</h3>
+          <span className="text-xs text-muted-foreground">({data.length} {data.length === 1 ? 'registro' : 'registros'})</span>
+        </div>
+        <select
+          value={String(metricKey)}
+          onChange={(e) => setMetricKey(e.target.value as keyof IGHistoryPoint)}
+          className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500"
+        >
+          {GROWTH_METRICS.map((m) => (
+            <option key={String(m.key)} value={String(m.key)}>{m.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-end gap-3 mb-4">
+        <span className="text-3xl font-bold text-foreground">{fmtVal(last)}</span>
+        {delta != null && delta !== 0 && (
+          <span className={`flex items-center gap-0.5 text-sm font-medium mb-1 ${delta > 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {delta > 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+            {metric.pct ? `${compactNum(Math.abs(delta))}pp` : compactNum(Math.abs(delta))}
+            {deltaPct != null && Number.isFinite(deltaPct) ? ` (${deltaPct > 0 ? '+' : ''}${deltaPct.toFixed(1)}%)` : ''}
+            <span className="text-muted-foreground font-normal ml-1">vs. sync anterior</span>
+          </span>
+        )}
+      </div>
+
+      <div className="h-56 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={(v) => compactNum(v)} width={48} />
+            <Tooltip
+              contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: 'hsl(var(--muted-foreground))' }}
+              formatter={(v: number) => [fmtVal(v), metric.label]}
+            />
+            <Line type="monotone" dataKey="value" stroke={metric.color} strokeWidth={2.5} dot={{ r: 3, fill: metric.color }} activeDot={{ r: 5 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 const SetupStep = ({ num, text }: { num: number; text: React.ReactNode }) => (
   <div className="flex gap-3 items-start">
     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 text-foreground text-xs font-bold flex items-center justify-center">
@@ -267,6 +394,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [posts, setPosts] = useState<IGPost[]>([]);
   const [audience, setAudience] = useState<Audience | null>(null);
+  const [history, setHistory] = useState<IGHistoryPoint[]>([]);
 
   const [checkedActions, setCheckedActions] = useState<Record<number, boolean>>({});
 
@@ -325,12 +453,22 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
     }
   }, []);
 
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/instagram/history`);
+      if (res.ok) setHistory(await res.json());
+    } catch {
+      // silent
+    }
+  }, []);
+
   useEffect(() => {
     fetchStatus();
     fetchAnalysis();
     fetchPosts();
     fetchAudience();
-  }, [fetchStatus, fetchAnalysis, fetchPosts, fetchAudience]);
+    fetchHistory();
+  }, [fetchStatus, fetchAnalysis, fetchPosts, fetchAudience, fetchHistory]);
 
   // Trata retorno do OAuth (?ig_connected / ?ig_error) e re-checa status ao voltar
   // pra aba — o OAuth abre em nova aba, então a aba original precisa reconferir.
@@ -384,6 +522,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
         await fetchPosts();
         await fetchStatus();
         await fetchAudience();
+        await fetchHistory();
       } else {
         toast.error(data.error || 'Sincronização falhou.');
       }
@@ -623,6 +762,9 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
           </div>
         </div>
       )}
+
+      {/* ── Gráfico de Evolução ── */}
+      {status?.connected && <GrowthChart history={history} />}
 
       {/* ── Stats Cards ── */}
       {analysis && (
