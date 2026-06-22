@@ -42,13 +42,14 @@ import ProfileSettings from './ProfileSettings';
 import IdeasGenerator from './IdeasGenerator';
 import InstagramAnalytics from './InstagramAnalytics';
 import PublicoAlvo from './PublicoAlvo';
+import PainelSEO from './PainelSEO';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
 import UsageBar from './UsageBar';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'analytics';
+type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'analytics' | 'seo';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'metodo',    label: 'Método',    icon: Zap },
@@ -58,6 +59,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'criar',     label: 'Criar',     icon: Layers },
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
   { id: 'analytics', label: 'Analytics', icon: Instagram },
+  { id: 'seo',       label: 'SEO',       icon: BarChart3 },
 ];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
@@ -684,6 +686,8 @@ export default function ViralOS() {
 
         {/* ── IDEIAS ── */}
         {activeTab === 'publico' && <PublicoAlvo />}
+
+        {activeTab === 'seo' && <PainelSEO />}
 
         {activeTab === 'ideias' && (
           <IdeasGenerator
