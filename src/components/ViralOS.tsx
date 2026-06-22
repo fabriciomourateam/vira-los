@@ -41,16 +41,18 @@ import ViralScore from './ViralScore';
 import ProfileSettings from './ProfileSettings';
 import IdeasGenerator from './IdeasGenerator';
 import InstagramAnalytics from './InstagramAnalytics';
+import PublicoAlvo from './PublicoAlvo';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
 import UsageBar from './UsageBar';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'analytics';
+type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'avaliar' | 'analytics';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'metodo',    label: 'Método',    icon: Zap },
+  { id: 'publico',   label: 'Público',   icon: Target },
   { id: 'descobrir', label: 'Descobrir', icon: Search },
   { id: 'ideias',    label: 'Ideias',    icon: Sparkles },
   { id: 'criar',     label: 'Criar',     icon: Layers },
@@ -681,6 +683,8 @@ export default function ViralOS() {
         )}
 
         {/* ── IDEIAS ── */}
+        {activeTab === 'publico' && <PublicoAlvo />}
+
         {activeTab === 'ideias' && (
           <IdeasGenerator
             onCreateCarousel={(topic, script) => {
