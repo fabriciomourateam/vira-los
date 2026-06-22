@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { FMTEAM_EDITORIAL } = require('../fmteamEditorial');
 
 const DIR = __dirname;
 
@@ -73,7 +74,9 @@ const SYSTEM_BLOCKS = {
 // Usar apenas se o usuário escolher template === 'fmteam' no briefing.
 const FMTEAM_OVERRIDE = `### [fmteam-template-override]
 
-${fmteamMd}`;
+${fmteamMd}
+
+${FMTEAM_EDITORIAL}`;
 
 // Helper: monta o array de blocos com cache_control para a API Anthropic.
 // Use diretamente no campo `system` da chamada messages.create().
