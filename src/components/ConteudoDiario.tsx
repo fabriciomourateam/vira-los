@@ -11,6 +11,9 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 interface Reel {
   id: string; title: string; teleprompter?: string; legendaPost?: string;
   hook?: { fala?: string; legenda?: string }; cta?: { palavra_chave?: string };
+  // Formato curto (7s): vídeo + frase de tela + "leia a legenda"
+  tipo?: string; duration?: number;
+  fraseTela?: string; videoSugerido?: string; ctaTela?: string; ctaTelaTiming?: string;
 }
 interface Carousel {
   id: string; topic: string; folderName: string; numSlides: number;
@@ -181,11 +184,27 @@ export default function ConteudoDiario() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {b.reels.map((r) => (
                 <div key={r.id} className="border border-border rounded-xl p-3 bg-secondary/30">
-                  <div className="flex items-center gap-1.5 text-xs text-pink-400 mb-1"><Film size={13} /> Modelo de Reel</div>
+                  <div className="flex items-center gap-1.5 text-xs text-pink-400 mb-1">
+                    <Film size={13} /> {r.tipo === 'short' ? `Reel curto · ${r.duration || 7}s` : 'Modelo de Reel'}
+                  </div>
                   <p className="text-sm font-medium text-foreground line-clamp-2">{r.title}</p>
-                  {r.hook?.legenda && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">Hook: {r.hook.legenda}</p>}
+                  {r.tipo === 'short' ? (
+                    <>
+                      {r.fraseTela && (
+                        <p className="text-xs text-foreground mt-1.5 font-medium">📱 Frase na tela: <span className="text-muted-foreground font-normal">"{r.fraseTela}"</span></p>
+                      )}
+                      {r.videoSugerido && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">🎬 Vídeo: {r.videoSugerido}</p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-1">⏱️ {r.ctaTelaTiming || '4-5s'}: {r.ctaTela || '👇 LEIA A LEGENDA'}</p>
+                    </>
+                  ) : (
+                    r.hook?.legenda && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">Hook: {r.hook.legenda}</p>
+                  )}
                   <div className="flex gap-3 mt-2 flex-wrap">
-                    <button onClick={() => openTeleprompter(r)} className="text-xs font-medium text-foreground bg-pink-600 hover:bg-pink-500 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors"><Play size={12} /> Teleprompter</button>
+                    {r.tipo !== 'short' && r.teleprompter && (
+                      <button onClick={() => openTeleprompter(r)} className="text-xs font-medium text-foreground bg-pink-600 hover:bg-pink-500 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors"><Play size={12} /> Teleprompter</button>
+                    )}
                     {r.legendaPost && <button onClick={() => copy(r.legendaPost!)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><Copy size={11} /> Copiar legenda</button>}
                   </div>
                 </div>
