@@ -60,6 +60,7 @@ type SavedReel = {
   fraseTela?: string;
   fraseTelaTiming?: string;
   videoSugerido?: string;
+  promptVideoIA?: string;
   ctaTela?: string;
   ctaTelaTiming?: string;
 };
@@ -449,6 +450,25 @@ function ReelCard({ reel, onTeleprompter, onClose, onUpdate }: {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Prompt de vídeo IA (HeyGen) */}
+          {reel.promptVideoIA && (
+            <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3" /> Prompt p/ gerar o vídeo (HeyGen)
+                </p>
+                <button
+                  onClick={() => copy(reel.promptVideoIA || '', 'Prompt do vídeo')}
+                  className="text-[11px] px-2 py-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+                >
+                  <Copy className="w-3 h-3" /> Copiar
+                </button>
+              </div>
+              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{reel.promptVideoIA}</p>
+              <p className="text-[10px] text-muted-foreground mt-2">Cola no HeyGen com seu avatar/vídeo, gera o clipe e posta com a legenda abaixo.</p>
             </div>
           )}
 

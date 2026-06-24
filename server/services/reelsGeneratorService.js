@@ -248,7 +248,14 @@ ${handleAt} · Nicho: ${niche}
 
 3. VÍDEO SUGERIDO (videoSugerido): descreva em 1 frase o B-roll do criador que combina com a emoção (ex.: "Fabricio treinando supino pesado, suado, foco fechado" / "Fabricio montando o prato na cozinha"). Vertical, sem fala.
 
-4. EMOÇÃO DOMINANTE (emocao): escolha UMA e mantenha em tudo: curiosidade | medo de perder | urgência | surpresa | indignação.
+4. PROMPT DE VÍDEO IA (promptVideoIA): um prompt PRONTO PRA COLAR no HeyGen (ou gerador de vídeo com avatar), em português, pra criar esse clipe a partir dos vídeos/avatar que o criador já tem. Regras do prompt:
+   • Diga pra USAR o vídeo/avatar enviado pelo criador como base (a cara é a dele).
+   • Vídeo VERTICAL 9:16, ~${duration}s, MUDO (sem fala, sem narração).
+   • Descreva a cena/ação do videoSugerido (movimento, ambiente, energia) e a emoção.
+   • Inclua o TEXTO NA TELA: a fraseTela aparecendo de 0-4s e "👇 LEIA A LEGENDA" de 4-5s, posição legível, fonte grande.
+   • Estilo realista, boa luz, corte único ou loop curto. Escreva como instrução direta pro app, 3-5 frases.
+
+5. EMOÇÃO DOMINANTE (emocao): escolha UMA e mantenha em tudo: curiosidade | medo de perder | urgência | surpresa | indignação.
 
 ━━━ FORMATO DE SAÍDA ━━━
 RESPONDA APENAS com JSON válido, nada antes ou depois.
@@ -260,6 +267,7 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
   "formato": "curiosidade-aberta|contra-intuição|dor-nomeada|número|polêmica",
   "emocao": "curiosidade|medo de perder|urgência|surpresa|indignação",
   "videoSugerido": "B-roll do criador, vertical, SEM fala — 1 frase concreta",
+  "promptVideoIA": "Prompt pronto pra colar no HeyGen: usar o vídeo/avatar do criador como base, 9:16, ~${duration}s, mudo, descreve a cena + textos na tela (fraseTela 0-4s e 'leia a legenda' 4-5s). 3-5 frases.",
   "fraseTela": "a frase que para o scroll (lacuna aberta, ≤12 palavras, máx 2 linhas)",
   "fraseTelaTiming": "0-4s",
   "ctaTela": "👇 LEIA A LEGENDA",

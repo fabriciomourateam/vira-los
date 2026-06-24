@@ -13,7 +13,7 @@ interface Reel {
   hook?: { fala?: string; legenda?: string }; cta?: { palavra_chave?: string };
   // Formato curto (7s): vídeo + frase de tela + "leia a legenda"
   tipo?: string; duration?: number;
-  fraseTela?: string; videoSugerido?: string; ctaTela?: string; ctaTelaTiming?: string;
+  fraseTela?: string; videoSugerido?: string; promptVideoIA?: string; ctaTela?: string; ctaTelaTiming?: string;
 }
 interface Carousel {
   id: string; topic: string; folderName: string; numSlides: number;
@@ -205,6 +205,7 @@ export default function ConteudoDiario() {
                     {r.tipo !== 'short' && r.teleprompter && (
                       <button onClick={() => openTeleprompter(r)} className="text-xs font-medium text-foreground bg-pink-600 hover:bg-pink-500 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors"><Play size={12} /> Teleprompter</button>
                     )}
+                    {r.promptVideoIA && <button onClick={() => copy(r.promptVideoIA!)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><Copy size={11} /> Copiar prompt do vídeo</button>}
                     {r.legendaPost && <button onClick={() => copy(r.legendaPost!)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><Copy size={11} /> Copiar legenda</button>}
                   </div>
                 </div>
