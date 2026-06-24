@@ -55,6 +55,14 @@ type SavedReel = {
   instagramHandle?: string;
   created_at?: string;
   archived?: boolean;
+  // Formato curto (7s): vídeo + frase de tela + "leia a legenda"
+  tipo?: string;
+  fraseTela?: string;
+  fraseTelaTiming?: string;
+  videoSugerido?: string;
+  promptsVideo?: { heygen?: string; broll?: string };
+  ctaTela?: string;
+  ctaTelaTiming?: string;
 };
 
 interface Props {
@@ -66,6 +74,7 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
   const [carousels, setCarousels] = useState<SavedCarousel[]>([]);
   const [reels, setReels] = useState<SavedReel[]>([]);
   const [selectedCarouselId, setSelectedCarouselId] = useState<string>('');
+  const [formato, setFormato] = useState<'roteiro' | 'short'>('roteiro');
   const [duration, setDuration] = useState(30);
   const [generating, setGenerating] = useState(false);
   const [generateStep, setGenerateStep] = useState('');
@@ -108,7 +117,11 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
       const startRes = await fetch(`${API}/api/reels/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ carouselId: selectedCarouselId, duration }),
+        body: JSON.stringify(
+          formato === 'short'
+            ? { carouselId: selectedCarouselId, duration: 7, format: 'short' }
+            : { carouselId: selectedCarouselId, duration }
+        ),
       });
       const startData = await startRes.json();
       if (!startRes.ok) throw new Error(startData.error || 'Erro ao iniciar geração');
@@ -191,23 +204,54 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
           )}
         </div>
 
+        {/* Formato */}
         <div>
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
-            <Clock className="w-3.5 h-3.5" /> Duração: <span className="text-rose-500 font-bold">{duration}s</span>
+            <Video className="w-3.5 h-3.5" /> Formato
           </label>
-          <input
-            type="range"
-            min={15}
-            max={120}
-            step={5}
-            value={duration}
-            onChange={e => setDuration(Number(e.target.value))}
-            className="w-full accent-rose-500"
-          />
-          <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
-            <span>15s</span><span>30s</span><span>60s</span><span>90s</span><span>120s</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setFormato('roteiro')}
+              className={`text-left rounded-lg border px-3 py-2.5 transition-all ${
+                formato === 'roteiro' ? 'border-rose-500 bg-rose-500/10' : 'border-border bg-background hover:bg-secondary/50'
+              }`}
+            >
+              <p className="text-sm font-bold">Roteiro falado</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Split-screen, você fala + teleprompter</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormato('short')}
+              className={`text-left rounded-lg border px-3 py-2.5 transition-all ${
+                formato === 'short' ? 'border-rose-500 bg-rose-500/10' : 'border-border bg-background hover:bg-secondary/50'
+              }`}
+            >
+              <p className="text-sm font-bold">7s · vídeo + legenda</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">B-roll + frase que para o scroll. Conteúdo na legenda.</p>
+            </button>
           </div>
         </div>
+
+        {formato === 'roteiro' && (
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+              <Clock className="w-3.5 h-3.5" /> Duração: <span className="text-rose-500 font-bold">{duration}s</span>
+            </label>
+            <input
+              type="range"
+              min={15}
+              max={120}
+              step={5}
+              value={duration}
+              onChange={e => setDuration(Number(e.target.value))}
+              className="w-full accent-rose-500"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
+              <span>15s</span><span>30s</span><span>60s</span><span>90s</span><span>120s</span>
+            </div>
+          </div>
+        )}
 
         <button
           onClick={handleGenerate}
@@ -222,7 +266,7 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
           ) : (
             <>
               <Sparkles className="w-4 h-4" />
-              Gerar Roteiro de Reels
+              {formato === 'short' ? 'Gerar Reel de 7s' : 'Gerar Roteiro de Reels'}
             </>
           )}
         </button>
@@ -266,7 +310,9 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold truncate">{r.title || r.carouselTopic || 'Sem título'}</p>
                   <p className="text-[11px] text-muted-foreground truncate">
-                    {r.duration}s · {(r.body?.length || 0) + 2} segmentos · {r.carouselTopic}
+                    {r.tipo === 'short'
+                      ? `${r.duration}s · vídeo + legenda · ${r.carouselTopic}`
+                      : `${r.duration}s · ${(r.body?.length || 0) + 2} segmentos · ${r.carouselTopic}`}
                   </p>
                 </div>
                 <button
@@ -359,22 +405,26 @@ function ReelCard({ reel, onTeleprompter, onClose, onUpdate }: {
             </div>
           )}
         </div>
-        <button
-          onClick={onTeleprompter}
-          className="shrink-0 px-3 py-2 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5"
-        >
-          <Mic className="w-3.5 h-3.5" />
-          Teleprompter
-        </button>
-        <a
-          href={`${API}/api/reels/saved/${reel.id}/zip`}
-          download
-          className="shrink-0 px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs flex items-center gap-1.5"
-          title="Baixa um .zip com roteiro.txt + timings.json + 1 imagem por segmento — pronto pra CapCut"
-        >
-          <Download className="w-3.5 h-3.5" />
-          ZIP
-        </a>
+        {reel.tipo !== 'short' && (
+          <>
+            <button
+              onClick={onTeleprompter}
+              className="shrink-0 px-3 py-2 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5"
+            >
+              <Mic className="w-3.5 h-3.5" />
+              Teleprompter
+            </button>
+            <a
+              href={`${API}/api/reels/saved/${reel.id}/zip`}
+              download
+              className="shrink-0 px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground font-bold text-xs flex items-center gap-1.5"
+              title="Baixa um .zip com roteiro.txt + timings.json + 1 imagem por segmento — pronto pra CapCut"
+            >
+              <Download className="w-3.5 h-3.5" />
+              ZIP
+            </a>
+          </>
+        )}
         <button
           onClick={onClose}
           className="shrink-0 p-2 rounded-lg text-muted-foreground hover:bg-secondary"
@@ -384,6 +434,97 @@ function ReelCard({ reel, onTeleprompter, onClose, onUpdate }: {
         </button>
       </div>
 
+      {reel.tipo === 'short' ? (
+        <div className="p-4 space-y-4">
+          {/* Vídeo sugerido */}
+          {reel.videoSugerido && (
+            <div className="rounded-lg bg-secondary/30 p-3">
+              <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <Video className="w-3 h-3" /> Vídeo que você grava (sem fala)
+              </p>
+              <p className="text-sm text-foreground">{reel.videoSugerido}</p>
+              {reel.imagensSugeridas && reel.imagensSugeridas.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {reel.imagensSugeridas.map((q, i) => (
+                    <span key={i} className="text-[11px] px-2 py-1 rounded-full bg-secondary text-muted-foreground">{q}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Prompts de vídeo IA */}
+          {reel.promptsVideo?.heygen && (
+            <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3" /> Prompt p/ HeyGen (você falando)
+                </p>
+                <button
+                  onClick={() => copy(reel.promptsVideo?.heygen || '', 'Prompt HeyGen')}
+                  className="text-[11px] px-2 py-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+                >
+                  <Copy className="w-3 h-3" /> Copiar
+                </button>
+              </div>
+              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{reel.promptsVideo.heygen}</p>
+            </div>
+          )}
+          {reel.promptsVideo?.broll && (
+            <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-semibold text-sky-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Video className="w-3 h-3" /> Prompt B-roll (Sora/Veo/Higgsfield/YouTube)
+                </p>
+                <button
+                  onClick={() => copy(reel.promptsVideo?.broll || '', 'Prompt B-roll')}
+                  className="text-[11px] px-2 py-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+                >
+                  <Copy className="w-3 h-3" /> Copiar
+                </button>
+              </div>
+              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{reel.promptsVideo.broll}</p>
+              <p className="text-[10px] text-muted-foreground mt-2">Gera o clipe com seu avatar/vídeo, baixa e posta com a legenda abaixo.</p>
+            </div>
+          )}
+
+          {/* Frase de tela */}
+          <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3">
+            <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3" /> Frase na tela ({reel.fraseTelaTiming || '0-4s'}) — para o scroll
+            </p>
+            <div className="flex items-start gap-2">
+              <p className="text-base font-bold text-foreground flex-1 leading-snug">"{reel.fraseTela}"</p>
+              <button
+                onClick={() => copy(reel.fraseTela || '', 'Frase da tela')}
+                className="shrink-0 p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+                title="Copiar frase"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2 pt-2 border-t border-dashed border-rose-500/20">
+              ⏱️ {reel.ctaTelaTiming || '4-5s'}: <span className="font-semibold text-foreground">{reel.ctaTela || '👇 LEIA A LEGENDA'}</span>
+            </p>
+          </div>
+
+          {/* Legenda completa — o conteúdo mora aqui */}
+          <div className="rounded-lg bg-secondary/30 p-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-3 h-3" /> Legenda (o conteúdo completo)
+              </p>
+              <button
+                onClick={() => copy(reel.legendaPost || '', 'Legenda')}
+                className="text-[11px] px-2 py-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+              >
+                <Copy className="w-3 h-3" /> Copiar
+              </button>
+            </div>
+            <pre className="text-xs whitespace-pre-wrap break-words font-sans text-foreground leading-relaxed">{reel.legendaPost}</pre>
+          </div>
+        </div>
+      ) : (
       <div className="divide-y divide-border">
         <Section
           label="HOOK (0-3s)"
@@ -495,6 +636,7 @@ function ReelCard({ reel, onTeleprompter, onClose, onUpdate }: {
           </Section>
         )}
       </div>
+      )}
     </div>
   );
 }

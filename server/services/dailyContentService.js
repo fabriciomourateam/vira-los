@@ -3,7 +3,8 @@
  *
  * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de temas DISTINTOS
  * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e, pra
- * cada um, 1 modelo de REEL (com teleprompter pronto). Salva tudo DENTRO do
+ * cada um, 1 REEL CURTO de ~7s (formato vídeo + frase de tela + "leia a legenda",
+ * com o conteúdo completo na legenda). Salva tudo DENTRO do
  * viralos (carousels.json + reels.json + daily_content.json) — sem Notion.
  *
  * Substitui a rotina do fmteam-gerador. Mira o HOMEM 25-40, evita repetir
@@ -15,7 +16,7 @@ const db = require('../db/database');
 const {
   generateCarousel, takeScreenshotsPixelPerfect, OUTPUT_DIR,
 } = require('./carouselService');
-const { generateReelsFromCarousel } = require('./reelsGeneratorService');
+const { generateShortReelFromCarousel } = require('./reelsGeneratorService');
 
 const HANDLE = 'fabriciomourateam';
 const CREATOR = 'Fabricio Moura';
@@ -142,12 +143,13 @@ async function buildOne(theme) {
   };
   db.saveCarousel(carousel);
 
-  // 4) Modelo de reel a partir do carrossel (mesmo tema) — traz teleprompter pronto
+  // 4) Reel curto de ~7s a partir do carrossel (mesmo tema): vídeo + frase de tela
+  //    + "leia a legenda", com o conteúdo completo na legenda.
   let reelId = null;
   try {
-    const reel = await generateReelsFromCarousel({
+    const reel = await generateShortReelFromCarousel({
       carousel: { id: carouselId, topic: carousel.topic, html: carouselResult.html, legenda: carousel.legenda, numSlides: carousel.numSlides },
-      duration: 15,
+      duration: 7,
       niche: NICHE,
       instagramHandle: `@${HANDLE}`,
     });

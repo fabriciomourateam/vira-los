@@ -12,7 +12,7 @@
 const express = require('express');
 const axios = require('axios');
 const archiver = require('archiver');
-const { generateReelsFromCarousel } = require('../services/reelsGeneratorService');
+const { generateReelsFromCarousel, generateShortReelFromCarousel } = require('../services/reelsGeneratorService');
 const { fetchOneImage } = require('../services/carouselService');
 const db = require('../db/database');
 
@@ -37,7 +37,8 @@ setInterval(() => {
 // ─── Gerar reels (assíncrono) ────────────────────────────────────────────────
 
 router.post('/generate', (req, res) => {
-  const { carouselId, duration = 30, niche, instagramHandle } = req.body || {};
+  const { carouselId, duration = 30, niche, instagramHandle, format } = req.body || {};
+  const isShort = format === 'short';
 
   if (!carouselId) {
     return res.status(400).json({ error: 'carouselId é obrigatório' });
@@ -64,7 +65,10 @@ router.post('/generate', (req, res) => {
     return res.status(400).json({ error: 'Carrossel sem HTML — não dá pra gerar reels.' });
   }
 
-  const dur = Math.min(120, Math.max(15, Number(duration) || 30));
+  // Reel curto (7s, vídeo + legenda) tem piso próprio; o roteiro falado mantém o mínimo de 15s.
+  const dur = isShort
+    ? Math.min(15, Math.max(5, Number(duration) || 7))
+    : Math.min(120, Math.max(15, Number(duration) || 30));
   const config = db.getCarouselConfig() || {};
   const finalNiche = niche || carousel.config?.niche || config.niche || 'fitness';
   const finalHandle = instagramHandle || carousel.config?.instagramHandle || config.instagramHandle || '';
@@ -77,9 +81,13 @@ router.post('/generate', (req, res) => {
     if (job) jobs.set(jobId, { ...job, step });
   };
 
-  setStep(`Gerando roteiro de ${dur}s com IA...`);
+  setStep(isShort ? `Gerando reel curto de ${dur}s (vídeo + legenda)...` : `Gerando roteiro de ${dur}s com IA...`);
 
-  generateReelsFromCarousel({ carousel, duration: dur, niche: finalNiche, instagramHandle: finalHandle })
+  const generation = isShort
+    ? generateShortReelFromCarousel({ carousel, duration: dur, niche: finalNiche, instagramHandle: finalHandle })
+    : generateReelsFromCarousel({ carousel, duration: dur, niche: finalNiche, instagramHandle: finalHandle });
+
+  generation
     .then(reelsData => {
       const reel = {
         id: `reel_${Date.now()}`,

@@ -5,6 +5,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { FMTEAM_EDITORIAL } = require('./fmteamEditorial');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 function sanitize(s) {
@@ -183,4 +184,129 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
   return parsed;
 }
 
-module.exports = { generateReelsFromCarousel, extractSlidesText };
+/**
+ * Gera um REEL CURTO (~7s) no formato "vídeo + frase de tela + leia a legenda".
+ *
+ * Conceito (validado pelo Fabricio): NÃO tem fala. O vídeo é um B-roll do criador
+ * fazendo algo (treinando, cozinhando, andando) + uma FRASE NA TELA que para o
+ * scroll com uma LACUNA ABERTA. No segundo 4-5 aparece "👇 LEIA A LEGENDA" e o
+ * CONTEÚDO COMPLETO mora na LEGENDA — é ela que entrega o valor e fecha a lacuna.
+ * Objetivo: loop de re-leitura (7s re-roda várias vezes) + comentário = retenção
+ * e engajamento altos, levando o homem certo pra DM/consultoria.
+ *
+ * @param {Object} args
+ * @param {Object} args.carousel - { id, topic, html, legenda, ... }
+ * @param {string} args.niche
+ * @param {string} args.instagramHandle
+ * @param {number} args.duration - duração-alvo do vídeo (default 7s)
+ */
+async function generateShortReelFromCarousel({ carousel, niche = 'fitness', instagramHandle = '', duration = 7 }) {
+  if (!carousel || !carousel.html) throw new Error('Carrossel sem HTML — não dá pra gerar reels.');
+
+  const slides = extractSlidesText(carousel.html);
+  if (slides.length === 0) throw new Error('Não encontrei texto nos slides do carrossel.');
+
+  const slidesText = slides.map(s => `Slide ${s.num}: ${s.text}`).join('\n');
+  const handle = (instagramHandle || '').replace('@', '');
+  const handleAt = handle ? `@${handle}` : 'criador';
+
+  const prompt = `Você é especialista em Reels do Instagram de TEXTO-NA-TELA (silenciosos) que viralizam organicamente no nicho de ${niche}.
+
+Transforme este carrossel em UM reel curto de ~${duration} segundos no formato "vídeo + frase de tela + leia a legenda". NÃO TEM FALA. O criador NÃO narra nada.
+
+${FMTEAM_EDITORIAL}
+
+━━━ CARROSSEL BASE — tema: "${carousel.topic || 'sem tema'}" ━━━
+${slidesText}
+
+━━━ CRIADOR ━━━
+${handleAt} · Nicho: ${niche}
+
+━━━ COMO ESSE FORMATO FUNCIONA (siga à risca) ━━━
+• O vídeo é um B-ROLL do criador fazendo algo (treinando, cozinhando, andando, se olhando no espelho) — SEM falar.
+• Por cima do vídeo aparece UMA frase escrita que PARA O SCROLL.
+• Nos primeiros ~4s só a frase. No segundo 4-5 aparece "👇 LEIA A LEGENDA".
+• O CONTEÚDO COMPLETO vai na LEGENDA. É ela que entrega o valor — o vídeo só fisga.
+• A pessoa fica relendo (o reel de 7s re-roda) e vai pra legenda → retenção + comentário.
+
+━━━ REGRAS NÃO-NEGOCIÁVEIS ━━━
+
+1. FRASE DE TELA (fraseTela) — é o que decide tudo:
+   • É uma LACUNA ABERTA: cria curiosidade mas NÃO entrega a resposta. Só a legenda fecha.
+   • ERRADO (entrega a resposta): "Cardio em excesso queima músculo".
+   • CERTO (lacuna): "Eu parei de fazer ISSO e meu shape mudou em 30 dias" / "Tem 1 erro que tá travando seu shape e não é treino".
+   • Curta: cabe na tela, no máximo 2 linhas (≤ 12 palavras). Linguagem de homem 25-40.
+   • Use gancho de número, contra-intuição ou dor nomeada. PROIBIDO morno ("dicas pra...", "você sabia").
+
+2. LEGENDA (legendaPost) — é onde mora o conteúdo, capricha:
+   • PRIMEIRA LINHA tem que RE-FISGAR sozinha (o Instagram corta em "... mais"). Não começa com "Bom," nem repete a frase da tela igual.
+   • Corpo: entrega o conteúdo de verdade, técnico traduzido, FECHA a lacuna que a frase de tela abriu. 1 ideia central do carrossel (a mais forte), não cobre tudo.
+   • Quebra em linhas curtas / parágrafos de 1-2 frases (legibilidade no app).
+   • Fecha com CTA diretivo: comentar uma PALAVRA-CHAVE específica OU chamar pra DM/consultoria. Natural, não venda forçada.
+   • 4-6 hashtags relevantes ao nicho. ANTI-BAN: SEM hashtag de substância (testosterona/TRT/ozempic/etc), SEM nome comercial de droga.
+   • Respeita a VOZ e o ANTI-BAN do cérebro editorial acima (você/não tu, sem "não é X é Y", português não gringo, por sintoma).
+
+3. VÍDEO SUGERIDO (videoSugerido): descreva em 1 frase o B-roll do criador que combina com a emoção (ex.: "Fabricio treinando supino pesado, suado, foco fechado" / "Fabricio montando o prato na cozinha"). Vertical, sem fala.
+
+4. PROMPTS DE VÍDEO IA (promptsVideo): dois prompts PRONTOS PRA COLAR, em português, pra criar esse clipe a partir dos vídeos/avatar que o criador já tem. Ambos: vídeo VERTICAL 9:16, ~${duration}s, usar o avatar/vídeo do criador como base (a cara é a dele), estilo realista e boa luz, texto na tela GRANDE e legível (a fraseTela de 0-4s e "👇 LEIA A LEGENDA" de 4-5s).
+   • promptsVideo.heygen — pro HeyGen (avatar FALANDO): o avatar fala em voz alta uma frase curta de impacto (adapte a fraseTela pra soar natural falada, 1 frase, 3-5s), tom de acordo com a emoção, e o texto na tela acompanha. Instrução direta, 3-5 frases.
+   • promptsVideo.broll — pro Sora / Veo / Higgsfield / YouTube Creator (texto→vídeo, MUDO, sem fala): descreve a cena/ação do videoSugerido (movimento, ambiente, energia, emoção) como B-roll cinematográfico, com os textos na tela. Instrução direta, 3-5 frases.
+
+5. EMOÇÃO DOMINANTE (emocao): escolha UMA e mantenha em tudo: curiosidade | medo de perder | urgência | surpresa | indignação.
+
+━━━ FORMATO DE SAÍDA ━━━
+RESPONDA APENAS com JSON válido, nada antes ou depois.
+
+{
+  "title": "Título curto pro histórico (máx 60 caracteres)",
+  "tipo": "short",
+  "duration": ${duration},
+  "formato": "curiosidade-aberta|contra-intuição|dor-nomeada|número|polêmica",
+  "emocao": "curiosidade|medo de perder|urgência|surpresa|indignação",
+  "videoSugerido": "B-roll do criador, vertical, SEM fala — 1 frase concreta",
+  "promptsVideo": {
+    "heygen": "Prompt pro HeyGen (avatar falando): usar o avatar do criador, 9:16, ~${duration}s, ele fala uma frase curta de impacto + textos na tela. 3-5 frases.",
+    "broll": "Prompt pro Sora/Veo/Higgsfield/YouTube Creator (texto→vídeo mudo): B-roll cinematográfico da cena do videoSugerido, 9:16, ~${duration}s, com os textos na tela. 3-5 frases."
+  },
+  "fraseTela": "a frase que para o scroll (lacuna aberta, ≤12 palavras, máx 2 linhas)",
+  "fraseTelaTiming": "0-4s",
+  "ctaTela": "👇 LEIA A LEGENDA",
+  "ctaTelaTiming": "4-5s",
+  "legendaPost": "Legenda COMPLETA: 1ª linha re-fisga + corpo que entrega o conteúdo e fecha a lacuna + CTA (palavra-chave pra comentar ou chamada pra DM) + 4-6 hashtags ban-safe. Use \\n para quebrar linhas.",
+  "imagensSugeridas": ["alternativa de B-roll 1", "alternativa de B-roll 2"]
+}`;
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 3000,
+    system: 'Você é especialista em Reels virais de texto-na-tela (silenciosos). Responde SEMPRE com JSON válido e absolutamente nada mais — sem markdown, sem texto antes ou depois.',
+    messages: [{ role: 'user', content: sanitize(prompt) }],
+  });
+
+  const text = (response.content[0]?.text || '').trim();
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Modelo não retornou JSON válido.');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    const fixed = jsonMatch[0]
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/[\x00-\x1F\x7F]/g, ' ');
+    try { parsed = JSON.parse(fixed); }
+    catch { throw new Error('JSON inválido na resposta do modelo. Tente novamente.'); }
+  }
+
+  // Validação mínima — o coração do formato é a frase de tela + a legenda.
+  if (!parsed.fraseTela || !parsed.legendaPost) {
+    throw new Error('Resposta incompleta — fraseTela ou legendaPost faltando.');
+  }
+  parsed.tipo = 'short';
+  if (!parsed.duration) parsed.duration = duration;
+  if (!parsed.ctaTela) parsed.ctaTela = '👇 LEIA A LEGENDA';
+
+  return parsed;
+}
+
+module.exports = { generateReelsFromCarousel, generateShortReelFromCarousel, extractSlidesText };
