@@ -60,7 +60,7 @@ type SavedReel = {
   fraseTela?: string;
   fraseTelaTiming?: string;
   videoSugerido?: string;
-  promptVideoIA?: string;
+  promptsVideo?: { heygen?: string; broll?: string };
   ctaTela?: string;
   ctaTelaTiming?: string;
 };
@@ -453,22 +453,38 @@ function ReelCard({ reel, onTeleprompter, onClose, onUpdate }: {
             </div>
           )}
 
-          {/* Prompt de vídeo IA (HeyGen) */}
-          {reel.promptVideoIA && (
+          {/* Prompts de vídeo IA */}
+          {reel.promptsVideo?.heygen && (
             <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3" /> Prompt p/ gerar o vídeo (HeyGen)
+                  <Sparkles className="w-3 h-3" /> Prompt p/ HeyGen (você falando)
                 </p>
                 <button
-                  onClick={() => copy(reel.promptVideoIA || '', 'Prompt do vídeo')}
+                  onClick={() => copy(reel.promptsVideo?.heygen || '', 'Prompt HeyGen')}
                   className="text-[11px] px-2 py-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center gap-1.5"
                 >
                   <Copy className="w-3 h-3" /> Copiar
                 </button>
               </div>
-              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{reel.promptVideoIA}</p>
-              <p className="text-[10px] text-muted-foreground mt-2">Cola no HeyGen com seu avatar/vídeo, gera o clipe e posta com a legenda abaixo.</p>
+              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{reel.promptsVideo.heygen}</p>
+            </div>
+          )}
+          {reel.promptsVideo?.broll && (
+            <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-semibold text-sky-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Video className="w-3 h-3" /> Prompt B-roll (Sora/Veo/Higgsfield/YouTube)
+                </p>
+                <button
+                  onClick={() => copy(reel.promptsVideo?.broll || '', 'Prompt B-roll')}
+                  className="text-[11px] px-2 py-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+                >
+                  <Copy className="w-3 h-3" /> Copiar
+                </button>
+              </div>
+              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{reel.promptsVideo.broll}</p>
+              <p className="text-[10px] text-muted-foreground mt-2">Gera o clipe com seu avatar/vídeo, baixa e posta com a legenda abaixo.</p>
             </div>
           )}
 
