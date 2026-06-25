@@ -1,10 +1,160 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BarChart3, CheckCircle2, Clock, Circle, FileText, Target,
   TrendingUp, Calendar, Settings, ExternalLink, Plus, Trash2,
+  Search, Loader2, RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLivingDoc, DocActions, TextInput, SuggestionModal } from './livingDoc';
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+// ── Google Search Console (dados reais, ao vivo) ───────────────────────────────
+type GscData = {
+  siteUrl: string;
+  range: { startDate: string; endDate: string };
+  totals: { clicks: number; impressions: number; ctr: number; position: number };
+  byDate: { date: string; clicks: number; impressions: number; position: number }[];
+  topQueries: { query: string; clicks: number; impressions: number; ctr: number; position: number }[];
+  topPages: { page: string; clicks: number; impressions: number; ctr: number; position: number }[];
+};
+const nf = new Intl.NumberFormat('pt-BR');
+const pctFmt = (n: number) => (n * 100).toFixed(1).replace('.', ',') + '%';
+
+function Sparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const w = 240, h = 36, max = Math.max(...values), min = Math.min(...values);
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / (max - min || 1)) * h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-9 text-emerald-400" preserveAspectRatio="none">
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function GscKpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="bg-card border border-border rounded-xl p-3">
+      <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className="text-xl font-bold text-foreground mt-0.5">{value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
+
+function GscPanel() {
+  const [data, setData] = useState<GscData | null>(null);
+  const [state, setState] = useState<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
+  const [errMsg, setErrMsg] = useState('');
+
+  async function load() {
+    setState('loading');
+    try {
+      const res = await fetch(`${API}/api/platforms/gsc/data?days=28`);
+      if (res.status === 409) { setState('disconnected'); return; }
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
+      setData(await res.json());
+      setState('connected');
+    } catch (e: any) {
+      setErrMsg(e?.message || 'Erro'); setState('error');
+    }
+  }
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('gsc') === 'connected') toast.success('Search Console conectado!');
+    if (p.get('gsc') === 'error') toast.error('Falha ao conectar: ' + (p.get('msg') || ''));
+    load();
+  }, []);
+
+  async function connect() {
+    try {
+      const { url } = await (await fetch(`${API}/api/platforms/gsc/auth-url`)).json();
+      window.location.href = url;
+    } catch { toast.error('Não consegui iniciar a conexão com o Google.'); }
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-5">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <Search size={18} className="text-emerald-400" />
+          <h3 className="font-bold text-foreground">Google Search Console</h3>
+          {state === 'connected' && data && (
+            <span className="text-[11px] text-muted-foreground">· {data.siteUrl} · últimos 28 dias</span>
+          )}
+        </div>
+        {state === 'connected' && (
+          <button onClick={load} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><RefreshCw size={12} /> Atualizar</button>
+        )}
+      </div>
+
+      {state === 'loading' && <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Carregando dados do Google…</div>}
+
+      {state === 'disconnected' && (
+        <div className="text-sm text-muted-foreground">
+          <p className="mb-3">Conecte o Search Console pra ver cliques, impressões, posição e os termos que mais sobem — dados reais do seu site, atualizados a cada visita.</p>
+          <button onClick={connect} className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 inline-flex items-center gap-2"><Search size={15} /> Conectar Google Search Console</button>
+        </div>
+      )}
+
+      {state === 'error' && (
+        <div className="text-sm text-red-400">
+          Erro ao buscar dados: {errMsg}
+          <button onClick={load} className="ml-2 underline">tentar de novo</button>
+        </div>
+      )}
+
+      {state === 'connected' && data && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+            <GscKpi label="Cliques" value={nf.format(Math.round(data.totals.clicks))} />
+            <GscKpi label="Impressões" value={nf.format(Math.round(data.totals.impressions))} />
+            <GscKpi label="CTR" value={pctFmt(data.totals.ctr)} />
+            <GscKpi label="Posição média" value={data.totals.position.toFixed(1).replace('.', ',')} />
+          </div>
+
+          {data.byDate.length > 1 && (
+            <div className="bg-secondary/40 border border-border rounded-xl p-3">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Cliques por dia</p>
+              <Sparkline values={data.byDate.map((d) => d.clicks)} />
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1.5">Top buscas</p>
+              <div className="space-y-1">
+                {data.topQueries.slice(0, 8).map((q, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 text-xs border-b border-border/50 pb-1">
+                    <span className="text-foreground truncate" title={q.query}>{q.query}</span>
+                    <span className="text-muted-foreground whitespace-nowrap">{nf.format(q.clicks)} cliques · pos {q.position.toFixed(1).replace('.', ',')}</span>
+                  </div>
+                ))}
+                {data.topQueries.length === 0 && <p className="text-xs text-muted-foreground">Sem dados ainda.</p>}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1.5">Top páginas</p>
+              <div className="space-y-1">
+                {data.topPages.slice(0, 8).map((p, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 text-xs border-b border-border/50 pb-1">
+                    <a href={p.page} target="_blank" rel="noopener" className="text-emerald-400 hover:underline truncate" title={p.page}>{p.page.replace(/^https?:\/\/[^/]+/, '') || '/'}</a>
+                    <span className="text-muted-foreground whitespace-nowrap">{nf.format(p.clicks)} cliques</span>
+                  </div>
+                ))}
+                {data.topPages.length === 0 && <p className="text-xs text-muted-foreground">Sem dados ainda.</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type Status = 'done' | 'wip' | 'todo';
 function statusOf(raw: string): Status {
@@ -152,6 +302,9 @@ export default function PainelSEO() {
           onSuggest={handleSuggest}
         />
       </div>
+
+      {/* Google Search Console — dados reais ao vivo */}
+      <GscPanel />
 
       {/* Objetivo + diagnóstico */}
       <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-5">

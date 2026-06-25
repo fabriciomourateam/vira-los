@@ -5,7 +5,7 @@ const db = require('../db/database');
 // GET /api/platforms/status
 router.get('/status', (_req, res) => {
   res.set('Cache-Control', 'no-store');
-  const names = ['instagram', 'tiktok', 'youtube'];
+  const names = ['instagram', 'tiktok', 'youtube', 'gsc'];
   const status = {};
   for (const p of names) {
     const t = db.getPlatformToken(p);
@@ -123,6 +123,48 @@ router.get('/youtube/callback', async (req, res) => {
 
 router.delete('/youtube', (_req, res) => {
   db.deletePlatformToken('youtube');
+  res.json({ ok: true });
+});
+
+// ── Google Search Console ───────────────────────────────────────────────────────
+
+router.get('/gsc/auth-url', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const gsc = require('../services/googleSearchConsole');
+    res.json({ url: gsc.getAuthUrl() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/gsc/callback', async (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+  try {
+    const { code, error } = req.query;
+    if (error) return res.redirect(`${frontendUrl}?gsc=error&msg=${encodeURIComponent(error)}`);
+    if (!code) return res.status(400).send('Código não encontrado');
+    const gsc = require('../services/googleSearchConsole');
+    const result = await gsc.exchangeCode(code);
+    res.redirect(`${frontendUrl}?gsc=connected&site=${encodeURIComponent(result.site)}`);
+  } catch (e) {
+    console.error('[GSC callback] Error:', e.message);
+    res.redirect(`${frontendUrl}?gsc=error&msg=${encodeURIComponent(e.message)}`);
+  }
+});
+
+router.get('/gsc/data', async (req, res) => {
+  try {
+    const gsc = require('../services/googleSearchConsole');
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 480);
+    res.json(await gsc.getDashboard({ days }));
+  } catch (e) {
+    res.status(e.message.includes('não conectado') ? 409 : 500).json({ error: e.message });
+  }
+});
+
+router.delete('/gsc', (_req, res) => {
+  db.deletePlatformToken('gsc');
   res.json({ ok: true });
 });
 
