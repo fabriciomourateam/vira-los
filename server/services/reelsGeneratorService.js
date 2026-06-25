@@ -248,9 +248,12 @@ ${handleAt} · Nicho: ${niche}
 
 3. VÍDEO SUGERIDO (videoSugerido): descreva em 1 frase o B-roll do criador que combina com a emoção (ex.: "Fabricio treinando supino pesado, suado, foco fechado" / "Fabricio montando o prato na cozinha"). Vertical, sem fala.
 
-4. PROMPTS DE VÍDEO IA (promptsVideo): dois prompts PRONTOS PRA COLAR, em português, pra criar esse clipe a partir dos vídeos/avatar que o criador já tem. Ambos: vídeo VERTICAL 9:16, ~${duration}s, usar o avatar/vídeo do criador como base (a cara é a dele), estilo realista e boa luz, texto na tela GRANDE e legível (a fraseTela de 0-4s e "👇 LEIA A LEGENDA" de 4-5s).
-   • promptsVideo.heygen — pro HeyGen (avatar FALANDO): o avatar fala em voz alta uma frase curta de impacto (adapte a fraseTela pra soar natural falada, 1 frase, 3-5s), tom de acordo com a emoção, e o texto na tela acompanha. Instrução direta, 3-5 frases.
-   • promptsVideo.broll — pro Sora / Veo / Higgsfield / YouTube Creator (texto→vídeo, MUDO, sem fala): descreve a cena/ação do videoSugerido (movimento, ambiente, energia, emoção) como B-roll cinematográfico, com os textos na tela. Instrução direta, 3-5 frases.
+4. PROMPTS DE VÍDEO IA (promptsVideo): dois prompts PRONTOS PRA COLAR pra gerar o clipe a partir do vídeo/foto que o criador SEMPRE envia como referência. REGRAS QUE VALEM PROS DOIS:
+   • SEMPRE comece o prompt mandando USAR O VÍDEO/FOTO DE REFERÊNCIA enviado pelo criador como base — NUNCA cite nome de arquivo (diga "the reference video/photo provided by the creator" / "o vídeo de referência enviado"). Se citar nome de arquivo as ferramentas ignoram e não fazem. A cara e o corpo têm que ser os MESMOS da referência.
+   • REALISMO ANTI-IA — quanto MAIS detalhe, MENOS cara de IA: peça pele com textura e poros reais e imperfeições naturais, luz natural imperfeita, leve tremida de câmera na mão (handheld), motion blur sutil no movimento, ambiente real (academia/cozinha de verdade, não estúdio limpo), suor e respiração reais, estética documental/candid de celular. PROIBIDO: pele plástica ou super-suavizada, brilho artificial, movimento robótico, cenário "perfeito demais".
+   • Vídeo VERTICAL 9:16, ~${duration}s, texto na tela GRANDE e legível (a fraseTela de 0-4s e "👇 LEIA A LEGENDA" de 4-5s). O TEXTO NA TELA fica SEMPRE em PORTUGUÊS (é o que a audiência lê).
+   • promptsVideo.heygen — pro HeyGen (avatar FALANDO): escreva a FALA do avatar EM PORTUGUÊS (1 frase curta de impacto adaptada da fraseTela pra soar natural falada, 3-5s, tom da emoção). A direção de cena/realismo pode vir em português. Instrução direta, 4-6 frases.
+   • promptsVideo.broll — pro Sora / Veo / Higgsfield / YouTube Creator (texto→vídeo, MUDO, sem fala): escreva a DESCRIÇÃO DE CENA EM INGLÊS (esses modelos de vídeo seguem MUITO melhor o prompt em inglês), detalhando ação/movimento/ambiente/energia/emoção do videoSugerido como B-roll cinematográfico realista, COM todo o realismo anti-IA acima. O texto sobreposto na tela continua em PORTUGUÊS. Instrução direta, 4-6 frases.
 
 5. EMOÇÃO DOMINANTE (emocao): escolha UMA e mantenha em tudo: curiosidade | medo de perder | urgência | surpresa | indignação.
 
@@ -265,8 +268,8 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
   "emocao": "curiosidade|medo de perder|urgência|surpresa|indignação",
   "videoSugerido": "B-roll do criador, vertical, SEM fala — 1 frase concreta",
   "promptsVideo": {
-    "heygen": "Prompt pro HeyGen (avatar falando): usar o avatar do criador, 9:16, ~${duration}s, ele fala uma frase curta de impacto + textos na tela. 3-5 frases.",
-    "broll": "Prompt pro Sora/Veo/Higgsfield/YouTube Creator (texto→vídeo mudo): B-roll cinematográfico da cena do videoSugerido, 9:16, ~${duration}s, com os textos na tela. 3-5 frases."
+    "heygen": "PT-BR. Use o vídeo/foto de referência enviado pelo criador como base (NÃO cite nome de arquivo), mesma cara e corpo. O avatar fala em português: '<frase de impacto>'. 9:16, ~${duration}s. Realismo anti-IA: pele e poros reais, luz natural, leve tremida de câmera. Texto na tela em PT. 4-6 frases.",
+    "broll": "Scene description in ENGLISH. Use the reference video/photo provided by the creator as the base (do NOT name any file); same face and body. <cinematic realistic B-roll: action, real environment, energy, emotion; handheld slight shake, natural imperfect light, real skin texture and pores, subtle motion blur, candid phone-documentary look; no plastic/over-smoothed skin>. Vertical 9:16, ~${duration}s, silent. On-screen text stays in Portuguese. 4-6 sentences."
   },
   "fraseTela": "a frase que para o scroll (lacuna aberta, ≤12 palavras, máx 2 linhas)",
   "fraseTelaTiming": "0-4s",
