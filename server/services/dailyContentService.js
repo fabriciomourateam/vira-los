@@ -180,8 +180,11 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
   // Cron é idempotente por dia: se já existe batch de hoje (não-erro), não regera.
   // O botão "Gerar agora" (manual) ignora essa trava e sempre gera.
   if (trigger !== 'manual') {
-    const already = db.getAllDailyBatches().some((b) => b.date === date && b.status !== 'error');
-    if (already) { console.log('[DailyContent] batch de hoje já existe — cron ignorado.'); return null; }
+    // só pula se o batch de hoje REALMENTE tem conteúdo — um batch vazio não bloqueia o dia.
+    const already = db.getAllDailyBatches().some(
+      (b) => b.date === date && b.status !== 'error' && ((b.carouselIds || []).length || (b.reelIds || []).length)
+    );
+    if (already) { console.log('[DailyContent] batch de hoje já existe com conteúdo — cron ignorado.'); return null; }
   }
 
   state.generating = true;
