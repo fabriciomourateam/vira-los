@@ -314,10 +314,11 @@ router.delete('/saved/:id', (req, res) => {
 });
 
 router.patch('/saved/:id', (req, res) => {
-  const { screenshots, archived } = req.body;
+  const { screenshots, archived, done } = req.body;
   const update = {};
   if (screenshots !== undefined) update.screenshots = screenshots;
   if (archived  !== undefined) update.archived  = archived;
+  if (done      !== undefined) update.done      = done;
   if (Object.keys(update).length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
   db.updateCarousel(req.params.id, update);
   res.json({ ok: true });
