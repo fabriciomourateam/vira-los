@@ -139,7 +139,7 @@ router.post('/saved', (req, res) => {
 });
 
 router.patch('/saved/:id', (req, res) => {
-  const allowed = ['title', 'archived', 'teleprompter', 'hook', 'body', 'cta', 'legendaPost'];
+  const allowed = ['title', 'archived', 'done', 'teleprompter', 'hook', 'body', 'cta', 'legendaPost'];
   const update = {};
   for (const k of allowed) if (req.body?.[k] !== undefined) update[k] = req.body[k];
   if (Object.keys(update).length === 0) return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
