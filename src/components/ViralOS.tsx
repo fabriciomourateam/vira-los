@@ -597,7 +597,7 @@ export default function ViralOS() {
       <Toaster position="bottom-center" richColors />
       {/* Header */}
       <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-md border-b border-border">
-        <div className="max-w-3xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-foreground rounded-lg flex items-center justify-center">
               <Zap size={16} className="text-background" />
@@ -640,7 +640,7 @@ export default function ViralOS() {
           </div>
         </div>
         {/* Tab Bar — ícone+label no desktop, só ícone no mobile */}
-        <div className="max-w-3xl mx-auto flex">
+        <div className="max-w-7xl mx-auto flex">
           {tabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -666,7 +666,7 @@ export default function ViralOS() {
       {/* Barra de gastos/economia com Claude */}
       <UsageBar />
 
-      <main className="max-w-3xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8">
 
         {/* ── DESCOBRIR ── */}
         {activeTab === 'descobrir' && (
