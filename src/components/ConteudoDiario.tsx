@@ -158,8 +158,8 @@ export default function ConteudoDiario() {
         className={`text-[11px] px-2 py-0.5 rounded-md inline-flex items-center gap-1 border ${item.done ? 'text-green-400 border-green-500/40 bg-green-500/10' : 'text-muted-foreground border-border hover:text-foreground'}`}>
         <Check size={12} /> {item.done ? 'Feito' : 'Feito'}
       </button>
-      <button onClick={() => setItem(kind, item.id, { archived: true })} title="Arquivar" className="text-muted-foreground hover:text-foreground p-1"><Archive size={13} /></button>
-      <button onClick={() => removeItem(kind, item.id)} title="Excluir" className="text-muted-foreground hover:text-red-400 p-1"><Trash2 size={13} /></button>
+      <button onClick={() => setItem(kind, item.id, { archived: true })} title="Arquivar" className="text-muted-foreground hover:text-foreground border border-border hover:border-foreground/30 rounded-md p-1.5"><Archive size={14} /></button>
+      <button onClick={() => removeItem(kind, item.id)} title="Excluir" className="text-muted-foreground hover:text-red-400 border border-border hover:border-red-500/50 hover:bg-red-500/10 rounded-md p-1.5"><Trash2 size={14} /></button>
     </div>
   );
 

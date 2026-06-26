@@ -99,7 +99,7 @@ export default function UsageBar() {
         className="w-full bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-amber-500/10 border-b border-amber-500/20 hover:from-amber-500/15 hover:via-emerald-500/15 hover:to-amber-500/15 transition-colors"
         title="Clique para ver detalhamento de custos"
       >
-        <div className="max-w-3xl mx-auto px-4 py-1.5 flex items-center justify-between text-[11px] sm:text-xs font-medium gap-3">
+        <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center justify-between text-[11px] sm:text-xs font-medium gap-3">
           <div className="flex items-center gap-3 sm:gap-5 overflow-x-auto whitespace-nowrap">
             <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
               <DollarSign className="w-3 h-3 shrink-0" />
