@@ -143,6 +143,37 @@ async function buildOne(theme) {
   };
   db.saveCarousel(carousel);
 
+  // 3b) Auto-agendamento no mLabs (se ligado nas settings e há PNGs). Best-effort:
+  //     uma falha aqui NÃO derruba a geração do dia.
+  try {
+    const cfg = db.getMlabsSettings && db.getMlabsSettings();
+    if (cfg && cfg.autoScheduleCarousel && screenshots.length) {
+      const mlabs = require('./mlabsService');
+      const { v4: uuidv4 } = require('uuid');
+      const dates = mlabs.computeDefaultDates();
+      const recId = uuidv4();
+      db.createMlabsSchedule({
+        id: recId, contentType: 'carousel', contentId: carouselId,
+        caption: carousel.legenda || '', dates, platforms: cfg.channelSourceIds, status: 'enviando',
+      });
+      try {
+        const r = await mlabs.scheduleContent({
+          type: 'IMAGE',
+          mediaPaths: screenshots.map((name) => path.join(OUTPUT_DIR, carouselResult.folderName, name)),
+          caption: carousel.legenda || '',
+          dates,
+        });
+        db.updateMlabsSchedule(recId, { status: 'agendado', mlabsResponse: r.scheduleResponse || null });
+        console.log(`[DailyContent] carrossel ${theme.id} agendado no mLabs (${dates.length} datas).`);
+      } catch (e) {
+        db.updateMlabsSchedule(recId, { status: 'erro', error: e.message });
+        console.warn(`[DailyContent] auto-agendar mLabs falhou (${theme.id}):`, e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('[DailyContent] auto-agendamento mLabs indisponível:', e.message);
+  }
+
   // 4) Reel curto de ~7s a partir do carrossel (mesmo tema): vídeo + frase de tela
   //    + "leia a legenda", com o conteúdo completo na legenda.
   let reelId = null;

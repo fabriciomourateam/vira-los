@@ -344,6 +344,34 @@ const createMaquinaCarrossel = (c) => { const db = readDb('maquina_carrosseis');
 const updateMaquinaCarrossel = (id, data) => { const db = readDb('maquina_carrosseis').map((c) => c.id === id ? { ...c, ...data, updated_at: now() } : c); writeDb('maquina_carrosseis', db); };
 const deleteMaquinaCarrossel = (id) => writeDb('maquina_carrosseis', readDb('maquina_carrosseis').filter((c) => c.id !== id));
 
+// ── mLabs (agendamento via Browserless) ───────────────────────────────────────
+// Settings: { profileId, channelSourceIds:[], ownerId, autoScheduleCarousel:bool,
+//             defaultTimes:["11:00"], dateOffsetsMonths:[0,3,6,9], updated_at }
+const MLABS_DEFAULTS = {
+  profileId: null,
+  channelSourceIds: [],
+  ownerId: null,
+  autoScheduleCarousel: false,
+  defaultTime: '11:00',          // hora SP padrão das postagens
+  dateOffsetsMonths: [0, 3, 6, 9], // amanhã (0=+1 dia base) e a cada 3 meses → 4 datas
+  updated_at: null,
+};
+const getMlabsSettings = () => ({ ...MLABS_DEFAULTS, ...readObj('mlabs_settings') });
+const setMlabsSettings = (c) => writeObj('mlabs_settings', { ...getMlabsSettings(), ...c, updated_at: now() });
+
+// Sessão do navegador (storageState do Playwright: cookies + localStorage)
+const getMlabsSession = () => { const s = readObj('mlabs_session'); return s && s.cookies ? s : null; };
+const setMlabsSession = (state) => writeObj('mlabs_session', state || {});
+const clearMlabsSession = () => writeObj('mlabs_session', {});
+
+// Registros de agendamento (o que MANDAMOS pro mLabs — pra você saber o que enviou)
+// Schema: { id, contentType:'carousel'|'reel', contentId, caption, dates:[isoSP],
+//           platforms:[], status:'agendado'|'erro', error?, mlabsResponse?, created_at }
+const getAllMlabsSchedules = () => readDb('mlabs_schedules').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+const createMlabsSchedule = (s) => { const db = readDb('mlabs_schedules'); const item = { ...s, created_at: now() }; db.push(item); writeDb('mlabs_schedules', db); return item; };
+const updateMlabsSchedule = (id, data) => { const db = readDb('mlabs_schedules').map((s) => s.id === id ? { ...s, ...data } : s); writeDb('mlabs_schedules', db); };
+const deleteMlabsSchedule = (id) => writeDb('mlabs_schedules', readDb('mlabs_schedules').filter((s) => s.id !== id));
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -384,4 +412,8 @@ module.exports = {
   getDiscoveredIdeas, saveDiscoveredIdeas, deleteDiscoveredIdea,
   getContentCalendar, setContentCalendar,
   getTrackedPosts, addTrackedPost, updateTrackedPost, deleteTrackedPost,
+  // mLabs
+  getMlabsSettings, setMlabsSettings,
+  getMlabsSession, setMlabsSession, clearMlabsSession,
+  getAllMlabsSchedules, createMlabsSchedule, updateMlabsSchedule, deleteMlabsSchedule,
 };

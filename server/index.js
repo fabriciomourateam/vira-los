@@ -118,6 +118,7 @@ app.use('/api/maquina',         require('./routes/maquina'));
 app.use('/api/qa-stickers',     require('./routes/qaStickers'));
 app.use('/api/ai-roteiro',      require('./routes/aiRoteiro'));
 app.use('/api/pexels',          require('./routes/pexels'));
+app.use('/api/mlabs',           require('./routes/mlabs'));
 
 // Health check
 app.get('/api/health', (_req, res) =>

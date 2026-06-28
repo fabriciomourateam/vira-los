@@ -5,6 +5,7 @@ import {
   Play, Copy, ChevronDown, ChevronUp, AlertTriangle, Check, Archive, Trash2,
 } from 'lucide-react';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
+import { MlabsScheduleButton, MlabsSettingsButton } from './MlabsScheduler';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -15,6 +16,7 @@ interface Reel {
   tipo?: string; duration?: number;
   fraseTela?: string; videoSugerido?: string; promptsVideo?: { heygen?: string; broll?: string }; ctaTela?: string; ctaTelaTiming?: string;
   done?: boolean; archived?: boolean;
+  videoFile?: string; // .mp4 editado já enviado pro mLabs
 }
 interface Carousel {
   id: string; topic: string; folderName: string; numSlides: number;
@@ -175,6 +177,7 @@ export default function ConteudoDiario() {
           <h2 className="text-xl font-bold text-foreground">Conteúdo Diário</h2>
         </div>
         <div className="flex items-center gap-2">
+          <MlabsSettingsButton />
           <button
             onClick={() => setShowArchived((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${showArchived ? 'border-purple-500/50 text-purple-300 bg-purple-500/10' : 'border-border text-muted-foreground hover:text-foreground'}`}
@@ -240,6 +243,7 @@ export default function ConteudoDiario() {
                             Legenda {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                           </button>
                         )}
+                        <MlabsScheduleButton kind="carousel" contentId={c.id} caption={c.legenda} />
                         <ItemActions kind="carousel" item={c} />
                       </div>
                     </div>
@@ -288,6 +292,7 @@ export default function ConteudoDiario() {
                     {r.promptsVideo?.heygen && <button onClick={() => copy(r.promptsVideo!.heygen!)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><Copy size={11} /> Prompt HeyGen</button>}
                     {r.promptsVideo?.broll && <button onClick={() => copy(r.promptsVideo!.broll!)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><Copy size={11} /> Prompt B-roll</button>}
                     {r.legendaPost && <button onClick={() => copy(r.legendaPost!)} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><Copy size={11} /> Copiar legenda</button>}
+                    <MlabsScheduleButton kind="reel" contentId={r.id} caption={r.legendaPost} hasVideo={!!r.videoFile} />
                   </div>
                 </div>
               ))}
