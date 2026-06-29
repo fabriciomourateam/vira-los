@@ -303,17 +303,21 @@ async function uploadMedia(page, filePath, auth, ownerId, fileType /* IMAGE|VIDE
   const put = await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': contentType }, body: buf });
   if (!put.ok) throw new Error(`PUT no S3 falhou (${put.status}) para ${fileName}`);
 
-  // 3) O id numérico que o /schedules espera. Procura em vários campos (id/mediaId/...);
-  //    se não estiver na resposta do ingest, tenta o poll GET /file/{uuid}.
+  // 3) O id numérico que o /schedules espera NÃO vem do ingest (só s3SignedUrl+uuid).
+  //    Ele aparece no poll GET /file/{uuid} depois que o mLabs processa o upload.
+  //    Pollamos com retentativas até o id surgir.
   let mediaId = findNumericId(ing);
-  if (!mediaId) {
+  let lastPoll = null;
+  for (let i = 0; i < 8 && !mediaId; i++) {
+    await page.waitForTimeout(1500);
     try {
       const poll = await apiFetch(page, `https://uploader.mlabs.io/file/${uuid}`, { method: 'GET', headers: { accept: 'application/json, text/plain, */*' } }, {});
+      lastPoll = poll.body;
       mediaId = findNumericId(poll.body);
-    } catch (_) { /* segue sem — o erro abaixo mostra a resposta pra mapear */ }
+    } catch (e) { lastPoll = `erro no poll: ${e.message}`; }
   }
 
-  return { uuid, fileName, mediaId, ingestResponse: ing };
+  return { uuid, fileName, mediaId, ingestResponse: ing, pollResponse: lastPoll };
 }
 
 // Procura a URL assinada do S3 na resposta do ingest (nomes conhecidos + varredura).
@@ -504,8 +508,8 @@ async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, cha
       const up = await uploadMedia(page, p, auth, ownerId || profileId, type);
       if (!up.mediaId) {
         throw new Error(
-          `Upload OK mas não achei o id numérico da mídia. Resposta do ingest: ` +
-          `${JSON.stringify(up.ingestResponse)}`
+          `Upload OK mas não achei o id numérico da mídia. ` +
+          `Poll GET /file/{uuid}: ${JSON.stringify(up.pollResponse)} | ingest: ${JSON.stringify(up.ingestResponse)}`
         );
       }
       mediaIds.push(up.mediaId);
