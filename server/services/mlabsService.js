@@ -290,10 +290,11 @@ async function uploadMedia(page, filePath, auth, ownerId, fileType /* IMAGE|VIDE
     throw new Error(`ingest falhou (${ingestRes.status}): ${JSON.stringify(ingestRes.body).slice(0, 300)}`);
   }
   const ing = ingestRes.body || {};
-  // A resposta traz a URL assinada e o id do arquivo. Cobrimos os nomes prováveis.
-  const uploadUrl = ing.uploadUrl || ing.url || ing.signedUrl || (ing.data && (ing.data.uploadUrl || ing.data.url));
+  // A URL assinada do S3 vem como `s3SignedUrl` (confirmado na resposta real); cobrimos
+  // outros nomes e, por garantia, varremos por uma string que pareça URL assinada do S3.
+  const uploadUrl = findUploadUrl(ing);
   if (!uploadUrl) {
-    throw new Error(`ingest sem URL de upload — resposta: ${JSON.stringify(ing).slice(0, 400)}`);
+    throw new Error(`ingest sem URL de upload — resposta: ${JSON.stringify(ing).slice(0, 600)}`);
   }
 
   // 2) PUT dos bytes no S3 (precisa rodar fora do browser pra mandar o binário do disco).
@@ -302,12 +303,48 @@ async function uploadMedia(page, filePath, auth, ownerId, fileType /* IMAGE|VIDE
   const put = await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': contentType }, body: buf });
   if (!put.ok) throw new Error(`PUT no S3 falhou (${put.status}) para ${fileName}`);
 
-  // 3) O id numérico vem da resposta do ingest (ou de um poll). Tentamos os candidatos.
-  const mediaId =
-    ing.id || ing.mediaId || ing.imageId || ing.videoId ||
-    (ing.data && (ing.data.id || ing.data.mediaId)) || null;
+  // 3) O id numérico que o /schedules espera. Procura em vários campos (id/mediaId/...);
+  //    se não estiver na resposta do ingest, tenta o poll GET /file/{uuid}.
+  let mediaId = findNumericId(ing);
+  if (!mediaId) {
+    try {
+      const poll = await apiFetch(page, `https://uploader.mlabs.io/file/${uuid}`, { method: 'GET', headers: { accept: 'application/json, text/plain, */*' } }, {});
+      mediaId = findNumericId(poll.body);
+    } catch (_) { /* segue sem — o erro abaixo mostra a resposta pra mapear */ }
+  }
 
   return { uuid, fileName, mediaId, ingestResponse: ing };
+}
+
+// Procura a URL assinada do S3 na resposta do ingest (nomes conhecidos + varredura).
+function findUploadUrl(o) {
+  const keys = ['s3SignedUrl', 'uploadUrl', 'url', 'signedUrl', 'presignedUrl', 's3_signed_url'];
+  if (o && typeof o === 'object') {
+    for (const k of keys) if (typeof o[k] === 'string' && /^https?:\/\//.test(o[k])) return o[k];
+    if (o.data) { const u = findUploadUrl(o.data); if (u) return u; }
+    for (const v of Object.values(o)) {
+      if (typeof v === 'string' && /^https?:\/\/.*(amazonaws|X-Amz-)/i.test(v)) return v;
+    }
+  }
+  return null;
+}
+
+// Procura o id numérico da mídia (recursivo). uuid tem hífens → só casa dígitos puros.
+function findNumericId(o) {
+  const keys = ['id', 'mediaId', 'imageId', 'videoId', 'fileId', 'file_id', 'image_id', 'video_id'];
+  const scan = (obj) => {
+    if (!obj || typeof obj !== 'object') return null;
+    for (const k of keys) {
+      const v = obj[k];
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      if (typeof v === 'string' && /^\d+$/.test(v)) return Number(v);
+    }
+    for (const v of Object.values(obj)) {
+      if (v && typeof v === 'object') { const r = scan(v); if (r) return r; }
+    }
+    return null;
+  };
+  return scan(o);
 }
 
 // ── Datas padrão (amanhã + offsets em meses, na hora SP padrão das settings) ────
@@ -467,8 +504,8 @@ async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, cha
       const up = await uploadMedia(page, p, auth, ownerId || profileId, type);
       if (!up.mediaId) {
         throw new Error(
-          `Upload OK mas não achei o id numérico da mídia na resposta do ingest. ` +
-          `Rode a calibração para mapear o campo. Resposta: ${JSON.stringify(up.ingestResponse).slice(0, 300)}`
+          `Upload OK mas não achei o id numérico da mídia. Resposta do ingest: ` +
+          `${JSON.stringify(up.ingestResponse)}`
         );
       }
       mediaIds.push(up.mediaId);
