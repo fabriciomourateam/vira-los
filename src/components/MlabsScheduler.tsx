@@ -169,7 +169,7 @@ function MlabsScheduleModal({
 // ── Engrenagem: settings + agendados ────────────────────────────────────────────
 interface Settings {
   autoScheduleCarousel: boolean; defaultTime: string; dateOffsetsMonths: number[];
-  profileId: number | null; channelSourceIds: number[];
+  profileId: number | null; ownerId: number | null; channelSourceIds: number[];
   channelSourceIdsReel: number[]; youtubeShortsChannelId: number | null;
 }
 interface Agendado {
@@ -275,6 +275,30 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
                 type="text" defaultValue={(s.dateOffsetsMonths || []).join(',')}
                 onBlur={(e) => save({ dateOffsetsMonths: e.target.value.split(',').map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)) })}
                 className="w-24 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+            </div>
+
+            {/* Identificação da conta (ids do mLabs) */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">
+                  profileId
+                  <span className="block text-xs text-muted-foreground">id do perfil. Ex.: 7371627</span>
+                </span>
+                <input
+                  type="number" defaultValue={s.profileId ?? ''}
+                  onBlur={(e) => save({ profileId: parseInt(e.target.value, 10) || null })}
+                  className="w-32 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">
+                  ownerId (upload)
+                  <span className="block text-xs text-muted-foreground">id do dono dos arquivos. Ex.: 3209986</span>
+                </span>
+                <input
+                  type="number" defaultValue={s.ownerId ?? ''}
+                  onBlur={(e) => save({ ownerId: parseInt(e.target.value, 10) || null })}
+                  className="w-32 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
             </div>
 
             {/* Canais (ids do mLabs) — carrossel/feed e reel/shorts são diferentes */}
