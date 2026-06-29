@@ -48,6 +48,7 @@ function MlabsScheduleModal({
   const [submitting, setSubmitting] = useState(false);
   const [videoReady, setVideoReady] = useState(!!hasVideo);
   const [uploading, setUploading] = useState(false);
+  const [captionText, setCaptionText] = useState(caption || '');
 
   useEffect(() => {
     fetch(`${API}/api/mlabs/default-dates`)
@@ -90,7 +91,7 @@ function MlabsScheduleModal({
       const r = await fetch(`${API}/api/mlabs/schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contentType: kind, contentId, dates: clean }),
+        body: JSON.stringify({ contentType: kind, contentId, dates: clean, caption: captionText }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao agendar.');
@@ -131,6 +132,16 @@ function MlabsScheduleModal({
             </label>
           </div>
         )}
+
+        {/* Legenda — editável antes de postar */}
+        <div className="space-y-1">
+          <span className="text-xs font-medium text-foreground">Legenda (vai pro post)</span>
+          <textarea
+            value={captionText} onChange={(e) => setCaptionText(e.target.value)}
+            className="w-full h-28 bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground whitespace-pre-wrap"
+          />
+          <span className="text-[11px] text-muted-foreground">{captionText.length} caracteres</span>
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-6 text-muted-foreground"><Loader2 size={20} className="animate-spin" /></div>
