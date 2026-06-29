@@ -159,13 +159,50 @@ router.post('/schedule', async (req, res) => {
 });
 
 // ── Semear sessão (cookies de login manual) ─────────────────────────────────────
-// Body: storageState do Playwright OU { cookies:[...], origins:[...] }.
+// Aceita 3 formatos:
+//   • storageState do Playwright  { cookies:[...], origins:[...] }
+//   • { storageState: {...} }
+//   • array cru da extensão Cookie-Editor  [ {name,value,domain,expirationDate,...}, ... ]
+// Normaliza pro formato do Playwright (sameSite/expires) automaticamente.
+function normalizeSameSite(v) {
+  const s = String(v || '').toLowerCase();
+  if (s === 'no_restriction' || s === 'none') return 'None';
+  if (s === 'strict') return 'Strict';
+  return 'Lax'; // lax / unspecified / vazio
+}
+function normalizeCookies(arr) {
+  return arr
+    .filter((c) => c && c.name && c.domain)
+    .map((c) => ({
+      name: c.name,
+      value: c.value || '',
+      domain: c.domain,
+      path: c.path || '/',
+      expires: typeof c.expires === 'number' ? c.expires
+        : typeof c.expirationDate === 'number' ? Math.round(c.expirationDate)
+        : -1,
+      httpOnly: !!c.httpOnly,
+      secure: !!c.secure,
+      sameSite: normalizeSameSite(c.sameSite),
+    }));
+}
 router.post('/session', (req, res) => {
   try {
-    const state = req.body && req.body.cookies ? req.body : req.body && req.body.storageState;
-    if (!state || !state.cookies) return res.status(400).json({ error: 'Envie um storageState com cookies.' });
-    db.setMlabsSession(state);
-    res.json({ ok: true, cookies: state.cookies.length });
+    const b = req.body;
+    let cookies, origins = [];
+    if (Array.isArray(b)) {
+      cookies = normalizeCookies(b);                       // Cookie-Editor
+    } else if (b && Array.isArray(b.cookies)) {
+      cookies = normalizeCookies(b.cookies); origins = b.origins || []; // Playwright
+    } else if (b && b.storageState && Array.isArray(b.storageState.cookies)) {
+      cookies = normalizeCookies(b.storageState.cookies); origins = b.storageState.origins || [];
+    }
+    if (!cookies || !cookies.length) {
+      return res.status(400).json({ error: 'Envie os cookies (array do Cookie-Editor ou storageState do Playwright).' });
+    }
+    const mlabsCookies = cookies.filter((c) => /mlabs/i.test(c.domain));
+    db.setMlabsSession({ cookies, origins });
+    res.json({ ok: true, cookies: cookies.length, mlabsCookies: mlabsCookies.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
