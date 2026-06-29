@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 import PromptTemplateModal from './PromptTemplateModal';
+import { MlabsScheduleButton } from './MlabsScheduler';
 import { generateAndSaveScreenshots as libGenerateScreenshots } from '@/lib/clientScreenshots';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -2663,6 +2664,9 @@ document.addEventListener('DOMContentLoaded', function() {
                           >
                             <Video className="w-3.5 h-3.5" />
                           </button>
+                        )}
+                        {(saved.screenshots?.length ?? 0) > 0 && !saved.isTemplate && (
+                          <MlabsScheduleButton kind="carousel" contentId={saved.id} caption={saved.legenda} />
                         )}
                         <button
                           onClick={() => toggleArchive(saved)}
