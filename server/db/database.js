@@ -349,7 +349,9 @@ const deleteMaquinaCarrossel = (id) => writeDb('maquina_carrosseis', readDb('maq
 //             defaultTimes:["11:00"], dateOffsetsMonths:[0,3,6,9], updated_at }
 const MLABS_DEFAULTS = {
   profileId: null,
-  channelSourceIds: [],
+  channelSourceIds: [],          // canais de CARROSSEL/feed (ex.: [3,1,23])
+  channelSourceIdsReel: [],      // canais de REEL/shorts/tiktok (ex.: [15,18,20,19])
+  youtubeShortsChannelId: 20,    // id do canal YouTube Shorts (exige título no agendamento)
   ownerId: null,
   autoScheduleCarousel: false,
   defaultTime: '11:00',          // hora SP padrão das postagens

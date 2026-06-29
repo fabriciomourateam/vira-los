@@ -284,8 +284,15 @@ function spToUtcIso(localDateTime) {
   return new Date(`${m[1]}T${m[2]}:00${SP_OFFSET}`).toISOString();
 }
 
-// ── Montagem do payload de /schedules (formato do HAR real) ─────────────────────
-function buildSchedulePayload({ caption, mediaIds, type, dates, channelSourceIds, profileId, requestId }) {
+// ── Montagem do payload de /schedules (formato exato dos HARs reais) ────────────
+// Observação importante (confirmada no HAR de reel): os flags reel/is-video/is-image
+// ficam SEMPRE false — o mLabs identifica reel pelos CANAIS (reels/shorts/tiktok),
+// não por booleanos. O vídeo entra em video-objects-attributes com screenshot:0.
+// Para YouTube Shorts, o `options` precisa do item kind:"title-video" com o título.
+function buildSchedulePayload({
+  caption, mediaIds, type, dates, channelSourceIds, profileId, requestId,
+  youtubeTitle, youtubeShortsChannelId,
+}) {
   const isVideo = type === 'VIDEO';
   const dateObjs = dates.map((d) => ({
     'channel-source-ids': channelSourceIds,
@@ -298,8 +305,24 @@ function buildSchedulePayload({ caption, mediaIds, type, dates, channelSourceIds
     ? mediaIds.map((id, i) => ({ id: null, 'image-id': id, position: i }))
     : [];
   const videoObjs = isVideo
-    ? mediaIds.map((id, i) => ({ id: null, 'video-id': id, position: i }))
+    ? mediaIds.map((id, i) => ({ id: null, 'video-id': id, position: i, screenshot: 0 }))
     : [];
+
+  // YouTube Shorts exige título (e o app envia mais 4 opções com valid:false → defaults).
+  let options = [];
+  const ytId = youtubeShortsChannelId;
+  if (isVideo && ytId && channelSourceIds.includes(Number(ytId)) && videoObjs.length) {
+    const ytTitle = (youtubeTitle || caption || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+    const csid = String(ytId);
+    const key = 'youtube_shorts';
+    options = [
+      { title: 'Título do vídeo', icon: 'align-left', kind: 'title-video', titles: [{ text: ytTitle, img_id: videoObjs[0]['video-id'] }], channel_source_id: csid, channel_source_key: key, valid: true, hiddenTour: false },
+      { title: 'Privacidade', icon: 'user-secret', kind: 'privacy', privacies: [], channel_source_id: csid, channel_source_key: key, valid: false, hiddenTour: false },
+      { title: 'Tags', icon: 'tags', kind: 'tag', tags: [], channel_source_id: csid, channel_source_key: key, valid: false, hiddenTour: false },
+      { title: 'Categoria', icon: 'sitemap', kind: 'category', categories: [], channel_source_id: csid, channel_source_key: key, valid: false, hiddenTour: false },
+      { title: 'Conteúdo para crianças', icon: 'toggle-on', kind: 'made-for-kids', channel_source_id: csid, channel_source_key: key, valid: false, hiddenTour: false },
+    ];
+  }
 
   return {
     data: {
@@ -319,13 +342,13 @@ function buildSchedulePayload({ caption, mediaIds, type, dates, channelSourceIds
         'can-edit-all': false,
         'can-edit': false,
         image360: false,
-        reel: isVideo,
-        'is-image': !isVideo,
-        'is-video': isVideo,
+        reel: false,
+        'is-image': false,
+        'is-video': false,
         'is-link': false,
         'is-hint': false,
         'media-stories': [],
-        options: [],
+        options,
         'from-other-schedule': false,
         'verify-more-schedules': false,
         'approval-link': null,
@@ -362,15 +385,18 @@ function buildSchedulePayload({ caption, mediaIds, type, dates, channelSourceIds
  *   profileId?: number,          // default das settings
  * }) → { ok, mlabsStatus, dates, scheduleResponse }
  */
-async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, channelSourceIds, profileId }) {
+async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, channelSourceIds, profileId, youtubeTitle }) {
   if (!mediaPaths || !mediaPaths.length) throw new Error('Nenhuma mídia para subir.');
   if (!dates || !dates.length) throw new Error('Nenhuma data informada.');
 
   const cfg = (db.getMlabsSettings && db.getMlabsSettings()) || {};
-  channelSourceIds = channelSourceIds || cfg.channelSourceIds;
+  const isVideo = type === 'VIDEO';
+  // Reel usa o conjunto de canais de reels/shorts; carrossel usa o de feed.
+  channelSourceIds = channelSourceIds
+    || (isVideo ? (cfg.channelSourceIdsReel && cfg.channelSourceIdsReel.length ? cfg.channelSourceIdsReel : cfg.channelSourceIds) : cfg.channelSourceIds);
   profileId = profileId || cfg.profileId;
   if (!channelSourceIds || !channelSourceIds.length) {
-    throw new Error('channelSourceIds não definido — rode a calibração (POST /api/mlabs/calibrate) primeiro.');
+    throw new Error(`channelSourceIds${isVideo ? ' (reel)' : ''} não definido — rode a calibração ou configure nas settings do mLabs.`);
   }
   if (!profileId) throw new Error('profileId não definido — rode a calibração primeiro.');
 
@@ -398,6 +424,7 @@ async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, cha
     const { v4: uuidv4 } = require('uuid');
     const payload = buildSchedulePayload({
       caption, mediaIds, type, dates, channelSourceIds, profileId, requestId: uuidv4(),
+      youtubeTitle, youtubeShortsChannelId: cfg.youtubeShortsChannelId,
     });
     const res = await apiFetch(
       page,

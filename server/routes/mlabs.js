@@ -66,7 +66,10 @@ async function resolveMedia(contentType, contentId) {
     if (!r.videoPath || !fs.existsSync(r.videoPath)) {
       throw new Error('Esse reel não tem vídeo editado. Suba o .mp4 (POST /api/mlabs/upload-reel/:reelId) antes de agendar.');
     }
-    return { type: 'VIDEO', mediaPaths: [r.videoPath], caption: r.legenda || r.caption || '', content: r };
+    const caption = r.legendaPost || r.legenda || r.caption || '';
+    // Título do YouTube Shorts: usa o title do reel, ou a 1ª frase da legenda.
+    const youtubeTitle = (r.title || caption.split('\n')[0] || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+    return { type: 'VIDEO', mediaPaths: [r.videoPath], caption, youtubeTitle, content: r };
   }
   throw new Error('contentType inválido (use "carousel" ou "reel").');
 }
@@ -76,7 +79,7 @@ router.get('/settings', (_req, res) => res.json(db.getMlabsSettings()));
 
 router.put('/settings', (req, res) => {
   try {
-    const allowed = ['profileId', 'channelSourceIds', 'ownerId', 'autoScheduleCarousel', 'defaultTime', 'dateOffsetsMonths'];
+    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'defaultTime', 'dateOffsetsMonths'];
     const patch = {};
     for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
     res.json(db.setMlabsSettings(patch));
@@ -144,6 +147,7 @@ router.post('/schedule', async (req, res) => {
       caption,
       dates,
       channelSourceIds: platforms || undefined,
+      youtubeTitle: media.youtubeTitle,
     });
 
     db.updateMlabsSchedule(recordId, { status: 'agendado', mlabsResponse: result.scheduleResponse || null });

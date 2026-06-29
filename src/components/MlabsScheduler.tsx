@@ -170,6 +170,7 @@ function MlabsScheduleModal({
 interface Settings {
   autoScheduleCarousel: boolean; defaultTime: string; dateOffsetsMonths: number[];
   profileId: number | null; channelSourceIds: number[];
+  channelSourceIdsReel: number[]; youtubeShortsChannelId: number | null;
 }
 interface Agendado {
   id: string; contentType: string; caption?: string; dates: string[]; status: string; error?: string; created_at: string;
@@ -274,6 +275,40 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
                 type="text" defaultValue={(s.dateOffsetsMonths || []).join(',')}
                 onBlur={(e) => save({ dateOffsetsMonths: e.target.value.split(',').map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)) })}
                 className="w-24 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+            </div>
+
+            {/* Canais (ids do mLabs) — carrossel/feed e reel/shorts são diferentes */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">
+                  Canais do carrossel (feed)
+                  <span className="block text-xs text-muted-foreground">ids separados por vírgula. Ex.: 3,1,23</span>
+                </span>
+                <input
+                  type="text" defaultValue={(s.channelSourceIds || []).join(',')}
+                  onBlur={(e) => save({ channelSourceIds: e.target.value.split(',').map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)) })}
+                  className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">
+                  Canais do reel (reels/shorts/tiktok)
+                  <span className="block text-xs text-muted-foreground">Ex.: 15,18,20,19</span>
+                </span>
+                <input
+                  type="text" defaultValue={(s.channelSourceIdsReel || []).join(',')}
+                  onBlur={(e) => save({ channelSourceIdsReel: e.target.value.split(',').map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)) })}
+                  className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">
+                  Canal YouTube Shorts
+                  <span className="block text-xs text-muted-foreground">Exige título no agendamento. Ex.: 20</span>
+                </span>
+                <input
+                  type="number" defaultValue={s.youtubeShortsChannelId ?? 20}
+                  onBlur={(e) => save({ youtubeShortsChannelId: parseInt(e.target.value, 10) || null })}
+                  className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
             </div>
 
             <button onClick={calibrate} disabled={calibrating}
