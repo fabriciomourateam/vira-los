@@ -197,6 +197,28 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
   const [agendados, setAgendados] = useState<Agendado[]>([]);
   const [saving, setSaving] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
+  const [sessionText, setSessionText] = useState('');
+  const [savingSession, setSavingSession] = useState(false);
+
+  async function saveSession() {
+    const txt = sessionText.trim();
+    if (!txt) { toast.error('Cole o JSON dos cookies (export do Cookie-Editor).'); return; }
+    let parsed: unknown;
+    try { parsed = JSON.parse(txt); }
+    catch { toast.error('JSON inválido — copie o "Export as JSON" inteiro.'); return; }
+    setSavingSession(true);
+    try {
+      const r = await fetch(`${API}/api/mlabs/session`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsed),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao salvar sessão.');
+      toast.success(`Sessão salva: ${d.mlabsCookies ?? d.cookies} cookies do mLabs.`);
+      setSessionText('');
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao salvar sessão.');
+    } finally { setSavingSession(false); }
+  }
 
   useEffect(() => {
     fetch(`${API}/api/mlabs/settings`).then((r) => r.json()).then(setS).catch(() => {});
@@ -333,6 +355,24 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
                   onBlur={(e) => save({ youtubeShortsChannelId: parseInt(e.target.value, 10) || null })}
                   className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
               </div>
+            </div>
+
+            {/* Sessão do mLabs — cole o export do Cookie-Editor (sem terminal) */}
+            <div className="space-y-1.5 pt-2 border-t border-border">
+              <span className="text-sm font-semibold text-foreground">Sessão do mLabs (cookies)</span>
+              <span className="block text-xs text-muted-foreground">
+                Login do mLabs tem captcha. Logue no navegador, exporte com a extensão Cookie-Editor
+                (Export → Export as JSON) e cole aqui.
+              </span>
+              <textarea
+                value={sessionText} onChange={(e) => setSessionText(e.target.value)}
+                placeholder='Cole aqui o JSON dos cookies (começa com [ ... ])'
+                className="w-full h-20 bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground font-mono"
+              />
+              <button onClick={saveSession} disabled={savingSession}
+                className="text-sm font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg inline-flex items-center gap-2 disabled:opacity-60">
+                {savingSession ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Salvar sessão
+              </button>
             </div>
 
             <button onClick={calibrate} disabled={calibrating}
