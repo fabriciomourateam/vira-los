@@ -272,12 +272,19 @@ async function uploadMedia(page, filePath, auth, ownerId, fileType /* IMAGE|VIDE
   const uuid = uuidv4();
   const fileName = `${uuid}.${ext}`;
 
-  // 1) ingest → pede a URL assinada do S3
+  // 1) ingest → pede a URL assinada do S3.
+  // IMPORTANTE: o uploader só aceita os headers "simples" (content-type + accept) +
+  // cookies. Mandar accept-version/current-profile/authorization dispara preflight CORS
+  // que o uploader rejeita ("Failed to fetch"). Por isso NÃO passamos `auth` aqui.
   const ingestRes = await apiFetch(
     page,
     MLABS.ingest,
-    { method: 'POST', json: { uuid, ownerId: String(ownerId), fileType, extension: ext, fileName, name: fileName, configuration: {}, formats: false } },
-    auth
+    {
+      method: 'POST',
+      headers: { accept: 'application/json, text/plain, */*' },
+      json: { uuid, ownerId: String(ownerId), fileType, extension: ext, fileName, name: fileName, configuration: {}, formats: false },
+    },
+    {} // sem headers de auth — só cookies (credentials:include)
   );
   if (!ingestRes.ok) {
     throw new Error(`ingest falhou (${ingestRes.status}): ${JSON.stringify(ingestRes.body).slice(0, 300)}`);
