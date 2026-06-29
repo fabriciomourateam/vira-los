@@ -19,7 +19,7 @@ const path = require('path');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
-const { OUTPUT_DIR } = require('../services/carouselService');
+const { OUTPUT_DIR, takeScreenshotsPixelPerfect } = require('../services/carouselService');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
 const REELS_DIR = path.join(UPLOADS_DIR, 'reels');
@@ -34,13 +34,29 @@ function mlabs() {
 const computeDefaultDates = () => mlabs().computeDefaultDates();
 
 // ── Resolve os arquivos de mídia de um conteúdo ─────────────────────────────────
-function resolveMedia(contentType, contentId) {
+// Carrossel: re-renderiza PIXEL-PERFECT a partir do carrossel.html salvo (a MESMA
+// rota do download "PNGs HD"). Assim o mLabs sempre recebe a última versão editada,
+// em qualidade pixel-perfect — não um screenshot velho. Cai pro screenshot salvo se
+// não houver html.
+async function resolveMedia(contentType, contentId) {
   if (contentType === 'carousel') {
     const c = db.getAllCarousels().find((x) => x.id === contentId);
     if (!c) throw new Error('Carrossel não encontrado.');
-    const shots = c.screenshots || [];
-    if (!shots.length) throw new Error('Esse carrossel não tem PNGs gerados — gere os screenshots antes de agendar.');
-    const paths = shots.map((name) => path.join(OUTPUT_DIR, c.folderName, name));
+    const folderPath = path.join(OUTPUT_DIR, c.folderName);
+    const htmlPath = path.join(folderPath, 'carrossel.html');
+
+    let shots = c.screenshots || [];
+    if (fs.existsSync(htmlPath)) {
+      try {
+        const html = fs.readFileSync(htmlPath, 'utf8');
+        const fresh = await takeScreenshotsPixelPerfect(html, folderPath); // sobrescreve slide_NN.png
+        if (fresh && fresh.length) shots = fresh;
+      } catch (e) {
+        console.warn('[mLabs] render pixel-perfect falhou, usando screenshots salvos:', e.message);
+      }
+    }
+    if (!shots.length) throw new Error('Esse carrossel não tem PNGs nem HTML pra renderizar.');
+    const paths = shots.map((name) => path.join(folderPath, name));
     for (const p of paths) if (!fs.existsSync(p)) throw new Error(`Arquivo do slide não existe: ${path.basename(p)}`);
     return { type: 'IMAGE', mediaPaths: paths, caption: c.legenda || '', content: c };
   }
@@ -112,7 +128,7 @@ router.post('/schedule', async (req, res) => {
   const recordId = uuidv4();
   try {
     if (!contentType || !contentId) return res.status(400).json({ error: 'contentType e contentId obrigatórios.' });
-    const media = resolveMedia(contentType, contentId);
+    const media = await resolveMedia(contentType, contentId);
     if (!dates || !dates.length) dates = computeDefaultDates();
     if (!caption) caption = media.caption;
 

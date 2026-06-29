@@ -499,7 +499,7 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily, titl
     .slide-editorial.accent-bg { background: ${primaryColor}; }
 
     .slide-editorial .editorial-content {
-      display: flex; flex-direction: column; gap: 28px;
+      display: flex; flex-direction: column; gap: 22px;
       z-index: 2; flex: 1; justify-content: center;
     }
 
@@ -535,12 +535,13 @@ function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily, titl
       color: #D9D353; font-weight: 700; font-style: italic;
     }
 
-    /* Foto contextual contida no slide (~90% largura) */
+    /* Foto contextual contida no slide (~90% largura) — altura menor pra o texto
+       caber acima do rodapé (slides com muito conteúdo estavam estourando). */
     .slide-editorial .editorial-photo-container {
-      width: 100%; border-radius: 8px; overflow: hidden;
+      width: 100%; border-radius: 8px; overflow: hidden; flex-shrink: 0;
     }
     .slide-editorial .editorial-photo-container img {
-      width: 100%; height: 380px; object-fit: cover; display: block;
+      width: 100%; height: 300px; object-fit: cover; display: block;
     }
   </style>`;
 }
@@ -617,7 +618,7 @@ REGRAS DE ESCRITA:
   } else {
     // 9 slides — estrutura fmteam v2 (posições fixas por tipo visual)
     structure += [
-      `SLIDE 1 — CAPA (hook visual): headline de gancho — promessa clara ou dor real em até 6 palavras. Subtítulo complementar. Proibido abertura genérica.`,
+      `SLIDE 1 — CAPA (hook visual): headline de gancho — promessa clara ou dor real em até 6 palavras + UM subtítulo curto de apoio. NÃO adicione uma frase entre parênteses no final (nada de "(...)"). Proibido abertura genérica.`,
       QUEBRA(2),
       AMPLI(3, ' pt.1'),
       `SLIDE 4 — AMPLIFICAÇÃO pt.2 (slide GRADIENT dourado — virada narrativa): o momento de maior tensão editorial. Comportamento incoerente da maioria + consequência real. Usar arrow-rows (máx 3 pontos curtos). Texto SEMPRE escuro, nunca branco.`,
