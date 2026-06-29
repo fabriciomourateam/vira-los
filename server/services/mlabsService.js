@@ -103,13 +103,47 @@ async function newContext(browser) {
 }
 
 // ── Login + detecção de sessão válida ───────────────────────────────────────────
-// Considera "logado" se, ao abrir o app, a navegação não cai na tela de login.
+// Navegação resiliente: waitUntil 'commit' (assim que a navegação confirma, sem
+// esperar a SPA/Cloudflare carregar tudo) + 1 retry. Evita timeout em páginas pesadas.
+async function gotoSafe(page, url, { timeout = 60000 } = {}) {
+  for (let i = 0; i < 2; i++) {
+    try {
+      await page.goto(url, { waitUntil: 'commit', timeout });
+      return true;
+    } catch (e) {
+      if (i === 1) throw e;
+      await page.waitForTimeout(1500);
+    }
+  }
+}
+
+// Testa a sessão batendo numa API autenticada do mLabs (cookies viajam junto).
+// 401/403 = não logado; 2xx/3xx = logado; null = ambíguo (deixa o caller decidir).
+async function apiProbeLoggedIn(page) {
+  const cfg = db.getMlabsSettings ? db.getMlabsSettings() : {};
+  const profile = cfg.profileId ? String(cfg.profileId) : '';
+  const status = await page.evaluate(async (profile) => {
+    try {
+      const r = await fetch('https://post-api.mlabs.io/schedules/limits', {
+        credentials: 'include',
+        headers: { accept: 'application/vnd.api+json', 'accept-version': 'v1', ...(profile ? { 'current-profile': profile } : {}) },
+      });
+      return r.status;
+    } catch { return 0; }
+  }, profile).catch(() => 0);
+  if (status === 401 || status === 403) return false;
+  if (status >= 200 && status < 400) return true;
+  return null;
+}
+
+// Considera "logado" via probe de API; cai pro sniff de URL se o probe for ambíguo.
 async function isLoggedIn(page) {
   try {
-    await page.goto(MLABS.app, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(2500);
-    const url = page.url();
-    return !/accounts\.mlabs\.io|\/login|sign_in/i.test(url);
+    await gotoSafe(page, MLABS.app);
+    await page.waitForTimeout(1800);
+    const probe = await apiProbeLoggedIn(page);
+    if (probe !== null) return probe;
+    return !/accounts\.mlabs\.io|\/login|sign_in/i.test(page.url());
   } catch (_) {
     return false;
   }
@@ -122,8 +156,8 @@ async function attemptLogin(page) {
   const password = process.env.MLABS_PASSWORD;
   if (!email || !password) throw new Error('MLABS_EMAIL/MLABS_PASSWORD não configurados.');
 
-  await page.goto(MLABS.login, { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForTimeout(2000);
+  await gotoSafe(page, MLABS.login);
+  await page.waitForTimeout(2500);
 
   // Campos de e-mail/senha (seletores tolerantes; calibrados na 1ª run se mudarem).
   const emailSel = 'input[type="email"], input[name="email"], input#email';
@@ -154,10 +188,23 @@ async function attemptLogin(page) {
   }
 }
 
-// Garante uma página logada no app. Salva a sessão após logar.
+// Garante uma página logada no app. Prefere a sessão semeada (cookies); só tenta
+// login automático se NÃO houver sessão salva (login tem captcha e costuma travar).
 async function ensureSession(ctx) {
   const page = await ctx.newPage();
+  page.setDefaultNavigationTimeout(60000);
+  const hasSession = !!loadSession();
+
   if (await isLoggedIn(page)) return page;
+
+  if (hasSession) {
+    throw new Error(
+      'Sessão do mLabs inválida ou expirada. Reexporte os cookies no Cookie-Editor ' +
+      '(logado no mLabs) e cole de novo em "Sessão do mLabs" na engrenagem. ' +
+      'Dica: exporte na aba já logada de app.mlabs.com.br.'
+    );
+  }
+
   await attemptLogin(page);
   if (!(await isLoggedIn(page))) throw new Error('Não consegui validar a sessão do mLabs após login.');
   saveSession(await ctx.storageState());
@@ -181,8 +228,8 @@ async function learnAuthHeaders(page) {
   page.on('request', onRequest);
 
   // Reabre o app pra disparar as chamadas de fundo (schedules/limits, hashtags, etc).
-  await page.goto(MLABS.app, { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
-  await page.waitForTimeout(4000);
+  await gotoSafe(page, MLABS.app).catch(() => {});
+  await page.waitForTimeout(5000);
   page.off('request', onRequest);
 
   // current-profile é essencial (id do perfil). Se não veio em header, tenta da sessão salva.
