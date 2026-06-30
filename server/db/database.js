@@ -374,6 +374,22 @@ const createMlabsSchedule = (s) => { const db = readDb('mlabs_schedules'); const
 const updateMlabsSchedule = (id, data) => { const db = readDb('mlabs_schedules').map((s) => s.id === id ? { ...s, ...data } : s); writeDb('mlabs_schedules', db); };
 const deleteMlabsSchedule = (id) => writeDb('mlabs_schedules', readDb('mlabs_schedules').filter((s) => s.id !== id));
 
+// Fotos usadas recentemente nos carrosséis (pra não repetir entre carrosséis seguidos).
+// Lista das mais recentes primeiro, deduplicada por caminho (ignora querystring), capada.
+const getRecentPhotoUrls = () => { const o = readObj('recent_photo_urls'); return Array.isArray(o.urls) ? o.urls : []; };
+const addRecentPhotoUrls = (urls, cap = 80) => {
+  if (!Array.isArray(urls) || !urls.length) return;
+  const merged = [...urls.filter(Boolean), ...getRecentPhotoUrls()];
+  const seen = new Set(); const out = [];
+  for (const u of merged) {
+    const k = String(u).split('?')[0];
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(u);
+    if (out.length >= cap) break;
+  }
+  writeObj('recent_photo_urls', { urls: out, updated_at: now() });
+};
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -418,4 +434,5 @@ module.exports = {
   getMlabsSettings, setMlabsSettings,
   getMlabsSession, setMlabsSession, clearMlabsSession,
   getAllMlabsSchedules, createMlabsSchedule, updateMlabsSchedule, deleteMlabsSchedule,
+  getRecentPhotoUrls, addRecentPhotoUrls,
 };

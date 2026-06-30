@@ -320,6 +320,28 @@ async function fetchOneImage(query, fallbackQuery) {
   }
 }
 
+// Normaliza URL de foto pra dedup: tira a querystring (params de tamanho/ixid mudam
+// a cada request, mas o caminho identifica a foto). Assim "mesma foto" colide mesmo
+// quando vem com parâmetros diferentes.
+function photoKey(url) {
+  return String(url || '').split('?')[0].trim();
+}
+
+// Como fetchOneImage, mas devolve VÁRIOS candidatos (Unsplash + Pexels) pra dar margem
+// de deduplicar entre slides do mesmo carrossel e entre carrosséis recentes.
+async function fetchImageCandidates(query, fallbackQuery, count = 12) {
+  let imgs = await fetchUnsplashImages(query, count);
+  if (imgs.length < count) {
+    const more = await fetchPexelsImages(query, count);
+    if (more.length) imgs = imgs.concat(more);
+  }
+  if (!imgs.length && fallbackQuery && fallbackQuery !== query) {
+    imgs = await fetchUnsplashImages(fallbackQuery, count);
+    if (!imgs.length) imgs = await fetchPexelsImages(fallbackQuery, count);
+  }
+  return imgs;
+}
+
 // Gera queries de imagem específicas por slide via Claude (chamada leve)
 async function generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle = '') {
   const roteiroContext = roteiro
@@ -1140,7 +1162,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── IMG BOX (light e gradient slides) ── */
     .img-box-top {
-      width:100%; border-radius:18px;
+      width:100%; height:300px; border-radius:18px;
       overflow:hidden; margin-bottom:24px; flex-shrink:0;
       position:relative; /* necessário para overlay de brightness posicionar-se corretamente */
     }
@@ -2278,6 +2300,7 @@ async function generateCarousel(config, setStep = () => {}) {
     fmteamFontSizes = {},
     ctaStyle = 'dark-fullbleed',  // 'dark-fullbleed' (default) | 'light-card'
     fmteamCover = {},             // personalização da capa fmteam (cores + toggles + imagem do CTA)
+    avoidPhotoUrls = [],          // URLs de fotos a evitar (carrosséis recentes) — dedup
   } = config;
 
   // Opções de personalização da capa fmteam (com defaults seguros)
@@ -2328,12 +2351,27 @@ async function generateCarousel(config, setStep = () => {}) {
   const minQueriesRequired = (layoutStyle === 'fmteam' && slidesCount === 9) ? slidesCount - 1 : slidesCount;
   let unsplashImages;
   if (slideQueries && slideQueries.length >= minQueriesRequired) {
-    const perSlide = await Promise.all(
-      slideQueries.map(q => fetchOneImage(q, topic))
+    // Busca os candidatos de TODOS os slides em paralelo (rede), depois escolhe um por
+    // slide de forma SEQUENCIAL evitando repetir foto no mesmo carrossel e nas dos
+    // carrosséis recentes (avoidPhotoUrls). Resolve "foto repetida no mesmo carrossel"
+    // e "foto igual à dos 1-3 anteriores".
+    const candidateLists = await Promise.all(
+      slideQueries.map(q => fetchImageCandidates(q, topic, 12))
     );
+    const usedKeys = new Set((avoidPhotoUrls || []).map(photoKey).filter(Boolean));
+    const perSlide = [];
+    for (let i = 0; i < slideQueries.length; i++) {
+      const candidates = candidateLists[i] || [];
+      // 1ª foto ainda não usada; se todas já usadas, repete a melhor; se Unsplash/Pexels
+      // não trouxeram nada, cai pro AI (fetchOneImage) como último recurso.
+      let choice = candidates.find(img => img && img.url && !usedKeys.has(photoKey(img.url)));
+      if (!choice && candidates.length) choice = candidates.find(img => img && img.url);
+      if (!choice) choice = await fetchOneImage(slideQueries[i], topic);
+      if (choice && choice.url) usedKeys.add(photoKey(choice.url));
+      perSlide.push(choice || null);
+    }
     unsplashImages = perSlide.map((img, i) => img || { url: '', query: slideQueries[i] });
-    // Filtra slots sem imagem mas mantém a ordem
-    console.log(`[CarouselService] Imagens por slide: ${perSlide.filter(Boolean).length}/${slidesCount} encontradas`);
+    console.log(`[CarouselService] Imagens por slide (dedup): ${perSlide.filter(Boolean).length}/${slidesCount} — evitando ${usedKeys.size - perSlide.filter(p => p && p.url).length} fotos recentes`);
   } else {
     // Fallback: busca genérica pelo tema
     unsplashImages = await fetchImages(topic, slidesCount + 2);
@@ -2661,6 +2699,7 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8
     screenshots,
     redditTrendsUsed: redditTrends.length,
     unsplashImagesUsed: unsplashImages.length,
+    photoUrlsUsed: unsplashImages.map(i => i && i.url).filter(Boolean),
   };
 }
 
