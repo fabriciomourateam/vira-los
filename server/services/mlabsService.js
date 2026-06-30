@@ -310,11 +310,16 @@ async function uploadMedia(page, filePath, auth, ownerId, fileType /* IMAGE|VIDE
 }
 
 // Espera o mLabs processar os uploads e devolver o id numérico de cada um.
-// Polla GET /file/{uuid} de TODAS as mídias em paralelo (dentro do browser, com cookies)
-// até cada uma ter id, ou até o deadline. Retorna { ids:{uuid:id}, last:{uuid:resposta} }.
-async function waitForMediaIds(page, uuids, deadlineMs = 75000) {
+// Polla GET /file/{uuid} de TODAS as mídias em paralelo (dentro do browser) até cada
+// uma ter id, ou até o deadline. Retorna { ids:{uuid:id}, last:{uuid:resposta} }.
+//
+// IMPORTANTE: o app real manda `authorization: Bearer` pro uploader.mlabs.io ao consultar
+// o arquivo — e o id numérico do registro processado parece só voltar pra requisição
+// autenticada. Por isso tentamos PRIMEIRO com os headers de auth aprendidos; se o preflight
+// CORS barrar (fetch "throws"), caímos pra cookies-só (que é o que basta pro ingest).
+async function waitForMediaIds(page, uuids, auth = {}, deadlineMs = 120000) {
   return page.evaluate(
-    async ({ uuids, deadlineMs }) => {
+    async ({ uuids, auth, deadlineMs }) => {
       const idKeys = ['id', 'mediaId', 'imageId', 'videoId', 'fileId', 'file_id', 'image_id', 'video_id'];
       const findId = (o) => {
         if (!o || typeof o !== 'object') return null;
@@ -333,21 +338,27 @@ async function waitForMediaIds(page, uuids, deadlineMs = 75000) {
       while (Date.now() < deadline && Object.keys(ids).length < uuids.length) {
         await Promise.all(uuids.map(async (u) => {
           if (ids[u]) return;
-          try {
-            const r = await fetch('https://uploader.mlabs.io/file/' + u, {
-              credentials: 'include', headers: { accept: 'application/json, text/plain, */*' },
-            });
-            const b = await r.json().catch(() => ({}));
-            last[u] = b;
-            const id = findId(b);
-            if (id) ids[u] = id;
-          } catch (e) { last[u] = String(e); }
+          // Tenta com auth (igual o app real) e, se barrar, sem auth.
+          for (const headers of [
+            { accept: 'application/json, text/plain, */*', ...auth },
+            { accept: 'application/json, text/plain, */*' },
+          ]) {
+            try {
+              const r = await fetch('https://uploader.mlabs.io/file/' + u, { credentials: 'include', headers });
+              const b = await r.json().catch(() => ({}));
+              last[u] = b;
+              const id = findId(b);
+              if (id) { ids[u] = id; break; }
+              // Resposta veio (não vazia) mas ainda sem id: está PROCESSANDO — não tenta o fallback.
+              if (b && typeof b === 'object' && Object.keys(b).length) break;
+            } catch (e) { last[u] = String(e); /* preflight/CORS: cai pro próximo header set */ }
+          }
         }));
         if (Object.keys(ids).length < uuids.length) await new Promise((r) => setTimeout(r, 2000));
       }
       return { ids, last };
     },
-    { uuids, deadlineMs }
+    { uuids, auth, deadlineMs }
   );
 }
 
@@ -533,20 +544,22 @@ async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, cha
     const auth = await learnAuthHeaders(page);
     const ownerId = cfg.ownerId || (auth['current-profile'] && cfg.ownerId) || cfg.ownerId;
 
-    // 1) sobe cada mídia (ingest + PUT no S3). Guarda os uuids na ordem dos slides.
-    const uploads = [];
-    for (const p of mediaPaths) {
-      uploads.push(await uploadMedia(page, p, auth, ownerId || profileId, type));
-    }
+    // 1) sobe cada mídia (ingest + PUT no S3) EM PARALELO. Mantém a ordem dos slides
+    //    (Promise.all preserva a ordem do array), que vira a `position` no carrossel.
+    const uploads = await Promise.all(
+      mediaPaths.map((p) => uploadMedia(page, p, auth, ownerId || profileId, type))
+    );
 
     // 2) espera o mLabs processar e devolver o id numérico de cada uma (em paralelo).
-    const { ids, last } = await waitForMediaIds(page, uploads.map((u) => u.uuid));
+    const { ids, last } = await waitForMediaIds(page, uploads.map((u) => u.uuid), auth);
     const mediaIds = uploads.map((u) => ids[u.uuid]);
     if (mediaIds.some((id) => !id)) {
-      const faltou = uploads.filter((u) => !ids[u.uuid]).map((u) => u.uuid);
+      const faltou = uploads.filter((u) => !ids[u.uuid]);
+      // Despeja a resposta REAL de cada /file/{uuid} que ficou sem id — é o que precisamos
+      // ver pra confirmar de onde sai o id numérico, caso ainda não esteja vindo.
+      const dump = faltou.map((u) => `${u.uuid} → ${JSON.stringify(last[u.uuid])}`).join(' | ');
       throw new Error(
-        `Mídia subiu mas o id numérico não apareceu no processamento (uuids: ${faltou.join(', ')}). ` +
-        `Última resposta /file/{uuid}: ${JSON.stringify(last[faltou[0]])}`
+        `Mídia subiu mas o id numérico não apareceu no processamento. Respostas /file/{uuid}: ${dump}`.slice(0, 1800)
       );
     }
 
