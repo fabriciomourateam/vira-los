@@ -104,6 +104,11 @@ function weightedSample(items, weights, k) {
 }
 
 async function buildOne(theme) {
+  // Fotos dos carrosséis recentes — pra NÃO repetir foto entre carrosséis seguidos.
+  // Lido fresco a cada carrossel (o anterior já salvou as dele), então os 2 do dia
+  // também não repetem entre si.
+  const avoidPhotoUrls = db.getRecentPhotoUrls ? db.getRecentPhotoUrls() : [];
+
   // 1) Carrossel fmteam
   const carouselResult = await generateCarousel({
     topic: theme.topic,
@@ -116,7 +121,13 @@ async function buildOne(theme) {
     dominantEmotion: theme.emotion,
     layoutStyle: 'fmteam',
     ctaStyle: 'dark-fullbleed',
+    // Capa SÓ com o gancho — sem a frase entre parênteses (capa-context).
+    fmteamCover: { showContext: false },
+    avoidPhotoUrls,
   });
+
+  // Registra as fotos usadas pra os próximos carrosséis evitarem repetir.
+  try { if (db.addRecentPhotoUrls) db.addRecentPhotoUrls(carouselResult.photoUrlsUsed || []); } catch (_) {}
 
   // 2) Screenshots server-side (Playwright). Se indisponível, segue com HTML só.
   let screenshots = [];
