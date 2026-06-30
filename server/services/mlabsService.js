@@ -303,21 +303,52 @@ async function uploadMedia(page, filePath, auth, ownerId, fileType /* IMAGE|VIDE
   const put = await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': contentType }, body: buf });
   if (!put.ok) throw new Error(`PUT no S3 falhou (${put.status}) para ${fileName}`);
 
-  // 3) O id numérico que o /schedules espera NÃO vem do ingest (só s3SignedUrl+uuid).
-  //    Ele aparece no poll GET /file/{uuid} depois que o mLabs processa o upload.
-  //    Pollamos com retentativas até o id surgir.
-  let mediaId = findNumericId(ing);
-  let lastPoll = null;
-  for (let i = 0; i < 8 && !mediaId; i++) {
-    await page.waitForTimeout(1500);
-    try {
-      const poll = await apiFetch(page, `https://uploader.mlabs.io/file/${uuid}`, { method: 'GET', headers: { accept: 'application/json, text/plain, */*' } }, {});
-      lastPoll = poll.body;
-      mediaId = findNumericId(poll.body);
-    } catch (e) { lastPoll = `erro no poll: ${e.message}`; }
-  }
+  // O id numérico NÃO vem aqui — só aparece no GET /file/{uuid} depois que o mLabs
+  // termina de PROCESSAR (status sai de UPLOADED). Esperamos isso depois, em paralelo
+  // pra todas as mídias (waitForMediaIds).
+  return { uuid, fileName, ingestResponse: ing };
+}
 
-  return { uuid, fileName, mediaId, ingestResponse: ing, pollResponse: lastPoll };
+// Espera o mLabs processar os uploads e devolver o id numérico de cada um.
+// Polla GET /file/{uuid} de TODAS as mídias em paralelo (dentro do browser, com cookies)
+// até cada uma ter id, ou até o deadline. Retorna { ids:{uuid:id}, last:{uuid:resposta} }.
+async function waitForMediaIds(page, uuids, deadlineMs = 75000) {
+  return page.evaluate(
+    async ({ uuids, deadlineMs }) => {
+      const idKeys = ['id', 'mediaId', 'imageId', 'videoId', 'fileId', 'file_id', 'image_id', 'video_id'];
+      const findId = (o) => {
+        if (!o || typeof o !== 'object') return null;
+        for (const k of idKeys) {
+          const v = o[k];
+          if (typeof v === 'number' && Number.isFinite(v)) return v;
+          if (typeof v === 'string' && /^\d+$/.test(v)) return Number(v);
+        }
+        for (const v of Object.values(o)) {
+          if (v && typeof v === 'object') { const r = findId(v); if (r) return r; }
+        }
+        return null;
+      };
+      const ids = {}, last = {};
+      const deadline = Date.now() + deadlineMs;
+      while (Date.now() < deadline && Object.keys(ids).length < uuids.length) {
+        await Promise.all(uuids.map(async (u) => {
+          if (ids[u]) return;
+          try {
+            const r = await fetch('https://uploader.mlabs.io/file/' + u, {
+              credentials: 'include', headers: { accept: 'application/json, text/plain, */*' },
+            });
+            const b = await r.json().catch(() => ({}));
+            last[u] = b;
+            const id = findId(b);
+            if (id) ids[u] = id;
+          } catch (e) { last[u] = String(e); }
+        }));
+        if (Object.keys(ids).length < uuids.length) await new Promise((r) => setTimeout(r, 2000));
+      }
+      return { ids, last };
+    },
+    { uuids, deadlineMs }
+  );
 }
 
 // Procura a URL assinada do S3 na resposta do ingest (nomes conhecidos + varredura).
@@ -502,20 +533,24 @@ async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, cha
     const auth = await learnAuthHeaders(page);
     const ownerId = cfg.ownerId || (auth['current-profile'] && cfg.ownerId) || cfg.ownerId;
 
-    // 1) sobe cada mídia
-    const mediaIds = [];
+    // 1) sobe cada mídia (ingest + PUT no S3). Guarda os uuids na ordem dos slides.
+    const uploads = [];
     for (const p of mediaPaths) {
-      const up = await uploadMedia(page, p, auth, ownerId || profileId, type);
-      if (!up.mediaId) {
-        throw new Error(
-          `Upload OK mas não achei o id numérico da mídia. ` +
-          `Poll GET /file/{uuid}: ${JSON.stringify(up.pollResponse)} | ingest: ${JSON.stringify(up.ingestResponse)}`
-        );
-      }
-      mediaIds.push(up.mediaId);
+      uploads.push(await uploadMedia(page, p, auth, ownerId || profileId, type));
     }
 
-    // 2) cria o agendamento com TODAS as datas
+    // 2) espera o mLabs processar e devolver o id numérico de cada uma (em paralelo).
+    const { ids, last } = await waitForMediaIds(page, uploads.map((u) => u.uuid));
+    const mediaIds = uploads.map((u) => ids[u.uuid]);
+    if (mediaIds.some((id) => !id)) {
+      const faltou = uploads.filter((u) => !ids[u.uuid]).map((u) => u.uuid);
+      throw new Error(
+        `Mídia subiu mas o id numérico não apareceu no processamento (uuids: ${faltou.join(', ')}). ` +
+        `Última resposta /file/{uuid}: ${JSON.stringify(last[faltou[0]])}`
+      );
+    }
+
+    // 3) cria o agendamento com TODAS as datas
     const { v4: uuidv4 } = require('uuid');
     const payload = buildSchedulePayload({
       caption, mediaIds, type, dates, channelSourceIds, profileId, requestId: uuidv4(),
