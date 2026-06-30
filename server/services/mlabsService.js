@@ -537,6 +537,24 @@ async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, cha
   }
   if (!profileId) throw new Error('profileId não definido — rode a calibração primeiro.');
 
+  // Carrossel: tira o Threads. Ele corta legenda em 500 chars e, quando a legenda passa
+  // disso, o mLabs recusa o POST /schedules inteiro (412 "Limite de caracteres do Threads
+  // excedido") — derrubando também o Instagram/Facebook. O comprador está no Instagram, então
+  // o carrossel não vai mais pro Threads. Id configurável via settings (default 23 = Threads
+  // nesta conta). Reels usam outro conjunto de canais e não passam por aqui.
+  if (!isVideo) {
+    const exclude = (cfg.excludeChannelSourceIdsImage && cfg.excludeChannelSourceIdsImage.length)
+      ? cfg.excludeChannelSourceIdsImage.map(Number)
+      : [23];
+    const kept = channelSourceIds.filter((id) => !exclude.includes(Number(id)));
+    const dropped = channelSourceIds.filter((id) => !kept.includes(id));
+    if (dropped.length) console.log(`[mLabs] carrossel: canais removidos (Threads/limite): ${dropped.join(',')}`);
+    if (!kept.length) {
+      throw new Error(`Sobrou nenhum canal pro carrossel depois de remover o Threads (${channelSourceIds.join(',')}). Ajuste channelSourceIds nas settings do mLabs.`);
+    }
+    channelSourceIds = kept;
+  }
+
   const { browser } = await connectBrowser();
   try {
     const ctx = await newContext(browser);
