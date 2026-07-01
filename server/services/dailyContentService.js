@@ -73,6 +73,40 @@ const THEMES = [
     topics: ['Você come menos proteína do que imagina', 'Proteína insuficiente travando seu ganho', 'Quanto de proteína seu shape realmente exige'] },
   { id: 'ultraprocessado', group: 'nutricao', tone: 'investigativo', emotion: 'alerta', keywords: ['ultraprocessado', 'industrializado', 'processado', 'fast food'],
     topics: ['Ultraprocessados sabotando sua composição corporal', 'A comida "fit" que não é fit', 'Calorias líquidas: o vilão escondido da dieta'] },
+  { id: 'fome-doce', group: 'nutricao', tone: 'investigativo', emotion: 'curiosidade', keywords: ['doce', 'açúcar', 'compulsão', 'vontade'],
+    topics: ['Fome de doce à noite não é falta de força', 'Compulsão por doce: o que ela revela', 'Vontade de açúcar e o seu cortisol'] },
+  { id: 'agua', group: 'nutricao', tone: 'direto', emotion: 'surpresa', keywords: ['água', 'hidratação', 'hidratar', 'desidrat'],
+    topics: ['Desidratação leve derrubando seu treino', 'Água de menos e a energia que some', 'Hidratação: o detalhe que muda a performance'] },
+  // ── HORMONAL (extra) ──
+  { id: 'saude-sexual', group: 'hormonal', tone: 'direto', emotion: 'preocupação', keywords: ['sexual', 'ereção', 'desempenho', 'libido'],
+    topics: ['Desempenho sexual caindo pode ser hormonal', 'Saúde sexual masculina: o sinal que o corpo dá', 'Quando o desempenho cai, o hormônio avisa antes'] },
+  // ── METABÓLICO (extra) ──
+  { id: 'barriga-teimosa', group: 'metabolico', tone: 'provocativo', emotion: 'frustração', keywords: ['barriga', 'abdominal', 'gordura', 'pochete'],
+    topics: ['A barriga teimosa que não sai nem no déficit', 'Gordura abdominal: por que ela resiste', 'Barriga de homem 30+: o que está por trás'] },
+  { id: 'metabolismo-lento', group: 'metabolico', tone: 'investigativo', emotion: 'contra-intuição', keywords: ['metabolismo', 'lento', 'queima', 'gasto'],
+    topics: ['Metabolismo lento é desculpa ou é real?', 'O que de fato desacelera sua queima', 'Por que seu metabolismo parece travado'] },
+  // ── TREINO (extra) ──
+  { id: 'sedentarismo', group: 'treino', tone: 'direto', emotion: 'alerta', keywords: ['sentado', 'sedentário', 'sedentarismo', 'escritório'],
+    topics: ['8 horas sentado sabotando seu shape', 'Sedentarismo: o dano que o treino não apaga', 'Trabalha sentado o dia todo? Isso muda seu corpo'] },
+  { id: 'volume-excesso', group: 'treino', tone: 'provocativo', emotion: 'contra-intuição', keywords: ['volume', 'séries', 'exagero', 'treino demais'],
+    topics: ['Treino de volume demais travando o ganho', 'Mais séries não é mais músculo', 'O excesso de treino que te deixa parado'] },
+  // ── RECUPERAÇÃO (extra) ──
+  { id: 'overtraining', group: 'recuperacao', tone: 'direto', emotion: 'contra-intuição', keywords: ['overtraining', 'descanso', 'recuperação', 'pausa'],
+    topics: ['Treinar todo dia está te deixando pior', 'Overtraining: quando falta é descanso', 'Recuperação: o treino que acontece fora da academia'] },
+  // ── MENTE (foco / humor / névoa) ──
+  { id: 'nevoa-mental', group: 'mente', tone: 'investigativo', emotion: 'preocupação', keywords: ['névoa', 'foco', 'concentração', 'memória', 'cabeça'],
+    topics: ['Névoa mental: quando a cabeça não engata', 'Falta de foco pode ser hormonal', 'Cabeça lenta o dia todo: o que está por trás'] },
+  { id: 'humor', group: 'mente', tone: 'direto', emotion: 'preocupação', keywords: ['humor', 'irritado', 'irritabilidade', 'ânimo', 'motivação'],
+    topics: ['Irritado à toa? O hormônio pode explicar', 'Humor instável e a testosterona', 'Ânimo lá embaixo: o sinal que os homens ignoram'] },
+  // ── MITOS vs CIÊNCIA ──
+  { id: 'testo-idade-mito', group: 'mitos', tone: 'provocativo', emotion: 'surpresa', keywords: ['idade', 'velho', 'jovem', 'novo'],
+    topics: ['Testosterona baixa não é coisa de velho', 'Homem de 28 com hormônio de 50: acontece', 'A idade não é a única culpada pela testo baixa'] },
+  { id: 'jejum-mito', group: 'mitos', tone: 'investigativo', emotion: 'contra-intuição', keywords: ['jejum', 'intermitente'],
+    topics: ['Jejum intermitente: o que ninguém te conta', 'Jejum funciona pra todo mundo? A real', 'O erro de fazer jejum do jeito errado'] },
+  { id: 'lowcarb-mito', group: 'mitos', tone: 'investigativo', emotion: 'contra-intuição', keywords: ['low carb', 'carboidrato', 'cetogênica', 'carbo'],
+    topics: ['Cortar carboidrato não é o que te trava', 'Low carb: mito e verdade pro seu shape', 'Carboidrato à noite engorda? A ciência'] },
+  { id: 'abdomen-mito', group: 'mitos', tone: 'provocativo', emotion: 'surpresa', keywords: ['abdominal', 'abdômen', 'localizado', 'seca'],
+    topics: ['Abdominal todo dia não seca a barriga', 'O mito do exercício localizado', 'Fazer abdominal x perder barriga: a verdade'] },
 ];
 
 // Estado em memória (só 1 geração por vez)
