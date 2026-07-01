@@ -390,6 +390,17 @@ const addRecentPhotoUrls = (urls, cap = 80) => {
   writeObj('recent_photo_urls', { urls: out, updated_at: now() });
 };
 
+// Títulos/ângulos usados recentemente nos carrosséis diários (pra não repetir o mesmo
+// enfoque). Mais recentes primeiro, deduplicado, capado.
+const getRecentTopics = () => { const o = readObj('recent_topics'); return Array.isArray(o.topics) ? o.topics : []; };
+const addRecentTopics = (topics, cap = 20) => {
+  if (!Array.isArray(topics) || !topics.length) return;
+  const merged = [...topics.filter(Boolean), ...getRecentTopics()];
+  const seen = new Set(); const out = [];
+  for (const t of merged) { if (seen.has(t)) continue; seen.add(t); out.push(t); if (out.length >= cap) break; }
+  writeObj('recent_topics', { topics: out, updated_at: now() });
+};
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -435,4 +446,5 @@ module.exports = {
   getMlabsSession, setMlabsSession, clearMlabsSession,
   getAllMlabsSchedules, createMlabsSchedule, updateMlabsSchedule, deleteMlabsSchedule,
   getRecentPhotoUrls, addRecentPhotoUrls,
+  getRecentTopics, addRecentTopics,
 };

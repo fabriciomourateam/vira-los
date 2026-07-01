@@ -25,19 +25,54 @@ const NICHE = 'Saúde hormonal e performance masculina';
 // ── Banco de temas (ângulos comprovados do PERFORMANCE-LOG, por SINTOMA = ban-safe) ──
 // O cérebro editorial (fmteamEditorial.js) cuida da voz/anti-ban; aqui é só O QUE falar.
 // `keywords` = termos pra casar com legendas dos posts reais (ponderação por performance).
+// Cada tema tem um `group` (assunto macro) e várias variações de ângulo (`topics`).
+// - `group` evita que os 2 carrosséis do dia (e os de dias seguidos) falem do MESMO
+//   assunto: metade dos temas antigos era "testosterona", então caíam parecidos.
+// - `topics` dá 3 ângulos por tema, então mesmo quando um tema volta, o título/enfoque
+//   muda (antes o tema = sempre o MESMO título exato → posts iguais).
 const THEMES = [
-  { id: 'testo-baixa', topic: 'Sinais de testosterona baixa no homem', tone: 'investigativo', emotion: 'preocupação', keywords: ['testosterona', 'testo', 'libido', 'hormonal', 'hormônio'] },
-  { id: 'energia',     topic: 'Falta de energia que não passa nem dormindo', tone: 'direto', emotion: 'cansaço', keywords: ['energia', 'disposição', 'cansaço', 'cansado', 'fadiga'] },
-  { id: 'rotina',      topic: 'Por que você não consegue encaixar treino e dieta na rotina', tone: 'direto', emotion: 'frustração', keywords: ['rotina', 'tempo', 'consistência', 'hábito', 'agenda'] },
-  { id: 'cortisol',    topic: 'Estresse e cortisol travando o seu shape', tone: 'investigativo', emotion: 'frustração', keywords: ['cortisol', 'estresse', 'estressado', 'ansiedade'] },
-  { id: 'falso-magro', topic: 'Falso magro: magro por fora, gordo por dentro', tone: 'provocativo', emotion: 'surpresa', keywords: ['falso magro', 'gordura visceral', 'magro'] },
-  { id: 'plato',       topic: 'Treina pesado e não cresce: o que está travando', tone: 'direto', emotion: 'frustração', keywords: ['não cresce', 'platô', 'estagnado', 'hipertrofia', 'massa muscular'] },
-  { id: 'alcool',      topic: 'Como o álcool sabota seu shape e sua testosterona', tone: 'provocativo', emotion: 'surpresa', keywords: ['álcool', 'bebida', 'cerveja', 'beber'] },
-  { id: 'glp1',        topic: 'Emagrecimento rápido que rouba o seu músculo', tone: 'investigativo', emotion: 'alerta', keywords: ['mounjaro', 'ozempic', 'glp', 'semaglutida', 'tirzepatida', 'emagrecimento rápido'] },
-  { id: 'vitd-zinco',  topic: 'Vitamina D, zinco e magnésio baixos derrubam sua testosterona', tone: 'investigativo', emotion: 'curiosidade', keywords: ['vitamina d', 'zinco', 'magnésio', 'suplemento'] },
-  { id: 'depois-30',   topic: 'Depois dos 30 o shape fica mais difícil — e por quê', tone: 'direto', emotion: 'preocupação', keywords: ['depois dos 30', 'idade', 'metabolismo', 'envelhec'] },
-  { id: 'sono',        topic: 'Sono ruim sabotando sua testosterona e seu shape', tone: 'investigativo', emotion: 'preocupação', keywords: ['sono', 'dormir', 'dorme', 'insônia'] },
-  { id: 'cardio',      topic: 'Cardio em excesso comendo o seu músculo', tone: 'provocativo', emotion: 'contra-intuição', keywords: ['cardio', 'corrida', 'aeróbico', 'esteira'] },
+  // ── HORMONAL ──
+  { id: 'testo-baixa', group: 'hormonal', tone: 'investigativo', emotion: 'preocupação', keywords: ['testosterona', 'testo', 'hormonal', 'hormônio'],
+    topics: ['Sinais de testosterona baixa no homem', '5 sintomas silenciosos de testosterona baixa', 'Testosterona baixa aos 30+: os sinais que você ignora'] },
+  { id: 'libido', group: 'hormonal', tone: 'direto', emotion: 'preocupação', keywords: ['libido', 'desejo', 'sexual', 'ereção'],
+    topics: ['Libido baixa não é frescura: o que ela revela', 'Quando a libido cai, o corpo está te avisando', 'Perda de desejo: o sinal que os homens ignoram'] },
+  { id: 'vitd-zinco', group: 'hormonal', tone: 'investigativo', emotion: 'curiosidade', keywords: ['vitamina d', 'zinco', 'magnésio', 'suplemento'],
+    topics: ['Vitamina D, zinco e magnésio baixos derrubam a testosterona', 'Os 3 micronutrientes que seu hormônio precisa', 'Deficiência de vitamina D e queda de performance'] },
+  // ── METABÓLICO ──
+  { id: 'falso-magro', group: 'metabolico', tone: 'provocativo', emotion: 'surpresa', keywords: ['falso magro', 'gordura visceral', 'magro', 'barriga'],
+    topics: ['Falso magro: magro por fora, gordo por dentro', 'Barriga que não sai mesmo estando magro', 'Gordura visceral: a que não aparece e é a pior'] },
+  { id: 'insulina', group: 'metabolico', tone: 'investigativo', emotion: 'alerta', keywords: ['insulina', 'açúcar', 'glicose', 'carboidrato'],
+    topics: ['Resistência à insulina travando seu shape', 'Açúcar escondido sabotando sua composição corporal', 'Picos de insulina e a barriga que não sai'] },
+  { id: 'glp1', group: 'metabolico', tone: 'investigativo', emotion: 'alerta', keywords: ['mounjaro', 'ozempic', 'glp', 'semaglutida', 'tirzepatida', 'emagrecimento rápido'],
+    topics: ['Emagrecimento rápido que rouba o seu músculo', 'O lado que ninguém conta do emagrecimento com caneta', 'Perder peso rápido e perder músculo junto'] },
+  // ── TREINO ──
+  { id: 'plato', group: 'treino', tone: 'direto', emotion: 'frustração', keywords: ['não cresce', 'platô', 'estagnado', 'hipertrofia', 'massa muscular'],
+    topics: ['Treina pesado e não cresce: o que está travando', 'Platô muscular: por que você estagnou', 'O erro de volume que trava sua hipertrofia'] },
+  { id: 'cardio', group: 'treino', tone: 'provocativo', emotion: 'contra-intuição', keywords: ['cardio', 'corrida', 'aeróbico', 'esteira'],
+    topics: ['Cardio em excesso comendo o seu músculo', 'Muito aeróbico e pouco resultado: o furo', 'Cardio demais sabotando seu ganho de massa'] },
+  { id: 'tecnica', group: 'treino', tone: 'direto', emotion: 'frustração', keywords: ['execução', 'técnica', 'amplitude', 'série', 'carga'],
+    topics: ['Execução errada: esforço de treino jogado fora', 'Amplitude e cadência: o que muda o resultado', 'Por que treinar mais nem sempre é treinar melhor'] },
+  // ── RECUPERAÇÃO ──
+  { id: 'sono', group: 'recuperacao', tone: 'investigativo', emotion: 'preocupação', keywords: ['sono', 'dormir', 'dorme', 'insônia'],
+    topics: ['Sono ruim sabotando sua testosterona e seu shape', 'Dormir mal está destruindo sua recuperação', 'As horas de sono que definem seu hormônio'] },
+  { id: 'cortisol', group: 'recuperacao', tone: 'investigativo', emotion: 'frustração', keywords: ['cortisol', 'estresse', 'estressado', 'ansiedade'],
+    topics: ['Estresse e cortisol travando o seu shape', 'Cortisol alto: o inimigo silencioso do shape', 'Estresse crônico e a gordura que não sai'] },
+  { id: 'energia', group: 'recuperacao', tone: 'direto', emotion: 'cansaço', keywords: ['energia', 'disposição', 'cansaço', 'cansado', 'fadiga'],
+    topics: ['Falta de energia que não passa nem dormindo', 'Cansaço o dia todo: o que seu corpo esconde', 'Fadiga constante mesmo dormindo bem'] },
+  // ── ROTINA ──
+  { id: 'rotina', group: 'rotina', tone: 'direto', emotion: 'frustração', keywords: ['rotina', 'tempo', 'hábito', 'agenda'],
+    topics: ['Por que você não encaixa treino e dieta na rotina', 'Falta de tempo x falta de método: a real', 'Como manter treino e dieta na correria'] },
+  { id: 'depois-30', group: 'rotina', tone: 'direto', emotion: 'preocupação', keywords: ['depois dos 30', 'idade', 'metabolismo', 'envelhec'],
+    topics: ['Depois dos 30 o shape fica mais difícil — e por quê', 'Metabolismo aos 30+: o que realmente muda', 'Por que o que funcionava aos 20 parou'] },
+  { id: 'consistencia', group: 'rotina', tone: 'provocativo', emotion: 'contra-intuição', keywords: ['consistência', 'disciplina', 'desiste', 'motivação'],
+    topics: ['Não é falta de força de vontade, é falta de método', 'Por que você desiste na 3ª semana', 'Consistência vence intensidade: a matemática'] },
+  // ── NUTRIÇÃO ──
+  { id: 'alcool', group: 'nutricao', tone: 'provocativo', emotion: 'surpresa', keywords: ['álcool', 'bebida', 'cerveja', 'beber'],
+    topics: ['Como o álcool sabota seu shape e sua testosterona', 'Aquela cerveja do fim de semana e o seu shape', 'Álcool e recuperação: a conta que ninguém faz'] },
+  { id: 'proteina', group: 'nutricao', tone: 'direto', emotion: 'surpresa', keywords: ['proteína', 'whey', 'carne', 'frango'],
+    topics: ['Você come menos proteína do que imagina', 'Proteína insuficiente travando seu ganho', 'Quanto de proteína seu shape realmente exige'] },
+  { id: 'ultraprocessado', group: 'nutricao', tone: 'investigativo', emotion: 'alerta', keywords: ['ultraprocessado', 'industrializado', 'processado', 'fast food'],
+    topics: ['Ultraprocessados sabotando sua composição corporal', 'A comida "fit" que não é fit', 'Calorias líquidas: o vilão escondido da dieta'] },
 ];
 
 // Estado em memória (só 1 geração por vez)
@@ -55,18 +90,54 @@ function recentThemeIds(days = 14) {
   return used;
 }
 
-// Escolhe 2 temas distintos, evitando os recentes (com fallback se acabarem)
+// Grupos (assuntos macro) usados nos últimos N batches — pra não cair no mesmo
+// assunto em dias seguidos (ex.: 3 dias falando de hormônio).
+function recentGroups(nBatches = 3) {
+  const batches = db.getAllDailyBatches()
+    .slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+    .slice(0, nBatches);
+  const g = new Set();
+  batches.forEach((b) => (b.themes || []).forEach((t) => { if (t.group) g.add(t.group); }));
+  return g;
+}
+
+// Escolhe 2 temas de GRUPOS DIFERENTES, evitando ids recentes (14d) e desincentivando
+// grupos usados nos últimos dias. Fallback progressivo se o pool apertar.
 function pickThemes() {
-  const recent = recentThemeIds();
-  let pool = THEMES.filter((t) => !recent.has(t.id));
+  const recentIds = recentThemeIds();
+  const recentG = recentGroups(3);
+  let pool = THEMES.filter((t) => !recentIds.has(t.id));
   if (pool.length < 2) pool = THEMES.slice(); // todos recentes → libera geral
 
-  // Ponderação por performance real (Analytics): temas cujos posts performaram
-  // melhor (saves/shares/follows) têm mais chance. Sem dados = pesos iguais (sorteio puro).
   const scores = scoreThemes();
   const maxScore = Math.max(0, ...pool.map((t) => scores[t.id] || 0));
-  const weights = pool.map((t) => 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4);
-  return weightedSample(pool, weights, 2);
+  const weightOf = (t) => {
+    // base 1 + até +4 por performance real; grupo usado recentemente pesa 1/4.
+    let w = 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4;
+    if (recentG.has(t.group)) w *= 0.25;
+    return w;
+  };
+
+  const first = weightedSample(pool, pool.map(weightOf), 1)[0];
+  if (!first) return [];
+  // 2º tema: grupo DIFERENTE do 1º (fallback: qualquer outro id).
+  let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
+  if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
+  const second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
+  return [first, second].filter(Boolean);
+}
+
+// Escolhe um ângulo (variação de título) do tema, evitando os títulos usados
+// recentemente (recent_topics). Assim, quando um tema volta, o enfoque muda.
+function pickAngle(theme) {
+  const topics = (Array.isArray(theme.topics) && theme.topics.length)
+    ? theme.topics
+    : [theme.topic].filter(Boolean);
+  if (topics.length <= 1) return topics[0] || theme.topic || '';
+  const recent = (db.getRecentTopics && db.getRecentTopics()) || [];
+  const fresh = topics.filter((tp) => !recent.includes(tp));
+  const from = fresh.length ? fresh : topics;
+  return from[Math.floor(Math.random() * from.length)];
 }
 
 // Score de cada tema a partir dos posts reais do Instagram (Analytics).
@@ -240,13 +311,18 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
   let photosUsed = 0;
   const errors = [];
 
+  // Resolve o ângulo (título) de cada tema agora, evitando títulos usados recentemente.
+  const resolved = themes.map((t) => ({ ...t, topic: pickAngle(t) }));
+
   try {
-    for (const theme of themes) {
+    for (const theme of resolved) {
       try {
         const r = await buildOne(theme);
         if (r.carouselId) carouselIds.push(r.carouselId);
         if (r.reelId) reelIds.push(r.reelId);
         photosUsed += r.photosUsed;
+        // Registra o título usado pra os próximos dias não repetirem o mesmo ângulo.
+        try { if (db.addRecentTopics) db.addRecentTopics([theme.topic]); } catch (_) {}
       } catch (e) {
         console.error(`[DailyContent] tema ${theme.id} falhou:`, e.message);
         errors.push(`${theme.id}: ${e.message}`);
@@ -257,7 +333,7 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
       id: batchId,
       date,
       trigger,
-      themes: themes.map((t) => ({ id: t.id, topic: t.topic })),
+      themes: resolved.map((t) => ({ id: t.id, group: t.group, topic: t.topic })),
       carouselIds,
       reelIds,
       photoSource: photosUsed > 0 ? 'pexels' : 'banco/local',
