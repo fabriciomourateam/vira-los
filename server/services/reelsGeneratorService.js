@@ -6,7 +6,18 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { FMTEAM_EDITORIAL } = require('./fmteamEditorial');
+const db = require('../db/database');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Fórmulas de gancho extraídas dos perfis-modelo (MODELOS-GANCHOS.md) — molde pra fraseTela.
+const HOOK_FORMULAS = [
+  'sintoma-espelho: junta sintomas soltos num alerta ("cansaço, libido baixa e barriga teimosa não são preguiça")',
+  'exame normal ≠ ideal ("deu tudo normal e você continua no chão")',
+  'idade-alarme ("o que muda no corpo do homem depois dos 30 que ninguém avisou")',
+  'mito quebrado ("cardio em jejum pra secar? você tá perdendo é músculo")',
+  'custo de não agir ("ignorar isso hoje cobra energia, foco e anos depois")',
+  'bastidor/autoridade ("todo homem que chega pra mim com X tem isso em comum")',
+];
 
 function sanitize(s) {
   if (!s) return '';
@@ -200,7 +211,7 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
  * @param {string} args.instagramHandle
  * @param {number} args.duration - duração-alvo do vídeo (default 7s)
  */
-async function generateShortReelFromCarousel({ carousel, niche = 'fitness', instagramHandle = '', duration = 7 }) {
+async function generateShortReelFromCarousel({ carousel, niche = 'fitness', instagramHandle = '', duration = 7, cta }) {
   if (!carousel || !carousel.html) throw new Error('Carrossel sem HTML — não dá pra gerar reels.');
 
   const slides = extractSlidesText(carousel.html);
@@ -209,6 +220,12 @@ async function generateShortReelFromCarousel({ carousel, niche = 'fitness', inst
   const slidesText = slides.map(s => `Slide ${s.num}: ${s.text}`).join('\n');
   const handle = (instagramHandle || '').replace('@', '');
   const handleAt = handle ? `@${handle}` : 'criador';
+
+  // CTA configurável (default: COMENTA TESTO → passo a passo natural). Vem das settings
+  // (db.getReelsCta) e pode ser sobrescrito por chamada. Só afeta os reels.
+  const ctaCfg = { ...(db.getReelsCta ? db.getReelsCta() : {}), ...(cta || {}) };
+  const ctaKeyword = String(ctaCfg.keyword || 'TESTO').toUpperCase().trim();
+  const ctaBenefit = String(ctaCfg.benefit || 'te envio um passo a passo pra subir a sua testosterona de forma natural').trim();
 
   const prompt = `Você é especialista em Reels do Instagram de TEXTO-NA-TELA (silenciosos) que viralizam organicamente no nicho de ${niche}.
 
@@ -236,13 +253,15 @@ ${handleAt} · Nicho: ${niche}
    • ERRADO (entrega a resposta): "Cardio em excesso queima músculo".
    • CERTO (lacuna): "Eu parei de fazer ISSO e meu shape mudou em 30 dias" / "Tem 1 erro que tá travando seu shape e não é treino".
    • Curta: cabe na tela, no máximo 2 linhas (≤ 12 palavras). Linguagem de homem 25-40.
+   • TOM INFORMAL, papo reto de treinador — do jeito que você fala no dia a dia. Gíria leve é bem-vinda ("ó", "se liga", "presta atenção", "cara", "tá"). NADA corporativo ou formal demais.
    • Use gancho de número, contra-intuição ou dor nomeada. PROIBIDO morno ("dicas pra...", "você sabia").
+   • Molde de gancho (inspiração dos tops do nicho — use a estrutura, NÃO copie): ${HOOK_FORMULAS.join(' · ')}.
 
 2. LEGENDA (legendaPost) — é onde mora o conteúdo, capricha:
    • PRIMEIRA LINHA tem que RE-FISGAR sozinha (o Instagram corta em "... mais"). Não começa com "Bom," nem repete a frase da tela igual.
    • Corpo: entrega o conteúdo de verdade, técnico traduzido, FECHA a lacuna que a frase de tela abriu. 1 ideia central do carrossel (a mais forte), não cobre tudo.
    • Quebra em linhas curtas / parágrafos de 1-2 frases (legibilidade no app).
-   • Fecha com CTA diretivo: comentar uma PALAVRA-CHAVE específica OU chamar pra DM/consultoria. Natural, não venda forçada.
+   • Fecha com o CTA FIXO: peça pra pessoa comentar a palavra "${ctaKeyword}" que você ${ctaBenefit}. Escreva com a sua voz, ex.: "COMENTA: ${ctaKeyword} que eu ${ctaBenefit}." NÃO invente outra palavra-chave nem troque o benefício.
    • 4-6 hashtags relevantes ao nicho. ANTI-BAN: SEM hashtag de substância (testosterona/TRT/ozempic/etc), SEM nome comercial de droga.
    • Respeita a VOZ e o ANTI-BAN do cérebro editorial acima (você/não tu, sem "não é X é Y", português não gringo, por sintoma).
 
@@ -275,7 +294,7 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
   "fraseTelaTiming": "0-4s",
   "ctaTela": "👇 LEIA A LEGENDA",
   "ctaTelaTiming": "4-5s",
-  "legendaPost": "Legenda COMPLETA: 1ª linha re-fisga + corpo que entrega o conteúdo e fecha a lacuna + CTA (palavra-chave pra comentar ou chamada pra DM) + 4-6 hashtags ban-safe. Use \\n para quebrar linhas.",
+  "legendaPost": "Legenda COMPLETA: 1ª linha re-fisga + corpo que entrega o conteúdo e fecha a lacuna + CTA FIXO (comenta ${ctaKeyword} → ${ctaBenefit}) + 4-6 hashtags ban-safe. Use \\n para quebrar linhas.",
   "imagensSugeridas": ["alternativa de B-roll 1", "alternativa de B-roll 2"]
 }`;
 

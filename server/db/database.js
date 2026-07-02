@@ -401,6 +401,12 @@ const addRecentTopics = (topics, cap = 20) => {
   writeObj('recent_topics', { topics: out, updated_at: now() });
 };
 
+// CTA dos REELS (configurável, separado do CTA dos carrosséis). Default: comenta TESTO
+// → passo a passo natural. Trocável sem código (setReelsCta).
+const REELS_CTA_DEFAULT = { keyword: 'TESTO', benefit: 'te envio um passo a passo pra subir a sua testosterona de forma natural' };
+const getReelsCta = () => ({ ...REELS_CTA_DEFAULT, ...readObj('reels_cta') });
+const setReelsCta = (c) => writeObj('reels_cta', { ...getReelsCta(), ...c, updated_at: now() });
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -447,4 +453,5 @@ module.exports = {
   getAllMlabsSchedules, createMlabsSchedule, updateMlabsSchedule, deleteMlabsSchedule,
   getRecentPhotoUrls, addRecentPhotoUrls,
   getRecentTopics, addRecentTopics,
+  getReelsCta, setReelsCta,
 };
