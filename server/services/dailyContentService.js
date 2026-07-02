@@ -107,6 +107,17 @@ const THEMES = [
     topics: ['Cortar carboidrato não é o que te trava', 'Low carb: mito e verdade pro seu shape', 'Carboidrato à noite engorda? A ciência'] },
   { id: 'abdomen-mito', group: 'mitos', tone: 'provocativo', emotion: 'surpresa', keywords: ['abdominal', 'abdômen', 'localizado', 'seca'],
     topics: ['Abdominal todo dia não seca a barriga', 'O mito do exercício localizado', 'Fazer abdominal x perder barriga: a verdade'] },
+  // ── Ângulos extraídos dos perfis-modelo (Paulo Brasil, Kyle Gillett, Luiz Paulo, John Anderson) ──
+  { id: 'exame-normal', group: 'mitos', tone: 'provocativo', emotion: 'surpresa', keywords: ['exame', 'normal', 'laboratório', 'resultado'],
+    topics: ['Seu exame deu "normal" e você continua no chão', '"Tá tudo normal" não é o mesmo que tá tudo bem', 'O que o exame normal não explica sobre você'] },
+  { id: 'gordura-hormonio', group: 'hormonal', tone: 'investigativo', emotion: 'curiosidade', keywords: ['gordura', 'testosterona', 'estrogênio', 'aromatase', 'barriga'],
+    topics: ['Quanto mais barriga, menos testosterona', 'A gordura que vira uma fábrica contra o seu hormônio', 'Por que perder gordura destrava o seu hormônio'] },
+  { id: 'luz-circadiano', group: 'rotina', tone: 'investigativo', emotion: 'curiosidade', keywords: ['luz', 'sol', 'manhã', 'circadiano', 'relógio biológico'],
+    topics: ['Luz da manhã: o ajuste grátis que seu corpo pede', 'Por que os primeiros minutos de sol mudam seu dia', 'Seu relógio interno decide sua energia e seu sono'] },
+  { id: 'inflamacao', group: 'metabolico', tone: 'investigativo', emotion: 'alerta', keywords: ['inflamação', 'inflamado', 'inchaço', 'retenção'],
+    topics: ['A inflamação silenciosa que trava o seu shape', 'Inchado e cansado o tempo todo? Pode ser inflamação', 'Por que você retém líquido e não seca'] },
+  { id: 'comer-pouco', group: 'nutricao', tone: 'direto', emotion: 'contra-intuição', keywords: ['comer pouco', 'déficit', 'dieta restritiva', 'fome'],
+    topics: ['Comer de menos também trava o seu resultado', 'Fome o dia todo e nada de secar: a conta errada', 'Por que cortar tudo do prato para de funcionar'] },
 ];
 
 // Estado em memória (só 1 geração por vez)
