@@ -1854,10 +1854,10 @@ ${numSlides === 9 ? `DISTRIBUIÇÃO FIXA DOS 9 SLIDES (estrutura fmteam v2 — s
 - Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
 - Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
 - Slide 3: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
-- Slide 4: GRADIENT — slide-grad on-light — img-box-top 580px, arrow-rows, grad-num
-- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 500px, stat-rows (dados/prova)
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 300px, arrow-rows, grad-num
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 300px, stat-rows (dados/prova)
 - Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
-- Slide 7: LIGHT — slide-light on-light — img-box-top 620px, light-h1 + light-body
+- Slide 7: LIGHT — slide-light on-light — img-box-top 300px, light-h1 + light-body
 - Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
 - Slide 9 (CTA): ${ctaDescription}
 
@@ -1916,7 +1916,7 @@ SLIDE 4 — GRADIENT (slide-grad on-light — fundo dourado, texto SEMPRE escuro
   ${header}
   <div class="grad-num">4</div>
   <div class="content on-light">
-    <div class="img-box-top" style="height:580px"><img id="img-s4" src="FOTO_4" alt="${topic}"></div>
+    <div class="img-box-top" style="height:300px"><img id="img-s4" src="FOTO_4" alt="${topic}"></div>
     <div class="tag">[CATEGORIA]</div>
     <div class="light-h1">TÍTULO<br>DO PONTO</div>
     <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 1</strong> — detalhe do argumento</span></div>
@@ -1926,11 +1926,11 @@ SLIDE 4 — GRADIENT (slide-grad on-light — fundo dourado, texto SEMPRE escuro
   [PROG_4]
 </div>
 
-SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 500px + stat-rows para dados numéricos):
+SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 300px + stat-rows para dados numéricos):
 <div class="slide slide-light on-light">
   ${header}
   <div class="content on-light">
-    <div class="img-box-top" style="height:500px"><img id="img-s5" src="FOTO_5" alt="${topic}"></div>
+    <div class="img-box-top" style="height:300px"><img id="img-s5" src="FOTO_5" alt="${topic}"></div>
     <div class="tag">[CATEGORIA]</div>
     <div class="light-h1">DADO<br><em>REAL</em></div>
     <div class="stat-row">
@@ -1951,11 +1951,11 @@ SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 500px + stat-rows para dados numé
   [PROG_5]
 </div>
 
-SLIDE 7 — LIGHT CONTEÚDO (img-box 620px + light-h1 + light-body):
+SLIDE 7 — LIGHT CONTEÚDO (img-box 300px + light-h1 + light-body):
 <div class="slide slide-light on-light">
   ${header}
   <div class="content on-light">
-    <div class="img-box-top" style="height:620px"><img id="img-s7" src="FOTO_7" alt="${topic}"></div>
+    <div class="img-box-top" style="height:300px"><img id="img-s7" src="FOTO_7" alt="${topic}"></div>
     <div class="tag">[CATEGORIA]</div>
     <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
     <div class="light-body">[corpo — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
@@ -2044,7 +2044,7 @@ SLIDE 4 — GRADIENT (slide-grad on-light — fundo dourado, texto SEMPRE escuro
   ${header}
   <div class="grad-num">4</div>
   <div class="content on-light">
-    <div class="img-box-top" style="height:580px"><img id="img-s4" src="FOTO_4" alt="${topic}"></div>
+    <div class="img-box-top" style="height:300px"><img id="img-s4" src="FOTO_4" alt="${topic}"></div>
     <div class="tag">[CATEGORIA]</div>
     <div class="light-h1">TÍTULO<br>DO PONTO</div>
     <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 1</strong> — detalhe do argumento</span></div>
@@ -2054,11 +2054,11 @@ SLIDE 4 — GRADIENT (slide-grad on-light — fundo dourado, texto SEMPRE escuro
   [PROG_4]
 </div>
 
-SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 500px + stat-rows para dados numéricos):
+SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 300px + stat-rows para dados numéricos):
 <div class="slide slide-light on-light">
   ${header}
   <div class="content on-light">
-    <div class="img-box-top" style="height:500px"><img id="img-s5" src="FOTO_5" alt="${topic}"></div>
+    <div class="img-box-top" style="height:300px"><img id="img-s5" src="FOTO_5" alt="${topic}"></div>
     <div class="tag">[CATEGORIA]</div>
     <div class="light-h1">DADO<br><em>REAL</em></div>
     <div class="stat-row">
@@ -2079,11 +2079,11 @@ SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 500px + stat-rows para dados numé
   [PROG_5]
 </div>
 
-SLIDE 7 — LIGHT CONTEÚDO (img-box 620px + light-h1 + light-body):
+SLIDE 7 — LIGHT CONTEÚDO (img-box 300px + light-h1 + light-body):
 <div class="slide slide-light on-light">
   ${header}
   <div class="content on-light">
-    <div class="img-box-top" style="height:620px"><img id="img-s7" src="FOTO_7" alt="${topic}"></div>
+    <div class="img-box-top" style="height:300px"><img id="img-s7" src="FOTO_7" alt="${topic}"></div>
     <div class="tag">[CATEGORIA]</div>
     <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
     <div class="light-body">[corpo — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
@@ -2440,10 +2440,10 @@ async function generateCarousel(config, setStep = () => {}) {
 - Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
 - Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
 - Slide 3: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
-- Slide 4: GRADIENT — slide-grad on-light — img-box-top 580px, arrow-rows, grad-num
-- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 500px, stat-rows (dados/prova)
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 300px, arrow-rows, grad-num
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 300px, stat-rows (dados/prova)
 - Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
-- Slide 7: LIGHT — slide-light on-light — img-box-top 620px, light-h1 + light-body
+- Slide 7: LIGHT — slide-light on-light — img-box-top 300px, light-h1 + light-body
 - Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
 - Slide 9 (CTA): ${fmCtaDescription}
 

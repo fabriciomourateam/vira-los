@@ -265,7 +265,7 @@ ${handleAt} · Nicho: ${niche}
    • 4-6 hashtags relevantes ao nicho. ANTI-BAN: SEM hashtag de substância (testosterona/TRT/ozempic/etc), SEM nome comercial de droga.
    • Respeita a VOZ e o ANTI-BAN do cérebro editorial acima (você/não tu, sem "não é X é Y", português não gringo, por sintoma).
 
-3. VÍDEO SUGERIDO (videoSugerido): descreva em 1 frase o B-roll do criador que combina com a emoção (ex.: "Fabricio treinando supino pesado, suado, foco fechado" / "Fabricio montando o prato na cozinha"). Vertical, sem fala.
+3. VÍDEO SUGERIDO (videoSugerido): o criador tem MUITO B-roll TREINANDO — então prefira SEMPRE um corte de TREINO que combine com a emoção (ex.: "criador numa série pesada de supino, suado, foco fechado" / "criador ofegante descansando entre séries, sério, olhando pra câmera" / "criador puxando costas, close no esforço"). Se o tema não casar com treino, sugira SPLIT-SCREEN: criador treinando EM CIMA + uma imagem/foto que ilustra o tema EMBAIXO. Vertical, sem fala.
 
 4. PROMPTS DE VÍDEO IA (promptsVideo): dois prompts PRONTOS PRA COLAR pra gerar o clipe a partir do vídeo/foto que o criador SEMPRE envia como referência. REGRAS QUE VALEM PROS DOIS:
    • SEMPRE comece o prompt mandando USAR O VÍDEO/FOTO DE REFERÊNCIA enviado pelo criador como base — NUNCA cite nome de arquivo (diga "the reference video/photo provided by the creator" / "o vídeo de referência enviado"). Se citar nome de arquivo as ferramentas ignoram e não fazem. A cara e o corpo têm que ser os MESMOS da referência.

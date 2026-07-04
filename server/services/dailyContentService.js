@@ -118,6 +118,23 @@ const THEMES = [
     topics: ['A inflamação silenciosa que trava o seu shape', 'Inchado e cansado o tempo todo? Pode ser inflamação', 'Por que você retém líquido e não seca'] },
   { id: 'comer-pouco', group: 'nutricao', tone: 'direto', emotion: 'contra-intuição', keywords: ['comer pouco', 'déficit', 'dieta restritiva', 'fome'],
     topics: ['Comer de menos também trava o seu resultado', 'Fome o dia todo e nada de secar: a conta errada', 'Por que cortar tudo do prato para de funcionar'] },
+  // ── ALERTA / SINAIS / PROCURE AVALIAÇÃO (uso consciente — droga popular no frame CAUTELAR) ──
+  // Regra: só ALERTA/SINAL + "procure médico/faça exame". NUNCA o que tomar/como manejar
+  // colateral (isso é escopo médico e é o que dá ban). É a fórmula de 10-20k do Fabricio.
+  { id: 'glp1-musculo', group: 'alerta', tone: 'investigativo', emotion: 'alerta', keywords: ['mounjaro', 'ozempic', 'caneta', 'emagrecedor', 'glp'],
+    topics: ['Emagreceu na caneta, mas quanto era músculo?', 'O que ninguém te conta sobre perder peso rápido demais', 'Perder peso e perder força ao mesmo tempo: a conta da pressa'] },
+  { id: 'eixo-hormonal', group: 'alerta', tone: 'direto', emotion: 'alerta', keywords: ['eixo', 'ciclo', 'dependência', 'parar', 'hormônio'],
+    topics: ['"Um pouquinho não faz mal" já desliga o seu eixo', 'Por que o corpo desliga a própria fábrica de hormônio', 'O preço de virar refém do atalho'] },
+  { id: 'pressao-coracao', group: 'alerta', tone: 'direto', emotion: 'preocupação', keywords: ['pressão', 'coração', 'cardiovascular', 'hipertensão'],
+    topics: ['Você se cuida no talo e nunca mediu a pressão?', 'Shape bonito com pressão alta é bomba-relógio', 'O que o coração cobra de quem treina pesado e não monitora'] },
+  { id: 'gine-sinal', group: 'alerta', tone: 'direto', emotion: 'preocupação', keywords: ['ginecomastia', 'peito', 'mamilo', 'nódulo'],
+    topics: ['Carocinho dolorido embaixo do mamilo? Não empurra com a barriga', 'O sinal no peito que muito homem finge que não vê', 'Nódulo no peito é hora de médico, não de palpite de vestiário'] },
+  { id: 'clembuterol-coracao', group: 'alerta', tone: 'provocativo', emotion: 'alerta', keywords: ['clembuterol', 'termogênico', 'secar', 'coração'],
+    topics: ['O que o termogênico forte faz com o seu coração', 'Secar 2kg e envelhecer o coração em silêncio', 'O preço escondido de acelerar a queima na marra'] },
+  { id: 'shape-falso-feed', group: 'alerta', tone: 'provocativo', emotion: 'indignação', keywords: ['natural', 'manipulado', 'influencer', 'comparação'],
+    topics: ['O shape do feed que te faz sentir um lixo é mentira', 'Boa parte dos "naturais" que você admira não é natural', 'Para de se comparar com quem joga com outro baralho'] },
+  { id: 'exames-antes', group: 'alerta', tone: 'direto', emotion: 'preocupação', keywords: ['exame', 'check-up', 'sangue', 'avaliação'],
+    topics: ['Os exames que deviam estar na sua mão antes de qualquer decisão', 'A pressa é a maior burrice de quem entra nesse mundo', 'O retrato do seu corpo que você precisa ter antes de tudo'] },
 ];
 
 // Estado em memória (só 1 geração por vez)
