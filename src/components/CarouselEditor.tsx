@@ -492,6 +492,18 @@ function extractTextBlocks(el: Element): TextBlock[] {
   return blocks;
 }
 
+/**
+ * Converte URLs raiz-relativas (ex.: /assets/fmteam-cta-bg.png, /output/...) para
+ * URLs absolutas apontando para a API. Sem isso, ao abrir um carrossel salvo no
+ * editor (frontend em outra origem), a foto full-bleed do último slide (CTA) não
+ * carrega — o navegador resolve /assets/... contra a origem do frontend (404).
+ * Só toca em src="..." e url(...); ignora http(s), data: e // (protocol-relative).
+ */
+function absolutizeAssetUrls(html: string, api: string): string {
+  if (!html) return html;
+  return html.replace(/(src=["']|url\(["']?)\/(?!\/)/gi, `$1${api}/`);
+}
+
 function parseSlides(html: string): { slides: EditableSlide[]; head: string } {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
@@ -2081,7 +2093,9 @@ export default function CarouselEditor({
     // Se o html prop é o que acabamos de emitir, não reinicializa (evita loop)
     if (html === lastEmittedHtml.current) return;
 
-    const { slides: parsed, head: parsedHead } = parseSlides(html);
+    // Resolve /assets/... e /output/... contra a API para que a foto do CTA
+    // (e demais assets do servidor) carreguem no preview do editor.
+    const { slides: parsed, head: parsedHead } = parseSlides(absolutizeAssetUrls(html, API));
     setHead(parsedHead);
     setSlides(parsed);
 
