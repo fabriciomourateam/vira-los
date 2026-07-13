@@ -406,11 +406,17 @@ export async function generateAndSaveScreenshots(
 ): Promise<string[]> {
   const { default: html2canvas } = await import('html2canvas-pro');
 
+  // ── Fix 0: /assets/... e /output/... → URL absoluta da API ────────────────
+  // A foto full-bleed do CTA fmteam usa src="/assets/fmteam-cta-bg.png" (raiz-relativo).
+  // No browser essa URL resolve contra a origem do frontend (404) → último slide sem foto.
+  // Absolutiza para a API; o proxy CORS abaixo então cuida do resto.
+  const rooted = html.replace(/(src=["']|url\(["']?)\/(?!\/)/gi, `$1${api}/`);
+
   // ── Fix 1: &amp; → & ──────────────────────────────────────────────────────
   // DOMParser/el.outerHTML re-escapa '&' como '&amp;' em valores de atributos.
   // Isso quebra URLs com query params (ex.: Unsplash: ?crop=entropy&cs=tinysrgb...).
   // O proxy tentaria buscar a URL com '&amp;' literal → Unsplash retorna erro → fundo preto.
-  const unescaped = html.replace(/&amp;/g, '&');
+  const unescaped = rooted.replace(/&amp;/g, '&');
 
   // ── Proxy CORS ────────────────────────────────────────────────────────────
   const proxyUrl = (url: string) =>
@@ -561,6 +567,10 @@ export async function generateAndSaveScreenshotsHiFi(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
   const { default: html2canvas } = await import('html2canvas-pro');
+
+  // /assets/... e /output/... (raiz-relativo, ex.: foto do CTA fmteam) → URL absoluta
+  // da API, senão o pré-embed abaixo (que só casa http/https) ignora e o slide fica sem foto.
+  html = html.replace(/(src=["']|url\(["']?)\/(?!\/)/gi, `$1${api}/`);
 
   // DOMParser/outerHTML escapa '&' como '&amp;' em atributos inline, mas dentro
   // de <style>...</style> fica '&'. Sem unificar, uma mesma URL vira duas na
