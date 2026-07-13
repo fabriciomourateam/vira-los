@@ -17,6 +17,32 @@ import {
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// Soma `months` a uma string local "AAAA-MM-DDTHH:MM" preservando a hora.
+// Usa a mesma lógica de overflow de mês do backend (Date.setMonth).
+function shiftMonthsLocal(base: string, months: number): string {
+  const m = String(base).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return base;
+  const dt = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  dt.setMonth(dt.getMonth() + months);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}T${p(dt.getHours())}:${p(dt.getMinutes())}`;
+}
+
+// Recalcula todas as datas a partir da 1ª: [first, first+interval, first+2*interval, ...]
+// A hora da 1ª data é preservada em todas (mudar hora na 1ª propaga).
+function recomputeLinkedDates(first: string, count: number, intervalMonths: number): string[] {
+  return Array.from({ length: count }, (_, k) => (k === 0 ? first : shiftMonthsLocal(first, k * intervalMonths)));
+}
+
+// Diferença em meses (ano+mês) entre duas datas locais — usada para inferir o
+// intervalo real das datas padrão vindas do backend.
+function monthGap(a: string, b: string): number {
+  const ma = String(a).match(/^(\d{4})-(\d{2})/);
+  const mb = String(b).match(/^(\d{4})-(\d{2})/);
+  if (!ma || !mb) return 3;
+  return (+mb[1] * 12 + +mb[2]) - (+ma[1] * 12 + +ma[2]);
+}
+
 // ── Botão + modal de agendamento ────────────────────────────────────────────────
 export function MlabsScheduleButton({
   kind, contentId, caption, hasVideo,
@@ -49,21 +75,62 @@ function MlabsScheduleModal({
   const [videoReady, setVideoReady] = useState(!!hasVideo);
   const [uploading, setUploading] = useState(false);
   const [captionText, setCaptionText] = useState(caption || '');
+  // Vincular datas: quando ligado, as datas seguem a 1ª (1ª + N, +2N, +3N meses)
+  // e mudar data/horário da 1ª propaga para as demais. Padrão: ligado, a cada 3 meses.
+  const [linked, setLinked] = useState(true);
+  const [intervalMonths, setIntervalMonths] = useState(3);
 
   useEffect(() => {
     fetch(`${API}/api/mlabs/default-dates`)
       .then((r) => r.json())
-      .then((d) => setDates(d.dates || []))
+      .then((d) => {
+        const arr: string[] = d.dates || [];
+        setDates(arr);
+        // Infere o intervalo real das datas padrão (ex.: [0,3,6,9] → 3 meses)
+        if (arr.length >= 2) {
+          const gap = monthGap(arr[0], arr[1]);
+          if (gap >= 1) setIntervalMonths(Math.min(24, gap));
+        }
+      })
       .catch(() => setDates([]))
       .finally(() => setLoading(false));
   }, []);
 
-  function setDate(i: number, v: string) { setDates((p) => p.map((d, j) => (j === i ? v : d))); }
-  function addDate() {
-    const last = dates[dates.length - 1];
-    setDates((p) => [...p, last || '']);
+  function setDate(i: number, v: string) {
+    setDates((p) => {
+      // Vinculado + edição da 1ª data (ou horário): recalcula todas a partir dela.
+      if (linked && i === 0) return recomputeLinkedDates(v, p.length, intervalMonths);
+      return p.map((d, j) => (j === i ? v : d));
+    });
   }
-  function removeDate(i: number) { setDates((p) => p.filter((_, j) => j !== i)); }
+  function addDate() {
+    setDates((p) => {
+      if (linked && p[0]) return [...p, shiftMonthsLocal(p[0], p.length * intervalMonths)];
+      const last = p[p.length - 1];
+      return [...p, last || ''];
+    });
+  }
+  function removeDate(i: number) {
+    setDates((p) => {
+      const next = p.filter((_, j) => j !== i);
+      // Vinculado: mantém o espaçamento a partir da 1ª após remover.
+      if (linked && next.length && next[0]) return recomputeLinkedDates(next[0], next.length, intervalMonths);
+      return next;
+    });
+  }
+  // Liga/desliga o vínculo; ao ligar, normaliza as datas para 1ª + k*intervalo.
+  function toggleLinked() {
+    setLinked((on) => {
+      const nowOn = !on;
+      if (nowOn) setDates((p) => (p[0] ? recomputeLinkedDates(p[0], p.length, intervalMonths) : p));
+      return nowOn;
+    });
+  }
+  function changeInterval(months: number) {
+    const safe = Math.max(1, Math.min(24, months || 1));
+    setIntervalMonths(safe);
+    if (linked) setDates((p) => (p[0] ? recomputeLinkedDates(p[0], p.length, safe) : p));
+  }
 
   async function uploadVideo(file: File) {
     setUploading(true);
@@ -146,19 +213,48 @@ function MlabsScheduleModal({
         {loading ? (
           <div className="flex items-center justify-center py-6 text-muted-foreground"><Loader2 size={20} className="animate-spin" /></div>
         ) : (
-          <div className="space-y-2 max-h-64 overflow-auto">
-            {dates.map((d, i) => (
-              <div key={i} className="flex items-center gap-2">
+          <div className="space-y-2">
+            {/* Opção: vincular datas e replicar a partir da 1ª */}
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/60 px-2.5 py-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={linked} onChange={toggleLinked} className="accent-blue-500 w-3.5 h-3.5" />
+                <span className="text-xs text-foreground leading-tight">
+                  Replicar a partir da 1ª data
+                  <span className="block text-[10px] text-muted-foreground">Mudar data/horário da 1ª ajusta as demais</span>
+                </span>
+              </label>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground flex-shrink-0">
+                a cada
                 <input
-                  type="datetime-local" value={d} onChange={(e) => setDate(i, e.target.value)}
-                  className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground"
+                  type="number" min={1} max={24} value={intervalMonths}
+                  disabled={!linked}
+                  onChange={(e) => changeInterval(parseInt(e.target.value, 10))}
+                  className="w-12 bg-background border border-border rounded px-1.5 py-1 text-center text-foreground disabled:opacity-50"
                 />
-                <button onClick={() => removeDate(i)} className="text-muted-foreground hover:text-red-400 p-1"><Trash2 size={15} /></button>
+                meses
               </div>
-            ))}
-            <button onClick={addDate} className="text-xs text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 mt-1">
-              <Plus size={13} /> Adicionar data
-            </button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-auto">
+              {dates.map((d, i) => {
+                const locked = linked && i > 0;
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground w-4 text-right flex-shrink-0">{i + 1}</span>
+                    <input
+                      type="datetime-local" value={d} onChange={(e) => setDate(i, e.target.value)}
+                      readOnly={locked}
+                      title={locked ? 'Definida pela 1ª data — edite a 1ª para mudar' : undefined}
+                      className={`flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground ${locked ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    />
+                    <button onClick={() => removeDate(i)} className="text-muted-foreground hover:text-red-400 p-1"><Trash2 size={15} /></button>
+                  </div>
+                );
+              })}
+              <button onClick={addDate} className="text-xs text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 mt-1">
+                <Plus size={13} /> Adicionar data
+              </button>
+            </div>
           </div>
         )}
 
