@@ -407,6 +407,12 @@ const REELS_CTA_DEFAULT = { keyword: 'TESTO', benefit: 'te envio um passo a pass
 const getReelsCta = () => ({ ...REELS_CTA_DEFAULT, ...readObj('reels_cta') });
 const setReelsCta = (c) => writeObj('reels_cta', { ...getReelsCta(), ...c, updated_at: now() });
 
+// CTA do CARROSSEL (último slide). Configurável — antes era chumbado em SHAPE/Acompanhamento.
+// Default: comenta palavra pra receber valor (mecânica de comentário), coerente com os reels.
+const CAROUSEL_CTA_DEFAULT = { label: 'COMENTA:', keyword: 'TESTO', benefit: 'Pra receber meu passo a passo pra subir a testosterona de forma natural' };
+const getCarouselCta = () => ({ ...CAROUSEL_CTA_DEFAULT, ...readObj('carousel_cta') });
+const setCarouselCta = (c) => writeObj('carousel_cta', { ...getCarouselCta(), ...c, updated_at: now() });
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -454,4 +460,5 @@ module.exports = {
   getRecentPhotoUrls, addRecentPhotoUrls,
   getRecentTopics, addRecentTopics,
   getReelsCta, setReelsCta,
+  getCarouselCta, setCarouselCta,
 };
