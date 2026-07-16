@@ -41,6 +41,12 @@ jobs:
               echo "✅ Conteúdo de $today gerado (status: $status)."
               exit 0
             fi
+            if [ "$status" = "error" ]; then
+              # A geração falhou no servidor — imprime o erro real e falha o run (visibilidade).
+              errs=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d)][0].errors // [] | join(" || ")')
+              echo "❌ Geração de $today falhou no servidor. Erros: $errs"
+              exit 1
+            fi
           done
           echo "⚠️ Timeout aguardando concluir — a geração pode ainda estar rodando no servidor."
-          exit 0
+          exit 1

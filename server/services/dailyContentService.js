@@ -140,6 +140,17 @@ const THEMES = [
 // Estado em memória (só 1 geração por vez)
 const state = { generating: false, startedAt: null, lastError: null, lastFinishedAt: null };
 
+// Teto por tema: se um carrossel/reel travar (Anthropic retentando, Playwright preso etc.),
+// não deixa a geração inteira pendurar sem salvar nada — registra o erro e segue.
+const DAILY_THEME_TIMEOUT_MS = 6 * 60 * 1000;
+function withTimeout(promise, ms, label) {
+  let t;
+  const timeout = new Promise((_, reject) => {
+    t = setTimeout(() => reject(new Error(`${label}: timeout ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
+
 // Temas usados nos últimos N dias (pra não repetir)
 function recentThemeIds(days = 14) {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
@@ -367,30 +378,40 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
   state.lastError = null;
 
   const batchId = `daily_${Date.now()}`;
-  const themes = pickThemes();
   const carouselIds = [];
   const reelIds = [];
   let photosUsed = 0;
   const errors = [];
-
-  // Resolve o ângulo (título) de cada tema agora, evitando títulos usados recentemente.
-  const resolved = themes.map((t) => ({ ...t, topic: pickAngle(t) }));
+  let resolved = [];
 
   try {
-    for (const theme of resolved) {
-      try {
-        const r = await buildOne(theme);
-        if (r.carouselId) carouselIds.push(r.carouselId);
-        if (r.reelId) reelIds.push(r.reelId);
-        photosUsed += r.photosUsed;
-        // Registra o título usado pra os próximos dias não repetirem o mesmo ângulo.
-        try { if (db.addRecentTopics) db.addRecentTopics([theme.topic]); } catch (_) {}
-      } catch (e) {
-        console.error(`[DailyContent] tema ${theme.id} falhou:`, e.message);
-        errors.push(`${theme.id}: ${e.message}`);
+    // pickThemes/pickAngle ficam DENTRO do try: se estourarem, o erro é registrado
+    // no batch (visível em /api/daily-content) em vez de sumir no log do Fly.
+    try {
+      const themes = pickThemes();
+      resolved = themes.map((t) => ({ ...t, topic: pickAngle(t) }));
+
+      for (const theme of resolved) {
+        try {
+          // Teto por tema: se travar, cai no catch e a geração segue (não pendura tudo).
+          const r = await withTimeout(buildOne(theme), DAILY_THEME_TIMEOUT_MS, `tema ${theme.id}`);
+          if (r.carouselId) carouselIds.push(r.carouselId);
+          if (r.reelId) reelIds.push(r.reelId);
+          photosUsed += r.photosUsed;
+          try { if (db.addRecentTopics) db.addRecentTopics([theme.topic]); } catch (_) {}
+        } catch (e) {
+          console.error(`[DailyContent] tema ${theme.id} falhou:`, e.message);
+          errors.push(`${theme.id}: ${e.message}`);
+        }
       }
+    } catch (e) {
+      // Falha ANTES/FORA do loop (ex.: pickThemes). Registra pra não sumir.
+      console.error('[DailyContent] geração falhou antes do loop:', e.message);
+      errors.push(`geração: ${e.message}`);
     }
 
+    // SEMPRE salva um batch — mesmo em falha total. Assim o erro fica VISÍVEL
+    // (status 'error' + mensagem) em vez de o batch nunca aparecer ("none").
     const batch = {
       id: batchId,
       date,
@@ -402,9 +423,9 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
       status: errors.length === 0 ? 'done' : (carouselIds.length ? 'partial' : 'error'),
       errors,
     };
-    db.saveDailyBatch(batch);
+    try { db.saveDailyBatch(batch); } catch (e) { console.error('[DailyContent] falha ao salvar batch:', e.message); }
     state.lastFinishedAt = new Date().toISOString();
-    if (errors.length) state.lastError = errors.join(' | ');
+    state.lastError = errors.length ? errors.join(' | ') : null;
     return batch;
   } finally {
     state.generating = false;
