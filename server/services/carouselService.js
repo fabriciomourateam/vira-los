@@ -1672,13 +1672,19 @@ function buildFmteamCapaClassesNote({ showCoverSub = true, showCoverContext = tr
 }
 
 function buildFmteamCtaTemplate({ ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor }) {
-  // Default: foto cobre todo o slide, card preto com borda dourada,
-  // "COMENTA: / SHAPE / Pra garantir um Bônus exclusivo..." FIXOS.
+  // CTA configurável (db.getCarouselCta) — não mais chumbado em SHAPE/Acompanhamento.
+  // Default: comenta uma palavra pra receber valor (mecânica de comentário que reativa o
+  // alcance), coerente com o CTA dos reels — em vez de um pitch de venda em todo carrossel.
+  const cfgCta = (db.getCarouselCta && db.getCarouselCta()) || {};
+  const ctaLabel   = cfgCta.label || 'COMENTA:';
+  const ctaKeyword = String(cfgCta.keyword || 'TESTO').toUpperCase().trim();
+  const ctaBenefit = cfgCta.benefit || 'Pra receber meu passo a passo pra subir a testosterona de forma natural';
+
   const dark = `SLIDE ${numSlides} — CTA (slide-dark, slide-with-bg, on-dark — foto full-bleed do criador):
 ATENÇÃO — O conteúdo deste slide tem PARTES FIXAS que NÃO podem ser alteradas:
-  • .cta-kbox-label deve ser EXATAMENTE: "COMENTA:"
-  • .cta-kbox-keyword deve ser EXATAMENTE: "SHAPE"
-  • .cta-kbox-benefit deve ser EXATAMENTE: "Pra garantir um Bônus exclusivo no meu Acompanhamento"
+  • .cta-kbox-label deve ser EXATAMENTE: "${ctaLabel}"
+  • .cta-kbox-keyword deve ser EXATAMENTE: "${ctaKeyword}"
+  • .cta-kbox-benefit deve ser EXATAMENTE: "${ctaBenefit}"
   • NÃO inclua .cta-kbox-sub
 A ÚNICA parte dinâmica é a .cta-bridge (frase-ponte conectando o tema do carrossel ao CTA).
 <div class="slide slide-dark slide-with-bg on-dark">
@@ -1688,10 +1694,10 @@ A ÚNICA parte dinâmica é a .cta-bridge (frase-ponte conectando o tema do carr
   <div class="content on-dark">
     <div class="cta-bridge">[FRASE-PONTE DINÂMICA — conecta o tema do carrossel ao CTA — <strong>palavra forte</strong> em negrito — máx 2 linhas]</div>
     <div class="cta-kbox">
-      <div class="cta-kbox-label">COMENTA:</div>
-      <div class="cta-kbox-keyword">SHAPE</div>
+      <div class="cta-kbox-label">${ctaLabel}</div>
+      <div class="cta-kbox-keyword">${ctaKeyword}</div>
       <div class="cta-kbox-divider"></div>
-      <div class="cta-kbox-benefit">Pra garantir um Bônus exclusivo no meu Acompanhamento</div>
+      <div class="cta-kbox-benefit">${ctaBenefit}</div>
     </div>
     <div class="cta-footer-badge">
       <div class="cta-badge-ring">
@@ -1742,7 +1748,7 @@ A ÚNICA parte dinâmica é a .cta-bridge (frase-ponte conectando o tema do carr
   }
   return {
     ctaSlideTemplate: dark,
-    ctaDescription: `slide-dark slide-with-bg on-dark — foto full-bleed do criador + overlay-shadow-up + .cta-bridge (DINÂMICO) + .cta-kbox (FIXO: label "COMENTA:", keyword "SHAPE", benefit "Pra garantir um Bônus exclusivo no meu Acompanhamento") + .cta-footer-badge`,
+    ctaDescription: `slide-dark slide-with-bg on-dark — foto full-bleed do criador + overlay-shadow-up + .cta-bridge (DINÂMICO) + .cta-kbox (FIXO: label "${ctaLabel}", keyword "${ctaKeyword}", benefit "${ctaBenefit}") + .cta-footer-badge`,
   };
 }
 
