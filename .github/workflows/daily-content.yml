@@ -1,13 +1,17 @@
 name: Conteúdo diário (09h BRT)
 
-# Roda todo dia às 12:00 UTC = 09:00 America/Sao_Paulo (Brasil não tem horário de verão).
-# Acorda a máquina do Fly (que dorme por inatividade), dispara a geração de 2 carrosséis
-# + 2 reels e fica fazendo polling até concluir — o polling mantém a máquina viva durante
-# a geração. Depois ela dorme de novo sozinha.
+# Roda todo dia de manhã (America/Sao_Paulo) e tem um horário de BACKUP à tarde.
+# O agendamento do GitHub Actions é "melhor esforço" e às vezes DROPA execuções (pior
+# no minuto :00 do topo da hora). Por isso: (1) o horário sai de :00 pra :17, o que
+# reduz muito a chance de ser descartado; (2) tem um segundo disparo à tarde — se o da
+# manhã cair, o de backup gera o dia. O guard de idempotência do serviço evita gerar
+# em dobro: se a manhã já gerou, o backup só confere e sai.
+#   09:17 BRT = 12:17 UTC  ·  13:17 BRT (backup) = 16:17 UTC
 
 on:
   schedule:
-    - cron: '0 12 * * *'
+    - cron: '17 12 * * *'   # manhã (~09:17 BRT)
+    - cron: '17 16 * * *'   # backup à tarde (~13:17 BRT) — cobre se a manhã dropar
   workflow_dispatch: {}   # permite rodar manualmente pelo botão do GitHub
 
 jobs:
