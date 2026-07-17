@@ -403,13 +403,13 @@ const addRecentTopics = (topics, cap = 20) => {
 
 // CTA dos REELS (configurável, separado do CTA dos carrosséis). Default: comenta TESTO
 // → passo a passo natural. Trocável sem código (setReelsCta).
-const REELS_CTA_DEFAULT = { keyword: 'TESTO', benefit: 'te envio um passo a passo pra subir a sua testosterona de forma natural' };
+const REELS_CTA_DEFAULT = { keyword: 'CARDÁPIO', benefit: 'te mando um cardápio que seca sem passar fome' };
 const getReelsCta = () => ({ ...REELS_CTA_DEFAULT, ...readObj('reels_cta') });
 const setReelsCta = (c) => writeObj('reels_cta', { ...getReelsCta(), ...c, updated_at: now() });
 
 // CTA do CARROSSEL (último slide). Configurável — antes era chumbado em SHAPE/Acompanhamento.
 // Default: comenta palavra pra receber valor (mecânica de comentário), coerente com os reels.
-const CAROUSEL_CTA_DEFAULT = { label: 'COMENTA:', keyword: 'TESTO', benefit: 'Pra receber meu passo a passo pra subir a testosterona de forma natural' };
+const CAROUSEL_CTA_DEFAULT = { label: 'COMENTA:', keyword: 'CARDÁPIO', benefit: 'Pra receber um cardápio que seca sem passar fome' };
 const getCarouselCta = () => ({ ...CAROUSEL_CTA_DEFAULT, ...readObj('carousel_cta') });
 const setCarouselCta = (c) => writeObj('carousel_cta', { ...getCarouselCta(), ...c, updated_at: now() });
 
