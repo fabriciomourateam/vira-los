@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { FABRICIO_AVATAR_DATA_URL } = require('./fmteamAssets');
 const { FMTEAM_EDITORIAL } = require('./fmteamEditorial');
+const db = require('../db/database'); // CTA configurável do carrossel (getCarouselCta)
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
