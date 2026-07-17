@@ -324,6 +324,10 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
   const errors = [];
   let resolved = [];
 
+  // Placeholder 'generating' JÁ NO INÍCIO: vira o estado corrente do dia (o poller do
+  // workflow espera em vez de ler um batch de erro ANTIGO e desistir). Atualizado no fim.
+  try { db.saveDailyBatch({ id: batchId, date, trigger, themes: [], carouselIds: [], reelIds: [], status: 'generating', errors: [] }); } catch (_) {}
+
   try {
     // pickThemes/pickAngle ficam DENTRO do try: se estourarem, o erro é registrado
     // no batch (visível em /api/daily-content) em vez de sumir no log do Fly.
@@ -363,7 +367,8 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
       status: errors.length === 0 ? 'done' : (carouselIds.length ? 'partial' : 'error'),
       errors,
     };
-    try { db.saveDailyBatch(batch); } catch (e) { console.error('[DailyContent] falha ao salvar batch:', e.message); }
+    // Atualiza o placeholder 'generating' criado no início (não duplica o batch do dia).
+    try { db.updateDailyBatch(batchId, batch); } catch (e) { console.error('[DailyContent] falha ao salvar batch:', e.message); }
     state.lastFinishedAt = new Date().toISOString();
     state.lastError = errors.length ? errors.join(' | ') : null;
     return batch;

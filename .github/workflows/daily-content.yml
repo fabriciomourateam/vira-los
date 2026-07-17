@@ -35,7 +35,7 @@ jobs:
           for i in $(seq 1 40); do
             sleep 30
             resp=$(curl -sS -m 30 "$BASE/api/daily-content" || echo '{}')
-            status=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d)][0].status // "none"')
+            status=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d)] | .[-1].status // "none"')
             echo "  tentativa $i — status de hoje: $status"
             if [ "$status" = "done" ] || [ "$status" = "partial" ]; then
               echo "✅ Conteúdo de $today gerado (status: $status)."
@@ -43,7 +43,7 @@ jobs:
             fi
             if [ "$status" = "error" ]; then
               # A geração falhou no servidor — imprime o erro real e falha o run (visibilidade).
-              errs=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d)][0].errors // [] | join(" || ")')
+              errs=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d)] | .[-1].errors // [] | join(" || ")')
               echo "❌ Geração de $today falhou no servidor. Erros: $errs"
               exit 1
             fi
