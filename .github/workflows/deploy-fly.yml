@@ -14,14 +14,10 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - run: |
-          flyctl deploy --remote-only --no-cache --strategy immediate
-          echo "=== disparando geração e capturando o STACK real do erro (flyctl logs) ==="
-          curl -sS -m 30 -X POST https://vira-los.fly.dev/api/daily-content/generate \
-            -H "Content-Type: application/json" -d '{"trigger":"cron"}' || true
-          sleep 12
-          echo "----- LOGS DA APP (stack do db is not defined) -----"
-          timeout 45 flyctl logs -a vira-los || true
-          echo "----- fim dos logs -----"
+      # --no-cache é OBRIGATÓRIO: sem ele o build remoto do Fly reaproveita a
+      # camada "COPY server/ ." do cache e publica imagens SEM as mudanças de
+      # código (deploy dá "success" mas o app roda código velho). --strategy
+      # immediate força a máquina a subir na release recém-publicada.
+      - run: flyctl deploy --remote-only --no-cache --strategy immediate
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
