@@ -10,13 +10,14 @@ const db = require('../db/database');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Fórmulas de gancho extraídas dos perfis-modelo (MODELOS-GANCHOS.md) — molde pra fraseTela.
+// Público: MULHER 35-44 que quer emagrecer sem passar fome, na correria (trabalho, filhos, casa).
 const HOOK_FORMULAS = [
-  'sintoma-espelho: junta sintomas soltos num alerta ("cansaço, libido baixa e barriga teimosa não são preguiça")',
-  'exame normal ≠ ideal ("deu tudo normal e você continua no chão")',
-  'idade-alarme ("o que muda no corpo do homem depois dos 30 que ninguém avisou")',
-  'mito quebrado ("cardio em jejum pra secar? você tá perdendo é músculo")',
-  'custo de não agir ("ignorar isso hoje cobra energia, foco e anos depois")',
-  'bastidor/autoridade ("todo homem que chega pra mim com X tem isso em comum")',
+  'sintoma-espelho: junta sintomas soltos num alerta ("barriga inchada, cansaço e roupa apertando não é só idade")',
+  'esforço ≠ resultado ("você come pouco, se mata na esteira e a balança não desce")',
+  'idade-alarme ("o que muda no corpo da mulher depois dos 35 que ninguém te avisou")',
+  'mito quebrado ("comer só salada o dia todo não te faz emagrecer — te deixa com mais fome")',
+  'custo de não agir ("cada mês empurrando é mais roupa que não serve e mais desânimo")',
+  'bastidor/autoridade ("toda mulher que chega pra mim travada no emagrecimento tem isso em comum")',
 ];
 
 function sanitize(s) {
@@ -105,7 +106,7 @@ ${handleAt} · Nicho: ${niche}
    • Mantida do hook ao CTA. Não mistura emoções.
 
 4. CTA — peso 15%:
-   • Ação CONCRETA + palavra-chave específica para comentar (ex: "comenta SHAPE pra receber X", "salva pra não esquecer").
+   • Ação CONCRETA + palavra-chave específica para comentar (ex: "comenta DIETA pra receber X", "salva pra não esquecer").
    • Ligado ao tema. PROIBIDO: "siga para mais conteúdo", "curte se gostou".
 
 5. FORMATO VIRAL — peso 15%:
@@ -144,7 +145,7 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
     }
   ],
   "cta": {
-    "palavra_chave": "PALAVRA EM MAIÚSCULAS que o espectador comenta (ex: SHAPE, ROTINA, FOCO)",
+    "palavra_chave": "PALAVRA EM MAIÚSCULAS que o espectador comenta (ex: DIETA, CARDÁPIO, RECEITA)",
     "acao": "comentar|salvar|seguir|clicar-link",
     "fala": "frase final pedindo a ação específica + entregando o benefício de quem responder",
     "legenda": "texto na tela com a palavra-chave em destaque",
@@ -203,7 +204,7 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
  * scroll com uma LACUNA ABERTA. No segundo 4-5 aparece "👇 LEIA A LEGENDA" e o
  * CONTEÚDO COMPLETO mora na LEGENDA — é ela que entrega o valor e fecha a lacuna.
  * Objetivo: loop de re-leitura (7s re-roda várias vezes) + comentário = retenção
- * e engajamento altos, levando o homem certo pra DM/consultoria.
+ * e engajamento altos, levando a mulher certa pra DM/consultoria.
  *
  * @param {Object} args
  * @param {Object} args.carousel - { id, topic, html, legenda, ... }
@@ -224,8 +225,8 @@ async function generateShortReelFromCarousel({ carousel, niche = 'fitness', inst
   // CTA configurável (default: COMENTA TESTO → passo a passo natural). Vem das settings
   // (db.getReelsCta) e pode ser sobrescrito por chamada. Só afeta os reels.
   const ctaCfg = { ...(db.getReelsCta ? db.getReelsCta() : {}), ...(cta || {}) };
-  const ctaKeyword = String(ctaCfg.keyword || 'TESTO').toUpperCase().trim();
-  const ctaBenefit = String(ctaCfg.benefit || 'te envio um passo a passo pra subir a sua testosterona de forma natural').trim();
+  const ctaKeyword = String(ctaCfg.keyword || 'DIETA').toUpperCase().trim();
+  const ctaBenefit = String(ctaCfg.benefit || 'te mando um cardápio que seca sem passar fome').trim();
 
   const prompt = `Você é especialista em Reels do Instagram de TEXTO-NA-TELA (silenciosos) que viralizam organicamente no nicho de ${niche}.
 
@@ -250,9 +251,9 @@ ${handleAt} · Nicho: ${niche}
 
 1. FRASE DE TELA (fraseTela) — é o que decide tudo:
    • É uma LACUNA ABERTA: cria curiosidade mas NÃO entrega a resposta. Só a legenda fecha.
-   • ERRADO (entrega a resposta): "Cardio em excesso queima músculo".
-   • CERTO (lacuna): "Eu parei de fazer ISSO e meu shape mudou em 30 dias" / "Tem 1 erro que tá travando seu shape e não é treino".
-   • Curta: cabe na tela, no máximo 2 linhas (≤ 12 palavras). Linguagem de homem 25-40.
+   • ERRADO (entrega a resposta): "Comer só salada não emagrece".
+   • CERTO (lacuna): "Eu parei de fazer ISSO e a barriga começou a secar em 30 dias" / "Tem 1 erro que trava o teu emagrecimento e não é treino".
+   • Curta: cabe na tela, no máximo 2 linhas (≤ 12 palavras). Linguagem de mulher 35-44 na correria (trabalho, filhos, casa).
    • TOM INFORMAL, papo reto de treinador — do jeito que você fala no dia a dia. Gíria leve é bem-vinda ("ó", "se liga", "presta atenção", "cara", "tá"). NADA corporativo ou formal demais.
    • Use gancho de número, contra-intuição ou dor nomeada. PROIBIDO morno ("dicas pra...", "você sabia").
    • Molde de gancho (inspiração dos tops do nicho — use a estrutura, NÃO copie): ${HOOK_FORMULAS.join(' · ')}.
