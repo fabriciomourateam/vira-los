@@ -14,23 +14,18 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      # --no-cache: o build remoto do Fly estava reaproveitando a camada
-      # "COPY server/ ." antiga e publicando imagens SEM as mudanças de código.
-      # --strategy immediate + machine list: força a substituição da máquina em
-      # execução (havia máquina servindo código velho) e mostra o estado real.
+      # A máquina estava presa numa imagem antiga: os deploys atualizavam a
+      # config mas a máquina (com volume, auto-stop) não trocava de imagem ao
+      # acordar. --strategy immediate + restart explícito de cada máquina força
+      # a máquina a subir na release recém-publicada.
       - run: |
-          flyctl deploy --remote-only --no-cache --strategy immediate
-          echo "=== máquinas de vira-los após o deploy ==="
+          flyctl deploy --remote-only --strategy immediate
+          echo "=== forçando restart de cada máquina na imagem nova ==="
+          for m in $(flyctl machines list --json -a vira-los | jq -r '.[].id'); do
+            echo "restart $m"
+            flyctl machine restart "$m" -a vira-los || true
+          done
+          echo "=== estado final ==="
           flyctl machine list -a vira-los
-          echo "=== acordando a máquina (curl) pra permitir ssh ==="
-          curl -sS -m 90 https://vira-los.fly.dev/api/daily-content >/dev/null || true
-          sleep 10
-          echo "=== flyctl status (imagem em execução) ==="
-          flyctl status -a vira-los || true
-          echo "=== PROVA: o código no disco da máquina tem meus fixes? ==="
-          echo "--- carouselService: require do db (esperado: 1 linha na ~21) ---"
-          flyctl ssh console -a vira-los -C "grep -n database /app/services/carouselService.js" || echo "(ssh/grep falhou)"
-          echo "--- dailyContentService: placeholder generating (esperado: linha status generating) ---"
-          flyctl ssh console -a vira-los -C "grep -n generating /app/services/dailyContentService.js" || echo "(ssh/grep falhou)"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
