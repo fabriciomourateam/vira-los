@@ -20,7 +20,7 @@ const { generateShortReelFromCarousel } = require('./reelsGeneratorService');
 
 const HANDLE = 'fabriciomourateam';
 const CREATOR = 'Fabricio Moura';
-const NICHE = 'Saúde hormonal e performance masculina';
+const NICHE = 'Emagrecimento e nutrição prática para mulheres 35-44';
 
 // ── Banco de temas (ângulos comprovados do PERFORMANCE-LOG, por SINTOMA = ban-safe) ──
 // O cérebro editorial (fmteamEditorial.js) cuida da voz/anti-ban; aqui é só O QUE falar.
@@ -31,110 +31,50 @@ const NICHE = 'Saúde hormonal e performance masculina';
 // - `topics` dá 3 ângulos por tema, então mesmo quando um tema volta, o título/enfoque
 //   muda (antes o tema = sempre o MESMO título exato → posts iguais).
 const THEMES = [
-  // ── HORMONAL ──
-  { id: 'testo-baixa', group: 'hormonal', tone: 'investigativo', emotion: 'preocupação', keywords: ['testosterona', 'testo', 'hormonal', 'hormônio'],
-    topics: ['Sinais de testosterona baixa no homem', '5 sintomas silenciosos de testosterona baixa', 'Testosterona baixa aos 30+: os sinais que você ignora'] },
-  { id: 'libido', group: 'hormonal', tone: 'direto', emotion: 'preocupação', keywords: ['libido', 'desejo', 'sexual', 'ereção'],
-    topics: ['Libido baixa não é frescura: o que ela revela', 'Quando a libido cai, o corpo está te avisando', 'Perda de desejo: o sinal que os homens ignoram'] },
-  { id: 'vitd-zinco', group: 'hormonal', tone: 'investigativo', emotion: 'curiosidade', keywords: ['vitamina d', 'zinco', 'magnésio', 'suplemento'],
-    topics: ['Vitamina D, zinco e magnésio baixos derrubam a testosterona', 'Os 3 micronutrientes que seu hormônio precisa', 'Deficiência de vitamina D e queda de performance'] },
-  // ── METABÓLICO ──
-  { id: 'falso-magro', group: 'metabolico', tone: 'provocativo', emotion: 'surpresa', keywords: ['falso magro', 'gordura visceral', 'magro', 'barriga'],
-    topics: ['Falso magro: magro por fora, gordo por dentro', 'Barriga que não sai mesmo estando magro', 'Gordura visceral: a que não aparece e é a pior'] },
-  { id: 'insulina', group: 'metabolico', tone: 'investigativo', emotion: 'alerta', keywords: ['insulina', 'açúcar', 'glicose', 'carboidrato'],
-    topics: ['Resistência à insulina travando seu shape', 'Açúcar escondido sabotando sua composição corporal', 'Picos de insulina e a barriga que não sai'] },
-  { id: 'glp1', group: 'metabolico', tone: 'investigativo', emotion: 'alerta', keywords: ['mounjaro', 'ozempic', 'glp', 'semaglutida', 'tirzepatida', 'emagrecimento rápido'],
-    topics: ['Emagrecimento rápido que rouba o seu músculo', 'O lado que ninguém conta do emagrecimento com caneta', 'Perder peso rápido e perder músculo junto'] },
-  // ── TREINO ──
-  { id: 'plato', group: 'treino', tone: 'direto', emotion: 'frustração', keywords: ['não cresce', 'platô', 'estagnado', 'hipertrofia', 'massa muscular'],
-    topics: ['Treina pesado e não cresce: o que está travando', 'Platô muscular: por que você estagnou', 'O erro de volume que trava sua hipertrofia'] },
-  { id: 'cardio', group: 'treino', tone: 'provocativo', emotion: 'contra-intuição', keywords: ['cardio', 'corrida', 'aeróbico', 'esteira'],
-    topics: ['Cardio em excesso comendo o seu músculo', 'Muito aeróbico e pouco resultado: o furo', 'Cardio demais sabotando seu ganho de massa'] },
-  { id: 'tecnica', group: 'treino', tone: 'direto', emotion: 'frustração', keywords: ['execução', 'técnica', 'amplitude', 'série', 'carga'],
-    topics: ['Execução errada: esforço de treino jogado fora', 'Amplitude e cadência: o que muda o resultado', 'Por que treinar mais nem sempre é treinar melhor'] },
-  // ── RECUPERAÇÃO ──
-  { id: 'sono', group: 'recuperacao', tone: 'investigativo', emotion: 'preocupação', keywords: ['sono', 'dormir', 'dorme', 'insônia'],
-    topics: ['Sono ruim sabotando sua testosterona e seu shape', 'Dormir mal está destruindo sua recuperação', 'As horas de sono que definem seu hormônio'] },
-  { id: 'cortisol', group: 'recuperacao', tone: 'investigativo', emotion: 'frustração', keywords: ['cortisol', 'estresse', 'estressado', 'ansiedade'],
-    topics: ['Estresse e cortisol travando o seu shape', 'Cortisol alto: o inimigo silencioso do shape', 'Estresse crônico e a gordura que não sai'] },
-  { id: 'energia', group: 'recuperacao', tone: 'direto', emotion: 'cansaço', keywords: ['energia', 'disposição', 'cansaço', 'cansado', 'fadiga'],
-    topics: ['Falta de energia que não passa nem dormindo', 'Cansaço o dia todo: o que seu corpo esconde', 'Fadiga constante mesmo dormindo bem'] },
-  // ── ROTINA ──
-  { id: 'rotina', group: 'rotina', tone: 'direto', emotion: 'frustração', keywords: ['rotina', 'tempo', 'hábito', 'agenda'],
-    topics: ['Por que você não encaixa treino e dieta na rotina', 'Falta de tempo x falta de método: a real', 'Como manter treino e dieta na correria'] },
-  { id: 'depois-30', group: 'rotina', tone: 'direto', emotion: 'preocupação', keywords: ['depois dos 30', 'idade', 'metabolismo', 'envelhec'],
-    topics: ['Depois dos 30 o shape fica mais difícil — e por quê', 'Metabolismo aos 30+: o que realmente muda', 'Por que o que funcionava aos 20 parou'] },
-  { id: 'consistencia', group: 'rotina', tone: 'provocativo', emotion: 'contra-intuição', keywords: ['consistência', 'disciplina', 'desiste', 'motivação'],
-    topics: ['Não é falta de força de vontade, é falta de método', 'Por que você desiste na 3ª semana', 'Consistência vence intensidade: a matemática'] },
-  // ── NUTRIÇÃO ──
-  { id: 'alcool', group: 'nutricao', tone: 'provocativo', emotion: 'surpresa', keywords: ['álcool', 'bebida', 'cerveja', 'beber'],
-    topics: ['Como o álcool sabota seu shape e sua testosterona', 'Aquela cerveja do fim de semana e o seu shape', 'Álcool e recuperação: a conta que ninguém faz'] },
-  { id: 'proteina', group: 'nutricao', tone: 'direto', emotion: 'surpresa', keywords: ['proteína', 'whey', 'carne', 'frango'],
-    topics: ['Você come menos proteína do que imagina', 'Proteína insuficiente travando seu ganho', 'Quanto de proteína seu shape realmente exige'] },
-  { id: 'ultraprocessado', group: 'nutricao', tone: 'investigativo', emotion: 'alerta', keywords: ['ultraprocessado', 'industrializado', 'processado', 'fast food'],
-    topics: ['Ultraprocessados sabotando sua composição corporal', 'A comida "fit" que não é fit', 'Calorias líquidas: o vilão escondido da dieta'] },
-  { id: 'fome-doce', group: 'nutricao', tone: 'investigativo', emotion: 'curiosidade', keywords: ['doce', 'açúcar', 'compulsão', 'vontade'],
-    topics: ['Fome de doce à noite não é falta de força', 'Compulsão por doce: o que ela revela', 'Vontade de açúcar e o seu cortisol'] },
-  { id: 'agua', group: 'nutricao', tone: 'direto', emotion: 'surpresa', keywords: ['água', 'hidratação', 'hidratar', 'desidrat'],
-    topics: ['Desidratação leve derrubando seu treino', 'Água de menos e a energia que some', 'Hidratação: o detalhe que muda a performance'] },
-  // ── HORMONAL (extra) ──
-  { id: 'saude-sexual', group: 'hormonal', tone: 'direto', emotion: 'preocupação', keywords: ['sexual', 'ereção', 'desempenho', 'libido'],
-    topics: ['Desempenho sexual caindo pode ser hormonal', 'Saúde sexual masculina: o sinal que o corpo dá', 'Quando o desempenho cai, o hormônio avisa antes'] },
-  // ── METABÓLICO (extra) ──
-  { id: 'barriga-teimosa', group: 'metabolico', tone: 'provocativo', emotion: 'frustração', keywords: ['barriga', 'abdominal', 'gordura', 'pochete'],
-    topics: ['A barriga teimosa que não sai nem no déficit', 'Gordura abdominal: por que ela resiste', 'Barriga de homem 30+: o que está por trás'] },
-  { id: 'metabolismo-lento', group: 'metabolico', tone: 'investigativo', emotion: 'contra-intuição', keywords: ['metabolismo', 'lento', 'queima', 'gasto'],
-    topics: ['Metabolismo lento é desculpa ou é real?', 'O que de fato desacelera sua queima', 'Por que seu metabolismo parece travado'] },
-  // ── TREINO (extra) ──
-  { id: 'sedentarismo', group: 'treino', tone: 'direto', emotion: 'alerta', keywords: ['sentado', 'sedentário', 'sedentarismo', 'escritório'],
-    topics: ['8 horas sentado sabotando seu shape', 'Sedentarismo: o dano que o treino não apaga', 'Trabalha sentado o dia todo? Isso muda seu corpo'] },
-  { id: 'volume-excesso', group: 'treino', tone: 'provocativo', emotion: 'contra-intuição', keywords: ['volume', 'séries', 'exagero', 'treino demais'],
-    topics: ['Treino de volume demais travando o ganho', 'Mais séries não é mais músculo', 'O excesso de treino que te deixa parado'] },
-  // ── RECUPERAÇÃO (extra) ──
-  { id: 'overtraining', group: 'recuperacao', tone: 'direto', emotion: 'contra-intuição', keywords: ['overtraining', 'descanso', 'recuperação', 'pausa'],
-    topics: ['Treinar todo dia está te deixando pior', 'Overtraining: quando falta é descanso', 'Recuperação: o treino que acontece fora da academia'] },
-  // ── MENTE (foco / humor / névoa) ──
-  { id: 'nevoa-mental', group: 'mente', tone: 'investigativo', emotion: 'preocupação', keywords: ['névoa', 'foco', 'concentração', 'memória', 'cabeça'],
-    topics: ['Névoa mental: quando a cabeça não engata', 'Falta de foco pode ser hormonal', 'Cabeça lenta o dia todo: o que está por trás'] },
-  { id: 'humor', group: 'mente', tone: 'direto', emotion: 'preocupação', keywords: ['humor', 'irritado', 'irritabilidade', 'ânimo', 'motivação'],
-    topics: ['Irritado à toa? O hormônio pode explicar', 'Humor instável e a testosterona', 'Ânimo lá embaixo: o sinal que os homens ignoram'] },
-  // ── MITOS vs CIÊNCIA ──
-  { id: 'testo-idade-mito', group: 'mitos', tone: 'provocativo', emotion: 'surpresa', keywords: ['idade', 'velho', 'jovem', 'novo'],
-    topics: ['Testosterona baixa não é coisa de velho', 'Homem de 28 com hormônio de 50: acontece', 'A idade não é a única culpada pela testo baixa'] },
-  { id: 'jejum-mito', group: 'mitos', tone: 'investigativo', emotion: 'contra-intuição', keywords: ['jejum', 'intermitente'],
-    topics: ['Jejum intermitente: o que ninguém te conta', 'Jejum funciona pra todo mundo? A real', 'O erro de fazer jejum do jeito errado'] },
-  { id: 'lowcarb-mito', group: 'mitos', tone: 'investigativo', emotion: 'contra-intuição', keywords: ['low carb', 'carboidrato', 'cetogênica', 'carbo'],
-    topics: ['Cortar carboidrato não é o que te trava', 'Low carb: mito e verdade pro seu shape', 'Carboidrato à noite engorda? A ciência'] },
-  { id: 'abdomen-mito', group: 'mitos', tone: 'provocativo', emotion: 'surpresa', keywords: ['abdominal', 'abdômen', 'localizado', 'seca'],
-    topics: ['Abdominal todo dia não seca a barriga', 'O mito do exercício localizado', 'Fazer abdominal x perder barriga: a verdade'] },
-  // ── Ângulos extraídos dos perfis-modelo (Paulo Brasil, Kyle Gillett, Luiz Paulo, John Anderson) ──
-  { id: 'exame-normal', group: 'mitos', tone: 'provocativo', emotion: 'surpresa', keywords: ['exame', 'normal', 'laboratório', 'resultado'],
-    topics: ['Seu exame deu "normal" e você continua no chão', '"Tá tudo normal" não é o mesmo que tá tudo bem', 'O que o exame normal não explica sobre você'] },
-  { id: 'gordura-hormonio', group: 'hormonal', tone: 'investigativo', emotion: 'curiosidade', keywords: ['gordura', 'testosterona', 'estrogênio', 'aromatase', 'barriga'],
-    topics: ['Quanto mais barriga, menos testosterona', 'A gordura que vira uma fábrica contra o seu hormônio', 'Por que perder gordura destrava o seu hormônio'] },
-  { id: 'luz-circadiano', group: 'rotina', tone: 'investigativo', emotion: 'curiosidade', keywords: ['luz', 'sol', 'manhã', 'circadiano', 'relógio biológico'],
-    topics: ['Luz da manhã: o ajuste grátis que seu corpo pede', 'Por que os primeiros minutos de sol mudam seu dia', 'Seu relógio interno decide sua energia e seu sono'] },
-  { id: 'inflamacao', group: 'metabolico', tone: 'investigativo', emotion: 'alerta', keywords: ['inflamação', 'inflamado', 'inchaço', 'retenção'],
-    topics: ['A inflamação silenciosa que trava o seu shape', 'Inchado e cansado o tempo todo? Pode ser inflamação', 'Por que você retém líquido e não seca'] },
-  { id: 'comer-pouco', group: 'nutricao', tone: 'direto', emotion: 'contra-intuição', keywords: ['comer pouco', 'déficit', 'dieta restritiva', 'fome'],
-    topics: ['Comer de menos também trava o seu resultado', 'Fome o dia todo e nada de secar: a conta errada', 'Por que cortar tudo do prato para de funcionar'] },
-  // ── ALERTA / SINAIS / PROCURE AVALIAÇÃO (uso consciente — droga popular no frame CAUTELAR) ──
-  // Regra: só ALERTA/SINAL + "procure médico/faça exame". NUNCA o que tomar/como manejar
-  // colateral (isso é escopo médico e é o que dá ban). É a fórmula de 10-20k do Fabricio.
-  { id: 'glp1-musculo', group: 'alerta', tone: 'investigativo', emotion: 'alerta', keywords: ['mounjaro', 'ozempic', 'caneta', 'emagrecedor', 'glp'],
-    topics: ['Emagreceu na caneta, mas quanto era músculo?', 'O que ninguém te conta sobre perder peso rápido demais', 'Perder peso e perder força ao mesmo tempo: a conta da pressa'] },
-  { id: 'eixo-hormonal', group: 'alerta', tone: 'direto', emotion: 'alerta', keywords: ['eixo', 'ciclo', 'dependência', 'parar', 'hormônio'],
-    topics: ['"Um pouquinho não faz mal" já desliga o seu eixo', 'Por que o corpo desliga a própria fábrica de hormônio', 'O preço de virar refém do atalho'] },
-  { id: 'pressao-coracao', group: 'alerta', tone: 'direto', emotion: 'preocupação', keywords: ['pressão', 'coração', 'cardiovascular', 'hipertensão'],
-    topics: ['Você se cuida no talo e nunca mediu a pressão?', 'Shape bonito com pressão alta é bomba-relógio', 'O que o coração cobra de quem treina pesado e não monitora'] },
-  { id: 'gine-sinal', group: 'alerta', tone: 'direto', emotion: 'preocupação', keywords: ['ginecomastia', 'peito', 'mamilo', 'nódulo'],
-    topics: ['Carocinho dolorido embaixo do mamilo? Não empurra com a barriga', 'O sinal no peito que muito homem finge que não vê', 'Nódulo no peito é hora de médico, não de palpite de vestiário'] },
-  { id: 'clembuterol-coracao', group: 'alerta', tone: 'provocativo', emotion: 'alerta', keywords: ['clembuterol', 'termogênico', 'secar', 'coração'],
-    topics: ['O que o termogênico forte faz com o seu coração', 'Secar 2kg e envelhecer o coração em silêncio', 'O preço escondido de acelerar a queima na marra'] },
-  { id: 'shape-falso-feed', group: 'alerta', tone: 'provocativo', emotion: 'indignação', keywords: ['natural', 'manipulado', 'influencer', 'comparação'],
-    topics: ['O shape do feed que te faz sentir um lixo é mentira', 'Boa parte dos "naturais" que você admira não é natural', 'Para de se comparar com quem joga com outro baralho'] },
-  { id: 'exames-antes', group: 'alerta', tone: 'direto', emotion: 'preocupação', keywords: ['exame', 'check-up', 'sangue', 'avaliação'],
-    topics: ['Os exames que deviam estar na sua mão antes de qualquer decisão', 'A pressa é a maior burrice de quem entra nesse mundo', 'O retrato do seu corpo que você precisa ter antes de tudo'] },
+  // ── COMIDA (comparações/prático — o lane campeão do Fabricio) ──
+  { id: 'comparacao-refeicao', group: 'comida', tone: 'direto', emotion: 'surpresa', keywords: ['calorias', 'refeição', 'café da manhã', 'prato'],
+    topics: ['A mesma refeição, o dobro de calorias — e você escolhe errado', 'Café da manhã de 280 x 500 kcal: a diferença que trava seu peso', 'Pão com ovo x tapioca com frango: qual seca de verdade?'] },
+  { id: 'calorias-liquidas', group: 'comida', tone: 'investigativo', emotion: 'surpresa', keywords: ['suco', 'bebida', 'líquido', 'refrigerante', 'café com leite'],
+    topics: ['As calorias que você BEBE sem perceber', 'Suco natural também engorda? A real que ninguém conta', 'O cafezinho com leite e açúcar que soma o dia inteiro'] },
+  { id: 'proteina-saciedade', group: 'comida', tone: 'direto', emotion: 'curiosidade', keywords: ['proteína', 'saciedade', 'fome', 'ovo', 'frango'],
+    topics: ['Você come muito menos proteína do que imagina', 'A proteína que segura a fome até a próxima refeição', 'Prato sem proteína é fome garantida daqui 2 horas'] },
+  { id: 'montar-prato', group: 'comida', tone: 'direto', emotion: 'curiosidade', keywords: ['prato', 'montar', 'porção', 'refeição'],
+    topics: ['Como montar o prato pra secar sem passar fome', 'A ordem dos alimentos no prato muda o teu resultado', 'O prato que enche o olho e ainda seca'] },
+  // ── TROCAS (parece igual mas não é — viraliza no teu perfil) ──
+  { id: 'parece-igual', group: 'trocas', tone: 'provocativo', emotion: 'surpresa', keywords: ['parece igual', 'troca', 'leite em pó', 'composto'],
+    topics: ['Parece igual, mas um seca e o outro engorda', 'Leite em pó x composto lácteo: a pegadinha do mercado', 'Duas comidas idênticas no olho, opostas no corpo'] },
+  { id: 'fit-que-nao-e', group: 'trocas', tone: 'provocativo', emotion: 'indignação', keywords: ['fit', 'zero', 'diet', 'barrinha'],
+    topics: ['A comida "fit" que não é fit', 'O "zero açúcar" que engorda do mesmo jeito', 'Barrinha de proteína x chocolate: surpresa no rótulo'] },
+  { id: 'rotulo', group: 'trocas', tone: 'investigativo', emotion: 'curiosidade', keywords: ['rótulo', 'ingredientes', 'tabela', 'industrializado'],
+    topics: ['O que o rótulo esconde de você', '3 palavras no rótulo que denunciam que engorda', 'Como ler um rótulo em 10 segundos'] },
+  // ── HÁBITOS (rotina real da mulher 35-44) ──
+  { id: 'correria', group: 'habitos', tone: 'direto', emotion: 'acolhimento', keywords: ['correria', 'tempo', 'rotina', 'trabalho', 'filho'],
+    topics: ['Emagrecer na correria (trabalho, filho, casa)', 'Sem tempo pra dieta? O problema quase nunca é tempo', 'Como não sabotar a semana inteira no domingo'] },
+  { id: 'doce-noite', group: 'habitos', tone: 'investigativo', emotion: 'curiosidade', keywords: ['doce', 'noite', 'vontade', 'açúcar'],
+    topics: ['A vontade de doce à noite tem explicação', 'Por que você segura o dia todo e ataca a geladeira à noite', 'Fome de doce não é falta de força de vontade'] },
+  { id: 'ansiedade-comida', group: 'habitos', tone: 'direto', emotion: 'acolhimento', keywords: ['ansiedade', 'compulsão', 'emocional', 'automático'],
+    topics: ['Você não come de fome, come de ansiedade', 'O gatilho que te faz comer sem nem perceber', 'Comer no automático: o vilão silencioso da dieta'] },
+  { id: 'balanca', group: 'habitos', tone: 'direto', emotion: 'acolhimento', keywords: ['balança', 'peso', 'pesar'],
+    topics: ['Para de surtar com a balança todo dia', 'O número da balança te engana — olha o que importa', 'Peso subiu 2kg da noite pro dia? Calma, é isso'] },
+  // ── CANETA (droga popular, curiosidade da mulher — frame emagrecimento) ──
+  { id: 'caneta-musculo', group: 'caneta', tone: 'investigativo', emotion: 'alerta', keywords: ['caneta', 'mounjaro', 'ozempic', 'emagrecedor'],
+    topics: ['Emagreceu na caneta e virou magra flácida?', 'O que a caneta faz sumir junto com a gordura', 'Perder peso rápido demais cobra a conta depois'] },
+  { id: 'caneta-parou', group: 'caneta', tone: 'direto', emotion: 'alerta', keywords: ['parou', 'efeito rebote', 'voltou', 'caneta'],
+    topics: ['Parou a caneta e o peso voltou com tudo?', 'A fome que volta em dobro quando você para', 'Caneta sem estratégia é resultado alugado'] },
+  // ── MENTE (relação com a comida — emocional, conecta) ──
+  { id: 'odiar-espelho', group: 'mente', tone: 'provocativo', emotion: 'conexão', keywords: ['espelho', 'autoestima', 'se odiar', 'aceitar'],
+    topics: ['Você quer emagrecer ou parar de se odiar no espelho?', 'A dieta muda quando o motivo muda', 'Emagrecer por raiva x por autocuidado dá resultado diferente'] },
+  { id: 'tentou-tudo', group: 'mente', tone: 'acolhedor', emotion: 'acolhimento', keywords: ['tentou de tudo', 'dieta', 'desistir', 'fracasso'],
+    topics: ['Já tentou de tudo e não desce? O problema não é você', 'Por que toda dieta funciona 2 semanas e depois trava', 'A dieta da fome não te faz secar, te faz desistir'] },
+  { id: 'terceira-semana', group: 'mente', tone: 'direto', emotion: 'curiosidade', keywords: ['terceira semana', 'desiste', 'constância', 'platô'],
+    topics: ['Por que você desiste exatamente na terceira semana', 'O ponto onde quase todo mundo larga a dieta', 'A semana que separa quem seca de quem desiste'] },
+  // ── CORPO 35+ (mudanças da idade, ban-safe) ──
+  { id: 'metabolismo-35', group: 'corpo35', tone: 'investigativo', emotion: 'preocupação', keywords: ['metabolismo', 'idade', 'depois dos 35', 'depois dos 40'],
+    topics: ['Depois dos 35 o corpo muda — e por quê', 'O que emagrecia aos 25 e parou de funcionar', 'Metabolismo mais lento com a idade: mito ou real?'] },
+  { id: 'inchaco', group: 'corpo35', tone: 'direto', emotion: 'curiosidade', keywords: ['inchaço', 'retenção', 'líquido', 'inchada'],
+    topics: ['Vive inchada e retendo líquido?', 'Não é tudo gordura: parte é inchaço (e tem solução)', 'A retenção que te faz parecer 3kg a mais'] },
+  { id: 'sono-emagrecer', group: 'corpo35', tone: 'investigativo', emotion: 'surpresa', keywords: ['sono', 'dormir', 'noite', 'fome'],
+    topics: ['Dormir mal engorda — e ninguém te conta', 'A noite mal dormida que sabota tua dieta no dia seguinte', 'Sono ruim vira mais fome de doce no dia seguinte'] },
 ];
 
 // Estado em memória (só 1 geração por vez)
@@ -256,7 +196,7 @@ async function buildOne(theme) {
   // 1) Carrossel fmteam
   const carouselResult = await generateCarousel({
     topic: theme.topic,
-    instructions: 'Mire o HOMEM 25-40. Gancho na capa que para o scroll. Cada slide de conteúdo entrega 1 ponto técnico traduzido.',
+    instructions: 'Mire a MULHER 35-44 que quer emagrecer sem passar fome, na correria da vida real (trabalho, filhos, casa). Gancho na capa que para o scroll. Prefira comparação visual e ponto prático traduzido, nada de jargão de academia masculina.',
     niche: NICHE,
     instagramHandle: HANDLE,
     creatorName: CREATOR,
