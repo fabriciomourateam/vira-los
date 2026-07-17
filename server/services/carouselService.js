@@ -348,10 +348,12 @@ async function generateSlideImageQueries(topic, roteiro, slidesCount, niche, lay
     ? `Roteiro:\n${roteiro.slice(0, 1200)}`
     : `Tema: "${topic}" — nicho: ${niche}`;
 
-  // fmteam 9-slide: gera apenas 8 queries (slide 9 usa foto do criador, não Unsplash)
-  // e inclui hint de orientação portrait/landscape por posição
-  const isFmteam9 = layoutStyle === 'fmteam' && slidesCount === 9;
-  const queryCount = isFmteam9 ? 8 : slidesCount;
+  // fmteam: o último slide é o CTA (foto do criador, não Unsplash) → gera slidesCount-1
+  // queries. Inclui hint de orientação portrait/landscape por posição (layouts alternados).
+  const isFmteam = layoutStyle === 'fmteam';
+  const isFmteam9 = isFmteam && slidesCount === 9;
+  const isFmteam7 = isFmteam && slidesCount === 7;
+  const queryCount = isFmteam ? slidesCount - 1 : slidesCount;
 
   const slideDesc = isFmteam9
     ? `Slide 1 = capa PORTRAIT (pessoa ou cena vertical impactante)
@@ -362,6 +364,15 @@ Slide 5 = LANDSCAPE (light dados, infográfico ou ambiente amplo)
 Slide 6 = conteúdo PORTRAIT (dark, pessoa ou cena forte)
 Slide 7 = LANDSCAPE (light, cena ampla ou visual do tema)
 Slide 8 = PORTRAIT (dark, foto de impacto para frase final)`
+    : isFmteam7
+    ? `Slide 1 = capa PORTRAIT (pessoa ou cena vertical impactante)
+Slide 2 = conteúdo PORTRAIT (dark, pessoa ou cena dramática)
+Slide 3 = LANDSCAPE (light, cena ampla ou visual do tema)
+Slide 4 = LANDSCAPE (gradient, cena ampla ou dado visual horizontal)
+Slide 5 = LANDSCAPE (light dados, infográfico ou ambiente amplo)
+Slide 6 = PORTRAIT (dark, foto de impacto para a frase final)`
+    : isFmteam
+    ? `Slide 1 = capa (foto vertical impactante), slides 2 a ${queryCount} = conteúdo específico de cada ponto (alterne cenas verticais e amplas)`
     : `Slide 1 = capa (foto impactante do tema), slides 2 a ${queryCount - 1} = conteúdo específico de cada ponto, slide ${queryCount} = CTA/motivação`;
 
   const prompt = `${roteiroContext}
@@ -1776,11 +1787,11 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   // Isso economiza ~3.000 tokens de input E ~3.500 tokens de output por chamada.
 
   const validImages = unsplashImages.filter(img => img.url);
-  // Para fmteam: slide 9 (CTA) usa foto do criador, não Unsplash — exclui da lista de imagens
-  const fmteamImageSlots = numSlides === 9 ? numSlides - 1 : numSlides;
+  // fmteam: o último slide (CTA) usa foto do criador, não Unsplash — exclui da lista de imagens
+  const fmteamImageSlots = numSlides - 1;
   const imagesSection = validImages.length
     ? `\nImagens — use a URL exata na ordem indicada:\n${unsplashImages.slice(0, fmteamImageSlots).map((img, i) =>
-        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}${numSlides === 9 ? `\nSlide 9 (CTA): usa foto do criador — NÃO substitua o src desta imagem` : ''}`
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}\nSlide ${numSlides} (CTA): usa foto do criador — NÃO substitua o src desta imagem`
     : '\n(Sem imagens fornecidas)';
 
   const roteiroSection = roteiro && roteiro.trim()
@@ -1867,9 +1878,19 @@ ${numSlides === 9 ? `DISTRIBUIÇÃO FIXA DOS 9 SLIDES (estrutura fmteam v2 — s
 - Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
 - Slide 9 (CTA): ${ctaDescription}
 
-IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.` : `DISTRIBUIÇÃO DOS ${numSlides} SLIDES:
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.` : numSlides === 7 ? `DISTRIBUIÇÃO FIXA DOS 7 SLIDES (curto e com LAYOUTS ALTERNADOS — nunca 2 slides seguidos do mesmo tipo):
 - Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
-- Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top)
+- Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up, dark-h1 + dark-body
+- Slide 3: LIGHT — slide-light on-light — img-box-top 300px, light-h1 + light-body
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 300px, arrow-rows, grad-num (virada narrativa)
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 300px, stat-rows (dados/prova)
+- Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up (frase final de impacto)
+- Slide 7 (CTA): ${ctaDescription}
+
+SEM PODAR CONTEÚDO: cubra o tema TODO nesses 5 slides de conteúdo. Se um ponto for denso, use arrow-rows/stat-rows pra caber a ideia inteira — NÃO deixe o carrossel raso só por ter menos slides.
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6). CTA usa foto sem ID.` : `DISTRIBUIÇÃO DOS ${numSlides} SLIDES:
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top) — nunca 2 seguidos iguais
 - Inclua 1 slide gradient (slide-grad on-light) no meio do carrossel (virada narrativa)
 - Slide ${numSlides} (CTA): ${ctaDescription}
 - IDs: id="img-capa" (slide 1), id="img-s2" até id="img-s${numSlides - 1}" (slides internos). CTA sem ID.`}
@@ -1902,7 +1923,7 @@ SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
   ${progFor(1, 'dark')}
 </div>
 
-SLIDES DARK INTERNOS (slides 2, 3, 6, 8):
+SLIDES DARK INTERNOS (os slides marcados DARK na distribuição acima):
 <div class="slide slide-dark slide-with-bg on-dark">
   ${header}
   <div class="photo-bg"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
@@ -1957,16 +1978,16 @@ SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 300px + stat-rows para dados numé
   [PROG_5]
 </div>
 
-SLIDE 7 — LIGHT CONTEÚDO (img-box 300px + light-h1 + light-body):
+SLIDE LIGHT CONTEÚDO — exemplo (img-box 300px + light-h1 + light-body) — aplique no slide marcado LIGHT na distribuição, com o id de imagem correto (img-sN) e o [PROG_N] daquele slide:
 <div class="slide slide-light on-light">
   ${header}
   <div class="content on-light">
-    <div class="img-box-top" style="height:300px"><img id="img-s7" src="FOTO_7" alt="${topic}"></div>
+    <div class="img-box-top" style="height:300px"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
     <div class="tag">[CATEGORIA]</div>
     <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
     <div class="light-body">[corpo — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
   </div>
-  [PROG_7]
+  [PROG_N]
 </div>
 
 ${ctaSlideTemplate}
@@ -1987,7 +2008,7 @@ Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
 Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
 ${capaClassesNote}
 CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
-IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s8 (slides internos)  |  CTA sem ID
+IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s${numSlides - 1} (slides internos)  |  CTA sem ID
 
 Gere o HTML completo agora (apenas HTML, nada mais):`;
 }
@@ -2030,7 +2051,7 @@ SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
   ${progFor(1, 'dark')}
 </div>
 
-SLIDES DARK INTERNOS (slides 2, 3, 6, 8):
+SLIDES DARK INTERNOS (os slides marcados DARK na distribuição acima):
 <div class="slide slide-dark slide-with-bg on-dark">
   ${header}
   <div class="photo-bg"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
@@ -2085,16 +2106,16 @@ SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 300px + stat-rows para dados numé
   [PROG_5]
 </div>
 
-SLIDE 7 — LIGHT CONTEÚDO (img-box 300px + light-h1 + light-body):
+SLIDE LIGHT CONTEÚDO — exemplo (img-box 300px + light-h1 + light-body) — aplique no slide marcado LIGHT na distribuição, com o id de imagem correto (img-sN) e o [PROG_N] daquele slide:
 <div class="slide slide-light on-light">
   ${header}
   <div class="content on-light">
-    <div class="img-box-top" style="height:300px"><img id="img-s7" src="FOTO_7" alt="${topic}"></div>
+    <div class="img-box-top" style="height:300px"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
     <div class="tag">[CATEGORIA]</div>
     <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
     <div class="light-body">[corpo — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
   </div>
-  [PROG_7]
+  [PROG_N]
 </div>
 
 ${ctaSlideTemplate}
@@ -2115,7 +2136,7 @@ Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
 Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
 ${capaClassesNote}
 CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
-IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s8 (slides internos)  |  CTA sem ID
+IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s${numSlides - 1} (slides internos)  |  CTA sem ID
 
 Gere o HTML completo agora (apenas HTML, nada mais):`;
 }
@@ -2353,8 +2374,8 @@ async function generateCarousel(config, setStep = () => {}) {
   // Passo 2: busca imagem específica para cada slide em paralelo
   setStep('Selecionando imagens para os slides...');
   console.log(`[GenerateCarousel] Passo 2 — buscando imagens Unsplash (${slideQueries?.length ?? 0} queries)...`);
-  // fmteam 9-slide: retorna 8 queries (sem CTA) — aceita length >= slidesCount - 1
-  const minQueriesRequired = (layoutStyle === 'fmteam' && slidesCount === 9) ? slidesCount - 1 : slidesCount;
+  // fmteam: o último slide (CTA) usa foto do criador — gera slidesCount-1 queries.
+  const minQueriesRequired = (layoutStyle === 'fmteam') ? slidesCount - 1 : slidesCount;
   let unsplashImages;
   if (slideQueries && slideQueries.length >= minQueriesRequired) {
     // Busca os candidatos de TODOS os slides em paralelo (rede), depois escolhe um por
@@ -2422,10 +2443,10 @@ async function generateCarousel(config, setStep = () => {}) {
       const fmCurrentYear = new Date().getFullYear();
 
       const fmValidImages = unsplashImages.filter(img => img.url);
-      const fmImageSlots = slidesCount === 9 ? slidesCount - 1 : slidesCount;
+      const fmImageSlots = slidesCount - 1; // fmteam: CTA (último) usa foto do criador
       const fmImagesSection = fmValidImages.length
         ? `\nImagens — use a URL exata na ordem indicada:\n${unsplashImages.slice(0, fmImageSlots).map((img, i) =>
-            img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}${slidesCount === 9 ? `\nSlide 9 (CTA): usa foto do criador — NÃO substitua o src desta imagem` : ''}`
+            img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}\nSlide ${slidesCount} (CTA): usa foto do criador — NÃO substitua o src desta imagem`
         : '\n(Sem imagens fornecidas)';
 
       const fmRoteiroSection = roteiro && roteiro.trim()
@@ -2454,9 +2475,21 @@ async function generateCarousel(config, setStep = () => {}) {
 - Slide 9 (CTA): ${fmCtaDescription}
 
 IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.`
+        : slidesCount === 7
+        ? `DISTRIBUIÇÃO FIXA DOS 7 SLIDES (curto e com LAYOUTS ALTERNADOS — nunca 2 slides seguidos do mesmo tipo):
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up, dark-h1 + dark-body
+- Slide 3: LIGHT — slide-light on-light — img-box-top 300px, light-h1 + light-body
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 300px, arrow-rows, grad-num (virada narrativa)
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 300px, stat-rows (dados/prova)
+- Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up (frase final de impacto)
+- Slide 7 (CTA): ${fmCtaDescription}
+
+SEM PODAR CONTEÚDO: cubra o tema TODO nesses 5 slides de conteúdo. Se um ponto for denso, use arrow-rows/stat-rows pra caber a ideia inteira — NÃO deixe o carrossel raso só por ter menos slides.
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6). CTA usa foto sem ID.`
         : `DISTRIBUIÇÃO DOS ${slidesCount} SLIDES:
 - Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
-- Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top)
+- Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top) — nunca 2 seguidos iguais
 - Inclua 1 slide gradient (slide-grad on-light) no meio do carrossel (virada narrativa)
 - Slide ${slidesCount} (CTA): ${fmCtaDescription}
 - IDs: id="img-capa" (slide 1), id="img-s2" até id="img-s${slidesCount - 1}" (slides internos). CTA sem ID.`;

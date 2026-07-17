@@ -200,7 +200,7 @@ async function buildOne(theme) {
     niche: NICHE,
     instagramHandle: HANDLE,
     creatorName: CREATOR,
-    numSlides: 9,
+    numSlides: 7,
     contentTone: theme.tone,
     dominantEmotion: theme.emotion,
     layoutStyle: 'fmteam',
