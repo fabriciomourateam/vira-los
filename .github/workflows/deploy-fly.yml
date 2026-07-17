@@ -3,6 +3,7 @@ name: Deploy Backend to Fly.io
 on:
   push:
     branches: [main]
+  workflow_dispatch: {}   # permite redeploy manual pelo botão do GitHub
 
 jobs:
   deploy:
@@ -13,6 +14,9 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - run: flyctl deploy --remote-only
+      # --no-cache: o build remoto do Fly estava reaproveitando a camada
+      # "COPY server/ ." antiga e publicando imagens SEM as mudanças de código
+      # (deploy dava "success" mas o app rodava código velho). Reconstrói limpo.
+      - run: flyctl deploy --remote-only --no-cache
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
