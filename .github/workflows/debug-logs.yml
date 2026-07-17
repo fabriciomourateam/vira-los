@@ -1,0 +1,26 @@
+name: Debug — capturar stack do erro (sem deploy)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  debug:
+    name: Trigger + capture logs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # NÃO faz deploy (não reinicia a máquina). Só acorda, dispara a geração
+      # e captura os logs da app com o STACK real do erro.
+      - run: |
+          echo "=== acordando + disparando geração ==="
+          curl -sS -m 40 -X POST https://vira-los.fly.dev/api/daily-content/generate \
+            -H "Content-Type: application/json" -d '{"trigger":"manual"}' || true
+          echo ""
+          echo "=== aguardando o erro aparecer ==="
+          sleep 15
+          echo "----- LOGS DA APP -----"
+          timeout 50 flyctl logs -a vira-los || true
+          echo "----- fim -----"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
