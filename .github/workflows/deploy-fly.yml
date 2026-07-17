@@ -14,21 +14,18 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      # COMBINA os dois: --no-cache garante imagem com o código atual;
-      # o restart explícito de cada máquina força a subir NESSA imagem
-      # (a máquina, com volume+auto-stop, não trocava sozinha). Depois,
-      # prova via ssh o código que ficou no disco da máquina em execução.
+      # A imagem já tem o código novo (release atual). O problema era a flag
+      # em memória state.generating presa em true de uma geração travada, que
+      # o restart não resetava. STOP total mata o processo; o próximo request
+      # (cron diário) faz cold-start com o processo limpo (state.generating=false).
       - run: |
-          flyctl deploy --remote-only --no-cache --strategy immediate
-          echo "=== forçando restart de cada máquina na imagem nova ==="
+          flyctl deploy --remote-only --strategy immediate
+          echo "=== parando cada máquina (kill do processo, reseta state.generating) ==="
           for m in $(flyctl machines list --json -a vira-los | jq -r '.[].id'); do
-            echo "restart $m"
-            flyctl machine restart "$m" -a vira-los || true
+            echo "stop $m"
+            flyctl machine stop "$m" -a vira-los || true
           done
-          echo "=== estado final ==="
+          echo "=== estado final (deve estar stopped; acorda no próximo request) ==="
           flyctl machine list -a vira-los
-          echo "=== PROVA (máquina started após restart): código no disco ==="
-          flyctl ssh console -a vira-los -C "grep -n database /app/services/carouselService.js" || echo "(ssh falhou)"
-          flyctl ssh console -a vira-los -C "grep -c generating /app/services/dailyContentService.js" || echo "(ssh falhou)"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
