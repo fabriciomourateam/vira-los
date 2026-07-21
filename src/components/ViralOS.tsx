@@ -52,6 +52,22 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'diario' | 'avaliar' | 'analytics' | 'seo';
 
+// Lembra a última aba/sub-aba visitada (localStorage) pra não voltar pro
+// início a cada F5. Valida contra a lista de valores aceitos antes de usar
+// (evita travar em algo inválido se a lista de abas mudar no futuro).
+function usePersistedTab<T extends string>(key: string, allowed: readonly T[], fallback: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      return (saved && (allowed as readonly string[]).includes(saved)) ? (saved as T) : fallback;
+    } catch { return fallback; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(key, value); } catch { /* ignora (modo privado etc.) */ }
+  }, [key, value]);
+  return [value, setValue];
+}
+
 const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'metodo',    label: 'Método',    icon: Zap },
   { id: 'publico',   label: 'Público',   icon: Target },
@@ -352,10 +368,12 @@ function SubTabBar<T extends string>({
 }
 
 export default function ViralOS() {
-  const [activeTab, setActiveTab] = useState<TabId>('metodo');
-  const [metodoSubTab,    setMetodoSubTab]    = useState<'roteiro' | 'produtos' | 'metricas'>('roteiro');
-  const [descobrirSubTab, setDescobrirSubTab] = useState<'pesquisa' | 'radar' | 'agente'>('pesquisa');
-  const [avaliarSubTab,   setAvaliarSubTab]   = useState<'analisador' | 'score'>('analisador');
+  const [activeTab, setActiveTab] = usePersistedTab<TabId>(
+    'viralos.activeTab', ['metodo','publico','descobrir','ideias','criar','diario','avaliar','analytics','seo'], 'metodo'
+  );
+  const [metodoSubTab,    setMetodoSubTab]    = usePersistedTab('viralos.metodoSubTab', ['roteiro','produtos','metricas'] as const, 'roteiro');
+  const [descobrirSubTab, setDescobrirSubTab] = usePersistedTab('viralos.descobrirSubTab', ['pesquisa','radar','agente'] as const, 'pesquisa');
+  const [avaliarSubTab,   setAvaliarSubTab]   = usePersistedTab('viralos.avaliarSubTab', ['analisador','score'] as const, 'analisador');
   const [carouselPrefill, setCarouselPrefill] = useState<{ script: string; topic: string } | null>(null);
   const [scorePrefill, setScorePrefill] = useState<{ script: string; type: 'carousel' | 'reels' } | null>(null);
   const [analyzerPrefillUrl, setAnalyzerPrefillUrl] = useState<string | null>(null);
