@@ -305,7 +305,7 @@ export default function ReelsEmLote() {
 
         {/* Preview + estilo + gerar */}
         <div className="space-y-3 md:sticky md:top-4">
-          <FramePreview texto={rows[focused]?.texto || ''} cta="👇 LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} />
+          <FramePreview texto={rows[focused]?.texto || ''} cta="LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} />
           <p className="text-[10px] text-muted-foreground text-center -mt-1">Prévia da linha em foco — mexa no estilo abaixo e veja aqui</p>
 
           {/* Controles de estilo — tudo aqui, ao lado da prévia */}

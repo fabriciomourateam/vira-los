@@ -38,6 +38,9 @@ function resolveFont(preferred) {
   return FONT_CANDIDATES[1];
 }
 
+// Emojis, símbolos e seletores de variação (a sans do sistema não tem glifo).
+const EMOJI_RE = /[\u{1F1E6}-\u{1F1FF}\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{2190}-\u{21FF}]/gu;
+
 // ── Timing ("0-4s" → { start, end }) ─────────────────────────────────────────
 function parseTiming(str, fallbackStart, fallbackEnd) {
   const m = String(str || '').match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/);
@@ -206,18 +209,22 @@ async function renderReel({
     cta = parseTiming(ctaTelaTiming, frase.end, frase.end + 1.5);
   }
 
-  // Quebra a frase em no máx 2 linhas (o gerador já limita a ≤12 palavras).
-  const wrapChars = Math.max(12, Math.floor(1000 / (fontSize * 0.52)));
-  const fraseWrapped = wrapText(fraseTela, wrapChars, 2).join('\n');
+  // Emojis não têm glifo na fonte do sistema → viram quadradinho. Remove antes
+  // de queimar (ex.: "👇 LEIA A LEGENDA" → "LEIA A LEGENDA").
+  const sanitize = (s) => String(s || '').replace(EMOJI_RE, '').replace(/\s+/g, ' ').trim();
+  // Largura segura: quebra o texto pra caber DENTRO do quadro (com margem),
+  // em quantas linhas precisar — sem forçar 2 linhas e estourar a largura.
+  const wrapChars = Math.max(10, Math.floor(900 / (fontSize * 0.55)));
+  const fraseWrapped = wrapText(sanitize(fraseTela), wrapChars, 5).join('\n');
 
   const stamp = `${Date.now()}_${Math.round(process.hrtime()[1] / 1000)}`;
   const fraseFile = path.join(work, `.frase_${stamp}.txt`);
   fs.writeFileSync(fraseFile, fraseWrapped, 'utf8');
 
   let ctaFile = null;
-  if (ctaTela && String(ctaTela).trim()) {
+  if (ctaTela && sanitize(ctaTela)) {
     ctaFile = path.join(work, `.cta_${stamp}.txt`);
-    fs.writeFileSync(ctaFile, wrapText(ctaTela, wrapChars + 6, 2).join('\n'), 'utf8');
+    fs.writeFileSync(ctaFile, wrapText(sanitize(ctaTela), wrapChars + 4, 2).join('\n'), 'utf8');
   }
 
   // Altura: gancho centralizado na fração textY; "Leia a legenda" ~0.13 abaixo.
