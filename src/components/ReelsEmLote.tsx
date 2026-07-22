@@ -22,18 +22,20 @@ const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' 
 // Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
-function FramePreview({ texto, cta }: { texto: string; cta: string }) {
+function FramePreview({ texto, cta, y = 0.6 }: { texto: string; cta: string; y?: number }) {
   const stroke = '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000';
+  const hookPct = Math.max(20, Math.min(90, y * 100));
+  const ctaPct = Math.min(92, hookPct + 13);
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-border bg-gradient-to-b from-neutral-700 to-neutral-900" style={{ aspectRatio: '9 / 16' }}>
-      {/* Gancho: branco, centralizado (levemente acima do meio) — o vídeo todo */}
-      <div className="absolute inset-x-0 top-[42%] -translate-y-1/2 px-3">
+      {/* Gancho: branco, centralizado na altura escolhida — o vídeo todo */}
+      <div className="absolute inset-x-0 -translate-y-1/2 px-3" style={{ top: `${hookPct}%` }}>
         <p className="text-center font-extrabold leading-tight text-white" style={{ fontSize: 'clamp(13px, 4.2vw, 20px)', textShadow: stroke }}>
           {texto || 'Seu texto na tela aparece aqui'}
         </p>
       </div>
-      {/* CTA dourado, logo abaixo — entra na METADE do vídeo */}
-      <div className="absolute inset-x-0 top-[60%] px-3">
+      {/* CTA dourado, ~0.13 abaixo — entra na METADE do vídeo */}
+      <div className="absolute inset-x-0 -translate-y-1/2 px-3" style={{ top: `${ctaPct}%` }}>
         <p className="text-center font-bold leading-tight" style={{ color: '#F5B301', fontSize: 'clamp(10px, 2.9vw, 15px)', textShadow: stroke }}>
           {cta}
         </p>
@@ -64,8 +66,25 @@ function parseImport(text: string): Row[] {
   }).filter((r) => r.texto);
 }
 
+const DRAFT_KEY = 'viralos.emLote.rows';
+
+// Rascunho automático: as linhas que você digita ficam salvas no navegador,
+// então trocar de aba / atualizar a página não perde nada.
+function loadDraft(): Row[] {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) {
+        return arr.map((r: any) => ({ texto: r.texto || '', legenda: r.legenda || '', data: r.data || '', rawVideoId: r.rawVideoId || '' }));
+      }
+    }
+  } catch { /* ignora */ }
+  return [emptyRow(), emptyRow(), emptyRow()];
+}
+
 export default function ReelsEmLote() {
-  const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow(), emptyRow()]);
+  const [rows, setRows] = useState<Row[]>(loadDraft);
   const [clips, setClips] = useState<RawVideo[]>([]);
   const [schedule, setSchedule] = useState(true);
   const [running, setRunning] = useState(false);
@@ -86,11 +105,24 @@ export default function ReelsEmLote() {
   }
   const [results, setResults] = useState<RowResult[] | null>(null);
   const [focused, setFocused] = useState(0);
+  const [textY, setTextY] = useState(0.6); // altura do texto (pra preview bater com o render)
 
   function loadClips() {
     fetch(`${API}/api/reels/raw-videos`).then((r) => r.json()).then((d) => setClips(Array.isArray(d) ? d : [])).catch(() => {});
   }
   useEffect(loadClips, []);
+
+  // Puxa a altura do texto das settings pra prévia refletir o render real.
+  useEffect(() => {
+    fetch(`${API}/api/mlabs/settings`).then((r) => r.json())
+      .then((s) => { if (typeof s?.reelTextY === 'number') setTextY(s.reelTextY); })
+      .catch(() => {});
+  }, []);
+
+  // Salva o rascunho sempre que a tabela muda (as frases não se perdem mais).
+  useEffect(() => {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(rows)); } catch { /* ignora */ }
+  }, [rows]);
 
   const freeClips = useMemo(() => clips.filter((c) => !c.used), [clips]);
   const filled = rows.filter((r) => r.texto.trim());
@@ -245,7 +277,7 @@ export default function ReelsEmLote() {
 
         {/* Preview + controles */}
         <div className="space-y-3 md:sticky md:top-4">
-          <FramePreview texto={rows[focused]?.texto || ''} cta="👇 LEIA A LEGENDA" />
+          <FramePreview texto={rows[focused]?.texto || ''} cta="👇 LEIA A LEGENDA" y={textY} />
           <p className="text-[10px] text-muted-foreground text-center -mt-1">Prévia aproximada da linha em foco</p>
 
           <label className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/60 px-2.5 py-2 cursor-pointer">
