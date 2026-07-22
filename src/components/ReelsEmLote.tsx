@@ -23,19 +23,18 @@ const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' 
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
 function FramePreview({ texto, cta }: { texto: string; cta: string }) {
+  const stroke = '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000';
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-border bg-gradient-to-b from-neutral-700 to-neutral-900" style={{ aspectRatio: '9 / 16' }}>
-      <div className="absolute inset-0 flex flex-col items-center justify-end pb-[18%] px-3 gap-2">
-        <p
-          className="text-center font-extrabold leading-tight text-white"
-          style={{ fontSize: 'clamp(13px, 4.2vw, 20px)', textShadow: '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000' }}
-        >
+      {/* Gancho: branco, centralizado (levemente acima do meio) — o vídeo todo */}
+      <div className="absolute inset-x-0 top-[42%] -translate-y-1/2 px-3">
+        <p className="text-center font-extrabold leading-tight text-white" style={{ fontSize: 'clamp(13px, 4.2vw, 20px)', textShadow: stroke }}>
           {texto || 'Seu texto na tela aparece aqui'}
         </p>
-        <p
-          className="text-center font-bold text-white/95"
-          style={{ fontSize: 'clamp(9px, 2.6vw, 13px)', textShadow: '0 0 3px #000, 1px 1px 2px #000' }}
-        >
+      </div>
+      {/* CTA dourado, logo abaixo — entra na METADE do vídeo */}
+      <div className="absolute inset-x-0 top-[60%] px-3">
+        <p className="text-center font-bold leading-tight" style={{ color: '#F5B301', fontSize: 'clamp(10px, 2.9vw, 15px)', textShadow: stroke }}>
           {cta}
         </p>
       </div>

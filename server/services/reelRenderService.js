@@ -81,6 +81,35 @@ function assertSafePath(p, label) {
   return p;
 }
 
+// Cor do drawtext: só nome (white/yellow), hex (#RRGGBB), 0xRRGGBB ou com @alpha.
+function assertSafeColor(c, label) {
+  if (!/^(#?[0-9a-fA-F]{3,8}|0x[0-9a-fA-F]{3,8}|[a-zA-Z]+)(@[0-9.]+)?$/.test(String(c))) {
+    throw new Error(`Cor inválida para ${label}: ${c}`);
+  }
+  return c;
+}
+
+// Mede a duração do vídeo (segundos) via ffprobe. Retorna null se falhar — o
+// render então cai pros timings do texto (comportamento antigo).
+function probeDuration(videoPath) {
+  return new Promise((resolve) => {
+    let out = '';
+    let proc;
+    try {
+      proc = spawn(process.env.FFPROBE_PATH || 'ffprobe', [
+        '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1', videoPath,
+      ]);
+    } catch { return resolve(null); }
+    proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.on('error', () => resolve(null));
+    proc.on('close', () => {
+      const n = parseFloat(String(out).trim());
+      resolve(isFinite(n) && n > 0 ? n : null);
+    });
+  });
+}
+
 /**
  * Monta a string do filtro -vf (função pura, testável sem ffmpeg).
  * @returns {string}
@@ -94,10 +123,16 @@ function buildDrawtextFilter(opts) {
     cta = { start: 4, end: 5 },
     fontSize = 96,
     targetWidth = 1080,
-    fraseY = 'h*0.58',
-    ctaY = 'h*0.80',
+    // Estilo calibrado pelos reels reais do Fabricio: gancho branco centralizado
+    // (levemente acima do meio) e "Leia a legenda" DOURADO logo abaixo.
+    fraseColor = 'white',
+    ctaColor = '#F5B301',
+    fraseY = '(h-text_h)/2-h*0.03',
+    ctaY = 'h*0.60',
   } = opts;
 
+  assertSafeColor(fraseColor, 'fraseColor');
+  assertSafeColor(ctaColor, 'ctaColor');
   assertSafePath(fraseFile, 'fraseFile');
   assertSafePath(fontFile, 'fontFile');
   if (ctaFile) assertSafePath(ctaFile, 'ctaFile');
@@ -107,19 +142,19 @@ function buildDrawtextFilter(opts) {
   const ctaSize = Math.max(28, Math.round(fontSize * 0.62));
   const ctaBorder = Math.max(3, Math.round(ctaSize * 0.06));
 
-  const common = (file, size, bw, y, timing, extra = '') =>
+  const common = (file, color, size, bw, y, timing, extra = '') =>
     `drawtext=textfile='${file}':fontfile='${fontFile}':` +
-    `fontcolor=white:fontsize=${size}:borderw=${bw}:bordercolor=black:` +
+    `fontcolor=${color}:fontsize=${size}:borderw=${bw}:bordercolor=black:` +
     `shadowcolor=black@0.6:shadowx=2:shadowy=2:${extra}` +
     `x=(w-text_w)/2:y=${y}:enable='between(t,${timing.start},${timing.end})'`;
 
   const parts = [
     // Normaliza pra 1080 de largura mantendo o 9:16 (altura par).
     `scale=${targetWidth}:-2`,
-    common(fraseFile, fontSize, border, fraseY, frase, `line_spacing=${lineSpacing}:`),
+    common(fraseFile, fraseColor, fontSize, border, fraseY, frase, `line_spacing=${lineSpacing}:`),
   ];
   if (ctaFile) {
-    parts.push(common(ctaFile, ctaSize, ctaBorder, ctaY, cta));
+    parts.push(common(ctaFile, ctaColor, ctaSize, ctaBorder, ctaY, cta));
   }
   return parts.join(',');
 }
@@ -137,6 +172,9 @@ async function renderReel({
   ctaTelaTiming,
   fontFile,
   fontSize = 96,
+  fraseColor,
+  ctaColor,
+  ctaAtMiddle = true,   // "Leia a legenda" entra na METADE do vídeo → fim
   tmpDir,
 }) {
   if (!rawVideoPath || !fs.existsSync(rawVideoPath)) {
@@ -151,10 +189,21 @@ async function renderReel({
   const work = tmpDir || path.dirname(outPath);
   fs.mkdirSync(work, { recursive: true });
 
-  // Timings: default fraseTela 0-4s, cta logo depois. Se o vídeo for mais
-  // curto, o between() simplesmente não dispara — sem quebrar.
-  const frase = parseTiming(fraseTelaTiming, 0, 4);
-  const cta = parseTiming(ctaTelaTiming, frase.end, frase.end + 1.5);
+  // Timings calibrados pelos reels reais: o GANCHO fica o vídeo todo e o
+  // "Leia a legenda" entra na METADE do tempo até o fim. Pra isso medimos a
+  // duração com ffprobe. Se falhar, cai pros timings do texto (0-4s / 4-5s).
+  const dur = await probeDuration(rawVideoPath);
+  const fraseStart = parseTiming(fraseTelaTiming, 0, 4).start;
+  let frase, cta;
+  if (dur && dur > 0) {
+    frase = { start: fraseStart, end: Math.round(dur * 100) / 100 };
+    cta = ctaAtMiddle
+      ? { start: Math.round((dur / 2) * 100) / 100, end: Math.round(dur * 100) / 100 }
+      : parseTiming(ctaTelaTiming, dur / 2, dur);
+  } else {
+    frase = parseTiming(fraseTelaTiming, 0, 4);
+    cta = parseTiming(ctaTelaTiming, frase.end, frase.end + 1.5);
+  }
 
   // Quebra a frase em no máx 2 linhas (o gerador já limita a ≤12 palavras).
   const wrapChars = Math.max(12, Math.floor(1000 / (fontSize * 0.52)));
@@ -172,6 +221,8 @@ async function renderReel({
 
   const filter = buildDrawtextFilter({
     fraseFile, ctaFile, fontFile: font, frase, cta, fontSize,
+    ...(fraseColor ? { fraseColor } : {}),
+    ...(ctaColor ? { ctaColor } : {}),
   });
 
   const args = [

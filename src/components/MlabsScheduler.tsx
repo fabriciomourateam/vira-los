@@ -316,7 +316,7 @@ interface Settings {
   channelSourceIdsReel: number[]; youtubeShortsChannelId: number | null;
   autoScheduleReel: boolean; autoRenderReel: boolean;
   reelPostsPerDay: number; reelScheduleDays: number; reelScheduleTimes: string[];
-  reelFontSize: number;
+  reelFontSize: number; reelCtaColor: string; reelCtaAtMiddle: boolean;
 }
 interface Agendado {
   id: string; contentType: string; caption?: string; dates: string[]; status: string; error?: string; created_at: string;
@@ -591,6 +591,21 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
                 <input type="number" min={40} max={200} defaultValue={s.reelFontSize ?? 96}
                   onBlur={(e) => save({ reelFontSize: Math.max(40, Math.min(200, parseInt(e.target.value, 10) || 96)) })}
                   className="w-20 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span className="text-sm text-foreground">
+                  "Leia a legenda" no meio do vídeo
+                  <span className="block text-xs text-muted-foreground">Entra na metade do tempo e fica até o fim (como nos teus reels).</span>
+                </span>
+                <input type="checkbox" checked={s.reelCtaAtMiddle !== false} onChange={(e) => save({ reelCtaAtMiddle: e.target.checked })} className="w-5 h-5 accent-blue-500" />
+              </label>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">
+                  Cor do "Leia a legenda"
+                  <span className="block text-xs text-muted-foreground">Dourado por padrão.</span>
+                </span>
+                <input type="color" value={s.reelCtaColor || '#F5B301'} onChange={(e) => save({ reelCtaColor: e.target.value })}
+                  className="w-12 h-8 bg-background border border-border rounded-lg cursor-pointer" />
               </div>
 
               {/* Banco de vídeos crus */}
