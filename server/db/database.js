@@ -375,6 +375,8 @@ const MLABS_DEFAULTS = {
   reelScheduleTimes: ['11:00', '18:00'],
   reelFontSize: 96,              // tamanho do texto queimado (px, base 1080×1920)
   reelFontFile: null,            // caminho de fonte custom (senão usa a do sistema)
+  reelCtaColor: '#F5B301',       // cor do "Leia a legenda" (dourado, como nos reels dele)
+  reelCtaAtMiddle: true,         // "Leia a legenda" entra na metade do vídeo → fim
   updated_at: null,
 };
 const getMlabsSettings = () => ({ ...MLABS_DEFAULTS, ...readObj('mlabs_settings') });

@@ -53,6 +53,8 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
     ctaTelaTiming: reel.ctaTelaTiming,
     fontFile: cfg.reelFontFile || null,
     fontSize: cfg.reelFontSize || 96,
+    ctaColor: cfg.reelCtaColor || undefined,
+    ctaAtMiddle: cfg.reelCtaAtMiddle !== false,
   });
 
   db.updateReel(reelId, {
