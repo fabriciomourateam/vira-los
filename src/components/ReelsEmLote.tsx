@@ -9,13 +9,13 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface RawVideo { id: string; file: string; originalName?: string; used: boolean; }
 interface Row { texto: string; legenda: string; data: string; rawVideoId: string; }
-interface RowResult { row: number; ok: boolean; reelId?: string; dates?: string[] | null; error?: string; }
+interface RowResult { row: number; ok: boolean; reelId?: string; videoFile?: string | null; dates?: string[] | null; error?: string; }
 
 const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' });
 
@@ -439,9 +439,17 @@ export default function ReelsEmLote() {
                 linha {r.row}
               </span>
               {r.ok ? (
-                <span className="text-muted-foreground truncate flex-1">
-                  pronto{r.dates?.length ? ` · agendado ${r.dates[0].replace('T', ' ')}` : ''}
-                </span>
+                <>
+                  <span className="text-muted-foreground truncate flex-1">
+                    pronto{r.dates?.length ? ` · agendado ${r.dates[0].replace('T', ' ')}` : ''}
+                  </span>
+                  {r.videoFile && (
+                    <a href={`${API}/uploads/reels/rendered/${r.videoFile}`} target="_blank" rel="noreferrer"
+                      className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 shrink-0">
+                      <Play size={12} /> ver vídeo
+                    </a>
+                  )}
+                </>
               ) : (
                 <span className="text-red-300 truncate flex-1">{r.error}</span>
               )}

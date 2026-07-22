@@ -137,7 +137,7 @@ router.post('/bulk', (req, res) => {
           source: 'bulk',
           archived: false,
         });
-        await renderReelVideo(reelId, { rawVideoId: item.rawVideoId });
+        const rend = await renderReelVideo(reelId, { rawVideoId: item.rawVideoId });
         let scheduled = null;
         if (schedule) {
           scheduled = await scheduleReelNow(reelId, {
@@ -145,7 +145,8 @@ router.post('/bulk', (req, res) => {
             caption: item.legenda || null,
           });
         }
-        results.push({ row: item.row, ok: true, reelId, dates: scheduled ? scheduled.dates : null });
+        const videoFile = rend && rend.outPath ? path.basename(rend.outPath) : null;
+        results.push({ row: item.row, ok: true, reelId, videoFile, dates: scheduled ? scheduled.dates : null });
       } catch (e) {
         results.push({ row: item.row, ok: false, error: e.message });
         console.warn(`[ReelsBulk] linha ${item.row} falhou:`, e.message);
