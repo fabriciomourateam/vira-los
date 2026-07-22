@@ -107,7 +107,11 @@ router.post('/saved/:id/render', async (req, res) => {
 // opcional: vazio → auto-pick do banco. Data opcional: vazia → próximo slot livre.
 // Responde {jobId} na hora; o progresso vem por GET /api/reels/jobs/:id.
 router.post('/bulk', (req, res) => {
-  const { rows, schedule = true } = req.body || {};
+  const { rows, schedule = true, repost = null } = req.body || {};
+  // repost: { months, count } → reposta o MESMO reel a cada `months` meses
+  // (evergreen, igual ao carrossel). null/1× = posta uma vez só.
+  const repMonths = repost && Number(repost.months) > 0 ? Number(repost.months) : 0;
+  const repCount = repost && Number(repost.count) > 1 ? Math.min(12, Number(repost.count)) : 1;
   if (!Array.isArray(rows) || !rows.length) {
     return res.status(400).json({ error: 'Envie rows[] (linhas da planilha).' });
   }
@@ -146,8 +150,16 @@ router.post('/bulk', (req, res) => {
         const rend = await renderReelVideo(reelId, { rawVideoId: item.rawVideoId });
         let scheduled = null;
         if (schedule) {
+          // Data-base: a informada, ou o próximo slot livre. Com repost ligado,
+          // expande em N repostagens evergreen (mesmo vídeo, a cada X meses).
+          let dates = item.data ? [item.data] : null;
+          if (repMonths && repCount > 1) {
+            const mlabs = require('../services/mlabsService');
+            const base = item.data || (mlabs.computeNextReelSlots(1)[0]);
+            dates = mlabs.expandMonthly(base, repMonths, repCount);
+          }
           scheduled = await scheduleReelNow(reelId, {
-            dates: item.data ? [item.data] : null,
+            dates,
             caption: item.legenda || null,
           });
         }
