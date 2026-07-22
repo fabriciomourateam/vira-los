@@ -321,10 +321,6 @@ interface Settings {
 interface Agendado {
   id: string; contentType: string; caption?: string; dates: string[]; status: string; error?: string; created_at: string;
 }
-interface RawVideo {
-  id: string; file: string; originalName?: string; size?: number; used: boolean; usedByReelId?: string | null; created_at: string;
-}
-
 export function MlabsSettingsButton() {
   const [open, setOpen] = useState(false);
   return (
@@ -348,36 +344,6 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
   const [calibrating, setCalibrating] = useState(false);
   const [sessionText, setSessionText] = useState('');
   const [savingSession, setSavingSession] = useState(false);
-  const [rawVideos, setRawVideos] = useState<RawVideo[]>([]);
-  const [uploadingRaw, setUploadingRaw] = useState(false);
-
-  function loadRawVideos() {
-    fetch(`${API}/api/reels/raw-videos`).then((r) => r.json()).then((d) => setRawVideos(Array.isArray(d) ? d : [])).catch(() => {});
-  }
-
-  async function uploadRawVideos(files: FileList) {
-    setUploadingRaw(true);
-    try {
-      const fd = new FormData();
-      Array.from(files).forEach((f) => fd.append('videos', f));
-      const r = await fetch(`${API}/api/reels/raw-videos`, { method: 'POST', body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha no upload.');
-      toast.success(`${d.count} clipe(s) no banco.`);
-      loadRawVideos();
-    } catch (e: any) {
-      toast.error(e?.message || 'Erro ao subir clipes.');
-    } finally {
-      setUploadingRaw(false);
-    }
-  }
-
-  async function deleteRawVideo(id: string) {
-    try {
-      await fetch(`${API}/api/reels/raw-videos/${id}`, { method: 'DELETE' });
-      setRawVideos((p) => p.filter((v) => v.id !== id));
-    } catch { /* ignora */ }
-  }
 
   async function saveSession() {
     const txt = sessionText.trim();
@@ -402,7 +368,6 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     fetch(`${API}/api/mlabs/settings`).then((r) => r.json()).then(setS).catch(() => {});
     fetch(`${API}/api/mlabs/agendados`).then((r) => r.json()).then(setAgendados).catch(() => {});
-    loadRawVideos();
   }, []);
 
   async function save(patch: Partial<Settings>) {
@@ -534,121 +499,6 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
                   type="number" defaultValue={s.youtubeShortsChannelId ?? 20}
                   onBlur={(e) => save({ youtubeShortsChannelId: parseInt(e.target.value, 10) || null })}
                   className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
-              </div>
-            </div>
-
-            {/* ── Reels: esteira automática (vídeo cru → texto queimado → agendar) ── */}
-            <div className="space-y-3 pt-3 border-t border-border">
-              <span className="text-sm font-semibold text-foreground inline-flex items-center gap-2">
-                <Film size={15} className="text-blue-400" /> Reels — vídeo automático
-              </span>
-
-              <label className="flex items-center justify-between gap-3 cursor-pointer">
-                <span className="text-sm text-foreground">
-                  Renderizar reels automaticamente
-                  <span className="block text-xs text-muted-foreground">Após gerar o reel, queima a frase de tela num clipe do banco.</span>
-                </span>
-                <input type="checkbox" checked={!!s.autoRenderReel} onChange={(e) => save({ autoRenderReel: e.target.checked })} className="w-5 h-5 accent-blue-500" />
-              </label>
-
-              <label className="flex items-center justify-between gap-3 cursor-pointer">
-                <span className="text-sm text-foreground">
-                  Agendar reels automaticamente
-                  <span className="block text-xs text-muted-foreground">Assim que o vídeo renderiza, entra no mLabs no próximo horário livre.</span>
-                </span>
-                <input type="checkbox" checked={!!s.autoScheduleReel} onChange={(e) => save({ autoScheduleReel: e.target.checked })} className="w-5 h-5 accent-blue-500" />
-              </label>
-
-              {/* Esquema de agendamento flexível: N/dia por X dias, nos horários */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-foreground">Posts por dia</span>
-                  <input type="number" min={1} max={12} defaultValue={s.reelPostsPerDay ?? 2}
-                    onBlur={(e) => save({ reelPostsPerDay: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                    className="w-16 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-foreground">Por quantos dias</span>
-                  <input type="number" min={1} max={365} defaultValue={s.reelScheduleDays ?? 30}
-                    onBlur={(e) => save({ reelScheduleDays: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                    className="w-16 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm text-foreground">
-                  Horários (Brasília)
-                  <span className="block text-xs text-muted-foreground">Separados por vírgula. Ex.: 11:00,18:00</span>
-                </span>
-                <input type="text" defaultValue={(s.reelScheduleTimes || []).join(',')}
-                  onBlur={(e) => save({ reelScheduleTimes: e.target.value.split(',').map((x) => x.trim()).filter((x) => /^\d{1,2}:\d{2}$/.test(x)) })}
-                  className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm text-foreground">
-                  Tamanho do texto na tela
-                  <span className="block text-xs text-muted-foreground">px (base 1080×1920). Padrão: 96</span>
-                </span>
-                <input type="number" min={40} max={200} defaultValue={s.reelFontSize ?? 96}
-                  onBlur={(e) => save({ reelFontSize: Math.max(40, Math.min(200, parseInt(e.target.value, 10) || 96)) })}
-                  className="w-20 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-foreground">
-                    Altura do texto no quadro
-                    <span className="block text-xs text-muted-foreground">Arraste pra descer/subir o gancho e o "Leia a legenda" juntos.</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground tabular-nums">{Math.round((s.reelTextY ?? 0.6) * 100)}%</span>
-                </div>
-                <input type="range" min={20} max={90} step={1} value={Math.round((s.reelTextY ?? 0.6) * 100)}
-                  onChange={(e) => save({ reelTextY: parseInt(e.target.value, 10) / 100 })}
-                  className="w-full accent-blue-500" />
-                <div className="flex justify-between text-[10px] text-muted-foreground"><span>topo</span><span>meio</span><span>base</span></div>
-              </div>
-
-              <label className="flex items-center justify-between gap-3 cursor-pointer">
-                <span className="text-sm text-foreground">
-                  "Leia a legenda" no meio do vídeo
-                  <span className="block text-xs text-muted-foreground">Entra na metade do tempo e fica até o fim (como nos teus reels).</span>
-                </span>
-                <input type="checkbox" checked={s.reelCtaAtMiddle !== false} onChange={(e) => save({ reelCtaAtMiddle: e.target.checked })} className="w-5 h-5 accent-blue-500" />
-              </label>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm text-foreground">
-                  Cor do "Leia a legenda"
-                  <span className="block text-xs text-muted-foreground">Dourado por padrão.</span>
-                </span>
-                <input type="color" value={s.reelCtaColor || '#F5B301'} onChange={(e) => save({ reelCtaColor: e.target.value })}
-                  className="w-12 h-8 bg-background border border-border rounded-lg cursor-pointer" />
-              </div>
-
-              {/* Banco de vídeos crus */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">
-                    Banco de clipes crus
-                    <span className="block text-xs text-muted-foreground">
-                      {rawVideos.filter((v) => !v.used).length} livre(s) · {rawVideos.length} no total
-                    </span>
-                  </span>
-                  <label className="text-xs font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer">
-                    {uploadingRaw ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Subir clipes
-                    <input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" multiple className="hidden"
-                      disabled={uploadingRaw}
-                      onChange={(e) => e.target.files?.length && uploadRawVideos(e.target.files)} />
-                  </label>
-                </div>
-                {rawVideos.length > 0 && (
-                  <div className="space-y-1 max-h-40 overflow-auto">
-                    {rawVideos.map((v) => (
-                      <div key={v.id} className="text-xs flex items-center gap-2 bg-background border border-border rounded-lg px-2 py-1.5">
-                        <span className={`px-1.5 py-0.5 rounded ${v.used ? 'bg-muted text-muted-foreground' : 'bg-green-500/15 text-green-400'}`}>{v.used ? 'usado' : 'livre'}</span>
-                        <span className="text-foreground truncate flex-1">{v.originalName || v.file}</span>
-                        <button onClick={() => deleteRawVideo(v.id)} className="text-muted-foreground hover:text-red-400 p-0.5"><Trash2 size={13} /></button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 

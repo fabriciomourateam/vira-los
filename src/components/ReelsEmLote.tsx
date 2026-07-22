@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -22,21 +22,24 @@ const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' 
 // Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
-function FramePreview({ texto, cta, y = 0.6 }: { texto: string; cta: string; y?: number }) {
+function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301' }: { texto: string; cta: string; y?: number; fontScale?: number; ctaColor?: string }) {
   const stroke = '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000';
   const hookPct = Math.max(20, Math.min(90, y * 100));
   const ctaPct = Math.min(92, hookPct + 13);
+  const k = Math.max(0.5, Math.min(2, fontScale));
+  const hookFont = `clamp(${13 * k}px, ${4.2 * k}vw, ${20 * k}px)`;
+  const ctaFont = `clamp(${10 * k}px, ${2.9 * k}vw, ${15 * k}px)`;
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-border bg-gradient-to-b from-neutral-700 to-neutral-900" style={{ aspectRatio: '9 / 16' }}>
       {/* Gancho: branco, centralizado na altura escolhida — o vídeo todo */}
       <div className="absolute inset-x-0 -translate-y-1/2 px-3" style={{ top: `${hookPct}%` }}>
-        <p className="text-center font-extrabold leading-tight text-white" style={{ fontSize: 'clamp(13px, 4.2vw, 20px)', textShadow: stroke }}>
+        <p className="text-center font-extrabold leading-tight text-white" style={{ fontSize: hookFont, textShadow: stroke }}>
           {texto || 'Seu texto na tela aparece aqui'}
         </p>
       </div>
       {/* CTA dourado, ~0.13 abaixo — entra na METADE do vídeo */}
       <div className="absolute inset-x-0 -translate-y-1/2 px-3" style={{ top: `${ctaPct}%` }}>
-        <p className="text-center font-bold leading-tight" style={{ color: '#F5B301', fontSize: 'clamp(10px, 2.9vw, 15px)', textShadow: stroke }}>
+        <p className="text-center font-bold leading-tight" style={{ color: ctaColor, fontSize: ctaFont, textShadow: stroke }}>
           {cta}
         </p>
       </div>
@@ -105,19 +108,43 @@ export default function ReelsEmLote() {
   }
   const [results, setResults] = useState<RowResult[] | null>(null);
   const [focused, setFocused] = useState(0);
-  const [textY, setTextY] = useState(0.6); // altura do texto (pra preview bater com o render)
+  const [cfg, setCfg] = useState<any>(null);        // settings do reel (estilo + automação)
+  const [configOpen, setConfigOpen] = useState(false);
+  const [uploadingClip, setUploadingClip] = useState(false);
+  const textY = typeof cfg?.reelTextY === 'number' ? cfg.reelTextY : 0.6;
+  const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 96;
+  const ctaColor = cfg?.reelCtaColor || '#F5B301';
 
   function loadClips() {
     fetch(`${API}/api/reels/raw-videos`).then((r) => r.json()).then((d) => setClips(Array.isArray(d) ? d : [])).catch(() => {});
   }
-  useEffect(loadClips, []);
+  function loadSettings() {
+    fetch(`${API}/api/mlabs/settings`).then((r) => r.json()).then(setCfg).catch(() => {});
+  }
+  useEffect(() => { loadClips(); loadSettings(); }, []);
 
-  // Puxa a altura do texto das settings pra prévia refletir o render real.
-  useEffect(() => {
-    fetch(`${API}/api/mlabs/settings`).then((r) => r.json())
-      .then((s) => { if (typeof s?.reelTextY === 'number') setTextY(s.reelTextY); })
-      .catch(() => {});
-  }, []);
+  // Salva um ajuste de estilo/automação (otimista: reflete na hora + PUT no servidor).
+  function saveSetting(patch: Record<string, any>) {
+    setCfg((p: any) => ({ ...(p || {}), ...patch }));
+    fetch(`${API}/api/mlabs/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).catch(() => {});
+  }
+
+  async function uploadClips(files: FileList) {
+    setUploadingClip(true);
+    try {
+      const fd = new FormData();
+      Array.from(files).forEach((f) => fd.append('videos', f));
+      const r = await fetch(`${API}/api/reels/raw-videos`, { method: 'POST', body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha no upload.');
+      toast.success(`${d.count} clipe(s) no banco.`);
+      loadClips();
+    } catch (e: any) { toast.error(e?.message || 'Erro ao subir clipes.'); }
+    finally { setUploadingClip(false); }
+  }
+  async function deleteClip(id: string) {
+    try { await fetch(`${API}/api/reels/raw-videos/${id}`, { method: 'DELETE' }); setClips((p) => p.filter((v) => v.id !== id)); } catch { /* ignora */ }
+  }
 
   // Salva o rascunho sempre que a tabela muda (as frases não se perdem mais).
   useEffect(() => {
@@ -225,9 +252,10 @@ export default function ReelsEmLote() {
       )}
 
       {freeClips.length === 0 && (
-        <div className="text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2.5 inline-flex items-center gap-2">
-          <Film size={14} /> Banco de clipes crus vazio. Suba clipes na engrenagem <b>mLabs → Reels → Banco de clipes crus</b> pra usar o modo aleatório.
-        </div>
+        <button onClick={() => setConfigOpen(true)}
+          className="text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2.5 inline-flex items-center gap-2 hover:bg-yellow-500/15 text-left">
+          <Film size={14} /> Banco de clipes vazio — clique aqui pra <b>subir seus vídeos de treino</b> e usar o modo aleatório.
+        </button>
       )}
 
       <div className="grid md:grid-cols-[1fr_220px] gap-4 items-start">
@@ -275,10 +303,41 @@ export default function ReelsEmLote() {
           </button>
         </div>
 
-        {/* Preview + controles */}
+        {/* Preview + estilo + gerar */}
         <div className="space-y-3 md:sticky md:top-4">
-          <FramePreview texto={rows[focused]?.texto || ''} cta="👇 LEIA A LEGENDA" y={textY} />
-          <p className="text-[10px] text-muted-foreground text-center -mt-1">Prévia aproximada da linha em foco</p>
+          <FramePreview texto={rows[focused]?.texto || ''} cta="👇 LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} />
+          <p className="text-[10px] text-muted-foreground text-center -mt-1">Prévia da linha em foco — mexa no estilo abaixo e veja aqui</p>
+
+          {/* Controles de estilo — tudo aqui, ao lado da prévia */}
+          <div className="rounded-lg border border-border bg-background/60 p-2.5 space-y-2.5">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground inline-flex items-center gap-1.5"><MoveVertical size={12} /> Altura do texto</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{Math.round(textY * 100)}%</span>
+              </div>
+              <input type="range" min={20} max={90} step={1} value={Math.round(textY * 100)}
+                onChange={(e) => saveSetting({ reelTextY: parseInt(e.target.value, 10) / 100 })}
+                className="w-full accent-blue-500" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground inline-flex items-center gap-1.5"><Type size={12} /> Tamanho da fonte</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{fontSize}px</span>
+              </div>
+              <input type="range" min={56} max={140} step={2} value={fontSize}
+                onChange={(e) => saveSetting({ reelFontSize: parseInt(e.target.value, 10) })}
+                className="w-full accent-blue-500" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-foreground">Cor do "Leia a legenda"</span>
+              <input type="color" value={ctaColor} onChange={(e) => saveSetting({ reelCtaColor: e.target.value })}
+                className="w-9 h-7 bg-background border border-border rounded cursor-pointer" />
+            </div>
+            <label className="flex items-center justify-between gap-2 cursor-pointer">
+              <span className="text-xs text-foreground">"Leia a legenda" no meio do vídeo</span>
+              <input type="checkbox" checked={cfg?.reelCtaAtMiddle !== false} onChange={(e) => saveSetting({ reelCtaAtMiddle: e.target.checked })} className="w-4 h-4 accent-blue-500" />
+            </label>
+          </div>
 
           <label className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/60 px-2.5 py-2 cursor-pointer">
             <span className="text-xs text-foreground inline-flex items-center gap-1.5"><Calendar size={13} /> Agendar no mLabs</span>
@@ -294,6 +353,80 @@ export default function ReelsEmLote() {
           </button>
           {step && <p className="text-xs text-muted-foreground text-center">{step}</p>}
         </div>
+      </div>
+
+      {/* Clipes + automação — recolhível, tudo do reel numa página só */}
+      <div className="rounded-lg border border-border">
+        <button onClick={() => setConfigOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-foreground">
+          <span className="inline-flex items-center gap-2"><Film size={15} className="text-blue-400" /> Clipes de treino e automação</span>
+          <span className="text-xs text-muted-foreground">{freeClips.length} clipe(s) livre(s) {configOpen ? '▲' : '▼'}</span>
+        </button>
+        {configOpen && (
+          <div className="px-3 pb-3 space-y-4 border-t border-border pt-3">
+            {/* Banco de clipes crus */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-foreground">
+                  Banco de clipes crus
+                  <span className="block text-xs text-muted-foreground">Vídeos de treino 9:16, sem texto. O lote pega deles (aleatório).</span>
+                </span>
+                <label className="text-xs font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer">
+                  {uploadingClip ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Subir clipes
+                  <input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" multiple className="hidden"
+                    disabled={uploadingClip} onChange={(e) => e.target.files?.length && uploadClips(e.target.files)} />
+                </label>
+              </div>
+              {clips.length > 0 && (
+                <div className="space-y-1 max-h-40 overflow-auto">
+                  {clips.map((v) => (
+                    <div key={v.id} className="text-xs flex items-center gap-2 bg-background border border-border rounded-lg px-2 py-1.5">
+                      <span className={`px-1.5 py-0.5 rounded ${v.used ? 'bg-muted text-muted-foreground' : 'bg-green-500/15 text-green-400'}`}>{v.used ? 'usado' : 'livre'}</span>
+                      <span className="text-foreground truncate flex-1">{v.originalName || v.file}</span>
+                      <button onClick={() => deleteClip(v.id)} className="text-muted-foreground hover:text-red-400 p-0.5"><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Automação da rotina diária */}
+            <div className="space-y-2.5 border-t border-border pt-3">
+              <span className="text-sm font-semibold text-foreground">Rotina automática (opcional)</span>
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span className="text-sm text-foreground">Renderizar reels do dia automaticamente
+                  <span className="block text-xs text-muted-foreground">A rotina diária queima o texto num clipe do banco.</span></span>
+                <input type="checkbox" checked={!!cfg?.autoRenderReel} onChange={(e) => saveSetting({ autoRenderReel: e.target.checked })} className="w-5 h-5 accent-blue-500" />
+              </label>
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span className="text-sm text-foreground">Agendar no mLabs automaticamente
+                  <span className="block text-xs text-muted-foreground">Assim que renderiza, entra no próximo horário livre.</span></span>
+                <input type="checkbox" checked={!!cfg?.autoScheduleReel} onChange={(e) => saveSetting({ autoScheduleReel: e.target.checked })} className="w-5 h-5 accent-blue-500" />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-foreground">Posts por dia</span>
+                  <input type="number" min={1} max={12} value={cfg?.reelPostsPerDay ?? 2}
+                    onChange={(e) => saveSetting({ reelPostsPerDay: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                    className="w-16 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-foreground">Por X dias</span>
+                  <input type="number" min={1} max={365} value={cfg?.reelScheduleDays ?? 30}
+                    onChange={(e) => saveSetting({ reelScheduleDays: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                    className="w-16 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">Horários (Brasília)
+                  <span className="block text-xs text-muted-foreground">Separados por vírgula. Ex.: 11:00,18:00</span></span>
+                <input type="text" defaultValue={(cfg?.reelScheduleTimes || []).join(',')}
+                  onBlur={(e) => saveSetting({ reelScheduleTimes: e.target.value.split(',').map((x) => x.trim()).filter((x) => /^\d{1,2}:\d{2}$/.test(x)) })}
+                  className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Resultados */}
