@@ -55,6 +55,7 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
     fontSize: cfg.reelFontSize || 96,
     ctaColor: cfg.reelCtaColor || undefined,
     ctaAtMiddle: cfg.reelCtaAtMiddle !== false,
+    textY: typeof cfg.reelTextY === 'number' ? cfg.reelTextY : 0.6,
   });
 
   db.updateReel(reelId, {

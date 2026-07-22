@@ -316,7 +316,7 @@ interface Settings {
   channelSourceIdsReel: number[]; youtubeShortsChannelId: number | null;
   autoScheduleReel: boolean; autoRenderReel: boolean;
   reelPostsPerDay: number; reelScheduleDays: number; reelScheduleTimes: string[];
-  reelFontSize: number; reelCtaColor: string; reelCtaAtMiddle: boolean;
+  reelFontSize: number; reelCtaColor: string; reelCtaAtMiddle: boolean; reelTextY: number;
 }
 interface Agendado {
   id: string; contentType: string; caption?: string; dates: string[]; status: string; error?: string; created_at: string;
@@ -592,6 +592,20 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
                   onBlur={(e) => save({ reelFontSize: Math.max(40, Math.min(200, parseInt(e.target.value, 10) || 96)) })}
                   className="w-20 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
               </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-foreground">
+                    Altura do texto no quadro
+                    <span className="block text-xs text-muted-foreground">Arraste pra descer/subir o gancho e o "Leia a legenda" juntos.</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{Math.round((s.reelTextY ?? 0.6) * 100)}%</span>
+                </div>
+                <input type="range" min={20} max={90} step={1} value={Math.round((s.reelTextY ?? 0.6) * 100)}
+                  onChange={(e) => save({ reelTextY: parseInt(e.target.value, 10) / 100 })}
+                  className="w-full accent-blue-500" />
+                <div className="flex justify-between text-[10px] text-muted-foreground"><span>topo</span><span>meio</span><span>base</span></div>
+              </div>
+
               <label className="flex items-center justify-between gap-3 cursor-pointer">
                 <span className="text-sm text-foreground">
                   "Leia a legenda" no meio do vídeo

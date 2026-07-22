@@ -175,6 +175,7 @@ async function renderReel({
   fraseColor,
   ctaColor,
   ctaAtMiddle = true,   // "Leia a legenda" entra na METADE do vídeo → fim
+  textY = 0.6,          // altura do gancho (fração da altura; cta fica ~0.13 abaixo)
   tmpDir,
 }) {
   if (!rawVideoPath || !fs.existsSync(rawVideoPath)) {
@@ -219,8 +220,14 @@ async function renderReel({
     fs.writeFileSync(ctaFile, wrapText(ctaTela, wrapChars + 6, 2).join('\n'), 'utf8');
   }
 
+  // Altura: gancho centralizado na fração textY; "Leia a legenda" ~0.13 abaixo.
+  const F = Math.max(0.2, Math.min(0.9, Number(textY) || 0.6));
+  const ctaF = Math.min(0.92, F + 0.13);
+  const fraseY = `h*${F}-text_h/2`;
+  const ctaY = `h*${ctaF.toFixed(3)}-text_h/2`;
+
   const filter = buildDrawtextFilter({
-    fraseFile, ctaFile, fontFile: font, frase, cta, fontSize,
+    fraseFile, ctaFile, fontFile: font, frase, cta, fontSize, fraseY, ctaY,
     ...(fraseColor ? { fraseColor } : {}),
     ...(ctaColor ? { ctaColor } : {}),
   });
