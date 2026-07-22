@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play, Repeat } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play, Repeat, Music } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -125,6 +125,8 @@ export default function ReelsEmLote() {
   const [cfg, setCfg] = useState<any>(null);        // settings do reel (estilo + automação)
   const [configOpen, setConfigOpen] = useState(false);
   const [uploadingClip, setUploadingClip] = useState(false);
+  const [tracks, setTracks] = useState<{ id: string; file: string; originalName?: string }[]>([]);
+  const [uploadingMusic, setUploadingMusic] = useState(false);
   const textY = typeof cfg?.reelTextY === 'number' ? cfg.reelTextY : 0.6;
   const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 72;
   const ctaColor = cfg?.reelCtaColor || '#F5B301';
@@ -136,7 +138,7 @@ export default function ReelsEmLote() {
   function loadSettings() {
     fetch(`${API}/api/mlabs/settings`).then((r) => r.json()).then(setCfg).catch(() => {});
   }
-  useEffect(() => { loadClips(); loadSettings(); }, []);
+  useEffect(() => { loadClips(); loadSettings(); loadMusic(); }, []);
 
   // Salva um ajuste de estilo/automação (otimista: reflete na hora + PUT no servidor).
   function saveSetting(patch: Record<string, any>) {
@@ -159,6 +161,26 @@ export default function ReelsEmLote() {
   }
   async function deleteClip(id: string) {
     try { await fetch(`${API}/api/reels/raw-videos/${id}`, { method: 'DELETE' }); setClips((p) => p.filter((v) => v.id !== id)); } catch { /* ignora */ }
+  }
+
+  function loadMusic() {
+    fetch(`${API}/api/reels/music`).then((r) => r.json()).then((d) => setTracks(Array.isArray(d) ? d : [])).catch(() => {});
+  }
+  async function uploadMusic(files: FileList) {
+    setUploadingMusic(true);
+    try {
+      const fd = new FormData();
+      Array.from(files).forEach((f) => fd.append('tracks', f));
+      const r = await fetch(`${API}/api/reels/music`, { method: 'POST', body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha no upload.');
+      toast.success(`${d.count} música(s) no banco.`);
+      loadMusic();
+    } catch (e: any) { toast.error(e?.message || 'Erro ao subir músicas.'); }
+    finally { setUploadingMusic(false); }
+  }
+  async function deleteMusic(id: string) {
+    try { await fetch(`${API}/api/reels/music/${id}`, { method: 'DELETE' }); setTracks((p) => p.filter((m) => m.id !== id)); } catch { /* ignora */ }
   }
 
   // Salva o rascunho sempre que a tabela muda (as frases não se perdem mais).
@@ -434,6 +456,45 @@ export default function ReelsEmLote() {
                       <span className={`px-1.5 py-0.5 rounded ${v.used ? 'bg-muted text-muted-foreground' : 'bg-green-500/15 text-green-400'}`}>{v.used ? 'usado' : 'livre'}</span>
                       <span className="text-foreground truncate flex-1">{v.originalName || v.file}</span>
                       <button onClick={() => deleteClip(v.id)} className="text-muted-foreground hover:text-red-400 p-0.5"><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Banco de músicas */}
+            <div className="space-y-2 border-t border-border pt-3">
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span className="text-sm text-foreground inline-flex items-center gap-1.5"><Music size={14} className="text-blue-400" /> Música na trilha
+                  <span className="block text-xs text-muted-foreground font-normal">Corta o áudio do treino e põe uma música aleatória do banco.</span></span>
+                <input type="checkbox" checked={!!cfg?.reelMusicOn} onChange={(e) => saveSetting({ reelMusicOn: e.target.checked })} className="w-5 h-5 accent-blue-500" />
+              </label>
+              {cfg?.reelMusicOn && (
+                <div className="space-y-1 pl-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-foreground">Volume da música</span>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">{Math.round((cfg?.reelMusicVolume ?? 0.9) * 100)}%</span>
+                  </div>
+                  <input type="range" min={10} max={100} step={5} value={Math.round((cfg?.reelMusicVolume ?? 0.9) * 100)}
+                    onChange={(e) => saveSetting({ reelMusicVolume: parseInt(e.target.value, 10) / 100 })}
+                    className="w-full accent-blue-500" />
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{tracks.length} música(s) no banco · use faixas livres de direito</span>
+                <label className="text-xs font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer">
+                  {uploadingMusic ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Subir músicas
+                  <input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" multiple className="hidden"
+                    disabled={uploadingMusic} onChange={(e) => e.target.files?.length && uploadMusic(e.target.files)} />
+                </label>
+              </div>
+              {tracks.length > 0 && (
+                <div className="space-y-1 max-h-32 overflow-auto">
+                  {tracks.map((m) => (
+                    <div key={m.id} className="text-xs flex items-center gap-2 bg-background border border-border rounded-lg px-2 py-1.5">
+                      <Music size={12} className="text-muted-foreground shrink-0" />
+                      <span className="text-foreground truncate flex-1">{m.originalName || m.file}</span>
+                      <button onClick={() => deleteMusic(m.id)} className="text-muted-foreground hover:text-red-400 p-0.5"><Trash2 size={13} /></button>
                     </div>
                   ))}
                 </div>

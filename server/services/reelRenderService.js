@@ -156,6 +156,8 @@ async function renderReel({
   ctaAtMiddle = true,   // "Leia a legenda" entra na METADE do vídeo → fim
   textY = 0.6,          // altura do gancho (fração da altura da imagem)
   ctaGap,               // espaço (px) entre o gancho e o "Leia a legenda"
+  musicPath,            // trilha (se definida: corta o áudio do treino e usa ela)
+  musicVolume = 0.9,    // volume da trilha (0–1)
   tmpDir,
 }) {
   if (!rawVideoPath || !fs.existsSync(rawVideoPath)) {
@@ -234,21 +236,37 @@ async function renderReel({
 
   const filter = buildDrawtextFilter({ layers, fontFile: font });
 
-  const args = [
-    '-y',
-    '-i', rawVideoPath,
-    '-vf', filter,
-    '-map', '0:v:0',
-    '-map', '0:a:0?',        // áudio opcional (clipe de treino pode não ter)
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '20',
-    '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-movflags', '+faststart',
-    outPath,
-  ];
+  // Com trilha: 2º input (música em loop pra cobrir clipes curtos), mapeia o
+  // vídeo do clipe e o ÁUDIO da música (corta o áudio do treino), corta no
+  // tamanho do vídeo (-shortest) e ajusta o volume. Sem trilha: áudio original.
+  const hasMusic = musicPath && fs.existsSync(musicPath);
+  const vol = Math.max(0, Math.min(1, Number(musicVolume)));
+  const args = hasMusic
+    ? [
+        '-y',
+        '-i', rawVideoPath,
+        '-stream_loop', '-1', '-i', musicPath,
+        '-vf', filter,
+        '-af', `volume=${vol.toFixed(2)}`,
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-shortest',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart',
+        outPath,
+      ]
+    : [
+        '-y',
+        '-i', rawVideoPath,
+        '-vf', filter,
+        '-map', '0:v:0',
+        '-map', '0:a:0?',        // áudio opcional (clipe de treino pode não ter)
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart',
+        outPath,
+      ];
 
   const cleanup = () => {
     for (const f of files) {
