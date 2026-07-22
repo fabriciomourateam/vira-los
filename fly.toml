@@ -7,6 +7,9 @@ primary_region = 'ams'
   PORT = "8080"
   NODE_ENV = "production"
   SERVER_URL = "https://vira-los.fly.dev"
+  # Uploads (clipes crus + reels renderizados) vão pro volume persistente
+  # (/app/data é o mount). Sem isso, cada deploy apaga os vídeos enviados.
+  UPLOADS_DIR = "/app/data/uploads"
 
 [http_service]
   internal_port = 8080
