@@ -49,8 +49,10 @@ server.timeout = 0;           // 0 = desabilitado (sem limite)
 server.keepAliveTimeout = 65000;  // 65s — maior que o Fly.dev proxy (60s)
 server.headersTimeout = 70000;
 
-// Serve arquivos de upload estaticamente (para Instagram consumir a URL pública)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve arquivos de upload estaticamente (para Instagram consumir a URL pública).
+// Usa o MESMO UPLOADS_DIR onde os arquivos são gravados (volume persistente),
+// senão os reels renderizados dão 404.
+app.use('/uploads', express.static(process.env.UPLOADS_DIR || path.join(__dirname, 'uploads')));
 
 // Assets estáticos do app (ex.: foto de fundo do CTA fmteam)
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
