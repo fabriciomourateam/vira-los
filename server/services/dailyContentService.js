@@ -295,6 +295,28 @@ async function buildOne(theme) {
     console.warn(`[DailyContent] reel falhou (${theme.id}):`, e.message);
   }
 
+  // 5) Esteira automática do reel: se ligado e houver clipe cru livre no banco,
+  //    queima a fraseTela no vídeo e (se autoScheduleReel) agenda no próximo
+  //    slot livre. Isolado — falha aqui não derruba o carrossel nem o batch.
+  if (reelId) {
+    try {
+      const cfg = db.getMlabsSettings();
+      if (cfg.autoRenderReel && db.pickUnusedRawVideo()) {
+        const { renderReelVideo, scheduleReelNow } = require('./reelPipelineService');
+        await renderReelVideo(reelId);
+        console.log(`[DailyContent] reel ${reelId} renderizado (texto queimado no clipe cru).`);
+        if (cfg.autoScheduleReel) {
+          const sch = await scheduleReelNow(reelId);
+          console.log(`[DailyContent] reel ${reelId} agendado no mLabs →`, (sch.dates || []).join(', '));
+        }
+      } else if (cfg.autoRenderReel) {
+        console.warn(`[DailyContent] auto-render ligado mas banco de vídeos crus vazio — reel ${reelId} ficou sem vídeo.`);
+      }
+    } catch (e) {
+      console.warn(`[DailyContent] auto-render/agendar reel falhou (${reelId}):`, e.message);
+    }
+  }
+
   return { theme, carouselId, reelId, photosUsed: carouselResult.unsplashImagesUsed || 0 };
 }
 

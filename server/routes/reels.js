@@ -10,13 +10,90 @@
  */
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const axios = require('axios');
 const archiver = require('archiver');
 const { generateReelsFromCarousel, generateShortReelFromCarousel } = require('../services/reelsGeneratorService');
 const { fetchOneImage } = require('../services/carouselService');
+const { renderReelVideo, scheduleReelNow } = require('../services/reelPipelineService');
 const db = require('../db/database');
 
 const router = express.Router();
+
+// ─── Banco de vídeos crus (clipes de treino sem texto) ────────────────────────
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+const RAW_DIR = path.join(UPLOADS_DIR, 'reels', 'raw');
+
+const rawStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => { fs.mkdirSync(RAW_DIR, { recursive: true }); cb(null, RAW_DIR); },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '.mp4') || '.mp4';
+    cb(null, `raw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+  },
+});
+const uploadRaw = multer({
+  storage: rawStorage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+  fileFilter: (_req, file, cb) => cb(null, /video\//.test(file.mimetype) || /\.(mp4|mov|m4v|webm)$/i.test(file.originalname)),
+});
+
+// Sobe 1..N clipes crus pro banco (campo "videos"). A rotina diária pesca
+// automaticamente o mais antigo livre; a UI também lista/exclui por aqui.
+router.post('/raw-videos', uploadRaw.array('videos', 20), (req, res) => {
+  try {
+    if (!req.files || !req.files.length) return res.status(400).json({ error: 'Envie ao menos um arquivo no campo "videos".' });
+    const saved = req.files.map((f) => {
+      const id = `raw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const rec = { id, path: f.path, file: path.basename(f.path), originalName: f.originalname, size: f.size };
+      db.saveRawVideo(rec);
+      return { id, file: rec.file, originalName: rec.originalName, size: rec.size };
+    });
+    res.json({ ok: true, count: saved.length, videos: saved });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/raw-videos', (_req, res) => {
+  // Não devolve o path absoluto do disco; só o que a UI precisa.
+  res.json(db.getAllRawVideos().map((v) => ({
+    id: v.id, file: v.file, originalName: v.originalName, size: v.size,
+    used: !!v.used, usedByReelId: v.usedByReelId || null, created_at: v.created_at,
+  })));
+});
+
+router.delete('/raw-videos/:id', (req, res) => {
+  const v = db.getRawVideo(req.params.id);
+  if (!v) return res.status(404).json({ error: 'Clipe não encontrado.' });
+  try { if (v.path && fs.existsSync(v.path)) fs.unlinkSync(v.path); } catch { /* ignora */ }
+  db.deleteRawVideo(req.params.id);
+  res.json({ ok: true });
+});
+
+// Renderiza o reel: queima a fraseTela no clipe cru (auto-pick ou rawVideoId) e
+// grava em videoPath. Se autoScheduleReel estiver ligado, já agenda no mLabs.
+router.post('/saved/:id/render', async (req, res) => {
+  try {
+    const { rawVideoId, autoSchedule } = req.body || {};
+    const out = await renderReelVideo(req.params.id, { rawVideoId: rawVideoId || null });
+
+    const cfg = db.getMlabsSettings();
+    let scheduled = null;
+    const wantsSchedule = autoSchedule !== undefined ? !!autoSchedule : !!cfg.autoScheduleReel;
+    if (wantsSchedule) {
+      try {
+        scheduled = await scheduleReelNow(req.params.id);
+      } catch (e) {
+        return res.json({ ok: true, videoFile: path.basename(out.outPath), rawVideoId: out.rawVideoId, scheduleError: e.message });
+      }
+    }
+    res.json({ ok: true, videoFile: path.basename(out.outPath), rawVideoId: out.rawVideoId, scheduled });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ─── Job store em memória ─────────────────────────────────────────────────────
 const jobs = new Map();

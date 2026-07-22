@@ -413,6 +413,61 @@ function computeDefaultDates() {
   });
 }
 
+// ── Slots de REEL (esquema flexível: N posts/dia por X dias) ────────────────────
+// Ao contrário do carrossel (mesmo conteúdo repetido em 4 datas evergreen), cada
+// reel é DIFERENTE e ocupa 1 slot livre. Aqui a gente gera a grade de horários
+// (reelScheduleTimes × reelScheduleDays) a partir de amanhã e devolve os
+// primeiros `count` slots que AINDA não foram tomados por outro reel agendado.
+// Sem trava artificial de "2/dia": é tudo configurável nas settings.
+function computeNextReelSlots(count = 1) {
+  const cfg = (db.getMlabsSettings && db.getMlabsSettings()) || {};
+  const perDay = Math.max(1, parseInt(cfg.reelPostsPerDay, 10) || 1);
+  const times = (Array.isArray(cfg.reelScheduleTimes) && cfg.reelScheduleTimes.length
+    ? cfg.reelScheduleTimes
+    : [cfg.defaultTime || '11:00'])
+    .slice(0, perDay)                     // no máx `perDay` horários por dia
+    .map((t) => String(t).slice(0, 5))
+    .sort();                              // cronológico dentro do dia
+  const maxDays = Math.min(365, Math.max(1, parseInt(cfg.reelScheduleDays, 10) || 14));
+
+  const fmt = (d, hhmm) => {
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${mo}-${da}T${hhmm}`;
+  };
+
+  // Slots já ocupados por reels agendados (normaliza pra minuto).
+  const taken = new Set();
+  try {
+    for (const s of db.getAllMlabsSchedules()) {
+      if (s.contentType !== 'reel') continue;
+      if (s.status === 'error' || s.status === 'cancelado') continue;
+      for (const d of (s.dates || [])) taken.add(String(d).slice(0, 16));
+    }
+  } catch { /* sem histórico ainda */ }
+
+  const base = new Date();
+  base.setDate(base.getDate() + 1); // começa amanhã
+  const slots = [];
+  // Estende a janela além de maxDays só se a grade toda estiver tomada, até
+  // achar os `count` livres (cap em 365 dias pra não rodar sem fim).
+  for (let day = 0; day < 365 && slots.length < count; day++) {
+    if (day >= maxDays && slots.length === 0 && day > maxDays + 30) break;
+    const d = new Date(base);
+    d.setDate(base.getDate() + day);
+    for (const t of times) {
+      const slot = fmt(d, t);
+      if (!taken.has(slot.slice(0, 16))) {
+        slots.push(slot);
+        taken.add(slot.slice(0, 16));
+        if (slots.length >= count) break;
+      }
+    }
+  }
+  return slots;
+}
+
 // ── Conversão de horário SP → UTC ───────────────────────────────────────────────
 // Aceita "2026-06-29T11:00" (hora local SP) → "2026-06-29T14:00:00.000Z".
 function spToUtcIso(localDateTime) {
@@ -654,4 +709,4 @@ async function calibrate() {
   }
 }
 
-module.exports = { scheduleContent, calibrate, computeDefaultDates, spToUtcIso, buildSchedulePayload };
+module.exports = { scheduleContent, calibrate, computeDefaultDates, computeNextReelSlots, spToUtcIso, buildSchedulePayload };
