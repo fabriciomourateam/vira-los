@@ -413,6 +413,23 @@ function computeDefaultDates() {
   });
 }
 
+// Expande uma data-base em N repostagens evergreen a cada `months` meses.
+// Ex.: ("2026-07-22T17:20", 3, 4) → amanhã, +3, +6, +9 meses. Mesma lógica de
+// overflow de mês do carrossel (Date.setMonth), formato local SP "AAAA-MM-DDTHH:MM".
+function expandMonthly(base, months = 3, count = 4) {
+  const b = new Date(base);
+  if (isNaN(b.getTime())) return [base];
+  const p = (n) => String(n).padStart(2, '0');
+  const fmt = (d) => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  const out = [];
+  for (let k = 0; k < Math.max(1, count); k++) {
+    const d = new Date(b);
+    d.setMonth(d.getMonth() + k * months);
+    out.push(fmt(d));
+  }
+  return out;
+}
+
 // ── Slots de REEL (esquema flexível: N posts/dia por X dias) ────────────────────
 // Ao contrário do carrossel (mesmo conteúdo repetido em 4 datas evergreen), cada
 // reel é DIFERENTE e ocupa 1 slot livre. Aqui a gente gera a grade de horários
@@ -709,4 +726,4 @@ async function calibrate() {
   }
 }
 
-module.exports = { scheduleContent, calibrate, computeDefaultDates, computeNextReelSlots, spToUtcIso, buildSchedulePayload };
+module.exports = { scheduleContent, calibrate, computeDefaultDates, computeNextReelSlots, expandMonthly, spToUtcIso, buildSchedulePayload };

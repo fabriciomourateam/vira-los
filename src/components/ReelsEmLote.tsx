@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play, Repeat } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -101,6 +101,9 @@ export default function ReelsEmLote() {
   const [rows, setRows] = useState<Row[]>(loadDraft);
   const [clips, setClips] = useState<RawVideo[]>([]);
   const [schedule, setSchedule] = useState(true);
+  const [repostOn, setRepostOn] = useState(false);
+  const [repostMonths, setRepostMonths] = useState(3);
+  const [repostCount, setRepostCount] = useState(4);
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState('');
   const [importOpen, setImportOpen] = useState(false);
@@ -188,6 +191,7 @@ export default function ReelsEmLote() {
     try {
       const payload = {
         schedule,
+        repost: schedule && repostOn ? { months: repostMonths, count: repostCount } : null,
         rows: filled.map((r) => ({ texto: r.texto.trim(), legenda: r.legenda.trim(), data: r.data || null, rawVideoId: r.rawVideoId || null })),
       };
       const r = await fetch(`${API}/api/reels/bulk`, {
@@ -365,6 +369,31 @@ export default function ReelsEmLote() {
             <input type="checkbox" checked={schedule} onChange={(e) => setSchedule(e.target.checked)} className="w-4 h-4 accent-blue-500" />
           </label>
 
+          {schedule && (
+            <div className="rounded-lg border border-border bg-background/60 px-2.5 py-2 space-y-2">
+              <label className="flex items-center justify-between gap-2 cursor-pointer">
+                <span className="text-xs text-foreground inline-flex items-center gap-1.5"><Repeat size={13} /> Repostar de tempos em tempos</span>
+                <input type="checkbox" checked={repostOn} onChange={(e) => setRepostOn(e.target.checked)} className="w-4 h-4 accent-blue-500" />
+              </label>
+              {repostOn && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground pl-1">
+                  a cada
+                  <input type="number" min={1} max={12} value={repostMonths}
+                    onChange={(e) => setRepostMonths(Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1)))}
+                    className="w-12 bg-background border border-border rounded px-1.5 py-1 text-center text-foreground" />
+                  meses,
+                  <input type="number" min={2} max={12} value={repostCount}
+                    onChange={(e) => setRepostCount(Math.max(2, Math.min(12, parseInt(e.target.value, 10) || 2)))}
+                    className="w-12 bg-background border border-border rounded px-1.5 py-1 text-center text-foreground" />
+                  vezes
+                </div>
+              )}
+              {repostOn && (
+                <p className="text-[10px] text-muted-foreground pl-1">Cada reel será repostado {repostCount}× (mesmo vídeo), a cada {repostMonths} meses.</p>
+              )}
+            </div>
+          )}
+
           <button
             onClick={generate} disabled={running || !filled.length}
             className="w-full text-sm font-semibold text-foreground bg-blue-600 hover:bg-blue-500 px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 disabled:opacity-60"
@@ -462,7 +491,7 @@ export default function ReelsEmLote() {
               {r.ok ? (
                 <>
                   <span className="text-muted-foreground truncate flex-1">
-                    pronto{r.dates?.length ? ` · agendado ${fmtBRT(r.dates[0])} (Brasília)` : ''}
+                    pronto{r.dates?.length ? ` · agendado ${fmtBRT(r.dates[0])} (Brasília)${r.dates.length > 1 ? ` +${r.dates.length - 1} repost` : ''}` : ''}
                   </span>
                   {r.videoFile && (
                     <a href={`${API}/uploads/reels/rendered/${r.videoFile}`} target="_blank" rel="noreferrer"
