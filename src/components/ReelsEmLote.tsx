@@ -19,6 +19,16 @@ interface RowResult { row: number; ok: boolean; reelId?: string; videoFile?: str
 
 const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' });
 
+// Mostra a data agendada em horário de Brasília (o backend devolve em UTC "…Z").
+function fmtBRT(s: string): string {
+  try {
+    const iso = /[Z+]/.test(s) ? s : `${s}Z`;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch { return s; }
+}
+
 // Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
@@ -452,7 +462,7 @@ export default function ReelsEmLote() {
               {r.ok ? (
                 <>
                   <span className="text-muted-foreground truncate flex-1">
-                    pronto{r.dates?.length ? ` · agendado ${r.dates[0].replace('T', ' ')}` : ''}
+                    pronto{r.dates?.length ? ` · agendado ${fmtBRT(r.dates[0])} (Brasília)` : ''}
                   </span>
                   {r.videoFile && (
                     <a href={`${API}/uploads/reels/rendered/${r.videoFile}`} target="_blank" rel="noreferrer"
