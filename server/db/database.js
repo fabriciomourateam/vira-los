@@ -285,6 +285,18 @@ const pickUnusedRawVideo = () => getAllRawVideos()
   .filter((v) => !v.used && v.path && fs.existsSync(v.path))
   .sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || null;
 
+// ── Banco de músicas (trilhas livres de direito pra queimar no reel) ───────────
+// Cada item: { id, path, file, originalName, size, created_at }. Reutilizável
+// (não "gasta" como o clipe) — pickRandomMusic sorteia uma faixa por reel.
+const getAllMusicTracks = () => readDb('music_tracks').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const getMusicTrack  = (id) => readDb('music_tracks').find((m) => m.id === id) || null;
+const saveMusicTrack = (m) => { const db = readDb('music_tracks'); db.push({ ...m, created_at: now() }); writeDb('music_tracks', db); };
+const deleteMusicTrack = (id) => writeDb('music_tracks', readDb('music_tracks').filter((m) => m.id !== id));
+const pickRandomMusic = () => {
+  const live = getAllMusicTracks().filter((m) => m.path && fs.existsSync(m.path));
+  return live.length ? live[Math.floor(Math.random() * live.length)] : null;
+};
+
 // ── Conteúdo diário (rotina automática: 2 carrosséis + 2 reels/dia) ───────────
 const getAllDailyBatches = () => readDb('daily_content').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const saveDailyBatch    = (b) => { const db = readDb('daily_content'); db.push({ ...b, created_at: now() }); writeDb('daily_content', db); };
@@ -382,6 +394,8 @@ const MLABS_DEFAULTS = {
   reelCtaAtMiddle: true,         // "Leia a legenda" entra na metade do vídeo → fim
   reelTextY: 0.6,                // altura do gancho (fração 0.2–0.9)
   reelCtaGap: 60,                // espaço (px) entre o gancho e o "Leia a legenda"
+  reelMusicOn: false,            // corta o áudio do treino e põe trilha aleatória do banco
+  reelMusicVolume: 0.9,          // volume da trilha (0–1)
   updated_at: null,
 };
 const getMlabsSettings = () => ({ ...MLABS_DEFAULTS, ...readObj('mlabs_settings') });
@@ -454,6 +468,7 @@ module.exports = {
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
   getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo,
+  getAllMusicTracks, getMusicTrack, saveMusicTrack, deleteMusicTrack, pickRandomMusic,
   getAllDailyBatches, saveDailyBatch, updateDailyBatch,
   getDoc, setDoc,  // Reels Sessions (fila de gravação)
   getAllReelsSessions, getReelsSession, saveReelsSession, updateReelsSession, deleteReelsSession,

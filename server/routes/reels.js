@@ -25,6 +25,7 @@ const router = express.Router();
 // ─── Banco de vídeos crus (clipes de treino sem texto) ────────────────────────
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
 const RAW_DIR = path.join(UPLOADS_DIR, 'reels', 'raw');
+const MUSIC_DIR = path.join(UPLOADS_DIR, 'reels', 'music');
 
 const rawStorage = multer.diskStorage({
   destination: (_req, _file, cb) => { fs.mkdirSync(RAW_DIR, { recursive: true }); cb(null, RAW_DIR); },
@@ -37,6 +38,51 @@ const uploadRaw = multer({
   storage: rawStorage,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
   fileFilter: (_req, file, cb) => cb(null, /video\//.test(file.mimetype) || /\.(mp4|mov|m4v|webm)$/i.test(file.originalname)),
+});
+
+// ─── Banco de músicas (trilhas livres de direito) ──────────────────────────────
+const musicStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => { fs.mkdirSync(MUSIC_DIR, { recursive: true }); cb(null, MUSIC_DIR); },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '.mp3') || '.mp3';
+    cb(null, `music_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+  },
+});
+const uploadMusic = multer({
+  storage: musicStorage,
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB por faixa
+  fileFilter: (_req, file, cb) => cb(null, /audio\//.test(file.mimetype) || /\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(file.originalname)),
+});
+
+router.post('/music', uploadMusic.array('tracks', 30), (req, res) => {
+  try {
+    if (!req.files || !req.files.length) return res.status(400).json({ error: 'Envie ao menos um arquivo no campo "tracks".' });
+    const saved = req.files.map((f) => {
+      const id = `music_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      db.saveMusicTrack({ id, path: f.path, file: path.basename(f.path), originalName: f.originalname, size: f.size });
+      return { id, file: path.basename(f.path), originalName: f.originalname, size: f.size };
+    });
+    res.json({ ok: true, count: saved.length, tracks: saved });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/music', (_req, res) => {
+  const live = [];
+  for (const m of db.getAllMusicTracks()) {
+    if (m.path && fs.existsSync(m.path)) live.push(m);
+    else db.deleteMusicTrack(m.id);
+  }
+  res.json(live.map((m) => ({ id: m.id, file: m.file, originalName: m.originalName, size: m.size, created_at: m.created_at })));
+});
+
+router.delete('/music/:id', (req, res) => {
+  const m = db.getMusicTrack(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Faixa não encontrada.' });
+  try { if (m.path && fs.existsSync(m.path)) fs.unlinkSync(m.path); } catch { /* ignora */ }
+  db.deleteMusicTrack(req.params.id);
+  res.json({ ok: true });
 });
 
 // Sobe 1..N clipes crus pro banco (campo "videos"). A rotina diária pesca

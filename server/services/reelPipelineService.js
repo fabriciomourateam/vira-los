@@ -44,6 +44,9 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
   fs.mkdirSync(RENDERED_DIR, { recursive: true });
   const outPath = path.join(RENDERED_DIR, `${reelId}_${Date.now()}.mp4`);
 
+  // Música: se ligada, sorteia uma faixa do banco (corta o áudio do treino).
+  const music = cfg.reelMusicOn ? db.pickRandomMusic() : null;
+
   await renderReel({
     rawVideoPath: raw.path,
     outPath,
@@ -57,7 +60,11 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
     ctaAtMiddle: cfg.reelCtaAtMiddle !== false,
     textY: typeof cfg.reelTextY === 'number' ? cfg.reelTextY : 0.6,
     ctaGap: typeof cfg.reelCtaGap === 'number' ? cfg.reelCtaGap : 60,
+    musicPath: music ? music.path : null,
+    musicVolume: typeof cfg.reelMusicVolume === 'number' ? cfg.reelMusicVolume : 0.9,
   });
+
+  if (music) db.updateReel(reelId, { musicFile: music.originalName || music.file });
 
   db.updateReel(reelId, {
     videoPath: outPath,
