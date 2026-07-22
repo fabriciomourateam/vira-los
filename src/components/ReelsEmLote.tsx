@@ -22,10 +22,11 @@ const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' 
 // Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
-function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301' }: { texto: string; cta: string; y?: number; fontScale?: number; ctaColor?: string }) {
+function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301', gap = 60 }: { texto: string; cta: string; y?: number; fontScale?: number; ctaColor?: string; gap?: number }) {
   const stroke = '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000';
   const hookPct = Math.max(20, Math.min(90, y * 100));
-  const ctaPct = Math.min(92, hookPct + 13);
+  // Aproxima a posição do CTA: metade do bloco do gancho + o gap (px/1920 → %).
+  const ctaPct = Math.min(93, hookPct + 9 + gap / 19.2);
   const k = Math.max(0.5, Math.min(2, fontScale));
   const hookFont = `clamp(${13 * k}px, ${4.2 * k}vw, ${20 * k}px)`;
   const ctaFont = `clamp(${10 * k}px, ${2.9 * k}vw, ${15 * k}px)`;
@@ -112,8 +113,9 @@ export default function ReelsEmLote() {
   const [configOpen, setConfigOpen] = useState(false);
   const [uploadingClip, setUploadingClip] = useState(false);
   const textY = typeof cfg?.reelTextY === 'number' ? cfg.reelTextY : 0.6;
-  const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 96;
+  const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 72;
   const ctaColor = cfg?.reelCtaColor || '#F5B301';
+  const ctaGap = typeof cfg?.reelCtaGap === 'number' ? cfg.reelCtaGap : 60;
 
   function loadClips() {
     fetch(`${API}/api/reels/raw-videos`).then((r) => r.json()).then((d) => setClips(Array.isArray(d) ? d : [])).catch(() => {});
@@ -305,7 +307,7 @@ export default function ReelsEmLote() {
 
         {/* Preview + estilo + gerar */}
         <div className="space-y-3 md:sticky md:top-4">
-          <FramePreview texto={rows[focused]?.texto || ''} cta="LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} />
+          <FramePreview texto={rows[focused]?.texto || ''} cta="LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} gap={ctaGap} />
           <p className="text-[10px] text-muted-foreground text-center -mt-1">Prévia da linha em foco — mexa no estilo abaixo e veja aqui</p>
 
           {/* Controles de estilo — tudo aqui, ao lado da prévia */}
@@ -326,6 +328,15 @@ export default function ReelsEmLote() {
               </div>
               <input type="range" min={56} max={140} step={2} value={fontSize}
                 onChange={(e) => saveSetting({ reelFontSize: parseInt(e.target.value, 10) })}
+                className="w-full accent-blue-500" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground">Espaço até "Leia a legenda"</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{ctaGap}px</span>
+              </div>
+              <input type="range" min={0} max={240} step={5} value={ctaGap}
+                onChange={(e) => saveSetting({ reelCtaGap: parseInt(e.target.value, 10) })}
                 className="w-full accent-blue-500" />
             </div>
             <div className="flex items-center justify-between">

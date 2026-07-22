@@ -117,49 +117,25 @@ function probeDuration(videoPath) {
  * Monta a string do filtro -vf (função pura, testável sem ffmpeg).
  * @returns {string}
  */
+// Cada "layer" é UMA linha de texto, centralizada horizontalmente por conta
+// própria (x=(w-text_w)/2). Renderizar linha a linha centraliza cada linha —
+// o drawtext com \n só centraliza o BLOCO, deixando as linhas à esquerda.
+// Layer: { file, color, size, border, y, timing:{start,end} }
 function buildDrawtextFilter(opts) {
-  const {
-    fraseFile,
-    ctaFile,
-    fontFile,
-    frase = { start: 0, end: 4 },
-    cta = { start: 4, end: 5 },
-    fontSize = 96,
-    targetWidth = 1080,
-    // Estilo calibrado pelos reels reais do Fabricio: gancho branco centralizado
-    // (levemente acima do meio) e "Leia a legenda" DOURADO logo abaixo.
-    fraseColor = 'white',
-    ctaColor = '#F5B301',
-    fraseY = '(h-text_h)/2-h*0.03',
-    ctaY = 'h*0.60',
-  } = opts;
-
-  assertSafeColor(fraseColor, 'fraseColor');
-  assertSafeColor(ctaColor, 'ctaColor');
-  assertSafePath(fraseFile, 'fraseFile');
+  const { layers = [], fontFile, targetWidth = 1080 } = opts;
   assertSafePath(fontFile, 'fontFile');
-  if (ctaFile) assertSafePath(ctaFile, 'ctaFile');
 
-  const border = Math.max(4, Math.round(fontSize * 0.06));
-  const lineSpacing = Math.max(4, Math.round(fontSize * 0.12));
-  const ctaSize = Math.max(28, Math.round(fontSize * 0.62));
-  const ctaBorder = Math.max(3, Math.round(ctaSize * 0.06));
+  const draw = (L) => {
+    assertSafePath(L.file, 'textfile');
+    assertSafeColor(L.color, 'color');
+    return `drawtext=textfile='${L.file}':fontfile='${fontFile}':` +
+      `fontcolor=${L.color}:fontsize=${L.size}:borderw=${L.border}:bordercolor=black:` +
+      `shadowcolor=black@0.6:shadowx=2:shadowy=2:` +
+      `x=(w-text_w)/2:y=${L.y}:enable='between(t,${L.timing.start},${L.timing.end})'`;
+  };
 
-  const common = (file, color, size, bw, y, timing, extra = '') =>
-    `drawtext=textfile='${file}':fontfile='${fontFile}':` +
-    `fontcolor=${color}:fontsize=${size}:borderw=${bw}:bordercolor=black:` +
-    `shadowcolor=black@0.6:shadowx=2:shadowy=2:${extra}` +
-    `x=(w-text_w)/2:y=${y}:enable='between(t,${timing.start},${timing.end})'`;
-
-  const parts = [
-    // Normaliza pra 1080 de largura mantendo o 9:16 (altura par).
-    `scale=${targetWidth}:-2`,
-    common(fraseFile, fraseColor, fontSize, border, fraseY, frase, `line_spacing=${lineSpacing}:`),
-  ];
-  if (ctaFile) {
-    parts.push(common(ctaFile, ctaColor, ctaSize, ctaBorder, ctaY, cta));
-  }
-  return parts.join(',');
+  // Normaliza pra 1080 de largura mantendo o 9:16 (altura par), depois as linhas.
+  return [`scale=${targetWidth}:-2`, ...layers.map(draw)].join(',');
 }
 
 /**
@@ -178,7 +154,8 @@ async function renderReel({
   fraseColor,
   ctaColor,
   ctaAtMiddle = true,   // "Leia a legenda" entra na METADE do vídeo → fim
-  textY = 0.6,          // altura do gancho (fração da altura; cta fica ~0.13 abaixo)
+  textY = 0.6,          // altura do gancho (fração da altura da imagem)
+  ctaGap,               // espaço (px) entre o gancho e o "Leia a legenda"
   tmpDir,
 }) {
   if (!rawVideoPath || !fs.existsSync(rawVideoPath)) {
@@ -213,31 +190,49 @@ async function renderReel({
   // de queimar (ex.: "👇 LEIA A LEGENDA" → "LEIA A LEGENDA").
   const sanitize = (s) => String(s || '').replace(EMOJI_RE, '').replace(/\s+/g, ' ').trim();
   // Largura segura: quebra o texto pra caber DENTRO do quadro (com margem),
-  // em quantas linhas precisar — sem forçar 2 linhas e estourar a largura.
+  // em quantas linhas precisar. Cada linha vira um layer centralizado.
   const wrapChars = Math.max(10, Math.floor(900 / (fontSize * 0.55)));
-  const fraseWrapped = wrapText(sanitize(fraseTela), wrapChars, 5).join('\n');
+  const fraseLines = wrapText(sanitize(fraseTela), wrapChars, 5);
+  const ctaSize = Math.max(28, Math.round(fontSize * 0.62));
+  const ctaLines = (ctaTela && sanitize(ctaTela)) ? wrapText(sanitize(ctaTela), wrapChars + 6, 2) : [];
+
+  const border = Math.max(4, Math.round(fontSize * 0.06));
+  const ctaBorder = Math.max(3, Math.round(ctaSize * 0.06));
+  const lineH = Math.round(fontSize * 1.16);      // altura de linha do gancho
+  const ctaLineH = Math.round(ctaSize * 1.16);
+  const gap = Number.isFinite(ctaGap) ? Math.max(0, ctaGap) : Math.round(fontSize * 0.8);
+
+  // Bloco do gancho centralizado verticalmente na fração F; "Leia a legenda"
+  // começa `gap` px abaixo da base do gancho. y do drawtext = topo da linha.
+  const F = Math.max(0.2, Math.min(0.9, Number(textY) || 0.6));
+  const hookH = fraseLines.length * lineH;
+  const yExpr = (px) => { const p = Math.round(px); return p >= 0 ? `h*${F}+${p}` : `h*${F}-${-p}`; };
 
   const stamp = `${Date.now()}_${Math.round(process.hrtime()[1] / 1000)}`;
-  const fraseFile = path.join(work, `.frase_${stamp}.txt`);
-  fs.writeFileSync(fraseFile, fraseWrapped, 'utf8');
+  const files = [];
+  const layers = [];
+  const writeLine = (prefix, i, text) => {
+    const f = path.join(work, `.${prefix}_${stamp}_${i}.txt`);
+    fs.writeFileSync(f, text, 'utf8');
+    files.push(f);
+    return f;
+  };
 
-  let ctaFile = null;
-  if (ctaTela && sanitize(ctaTela)) {
-    ctaFile = path.join(work, `.cta_${stamp}.txt`);
-    fs.writeFileSync(ctaFile, wrapText(sanitize(ctaTela), wrapChars + 4, 2).join('\n'), 'utf8');
-  }
-
-  // Altura: gancho centralizado na fração textY; "Leia a legenda" ~0.13 abaixo.
-  const F = Math.max(0.2, Math.min(0.9, Number(textY) || 0.6));
-  const ctaF = Math.min(0.92, F + 0.13);
-  const fraseY = `h*${F}-text_h/2`;
-  const ctaY = `h*${ctaF.toFixed(3)}-text_h/2`;
-
-  const filter = buildDrawtextFilter({
-    fraseFile, ctaFile, fontFile: font, frase, cta, fontSize, fraseY, ctaY,
-    ...(fraseColor ? { fraseColor } : {}),
-    ...(ctaColor ? { ctaColor } : {}),
+  fraseLines.forEach((line, i) => {
+    layers.push({
+      file: writeLine('frase', i, line), color: fraseColor || 'white',
+      size: fontSize, border, y: yExpr(-hookH / 2 + i * lineH), timing: frase,
+    });
   });
+  const ctaBase = hookH / 2 + gap;
+  ctaLines.forEach((line, j) => {
+    layers.push({
+      file: writeLine('cta', j, line), color: ctaColor || '#F5B301',
+      size: ctaSize, border: ctaBorder, y: yExpr(ctaBase + j * ctaLineH), timing: cta,
+    });
+  });
+
+  const filter = buildDrawtextFilter({ layers, fontFile: font });
 
   const args = [
     '-y',
@@ -256,7 +251,7 @@ async function renderReel({
   ];
 
   const cleanup = () => {
-    for (const f of [fraseFile, ctaFile]) {
+    for (const f of files) {
       try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch { /* ignora */ }
     }
   };

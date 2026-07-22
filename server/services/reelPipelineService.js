@@ -56,6 +56,7 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
     ctaColor: cfg.reelCtaColor || undefined,
     ctaAtMiddle: cfg.reelCtaAtMiddle !== false,
     textY: typeof cfg.reelTextY === 'number' ? cfg.reelTextY : 0.6,
+    ctaGap: typeof cfg.reelCtaGap === 'number' ? cfg.reelCtaGap : 60,
   });
 
   db.updateReel(reelId, {
