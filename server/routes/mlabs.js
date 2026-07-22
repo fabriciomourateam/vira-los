@@ -79,7 +79,7 @@ router.get('/settings', (_req, res) => res.json(db.getMlabsSettings()));
 
 router.put('/settings', (req, res) => {
   try {
-    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'defaultTime', 'dateOffsetsMonths'];
+    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'autoScheduleReel', 'autoRenderReel', 'defaultTime', 'dateOffsetsMonths', 'reelPostsPerDay', 'reelScheduleDays', 'reelScheduleTimes', 'reelFontSize', 'reelFontFile'];
     const patch = {};
     for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
     res.json(db.setMlabsSettings(patch));
@@ -89,6 +89,11 @@ router.put('/settings', (req, res) => {
 });
 
 router.get('/default-dates', (_req, res) => res.json({ dates: computeDefaultDates() }));
+// Próximos slots livres de REEL (esquema N/dia por X dias). Cada reel = 1 slot.
+router.get('/reel-slots', (req, res) => {
+  const count = Math.max(1, Math.min(50, parseInt(req.query.count, 10) || 1));
+  res.json({ dates: mlabs().computeNextReelSlots(count) });
+});
 
 // ── Agendados (registro local do que mandamos) ──────────────────────────────────
 router.get('/agendados', (_req, res) => res.json(db.getAllMlabsSchedules()));
@@ -132,7 +137,11 @@ router.post('/schedule', async (req, res) => {
   try {
     if (!contentType || !contentId) return res.status(400).json({ error: 'contentType e contentId obrigatórios.' });
     const media = await resolveMedia(contentType, contentId);
-    if (!dates || !dates.length) dates = computeDefaultDates();
+    // Reel usa o esquema flexível "N/dia por X dias" (1 slot livre por reel);
+    // carrossel mantém as datas evergreen (amanhã + a cada 3 meses).
+    if (!dates || !dates.length) {
+      dates = contentType === 'reel' ? mlabs().computeNextReelSlots(1) : computeDefaultDates();
+    }
     if (!caption) caption = media.caption;
 
     // Registra como "enviando" antes de chamar o mLabs (assim você vê mesmo se travar).

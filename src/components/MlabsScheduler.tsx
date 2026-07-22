@@ -12,7 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  CalendarClock, Loader2, Plus, X, Upload, Settings, Check, Trash2, RefreshCw,
+  CalendarClock, Loader2, Plus, X, Upload, Settings, Check, Trash2, RefreshCw, Wand2, Film,
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -74,27 +74,49 @@ function MlabsScheduleModal({
   const [submitting, setSubmitting] = useState(false);
   const [videoReady, setVideoReady] = useState(!!hasVideo);
   const [uploading, setUploading] = useState(false);
+  const [rendering, setRendering] = useState(false);
   const [captionText, setCaptionText] = useState(caption || '');
   // Vincular datas: quando ligado, as datas seguem a 1ª (1ª + N, +2N, +3N meses)
-  // e mudar data/horário da 1ª propaga para as demais. Padrão: ligado, a cada 3 meses.
-  const [linked, setLinked] = useState(true);
+  // e mudar data/horário da 1ª propaga para as demais. Reel não é evergreen, então
+  // começa desvinculado (cada reel = 1 slot livre); carrossel começa vinculado.
+  const isReel = kind === 'reel';
+  const [linked, setLinked] = useState(!isReel);
   const [intervalMonths, setIntervalMonths] = useState(3);
 
   useEffect(() => {
-    fetch(`${API}/api/mlabs/default-dates`)
+    // Reel: próximo slot livre (esquema N/dia). Carrossel: datas evergreen (meses).
+    const url = isReel ? `${API}/api/mlabs/reel-slots?count=1` : `${API}/api/mlabs/default-dates`;
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
         const arr: string[] = d.dates || [];
         setDates(arr);
-        // Infere o intervalo real das datas padrão (ex.: [0,3,6,9] → 3 meses)
-        if (arr.length >= 2) {
+        if (!isReel && arr.length >= 2) {
           const gap = monthGap(arr[0], arr[1]);
           if (gap >= 1) setIntervalMonths(Math.min(24, gap));
         }
       })
       .catch(() => setDates([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [isReel]);
+
+  // Renderiza do banco: pega um clipe cru livre e queima a fraseTela no vídeo.
+  async function renderFromBank() {
+    setRendering(true);
+    try {
+      const r = await fetch(`${API}/api/reels/saved/${contentId}/render`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ autoSchedule: false }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao renderizar.');
+      setVideoReady(true);
+      toast.success('Texto queimado no clipe do banco. Vídeo pronto!');
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao renderizar o reel.');
+    } finally {
+      setRendering(false);
+    }
+  }
 
   function setDate(i: number, v: string) {
     setDates((p) => {
@@ -187,16 +209,30 @@ function MlabsScheduleModal({
         </p>
 
         {kind === 'reel' && (
-          <div className={`border rounded-lg p-3 ${videoReady ? 'border-green-500/40 bg-green-500/5' : 'border-border'}`}>
-            <label className="text-xs font-medium text-foreground flex items-center gap-2 cursor-pointer">
-              {videoReady ? <Check size={14} className="text-green-400" /> : <Upload size={14} />}
-              {videoReady ? 'Vídeo enviado' : (uploading ? 'Enviando...' : 'Subir vídeo editado (.mp4)')}
-              <input
-                type="file" accept="video/mp4,video/quicktime,.mp4,.mov" className="hidden"
-                disabled={uploading}
-                onChange={(e) => e.target.files?.[0] && uploadVideo(e.target.files[0])}
-              />
-            </label>
+          <div className={`border rounded-lg p-3 space-y-2 ${videoReady ? 'border-green-500/40 bg-green-500/5' : 'border-border'}`}>
+            {videoReady ? (
+              <div className="text-xs font-medium text-green-400 flex items-center gap-2"><Check size={14} /> Vídeo pronto pra agendar</div>
+            ) : (
+              <>
+                {/* Caminho automático: queima a fraseTela num clipe cru do banco */}
+                <button
+                  onClick={renderFromBank} disabled={rendering || uploading}
+                  className="w-full text-xs font-semibold text-foreground bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-lg inline-flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {rendering ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                  {rendering ? 'Renderizando...' : 'Renderizar do banco (queima o texto no clipe)'}
+                </button>
+                {/* Caminho manual: subir um .mp4 já editado */}
+                <label className="text-[11px] text-muted-foreground flex items-center justify-center gap-1.5 cursor-pointer hover:text-foreground">
+                  <Upload size={12} /> {uploading ? 'Enviando...' : 'ou subir um .mp4 já editado'}
+                  <input
+                    type="file" accept="video/mp4,video/quicktime,.mp4,.mov" className="hidden"
+                    disabled={uploading || rendering}
+                    onChange={(e) => e.target.files?.[0] && uploadVideo(e.target.files[0])}
+                  />
+                </label>
+              </>
+            )}
           </div>
         )}
 
@@ -278,9 +314,15 @@ interface Settings {
   autoScheduleCarousel: boolean; defaultTime: string; dateOffsetsMonths: number[];
   profileId: number | null; ownerId: number | null; channelSourceIds: number[];
   channelSourceIdsReel: number[]; youtubeShortsChannelId: number | null;
+  autoScheduleReel: boolean; autoRenderReel: boolean;
+  reelPostsPerDay: number; reelScheduleDays: number; reelScheduleTimes: string[];
+  reelFontSize: number;
 }
 interface Agendado {
   id: string; contentType: string; caption?: string; dates: string[]; status: string; error?: string; created_at: string;
+}
+interface RawVideo {
+  id: string; file: string; originalName?: string; size?: number; used: boolean; usedByReelId?: string | null; created_at: string;
 }
 
 export function MlabsSettingsButton() {
@@ -306,6 +348,36 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
   const [calibrating, setCalibrating] = useState(false);
   const [sessionText, setSessionText] = useState('');
   const [savingSession, setSavingSession] = useState(false);
+  const [rawVideos, setRawVideos] = useState<RawVideo[]>([]);
+  const [uploadingRaw, setUploadingRaw] = useState(false);
+
+  function loadRawVideos() {
+    fetch(`${API}/api/reels/raw-videos`).then((r) => r.json()).then((d) => setRawVideos(Array.isArray(d) ? d : [])).catch(() => {});
+  }
+
+  async function uploadRawVideos(files: FileList) {
+    setUploadingRaw(true);
+    try {
+      const fd = new FormData();
+      Array.from(files).forEach((f) => fd.append('videos', f));
+      const r = await fetch(`${API}/api/reels/raw-videos`, { method: 'POST', body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha no upload.');
+      toast.success(`${d.count} clipe(s) no banco.`);
+      loadRawVideos();
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao subir clipes.');
+    } finally {
+      setUploadingRaw(false);
+    }
+  }
+
+  async function deleteRawVideo(id: string) {
+    try {
+      await fetch(`${API}/api/reels/raw-videos/${id}`, { method: 'DELETE' });
+      setRawVideos((p) => p.filter((v) => v.id !== id));
+    } catch { /* ignora */ }
+  }
 
   async function saveSession() {
     const txt = sessionText.trim();
@@ -330,6 +402,7 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     fetch(`${API}/api/mlabs/settings`).then((r) => r.json()).then(setS).catch(() => {});
     fetch(`${API}/api/mlabs/agendados`).then((r) => r.json()).then(setAgendados).catch(() => {});
+    loadRawVideos();
   }, []);
 
   async function save(patch: Partial<Settings>) {
@@ -461,6 +534,92 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
                   type="number" defaultValue={s.youtubeShortsChannelId ?? 20}
                   onBlur={(e) => save({ youtubeShortsChannelId: parseInt(e.target.value, 10) || null })}
                   className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
+            </div>
+
+            {/* ── Reels: esteira automática (vídeo cru → texto queimado → agendar) ── */}
+            <div className="space-y-3 pt-3 border-t border-border">
+              <span className="text-sm font-semibold text-foreground inline-flex items-center gap-2">
+                <Film size={15} className="text-blue-400" /> Reels — vídeo automático
+              </span>
+
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span className="text-sm text-foreground">
+                  Renderizar reels automaticamente
+                  <span className="block text-xs text-muted-foreground">Após gerar o reel, queima a frase de tela num clipe do banco.</span>
+                </span>
+                <input type="checkbox" checked={!!s.autoRenderReel} onChange={(e) => save({ autoRenderReel: e.target.checked })} className="w-5 h-5 accent-blue-500" />
+              </label>
+
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span className="text-sm text-foreground">
+                  Agendar reels automaticamente
+                  <span className="block text-xs text-muted-foreground">Assim que o vídeo renderiza, entra no mLabs no próximo horário livre.</span>
+                </span>
+                <input type="checkbox" checked={!!s.autoScheduleReel} onChange={(e) => save({ autoScheduleReel: e.target.checked })} className="w-5 h-5 accent-blue-500" />
+              </label>
+
+              {/* Esquema de agendamento flexível: N/dia por X dias, nos horários */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-foreground">Posts por dia</span>
+                  <input type="number" min={1} max={12} defaultValue={s.reelPostsPerDay ?? 2}
+                    onBlur={(e) => save({ reelPostsPerDay: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                    className="w-16 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-foreground">Por quantos dias</span>
+                  <input type="number" min={1} max={365} defaultValue={s.reelScheduleDays ?? 30}
+                    onBlur={(e) => save({ reelScheduleDays: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                    className="w-16 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">
+                  Horários (Brasília)
+                  <span className="block text-xs text-muted-foreground">Separados por vírgula. Ex.: 11:00,18:00</span>
+                </span>
+                <input type="text" defaultValue={(s.reelScheduleTimes || []).join(',')}
+                  onBlur={(e) => save({ reelScheduleTimes: e.target.value.split(',').map((x) => x.trim()).filter((x) => /^\d{1,2}:\d{2}$/.test(x)) })}
+                  className="w-28 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">
+                  Tamanho do texto na tela
+                  <span className="block text-xs text-muted-foreground">px (base 1080×1920). Padrão: 96</span>
+                </span>
+                <input type="number" min={40} max={200} defaultValue={s.reelFontSize ?? 96}
+                  onBlur={(e) => save({ reelFontSize: Math.max(40, Math.min(200, parseInt(e.target.value, 10) || 96)) })}
+                  className="w-20 bg-background border border-border rounded-lg px-2 py-1 text-sm text-foreground text-center" />
+              </div>
+
+              {/* Banco de vídeos crus */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground">
+                    Banco de clipes crus
+                    <span className="block text-xs text-muted-foreground">
+                      {rawVideos.filter((v) => !v.used).length} livre(s) · {rawVideos.length} no total
+                    </span>
+                  </span>
+                  <label className="text-xs font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer">
+                    {uploadingRaw ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Subir clipes
+                    <input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" multiple className="hidden"
+                      disabled={uploadingRaw}
+                      onChange={(e) => e.target.files?.length && uploadRawVideos(e.target.files)} />
+                  </label>
+                </div>
+                {rawVideos.length > 0 && (
+                  <div className="space-y-1 max-h-40 overflow-auto">
+                    {rawVideos.map((v) => (
+                      <div key={v.id} className="text-xs flex items-center gap-2 bg-background border border-border rounded-lg px-2 py-1.5">
+                        <span className={`px-1.5 py-0.5 rounded ${v.used ? 'bg-muted text-muted-foreground' : 'bg-green-500/15 text-green-400'}`}>{v.used ? 'usado' : 'livre'}</span>
+                        <span className="text-foreground truncate flex-1">{v.originalName || v.file}</span>
+                        <button onClick={() => deleteRawVideo(v.id)} className="text-muted-foreground hover:text-red-400 p-0.5"><Trash2 size={13} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

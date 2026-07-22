@@ -272,6 +272,16 @@ const saveReel   = (r) => { const db = readDb('reels'); db.push({ ...r, created_
 const updateReel = (id, data) => { const db = readDb('reels').map((r) => r.id === id ? { ...r, ...data } : r); writeDb('reels', db); };
 const deleteReel = (id) => writeDb('reels', readDb('reels').filter((r) => r.id !== id));
 
+// ── Banco de vídeos crus (clipes de treino sem texto, pra render dos reels) ────
+// Cada item: { id, path, file, originalName, size, used, usedByReelId, created_at }
+const getAllRawVideos = () => readDb('raw_videos').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const getRawVideo    = (id) => readDb('raw_videos').find((v) => v.id === id) || null;
+const saveRawVideo   = (v) => { const db = readDb('raw_videos'); db.push({ used: false, usedByReelId: null, ...v, created_at: now() }); writeDb('raw_videos', db); };
+const updateRawVideo = (id, data) => { const db = readDb('raw_videos').map((v) => v.id === id ? { ...v, ...data } : v); writeDb('raw_videos', db); };
+const deleteRawVideo = (id) => writeDb('raw_videos', readDb('raw_videos').filter((v) => v.id !== id));
+// Pega o clipe cru livre mais antigo (FIFO) — o auto-pick da rotina diária.
+const pickUnusedRawVideo = () => getAllRawVideos().filter((v) => !v.used).sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || null;
+
 // ── Conteúdo diário (rotina automática: 2 carrosséis + 2 reels/dia) ───────────
 const getAllDailyBatches = () => readDb('daily_content').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const saveDailyBatch    = (b) => { const db = readDb('daily_content'); db.push({ ...b, created_at: now() }); writeDb('daily_content', db); };
@@ -354,8 +364,17 @@ const MLABS_DEFAULTS = {
   youtubeShortsChannelId: 20,    // id do canal YouTube Shorts (exige título no agendamento)
   ownerId: null,
   autoScheduleCarousel: false,
+  autoScheduleReel: false,       // agenda o reel sozinho assim que o vídeo renderiza
+  autoRenderReel: false,         // rotina diária queima o texto no clipe cru do banco
   defaultTime: '11:00',          // hora SP padrão das postagens
-  dateOffsetsMonths: [0, 3, 6, 9], // amanhã (0=+1 dia base) e a cada 3 meses → 4 datas
+  dateOffsetsMonths: [0, 3, 6, 9], // CARROSSEL: amanhã e a cada 3 meses → 4 datas (evergreen)
+  // REEL: esquema flexível "N posts/dia por X dias" (sem trava de 2/dia). Cada
+  // reel ocupa 1 slot livre; slots = reelScheduleTimes × reelScheduleDays.
+  reelPostsPerDay: 2,
+  reelScheduleDays: 30,
+  reelScheduleTimes: ['11:00', '18:00'],
+  reelFontSize: 96,              // tamanho do texto queimado (px, base 1080×1920)
+  reelFontFile: null,            // caminho de fonte custom (senão usa a do sistema)
   updated_at: null,
 };
 const getMlabsSettings = () => ({ ...MLABS_DEFAULTS, ...readObj('mlabs_settings') });
@@ -427,6 +446,7 @@ module.exports = {
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
+  getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo,
   getAllDailyBatches, saveDailyBatch, updateDailyBatch,
   getDoc, setDoc,  // Reels Sessions (fila de gravação)
   getAllReelsSessions, getReelsSession, saveReelsSession, updateReelsSession, deleteReelsSession,
