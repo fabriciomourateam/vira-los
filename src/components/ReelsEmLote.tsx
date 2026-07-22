@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -42,12 +42,48 @@ function FramePreview({ texto, cta }: { texto: string; cta: string }) {
   );
 }
 
+// Aceita o lote que o Claude gera: JSON [{texto, legenda, data?}] OU linhas
+// separadas por TAB/"|" (texto | legenda | data). Robusto a legenda com quebra
+// de linha quando vem em JSON.
+function parseImport(text: string): Row[] {
+  const t = text.trim();
+  if (!t) return [];
+  if (t.startsWith('[') || t.startsWith('{')) {
+    const arr = JSON.parse(t);
+    const list = Array.isArray(arr) ? arr : [arr];
+    return list.map((o: any) => ({
+      texto: String(o.texto ?? o.text ?? o.titulo ?? o.hook ?? o.fraseTela ?? '').trim(),
+      legenda: String(o.legenda ?? o.caption ?? o.legendaPost ?? '').trim(),
+      data: String(o.data ?? o.date ?? '').trim(),
+      rawVideoId: '',
+    })).filter((r) => r.texto);
+  }
+  return t.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const parts = line.includes('\t') ? line.split('\t') : line.split('|');
+    return { texto: (parts[0] || '').trim(), legenda: (parts[1] || '').trim(), data: (parts[2] || '').trim(), rawVideoId: '' };
+  }).filter((r) => r.texto);
+}
+
 export default function ReelsEmLote() {
   const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow(), emptyRow()]);
   const [clips, setClips] = useState<RawVideo[]>([]);
   const [schedule, setSchedule] = useState(true);
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+
+  function doImport() {
+    let parsed: Row[];
+    try { parsed = parseImport(importText); }
+    catch { toast.error('Formato inválido — cole o JSON que o Claude gerou (começa com [).'); return; }
+    if (!parsed.length) { toast.error('Nada pra importar — nenhuma linha com texto.'); return; }
+    setRows(parsed);
+    setImportOpen(false);
+    setImportText('');
+    setFocused(0);
+    toast.success(`${parsed.length} reel(s) preenchidos na tabela.`);
+  }
   const [results, setResults] = useState<RowResult[] | null>(null);
   const [focused, setFocused] = useState(0);
 
@@ -132,7 +168,29 @@ export default function ReelsEmLote() {
           (vazio = aleatório do banco) e a data também (vazia = próximo horário livre). Clique em
           <b> Gerar lote</b> e o sistema queima o texto no vídeo e agenda tudo.
         </p>
+        <button onClick={() => setImportOpen((v) => !v)}
+          className="mt-2 text-xs font-medium text-blue-400 hover:text-blue-300 inline-flex items-center gap-1.5">
+          <ClipboardPaste size={13} /> Importar / colar lote (do Claude)
+        </button>
       </div>
+
+      {importOpen && (
+        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Cole aqui o lote que o Claude te mandou (JSON começando com <code>[</code>, ou uma linha por reel
+            no formato <code>texto | legenda | data</code>). Isso <b>substitui</b> a tabela atual.
+          </p>
+          <textarea
+            value={importText} onChange={(e) => setImportText(e.target.value)}
+            placeholder='[{"texto":"...","legenda":"...","data":""}, ...]'
+            className="w-full h-32 bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground font-mono"
+          />
+          <div className="flex items-center gap-2">
+            <button onClick={doImport} className="text-xs font-semibold text-foreground bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg">Preencher tabela</button>
+            <button onClick={() => { setImportOpen(false); setImportText(''); }} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5">Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {freeClips.length === 0 && (
         <div className="text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2.5 inline-flex items-center gap-2">
