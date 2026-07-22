@@ -279,8 +279,11 @@ const getRawVideo    = (id) => readDb('raw_videos').find((v) => v.id === id) || 
 const saveRawVideo   = (v) => { const db = readDb('raw_videos'); db.push({ used: false, usedByReelId: null, ...v, created_at: now() }); writeDb('raw_videos', db); };
 const updateRawVideo = (id, data) => { const db = readDb('raw_videos').map((v) => v.id === id ? { ...v, ...data } : v); writeDb('raw_videos', db); };
 const deleteRawVideo = (id) => writeDb('raw_videos', readDb('raw_videos').filter((v) => v.id !== id));
-// Pega o clipe cru livre mais antigo (FIFO) — o auto-pick da rotina diária.
-const pickUnusedRawVideo = () => getAllRawVideos().filter((v) => !v.used).sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || null;
+// Pega o clipe cru livre mais antigo (FIFO) cujo ARQUIVO ainda existe no disco —
+// registros órfãos (arquivo apagado num deploy) são ignorados no auto-pick.
+const pickUnusedRawVideo = () => getAllRawVideos()
+  .filter((v) => !v.used && v.path && fs.existsSync(v.path))
+  .sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || null;
 
 // ── Conteúdo diário (rotina automática: 2 carrosséis + 2 reels/dia) ───────────
 const getAllDailyBatches = () => readDb('daily_content').sort((a, b) => b.created_at.localeCompare(a.created_at));

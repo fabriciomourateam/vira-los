@@ -57,8 +57,14 @@ router.post('/raw-videos', uploadRaw.array('videos', 20), (req, res) => {
 });
 
 router.get('/raw-videos', (_req, res) => {
-  // Não devolve o path absoluto do disco; só o que a UI precisa.
-  res.json(db.getAllRawVideos().map((v) => ({
+  // Auto-limpeza: registros órfãos (arquivo apagado num deploy antigo) somem da
+  // lista pra não confundir nem travar o auto-pick. Não devolve o path do disco.
+  const live = [];
+  for (const v of db.getAllRawVideos()) {
+    if (v.path && fs.existsSync(v.path)) live.push(v);
+    else db.deleteRawVideo(v.id);
+  }
+  res.json(live.map((v) => ({
     id: v.id, file: v.file, originalName: v.originalName, size: v.size,
     used: !!v.used, usedByReelId: v.usedByReelId || null, created_at: v.created_at,
   })));
