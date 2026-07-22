@@ -380,7 +380,8 @@ const MLABS_DEFAULTS = {
   reelFontFile: null,            // caminho de fonte custom (senão usa a do sistema)
   reelCtaColor: '#F5B301',       // cor do "Leia a legenda" (dourado, como nos reels dele)
   reelCtaAtMiddle: true,         // "Leia a legenda" entra na metade do vídeo → fim
-  reelTextY: 0.6,                // altura do gancho (fração 0.2–0.9; cta ~0.13 abaixo)
+  reelTextY: 0.6,                // altura do gancho (fração 0.2–0.9)
+  reelCtaGap: 60,                // espaço (px) entre o gancho e o "Leia a legenda"
   updated_at: null,
 };
 const getMlabsSettings = () => ({ ...MLABS_DEFAULTS, ...readObj('mlabs_settings') });
