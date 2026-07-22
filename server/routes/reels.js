@@ -95,6 +95,66 @@ router.post('/saved/:id/render', async (req, res) => {
   }
 });
 
+// ─── Lote: cria + renderiza + agenda vários reels de uma vez ───────────────────
+// Body: { rows: [{ texto, legenda, data?, rawVideoId? }], schedule?: bool }
+// Cada linha vira um reel com o SEU texto na tela (não o da IA). Clipe é
+// opcional: vazio → auto-pick do banco. Data opcional: vazia → próximo slot livre.
+// Responde {jobId} na hora; o progresso vem por GET /api/reels/jobs/:id.
+router.post('/bulk', (req, res) => {
+  const { rows, schedule = true } = req.body || {};
+  if (!Array.isArray(rows) || !rows.length) {
+    return res.status(400).json({ error: 'Envie rows[] (linhas da planilha).' });
+  }
+  const clean = rows
+    .map((r, i) => ({
+      texto: String(r.texto || '').trim(),
+      legenda: String(r.legenda || '').trim(),
+      data: r.data || null,
+      rawVideoId: r.rawVideoId || null,
+      row: i + 1,
+    }))
+    .filter((r) => r.texto);
+  if (!clean.length) return res.status(400).json({ error: 'Nenhuma linha com "texto na tela" preenchido.' });
+
+  const jobId = createJob();
+  res.json({ jobId, total: clean.length });
+
+  (async () => {
+    const results = [];
+    for (let k = 0; k < clean.length; k++) {
+      const item = clean[k];
+      setJobStep(jobId, `Renderizando ${k + 1}/${clean.length}${schedule ? ' e agendando' : ''}...`);
+      const reelId = `reel_bulk_${Date.now()}_${k}`;
+      try {
+        db.saveReel({
+          id: reelId,
+          fraseTela: item.texto,
+          fraseTelaTiming: '0-4s',
+          ctaTela: '👇 LEIA A LEGENDA',
+          ctaTelaTiming: '4-5s',
+          legendaPost: item.legenda,
+          title: item.texto.slice(0, 60),
+          source: 'bulk',
+          archived: false,
+        });
+        await renderReelVideo(reelId, { rawVideoId: item.rawVideoId });
+        let scheduled = null;
+        if (schedule) {
+          scheduled = await scheduleReelNow(reelId, {
+            dates: item.data ? [item.data] : null,
+            caption: item.legenda || null,
+          });
+        }
+        results.push({ row: item.row, ok: true, reelId, dates: scheduled ? scheduled.dates : null });
+      } catch (e) {
+        results.push({ row: item.row, ok: false, error: e.message });
+        console.warn(`[ReelsBulk] linha ${item.row} falhou:`, e.message);
+      }
+    }
+    finishJob(jobId, { results, ok: results.filter((r) => r.ok).length, fail: results.filter((r) => !r.ok).length });
+  })();
+});
+
 // ─── Job store em memória ─────────────────────────────────────────────────────
 const jobs = new Map();
 const JOB_TTL_MS = 15 * 60 * 1000;
@@ -110,6 +170,15 @@ setInterval(() => {
   const now = Date.now();
   for (const [id, job] of jobs) if (now - job.startedAt > JOB_TTL_MS) jobs.delete(id);
 }, 5 * 60 * 1000);
+
+function setJobStep(jobId, step) {
+  const j = jobs.get(jobId);
+  if (j) jobs.set(jobId, { ...j, step });
+}
+function finishJob(jobId, result) {
+  const j = jobs.get(jobId);
+  if (j) jobs.set(jobId, { ...j, status: 'done', step: 'Concluído!', result });
+}
 
 // ─── Gerar reels (assíncrono) ────────────────────────────────────────────────
 
@@ -216,7 +285,7 @@ router.post('/saved', (req, res) => {
 });
 
 router.patch('/saved/:id', (req, res) => {
-  const allowed = ['title', 'archived', 'done', 'teleprompter', 'hook', 'body', 'cta', 'legendaPost'];
+  const allowed = ['title', 'archived', 'done', 'teleprompter', 'hook', 'body', 'cta', 'legendaPost', 'fraseTela', 'fraseTelaTiming', 'ctaTela', 'ctaTelaTiming'];
   const update = {};
   for (const k of allowed) if (req.body?.[k] !== undefined) update[k] = req.body[k];
   if (Object.keys(update).length === 0) return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });

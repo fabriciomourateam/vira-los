@@ -19,6 +19,7 @@ import {
   BookOpen,
   Bot,
   Layers,
+  ListChecks,
   ScanSearch,
   Radio,
   Gauge,
@@ -44,13 +45,14 @@ import InstagramAnalytics from './InstagramAnalytics';
 import PublicoAlvo from './PublicoAlvo';
 import PainelSEO from './PainelSEO';
 import ConteudoDiario from './ConteudoDiario';
+import ReelsEmLote from './ReelsEmLote';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
 import UsageBar from './UsageBar';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'diario' | 'avaliar' | 'analytics' | 'seo';
+type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'lote' | 'diario' | 'avaliar' | 'analytics' | 'seo';
 
 // Lembra a última aba/sub-aba visitada (localStorage) pra não voltar pro
 // início a cada F5. Valida contra a lista de valores aceitos antes de usar
@@ -74,6 +76,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'descobrir', label: 'Descobrir', icon: Search },
   { id: 'ideias',    label: 'Ideias',    icon: Sparkles },
   { id: 'criar',     label: 'Criar',     icon: Layers },
+  { id: 'lote',      label: 'Em Lote',   icon: ListChecks },
   { id: 'diario',    label: 'Diário',    icon: Repeat },
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
   { id: 'analytics', label: 'Analytics', icon: Instagram },
@@ -369,7 +372,7 @@ function SubTabBar<T extends string>({
 
 export default function ViralOS() {
   const [activeTab, setActiveTab] = usePersistedTab<TabId>(
-    'viralos.activeTab', ['metodo','publico','descobrir','ideias','criar','diario','avaliar','analytics','seo'], 'metodo'
+    'viralos.activeTab', ['metodo','publico','descobrir','ideias','criar','lote','diario','avaliar','analytics','seo'], 'metodo'
   );
   const [metodoSubTab,    setMetodoSubTab]    = usePersistedTab('viralos.metodoSubTab', ['roteiro','produtos','metricas'] as const, 'roteiro');
   const [descobrirSubTab, setDescobrirSubTab] = usePersistedTab('viralos.descobrirSubTab', ['pesquisa','radar','agente'] as const, 'pesquisa');
@@ -708,6 +711,8 @@ export default function ViralOS() {
         {activeTab === 'publico' && <PublicoAlvo />}
 
         {activeTab === 'seo' && <PainelSEO />}
+
+        {activeTab === 'lote' && <ReelsEmLote />}
 
         {activeTab === 'diario' && <ConteudoDiario />}
 

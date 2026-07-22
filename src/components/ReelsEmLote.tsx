@@ -1,0 +1,232 @@
+/**
+ * ReelsEmLote.tsx — Tabela embutida pra produzir reels em massa.
+ *
+ * Cada linha = { texto na tela, legenda, data (opcional), clipe (opcional) }.
+ * O texto é SEU (não o da IA). Clipe vazio → o sistema pega um aleatório do
+ * banco de crus. Data vazia → próximo horário livre. "Gerar lote" cria +
+ * renderiza (queima o texto) + agenda tudo de uma vez, via POST /api/reels/bulk.
+ */
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar } from 'lucide-react';
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+interface RawVideo { id: string; file: string; originalName?: string; used: boolean; }
+interface Row { texto: string; legenda: string; data: string; rawVideoId: string; }
+interface RowResult { row: number; ok: boolean; reelId?: string; dates?: string[] | null; error?: string; }
+
+const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' });
+
+// Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
+// contorno/sombra preta, terço inferior). Não é o render real — é pra você
+// julgar o texto/tamanho antes de gastar processamento.
+function FramePreview({ texto, cta }: { texto: string; cta: string }) {
+  return (
+    <div className="relative w-full rounded-xl overflow-hidden border border-border bg-gradient-to-b from-neutral-700 to-neutral-900" style={{ aspectRatio: '9 / 16' }}>
+      <div className="absolute inset-0 flex flex-col items-center justify-end pb-[18%] px-3 gap-2">
+        <p
+          className="text-center font-extrabold leading-tight text-white"
+          style={{ fontSize: 'clamp(13px, 4.2vw, 20px)', textShadow: '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000' }}
+        >
+          {texto || 'Seu texto na tela aparece aqui'}
+        </p>
+        <p
+          className="text-center font-bold text-white/95"
+          style={{ fontSize: 'clamp(9px, 2.6vw, 13px)', textShadow: '0 0 3px #000, 1px 1px 2px #000' }}
+        >
+          {cta}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function ReelsEmLote() {
+  const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow(), emptyRow()]);
+  const [clips, setClips] = useState<RawVideo[]>([]);
+  const [schedule, setSchedule] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [step, setStep] = useState('');
+  const [results, setResults] = useState<RowResult[] | null>(null);
+  const [focused, setFocused] = useState(0);
+
+  function loadClips() {
+    fetch(`${API}/api/reels/raw-videos`).then((r) => r.json()).then((d) => setClips(Array.isArray(d) ? d : [])).catch(() => {});
+  }
+  useEffect(loadClips, []);
+
+  const freeClips = useMemo(() => clips.filter((c) => !c.used), [clips]);
+  const filled = rows.filter((r) => r.texto.trim());
+
+  function setRow(i: number, patch: Partial<Row>) {
+    setRows((p) => p.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  }
+  function addRow() { setRows((p) => [...p, emptyRow()]); }
+  function removeRow(i: number) {
+    setRows((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : p));
+    setFocused(0);
+  }
+
+  async function generate() {
+    if (!filled.length) { toast.error('Preencha ao menos uma linha com o texto na tela.'); return; }
+    if (schedule && !freeClips.length && rows.every((r) => !r.rawVideoId)) {
+      // Sem clipe informado e banco vazio → o render vai falhar linha a linha.
+      toast.error('Banco de clipes crus vazio. Suba clipes (engrenagem mLabs → Reels) ou escolha um clipe por linha.');
+      return;
+    }
+    setRunning(true);
+    setResults(null);
+    setStep('Enviando lote...');
+    try {
+      const payload = {
+        schedule,
+        rows: filled.map((r) => ({ texto: r.texto.trim(), legenda: r.legenda.trim(), data: r.data || null, rawVideoId: r.rawVideoId || null })),
+      };
+      const r = await fetch(`${API}/api/reels/bulk`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao iniciar o lote.');
+      await pollJob(d.jobId);
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro no lote.');
+      setRunning(false);
+      setStep('');
+    }
+  }
+
+  async function pollJob(jobId: string) {
+    for (;;) {
+      await new Promise((res) => setTimeout(res, 1300));
+      let d: any;
+      try {
+        const r = await fetch(`${API}/api/reels/jobs/${jobId}`);
+        d = await r.json();
+      } catch { continue; }
+      if (d.status === 'done') {
+        const res: RowResult[] = d.result?.results || [];
+        setResults(res);
+        setRunning(false);
+        setStep('');
+        loadClips();
+        const ok = res.filter((x) => x.ok).length;
+        const fail = res.length - ok;
+        if (fail === 0) toast.success(`${ok} reel(s) prontos${schedule ? ' e agendados' : ''}!`);
+        else toast.warning(`${ok} ok, ${fail} com erro. Veja os detalhes abaixo.`);
+        return;
+      }
+      if (d.status === 'error') { toast.error(d.error || 'Erro no lote.'); setRunning(false); setStep(''); return; }
+      if (d.step) setStep(d.step);
+    }
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-foreground inline-flex items-center gap-2">
+          <ListChecks size={20} className="text-blue-400" /> Reels em lote
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Preencha o texto que vai <b>na tela</b> e a <b>legenda</b> de cada reel. O clipe é opcional
+          (vazio = aleatório do banco) e a data também (vazia = próximo horário livre). Clique em
+          <b> Gerar lote</b> e o sistema queima o texto no vídeo e agenda tudo.
+        </p>
+      </div>
+
+      {freeClips.length === 0 && (
+        <div className="text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2.5 inline-flex items-center gap-2">
+          <Film size={14} /> Banco de clipes crus vazio. Suba clipes na engrenagem <b>mLabs → Reels → Banco de clipes crus</b> pra usar o modo aleatório.
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-[1fr_220px] gap-4 items-start">
+        {/* Tabela */}
+        <div className="space-y-2">
+          <div className="hidden md:grid grid-cols-[1.3fr_1.3fr_150px_120px_28px] gap-2 px-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+            <span>Texto na tela</span><span>Legenda do post</span><span>Data (opcional)</span><span>Clipe</span><span></span>
+          </div>
+          {rows.map((r, i) => (
+            <div
+              key={i}
+              onFocusCapture={() => setFocused(i)}
+              className={`grid grid-cols-1 md:grid-cols-[1.3fr_1.3fr_150px_120px_28px] gap-2 items-start rounded-lg p-1.5 ${focused === i ? 'bg-blue-500/5 ring-1 ring-blue-500/30' : ''}`}
+            >
+              <textarea
+                value={r.texto} onChange={(e) => setRow(i, { texto: e.target.value })}
+                placeholder="Ex.: Você treina e não seca? O problema é a insulina."
+                rows={2}
+                className="bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground resize-y min-h-[42px]"
+              />
+              <textarea
+                value={r.legenda} onChange={(e) => setRow(i, { legenda: e.target.value })}
+                placeholder="Legenda completa + Comenta DIETA que eu te mando o cardápio..."
+                rows={2}
+                className="bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground resize-y min-h-[42px]"
+              />
+              <input
+                type="datetime-local" value={r.data} onChange={(e) => setRow(i, { data: e.target.value })}
+                className="bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground"
+              />
+              <select
+                value={r.rawVideoId} onChange={(e) => setRow(i, { rawVideoId: e.target.value })}
+                className="bg-background border border-border rounded-lg px-1.5 py-1.5 text-xs text-foreground"
+              >
+                <option value="">Aleatório</option>
+                {freeClips.map((c) => (
+                  <option key={c.id} value={c.id}>{(c.originalName || c.file).slice(0, 22)}</option>
+                ))}
+              </select>
+              <button onClick={() => removeRow(i)} className="text-muted-foreground hover:text-red-400 p-1 mt-1" title="Remover linha"><Trash2 size={15} /></button>
+            </div>
+          ))}
+          <button onClick={addRow} className="text-xs text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 mt-1">
+            <Plus size={13} /> Adicionar linha
+          </button>
+        </div>
+
+        {/* Preview + controles */}
+        <div className="space-y-3 md:sticky md:top-4">
+          <FramePreview texto={rows[focused]?.texto || ''} cta="👇 LEIA A LEGENDA" />
+          <p className="text-[10px] text-muted-foreground text-center -mt-1">Prévia aproximada da linha em foco</p>
+
+          <label className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/60 px-2.5 py-2 cursor-pointer">
+            <span className="text-xs text-foreground inline-flex items-center gap-1.5"><Calendar size={13} /> Agendar no mLabs</span>
+            <input type="checkbox" checked={schedule} onChange={(e) => setSchedule(e.target.checked)} className="w-4 h-4 accent-blue-500" />
+          </label>
+
+          <button
+            onClick={generate} disabled={running || !filled.length}
+            className="w-full text-sm font-semibold text-foreground bg-blue-600 hover:bg-blue-500 px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {running ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+            {running ? 'Processando...' : `Gerar lote (${filled.length})`}
+          </button>
+          {step && <p className="text-xs text-muted-foreground text-center">{step}</p>}
+        </div>
+      </div>
+
+      {/* Resultados */}
+      {results && (
+        <div className="pt-2 border-t border-border space-y-1.5">
+          <p className="text-sm font-semibold text-foreground">Resultado</p>
+          {results.map((r) => (
+            <div key={r.row} className="text-xs flex items-center gap-2 bg-background border border-border rounded-lg px-2 py-1.5">
+              <span className={`px-1.5 py-0.5 rounded ${r.ok ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                linha {r.row}
+              </span>
+              {r.ok ? (
+                <span className="text-muted-foreground truncate flex-1">
+                  pronto{r.dates?.length ? ` · agendado ${r.dates[0].replace('T', ' ')}` : ''}
+                </span>
+              ) : (
+                <span className="text-red-300 truncate flex-1">{r.error}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
