@@ -32,27 +32,29 @@ function fmtBRT(s: string): string {
 // Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
-function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301', gap = 60 }: { texto: string; cta: string; y?: number; fontScale?: number; ctaColor?: string; gap?: number }) {
+function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301', gap = 60, style = 'contorno', boxColor = '#F5C518', boxTextColor = '#111111' }: { texto: string; cta: string; y?: number; fontScale?: number; ctaColor?: string; gap?: number; style?: string; boxColor?: string; boxTextColor?: string }) {
   const stroke = '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000';
+  const box = style === 'caixa';
   const hookPct = Math.max(20, Math.min(90, y * 100));
-  // Aproxima a posição do CTA: metade do bloco do gancho + o gap (px/1920 → %).
   const ctaPct = Math.min(93, hookPct + 9 + gap / 19.2);
   const k = Math.max(0.5, Math.min(2, fontScale));
   const hookFont = `clamp(${13 * k}px, ${4.2 * k}vw, ${20 * k}px)`;
   const ctaFont = `clamp(${10 * k}px, ${2.9 * k}vw, ${15 * k}px)`;
+  // box-decoration-break: clone → cada linha ganha sua própria caixa (como no render).
+  const clone = { WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone' } as React.CSSProperties;
+  const hookSpan: React.CSSProperties = box
+    ? { color: boxTextColor, background: boxColor, padding: '0.06em 0.3em', borderRadius: 5, ...clone }
+    : { color: '#fff', textShadow: stroke };
+  const ctaSpan: React.CSSProperties = box
+    ? { color: boxColor, background: boxTextColor, padding: '0.06em 0.32em', borderRadius: 5, ...clone }
+    : { color: ctaColor, textShadow: stroke };
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-border bg-gradient-to-b from-neutral-700 to-neutral-900" style={{ aspectRatio: '9 / 16' }}>
-      {/* Gancho: branco, centralizado na altura escolhida — o vídeo todo */}
-      <div className="absolute inset-x-0 -translate-y-1/2 px-3" style={{ top: `${hookPct}%` }}>
-        <p className="text-center font-extrabold leading-tight text-white" style={{ fontSize: hookFont, textShadow: stroke }}>
-          {texto || 'Seu texto na tela aparece aqui'}
-        </p>
+      <div className="absolute inset-x-0 -translate-y-1/2 px-3 text-center" style={{ top: `${hookPct}%`, lineHeight: box ? 1.55 : 1.15 }}>
+        <span className="font-extrabold" style={{ fontSize: hookFont, ...hookSpan }}>{texto || 'Seu texto na tela aparece aqui'}</span>
       </div>
-      {/* CTA dourado, ~0.13 abaixo — entra na METADE do vídeo */}
-      <div className="absolute inset-x-0 -translate-y-1/2 px-3" style={{ top: `${ctaPct}%` }}>
-        <p className="text-center font-bold leading-tight" style={{ color: ctaColor, fontSize: ctaFont, textShadow: stroke }}>
-          {cta}
-        </p>
+      <div className="absolute inset-x-0 -translate-y-1/2 px-3 text-center" style={{ top: `${ctaPct}%`, lineHeight: box ? 1.6 : 1.15 }}>
+        <span className="font-bold" style={{ fontSize: ctaFont, ...ctaSpan }}>{cta}</span>
       </div>
     </div>
   );
@@ -131,6 +133,9 @@ export default function ReelsEmLote() {
   const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 72;
   const ctaColor = cfg?.reelCtaColor || '#F5B301';
   const ctaGap = typeof cfg?.reelCtaGap === 'number' ? cfg.reelCtaGap : 60;
+  const textStyle = cfg?.reelTextStyle === 'caixa' ? 'caixa' : 'contorno';
+  const boxColor = cfg?.reelBoxColor || '#F5C518';
+  const boxTextColor = cfg?.reelBoxTextColor || '#111111';
 
   function loadClips() {
     fetch(`${API}/api/reels/raw-videos`).then((r) => r.json()).then((d) => setClips(Array.isArray(d) ? d : [])).catch(() => {});
@@ -343,11 +348,34 @@ export default function ReelsEmLote() {
 
         {/* Preview + estilo + gerar */}
         <div className="space-y-3 md:sticky md:top-4">
-          <FramePreview texto={rows[focused]?.texto || ''} cta="LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} gap={ctaGap} />
+          <FramePreview texto={rows[focused]?.texto || ''} cta="LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} gap={ctaGap} style={textStyle} boxColor={boxColor} boxTextColor={boxTextColor} />
           <p className="text-[10px] text-muted-foreground text-center -mt-1">Prévia da linha em foco — mexa no estilo abaixo e veja aqui</p>
 
           {/* Controles de estilo — tudo aqui, ao lado da prévia */}
           <div className="rounded-lg border border-border bg-background/60 p-2.5 space-y-2.5">
+            {/* Estilo do texto: contorno x caixa */}
+            <div className="grid grid-cols-2 gap-1.5">
+              {(['contorno', 'caixa'] as const).map((st) => (
+                <button key={st} onClick={() => saveSetting({ reelTextStyle: st })}
+                  className={`text-xs font-semibold py-1.5 rounded-lg border transition-colors ${textStyle === st ? 'bg-blue-600 text-foreground border-blue-500' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}>
+                  {st === 'contorno' ? 'Contorno' : 'Caixa'}
+                </button>
+              ))}
+            </div>
+            {textStyle === 'caixa' && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs text-foreground">Cor da caixa</span>
+                  <input type="color" value={boxColor} onChange={(e) => saveSetting({ reelBoxColor: e.target.value })}
+                    className="w-9 h-7 bg-background border border-border rounded cursor-pointer" />
+                </div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs text-foreground">Cor do texto</span>
+                  <input type="color" value={boxTextColor} onChange={(e) => saveSetting({ reelBoxTextColor: e.target.value })}
+                    className="w-9 h-7 bg-background border border-border rounded cursor-pointer" />
+                </div>
+              </div>
+            )}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-foreground inline-flex items-center gap-1.5"><MoveVertical size={12} /> Altura do texto</span>
@@ -375,11 +403,13 @@ export default function ReelsEmLote() {
                 onChange={(e) => saveSetting({ reelCtaGap: parseInt(e.target.value, 10) })}
                 className="w-full accent-blue-500" />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-foreground">Cor do "Leia a legenda"</span>
-              <input type="color" value={ctaColor} onChange={(e) => saveSetting({ reelCtaColor: e.target.value })}
-                className="w-9 h-7 bg-background border border-border rounded cursor-pointer" />
-            </div>
+            {textStyle === 'contorno' && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground">Cor do "Leia a legenda"</span>
+                <input type="color" value={ctaColor} onChange={(e) => saveSetting({ reelCtaColor: e.target.value })}
+                  className="w-9 h-7 bg-background border border-border rounded cursor-pointer" />
+              </div>
+            )}
             <label className="flex items-center justify-between gap-2 cursor-pointer">
               <span className="text-xs text-foreground">"Leia a legenda" no meio do vídeo</span>
               <input type="checkbox" checked={cfg?.reelCtaAtMiddle !== false} onChange={(e) => saveSetting({ reelCtaAtMiddle: e.target.checked })} className="w-4 h-4 accent-blue-500" />

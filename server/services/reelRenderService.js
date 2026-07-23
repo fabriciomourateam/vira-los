@@ -117,10 +117,18 @@ function probeDuration(videoPath) {
  * Monta a string do filtro -vf (função pura, testável sem ffmpeg).
  * @returns {string}
  */
+// drawbox/drawtext aceitam melhor 0xRRGGBB — normaliza "#RRGGBB" → "0xRRGGBB".
+function ffColor(c) {
+  const m = String(c).match(/^#([0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?)$/);
+  return m ? `0x${m[1]}` : String(c);
+}
+
 // Cada "layer" é UMA linha de texto, centralizada horizontalmente por conta
 // própria (x=(w-text_w)/2). Renderizar linha a linha centraliza cada linha —
 // o drawtext com \n só centraliza o BLOCO, deixando as linhas à esquerda.
-// Layer: { file, color, size, border, y, timing:{start,end} }
+// Layer: { file, color, size, y, timing } + estilo:
+//   box=true → caixa preenchida atrás do texto (boxColor, boxBorderW = padding)
+//   stroke=true → contorno + sombra preta (border)
 function buildDrawtextFilter(opts) {
   const { layers = [], fontFile, targetWidth = 1080 } = opts;
   assertSafePath(fontFile, 'fontFile');
@@ -128,9 +136,14 @@ function buildDrawtextFilter(opts) {
   const draw = (L) => {
     assertSafePath(L.file, 'textfile');
     assertSafeColor(L.color, 'color');
+    const boxPart = L.box
+      ? `box=1:boxcolor=${ffColor(assertSafeColor(L.boxColor, 'boxColor'))}:boxborderw=${Math.round(L.boxBorderW || 0)}:`
+      : '';
+    const strokePart = L.stroke
+      ? `borderw=${L.border}:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:`
+      : '';
     return `drawtext=textfile='${L.file}':fontfile='${fontFile}':` +
-      `fontcolor=${L.color}:fontsize=${L.size}:borderw=${L.border}:bordercolor=black:` +
-      `shadowcolor=black@0.6:shadowx=2:shadowy=2:` +
+      `fontcolor=${ffColor(L.color)}:fontsize=${L.size}:${strokePart}${boxPart}` +
       `x=(w-text_w)/2:y=${L.y}:enable='between(t,${L.timing.start},${L.timing.end})'`;
   };
 
@@ -153,6 +166,9 @@ async function renderReel({
   fontSize = 96,
   fraseColor,
   ctaColor,
+  textStyle = 'contorno', // 'contorno' (texto + contorno) | 'caixa' (texto em retângulo)
+  boxColor = '#F5C518',   // cor da caixa (amarelo) — modo caixa
+  boxTextColor = '#111111', // cor do texto dentro da caixa (escuro) — modo caixa
   ctaAtMiddle = true,   // "Leia a legenda" entra na METADE do vídeo → fim
   textY = 0.6,          // altura do gancho (fração da altura da imagem)
   ctaGap,               // espaço (px) entre o gancho e o "Leia a legenda"
@@ -198,11 +214,20 @@ async function renderReel({
   const ctaSize = Math.max(28, Math.round(fontSize * 0.62));
   const ctaLines = (ctaTela && sanitize(ctaTela)) ? wrapText(sanitize(ctaTela), wrapChars + 6, 2) : [];
 
+  // Estilo: 'caixa' = texto em retângulo preenchido (gancho escuro no amarelo,
+  // CTA amarelo no escuro — invertido); 'contorno' = texto colorido + contorno.
+  const boxMode = textStyle === 'caixa';
   const border = Math.max(4, Math.round(fontSize * 0.06));
   const ctaBorder = Math.max(3, Math.round(ctaSize * 0.06));
-  const lineH = Math.round(fontSize * 1.16);      // altura de linha do gancho
-  const ctaLineH = Math.round(ctaSize * 1.16);
+  const boxPad = Math.round(fontSize * 0.16);
+  const ctaBoxPad = Math.round(ctaSize * 0.18);
+  const lineH = Math.round(fontSize * (boxMode ? 1.34 : 1.16));   // + folga no modo caixa
+  const ctaLineH = Math.round(ctaSize * (boxMode ? 1.34 : 1.16));
   const gap = Number.isFinite(ctaGap) ? Math.max(0, ctaGap) : Math.round(fontSize * 0.8);
+
+  // Cores por estilo. Caixa: gancho = texto escuro + caixa amarela; CTA invertido.
+  const hookColor = boxMode ? boxTextColor : (fraseColor || 'white');
+  const ctaTextColor = boxMode ? boxColor : (ctaColor || '#F5B301');
 
   // Bloco do gancho centralizado verticalmente na fração F; "Leia a legenda"
   // começa `gap` px abaixo da base do gancho. y do drawtext = topo da linha.
@@ -222,15 +247,19 @@ async function renderReel({
 
   fraseLines.forEach((line, i) => {
     layers.push({
-      file: writeLine('frase', i, line), color: fraseColor || 'white',
-      size: fontSize, border, y: yExpr(-hookH / 2 + i * lineH), timing: frase,
+      file: writeLine('frase', i, line), color: hookColor, size: fontSize,
+      stroke: !boxMode, border,
+      box: boxMode, boxColor, boxBorderW: boxPad,
+      y: yExpr(-hookH / 2 + i * lineH), timing: frase,
     });
   });
   const ctaBase = hookH / 2 + gap;
   ctaLines.forEach((line, j) => {
     layers.push({
-      file: writeLine('cta', j, line), color: ctaColor || '#F5B301',
-      size: ctaSize, border: ctaBorder, y: yExpr(ctaBase + j * ctaLineH), timing: cta,
+      file: writeLine('cta', j, line), color: ctaTextColor, size: ctaSize,
+      stroke: !boxMode, border: ctaBorder,
+      box: boxMode, boxColor: boxTextColor, boxBorderW: ctaBoxPad,
+      y: yExpr(ctaBase + j * ctaLineH), timing: cta,
     });
   });
 

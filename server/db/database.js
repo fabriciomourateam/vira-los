@@ -396,6 +396,9 @@ const MLABS_DEFAULTS = {
   reelCtaGap: 60,                // espaço (px) entre o gancho e o "Leia a legenda"
   reelMusicOn: false,            // corta o áudio do treino e põe trilha aleatória do banco
   reelMusicVolume: 0.9,          // volume da trilha (0–1)
+  reelTextStyle: 'contorno',     // 'contorno' (texto + contorno) | 'caixa' (retângulo atrás)
+  reelBoxColor: '#F5C518',       // cor da caixa (amarelo) — modo caixa
+  reelBoxTextColor: '#111111',   // cor do texto dentro da caixa (escuro) — modo caixa
   updated_at: null,
 };
 const getMlabsSettings = () => ({ ...MLABS_DEFAULTS, ...readObj('mlabs_settings') });
