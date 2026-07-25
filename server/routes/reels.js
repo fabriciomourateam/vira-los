@@ -50,8 +50,12 @@ const musicStorage = multer.diskStorage({
 });
 const uploadMusic = multer({
   storage: musicStorage,
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB por faixa
-  fileFilter: (_req, file, cb) => cb(null, /audio\//.test(file.mimetype) || /\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(file.originalname)),
+  limits: { fileSize: 120 * 1024 * 1024 }, // 120MB (aceita o reel baixado com o som)
+  // Aceita áudio OU vídeo: se subir o reel em alta baixado do Insta, o ffmpeg
+  // pega o áudio dele na hora do render (mapeia 1:a:0). Sem passo de extração.
+  fileFilter: (_req, file, cb) => cb(null,
+    /audio\/|video\//.test(file.mimetype) ||
+    /\.(mp3|m4a|aac|wav|ogg|flac|mp4|mov|m4v|webm)$/i.test(file.originalname)),
 });
 
 router.post('/music', uploadMusic.array('tracks', 30), (req, res) => {
