@@ -510,11 +510,13 @@ export default function ReelsEmLote() {
                     className="w-full accent-blue-500" />
                 </div>
               )}
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{tracks.length} música(s) no banco · use faixas livres de direito</span>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                {tracks.length} no banco. Pode subir <b>áudio</b> (mp3) <b>ou o próprio reel em alta baixado do Insta</b> — o sistema pega o som dele sozinho.
+              </p>
+              <div className="flex items-center justify-end">
                 <label className="text-xs font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer">
-                  {uploadingMusic ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Subir músicas
-                  <input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac" multiple className="hidden"
+                  {uploadingMusic ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Subir músicas/reels
+                  <input type="file" accept="audio/*,video/*,.mp3,.m4a,.aac,.wav,.ogg,.flac,.mp4,.mov,.m4v,.webm" multiple className="hidden"
                     disabled={uploadingMusic} onChange={(e) => e.target.files?.length && uploadMusic(e.target.files)} />
                 </label>
               </div>
