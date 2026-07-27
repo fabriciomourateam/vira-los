@@ -282,12 +282,15 @@ async function renderReel({
   const hasMusic = musicPath && fs.existsSync(musicPath);
   const vol = Math.max(0, Math.min(1, Number(musicVolume)));
   const gradient = !fmteam && background === 'gradiente' && fs.existsSync(SCRIM_PATH);
-  const VENC = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
+  // Encode leve pra CPU fraca do Fly: 30fps (o clipe pode vir a 60 → metade do
+  // trabalho), preset ultrafast e crf 23. Reel não precisa de 60fps nem H.264
+  // pesado — o Instagram recomprime de qualquer jeito.
+  const VENC = ['-r', '30', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p'];
   const AENC = ['-c:a', 'aac', '-b:a', '128k'];
-  // CAP de duração SEMPRE presente: garante que o ffmpeg termina no tamanho do
-  // clipe (ou num teto de 60s se o ffprobe falhar). Sem isso, input de imagem ou
-  // áudio "infinito" pode rodar sem parar.
-  const capT = ['-t', ((dur && dur > 0) ? dur : 60).toFixed(2)];
+  // CAP de duração: no máx 20s (reel de "leia a legenda" não precisa mais), o que
+  // também evita encode longo demais. Usa a duração do clipe se for menor.
+  const capSecs = Math.min(20, (dur && dur > 0) ? dur : 20);
+  const capT = ['-t', capSecs.toFixed(2)];
 
   let args;
   if (fmteam) {
@@ -357,8 +360,8 @@ async function renderReel({
       try { proc.kill('SIGKILL'); } catch { /* ignora */ }
       cleanup();
       const tail = stderr.slice(-1400).trim();
-      reject(new Error(`Render interrompido em 90s. Comando: ffmpeg ${args.join(' ')}\n\nÚltimo log do ffmpeg:\n${tail || '(nada — o ffmpeg não imprimiu nada, pode nem ter começado)'}`));
-    }, 90000);
+      reject(new Error(`Render interrompido em 120s. Comando: ffmpeg ${args.join(' ')}\n\nÚltimo log do ffmpeg:\n${tail || '(nada — o ffmpeg não imprimiu nada, pode nem ter começado)'}`));
+    }, 120000);
     proc.stderr.on('data', (d) => { stderr += d.toString(); if (stderr.length > 20000) stderr = stderr.slice(-20000); });
     proc.on('error', (e) => {
       if (done) return; done = true; clearTimeout(killer); cleanup();
