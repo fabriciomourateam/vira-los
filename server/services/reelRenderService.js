@@ -207,18 +207,22 @@ async function renderReel({
   const files = [];
   const layers = [];
 
-  let fmteamPng = null;
+  let fmteamHookPng = null, fmteamCtaPng = null;
   if (fmteam) {
-    // Estilo Dourado (fmteam): o texto é renderizado como PNG transparente
-    // (fonte condensada + palavra dourada em **) e sobreposto no vídeo.
-    fmteamPng = path.join(work, `.fmteam_${stamp}.png`);
-    const { renderHookOverlay } = require('./reelOverlayService');
-    await renderHookOverlay({
+    // Estilo Dourado (fmteam): texto renderizado como PNG (fonte + dourado).
+    // Duas imagens: gancho (vídeo todo) e "Leia a legenda" (meio→fim).
+    fmteamHookPng = path.join(work, `.fmteam_h_${stamp}.png`);
+    const ctaClean = ctaTela ? String(ctaTela).replace(EMOJI_RE, '').replace(/\*\*/g, '').trim() : '';
+    fmteamCtaPng = ctaClean ? path.join(work, `.fmteam_c_${stamp}.png`) : null;
+    const { renderOverlays } = require('./reelOverlayService');
+    const r = await renderOverlays({
       hookText: String(fraseTela).replace(EMOJI_RE, '').trim(),
-      ctaText: ctaTela ? String(ctaTela).replace(EMOJI_RE, '').replace(/\*\*/g, '').trim() : '',
-      outPng: fmteamPng, fontSize, textY: F, gradient: true,
+      ctaText: ctaClean,
+      hookPng: fmteamHookPng, ctaPng: fmteamCtaPng, fontSize, textY: F, gradient: true,
     });
-    files.push(fmteamPng);
+    fmteamCtaPng = r.ctaPng;
+    files.push(fmteamHookPng);
+    if (fmteamCtaPng) files.push(fmteamCtaPng);
   } else {
     // Estilos drawtext (contorno / caixa): uma linha centralizada por layer.
     const fraseStart = parseTiming(fraseTelaTiming, 0, 4).start;
@@ -294,17 +298,28 @@ async function renderReel({
 
   let args;
   if (fmteam) {
-    // Sobrepõe o PNG fmteam (já tem sombra + gancho dourado + cta). Sem drawtext.
-    const inputs = ['-i', rawVideoPath, '-i', fmteamPng];
+    // Sobrepõe o PNG do gancho (vídeo todo) e o do "Leia a legenda" (meio→fim).
+    const inputs = ['-i', rawVideoPath, '-i', fmteamHookPng];
     const chain = [
       '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v]',
-      '[1:v]scale=1080:1920:flags=lanczos[ov]',   // reduz o PNG 2x (supersampling = texto nítido)
-      '[v][ov]overlay=0:0[out]',
+      '[1:v]scale=1080:1920:flags=lanczos[hk]',   // reduz o PNG 2x (supersampling = texto nítido)
     ];
+    let idx = 2;
+    if (fmteamCtaPng) {
+      chain.push('[v][hk]overlay=0:0[a]');
+      inputs.push('-i', fmteamCtaPng);
+      const ci = idx++;
+      chain.push(`[${ci}:v]scale=1080:1920:flags=lanczos[ct]`);
+      const mid = (capSecs / 2).toFixed(2), end = capSecs.toFixed(2);
+      chain.push(`[a][ct]overlay=0:0:enable='between(t,${mid},${end})'[out]`);
+    } else {
+      chain.push('[v][hk]overlay=0:0[out]');
+    }
     const audio = [];
     if (hasMusic) {
       inputs.push('-i', musicPath);
-      chain.push(`[2:a:0]volume=${vol.toFixed(2)}[aout]`);
+      const mi = idx++;
+      chain.push(`[${mi}:a:0]volume=${vol.toFixed(2)}[aout]`);
       audio.push('-map', '[aout]', '-shortest');
     } else {
       audio.push('-map', '0:a:0?');
