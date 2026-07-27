@@ -257,13 +257,26 @@ export default function ReelsEmLote() {
   }
 
   async function pollJob(jobId: string) {
+    let notFound = 0;
     for (;;) {
       await new Promise((res) => setTimeout(res, 1300));
-      let d: any;
+      let d: any; let status = 0;
       try {
         const r = await fetch(`${API}/api/reels/jobs/${jobId}`);
+        status = r.status;
         d = await r.json();
       } catch { continue; }
+      // 404 = o job sumiu (servidor reiniciou, ex.: falta de memória num render).
+      // Tolera 2 blips e então para com aviso, em vez de tentar pra sempre.
+      if (status === 404) {
+        if (++notFound >= 3) {
+          toast.error('O processamento parou (o servidor reiniciou no meio — pode ser memória). Os reels que já apareceram no resultado estão salvos. Tente gerar o restante de novo.');
+          setRunning(false); setStep('');
+          return;
+        }
+        continue;
+      }
+      notFound = 0;
       if (d.status === 'done') {
         const res: RowResult[] = d.result?.results || [];
         setResults(res);

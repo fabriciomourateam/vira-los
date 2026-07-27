@@ -82,9 +82,17 @@ async function renderHookOverlay({ hookText, ctaText = '', outPng, fontSize = 96
   const ctx = await browser.newContext({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   try {
-    await page.setContent(buildHtml({ hookText, ctaText, fontSize, textY, gradient }), { waitUntil: 'networkidle', timeout: 30000 });
-    try { await page.evaluate(() => (document.fonts && document.fonts.ready) ? document.fonts.ready : null); } catch { /* ignora */ }
-    await page.waitForTimeout(250);
+    await page.setContent(buildHtml({ hookText, ctaText, fontSize, textY, gradient }), { waitUntil: 'load', timeout: 15000 });
+    // Espera as fontes carregarem, mas no MÁXIMO ~4s — se o Google Fonts demorar,
+    // não trava o render (cai na fonte de sistema). Antes o 'networkidle' podia
+    // segurar até 30s por causa do <link> pendente.
+    try {
+      await Promise.race([
+        page.evaluate(() => (document.fonts && document.fonts.ready) ? document.fonts.ready : null),
+        page.waitForTimeout(4000),
+      ]);
+    } catch { /* ignora */ }
+    await page.waitForTimeout(150);
     fs.mkdirSync(path.dirname(outPng), { recursive: true });
     await page.screenshot({ path: outPng, omitBackground: true });
   } finally {

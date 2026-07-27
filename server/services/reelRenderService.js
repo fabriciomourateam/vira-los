@@ -196,6 +196,11 @@ async function renderReel({
   const work = tmpDir || path.dirname(outPath);
   fs.mkdirSync(work, { recursive: true });
 
+  // Duração do clipe (ffprobe). Serve pros timings do texto E como CAP de
+  // segurança (-t): com música em loop ou overlay, garante que o ffmpeg
+  // termina no tamanho do vídeo em vez de rodar sem fim.
+  const dur = await probeDuration(rawVideoPath);
+
   const fmteam = textStyle === 'fmteam';
   const F = Math.max(0.2, Math.min(0.9, Number(textY) || 0.6));
   const stamp = `${Date.now()}_${Math.round(process.hrtime()[1] / 1000)}`;
@@ -216,7 +221,6 @@ async function renderReel({
     files.push(fmteamPng);
   } else {
     // Estilos drawtext (contorno / caixa): uma linha centralizada por layer.
-    const dur = await probeDuration(rawVideoPath);
     const fraseStart = parseTiming(fraseTelaTiming, 0, 4).start;
     let frase, cta;
     if (dur && dur > 0) {
@@ -280,6 +284,8 @@ async function renderReel({
   const gradient = !fmteam && background === 'gradiente' && fs.existsSync(SCRIM_PATH);
   const VENC = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
   const AENC = ['-c:a', 'aac', '-b:a', '128k'];
+  // CAP de duração: com overlay (imagem) ou música em loop, o -t garante o fim.
+  const capT = (dur && dur > 0) ? ['-t', dur.toFixed(2)] : [];
 
   let args;
   if (fmteam) {
@@ -297,7 +303,7 @@ async function renderReel({
     } else {
       audio.push('-map', '0:a:0?');
     }
-    args = ['-y', ...inputs, '-filter_complex', chain.join(';'), '-map', '[out]', ...audio, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
+    args = ['-y', ...inputs, '-filter_complex', chain.join(';'), '-map', '[out]', ...audio, ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
   } else if (gradient) {
     // Modo gradiente: corta o vídeo pra 1080×1920 exato, sobrepõe o scrim (2º
     // input) e escreve o texto por cima — via filter_complex. Música = 3º input.
@@ -315,14 +321,14 @@ async function renderReel({
     } else {
       audio.push('-map', '0:a:0?');
     }
-    args = ['-y', ...inputs, '-filter_complex', chain.join(';'), '-map', '[out]', ...audio, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
+    args = ['-y', ...inputs, '-filter_complex', chain.join(';'), '-map', '[out]', ...audio, ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
   } else {
-    // Sem gradiente: caminho simples com -vf (inalterado). Com trilha, loopa a
-    // música, mapeia o áudio dela (corta o do treino) e corta no tamanho (-shortest).
+    // Sem gradiente: caminho simples com -vf. Com trilha, loopa a música, mapeia
+    // o áudio dela (corta o do treino) e corta no tamanho do vídeo (-t + -shortest).
     const filter = buildDrawtextFilter({ layers, fontFile: font });
     args = hasMusic
-      ? ['-y', '-i', rawVideoPath, '-stream_loop', '-1', '-i', musicPath, '-vf', filter, '-af', `volume=${vol.toFixed(2)}`, '-map', '0:v:0', '-map', '1:a:0', '-shortest', ...VENC, ...AENC, '-movflags', '+faststart', outPath]
-      : ['-y', '-i', rawVideoPath, '-vf', filter, '-map', '0:v:0', '-map', '0:a:0?', ...VENC, ...AENC, '-movflags', '+faststart', outPath];
+      ? ['-y', '-i', rawVideoPath, '-stream_loop', '-1', '-i', musicPath, '-vf', filter, '-af', `volume=${vol.toFixed(2)}`, '-map', '0:v:0', '-map', '1:a:0', '-shortest', ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath]
+      : ['-y', '-i', rawVideoPath, '-vf', filter, '-map', '0:v:0', '-map', '0:a:0?', ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
   }
 
   const cleanup = () => {
@@ -333,6 +339,7 @@ async function renderReel({
 
   await new Promise((resolve, reject) => {
     let stderr = '';
+    let done = false;
     let proc;
     try {
       proc = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args);
@@ -340,21 +347,30 @@ async function renderReel({
       cleanup();
       return reject(new Error(`Falha ao iniciar o ffmpeg: ${e.message}`));
     }
+    // Timeout de segurança: se travar (input em loop etc.), mata em 3 min em vez
+    // de segurar o lote pra sempre.
+    const killer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      try { proc.kill('SIGKILL'); } catch { /* ignora */ }
+      cleanup();
+      reject(new Error('Render passou de 3 min e foi interrompido (possível travamento no ffmpeg).'));
+    }, 180000);
     proc.stderr.on('data', (d) => { stderr += d.toString(); if (stderr.length > 20000) stderr = stderr.slice(-20000); });
     proc.on('error', (e) => {
-      cleanup();
+      if (done) return; done = true; clearTimeout(killer); cleanup();
       reject(new Error(e.code === 'ENOENT'
         ? 'ffmpeg não encontrado no ambiente. (Existe na imagem Docker de produção.)'
         : `Erro no ffmpeg: ${e.message}`));
     });
     proc.on('close', (code) => {
-      cleanup();
+      if (done) return; done = true; clearTimeout(killer); cleanup();
       if (code === 0 && fs.existsSync(outPath)) return resolve();
       reject(new Error(`ffmpeg saiu com código ${code}. Trecho do log:\n${stderr.slice(-1200)}`));
     });
   });
 
-  return { outPath, filter };
+  return { outPath };
 }
 
 module.exports = {
