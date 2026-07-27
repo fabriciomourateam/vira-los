@@ -303,7 +303,7 @@ async function renderReel({
     const audio = [];
     if (hasMusic) {
       inputs.push('-i', musicPath);
-      chain.push(`[2:a]volume=${vol.toFixed(2)}[aout]`);
+      chain.push(`[2:a:0]volume=${vol.toFixed(2)}[aout]`);
       audio.push('-map', '[aout]', '-shortest');
     } else {
       audio.push('-map', '0:a:0?');
@@ -321,7 +321,7 @@ async function renderReel({
     const audio = [];
     if (hasMusic) {
       inputs.push('-i', musicPath);
-      chain.push(`[2:a]volume=${vol.toFixed(2)}[aout]`);
+      chain.push(`[2:a:0]volume=${vol.toFixed(2)}[aout]`);
       audio.push('-map', '[aout]', '-shortest');
     } else {
       audio.push('-map', '0:a:0?');

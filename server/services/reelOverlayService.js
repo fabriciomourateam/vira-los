@@ -11,6 +11,8 @@
 
 const path = require('path');
 const fs = require('fs');
+let FABRICIO_AVATAR_DATA_URL = '';
+try { ({ FABRICIO_AVATAR_DATA_URL } = require('./fmteamAssets')); } catch { /* sem avatar */ }
 
 let _browser = null;
 let _launching = null;
@@ -41,14 +43,28 @@ function markup(text) {
   }).join('');
 }
 
-// HTML 1080×1920 transparente: sombra embaixo + gancho (dourado no **) + CTA.
-function buildHtml({ hookText, ctaText = '', fontSize = 96, textY = 0.62, gradient = true }) {
-  const G = 'linear-gradient(165deg, #B8860B 0%, #FFC300 50%, #FFE58A 100%)';
+// HTML 1080×1920 transparente: sombra embaixo + selo + gancho (dourado no **) + CTA.
+function buildHtml({ hookText, ctaText = '', fontSize = 96, textY = 0.62, gradient = true, selo = true, displayName = 'Fabricio Moura', handle = '@fabriciomourateam' }) {
+  // Dourado SÓLIDO brilhante (o gradiente com background-clip ficava muddy no
+  // Chromium — "preto amarelado"). Igual ao carrossel.
+  const GOLD = '#F7B500';
+  // Sombra FORTE (como no carrossel): escurece bem a metade de baixo pro texto
+  // saltar. Quase preto na base.
   const scrim = gradient
-    ? 'background:linear-gradient(to bottom, rgba(0,0,0,0) 36%, rgba(0,0,0,0.5) 60%, rgba(0,0,0,0.92) 100%);'
+    ? 'background:linear-gradient(to bottom, rgba(0,0,0,0) 24%, rgba(0,0,0,0.55) 44%, rgba(0,0,0,0.85) 66%, rgba(0,0,0,0.97) 100%);'
     : '';
   const topPx = Math.round(Math.max(0.2, Math.min(0.9, textY)) * 1920);
   const ctaSize = Math.round(fontSize * 0.5);
+  const avaSize = Math.round(fontSize * 0.62);
+  const nameSize = Math.round(fontSize * 0.36);
+  const badge = Math.round(nameSize * 0.9);
+  const showSelo = selo && FABRICIO_AVATAR_DATA_URL;
+  const seloHtml = showSelo ? `<div class="selo">
+      <img class="ava" src="${FABRICIO_AVATAR_DATA_URL}" />
+      <div class="who"><span class="nm">${esc(displayName)}</span>
+        <svg class="vf" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#3897F0"/><path d="M6.8 12.4l3.1 3.1 7-7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="hd">${esc(handle)}</span></div>
+    </div>` : '';
   return `<!doctype html><html><head><meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -57,18 +73,23 @@ function buildHtml({ hookText, ctaText = '', fontSize = 96, textY = 0.62, gradie
   html,body{margin:0;padding:0;width:1080px;height:1920px;background:transparent;overflow:hidden;}
   .stage{position:relative;width:1080px;height:1920px;}
   .scrim{position:absolute;inset:0;${scrim}}
-  .block{position:absolute;left:56px;right:56px;top:${topPx}px;transform:translateY(-50%);text-align:center;}
-  .hook{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;
-    font-size:${fontSize}px;line-height:0.95;letter-spacing:-1px;color:#fff;
-    text-shadow:0 3px 16px rgba(0,0,0,0.55),0 1px 2px rgba(0,0,0,0.6);}
-  .hook em{font-style:normal;background:${G};-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
-  .cta{margin-top:24px;font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;
-    font-size:${ctaSize}px;letter-spacing:0.5px;
-    background:${G};-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-    filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5));}
+  .block{position:absolute;left:52px;right:52px;top:${topPx}px;transform:translateY(-50%);text-align:center;}
+  .selo{display:flex;align-items:center;justify-content:center;gap:${Math.round(avaSize*0.28)}px;margin-bottom:${Math.round(fontSize*0.22)}px;}
+  .ava{width:${avaSize}px;height:${avaSize}px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 3px rgba(255,255,255,0.9),0 2px 10px rgba(0,0,0,0.5);}
+  .who{display:flex;align-items:center;gap:${Math.round(nameSize*0.28)}px;flex-wrap:wrap;justify-content:center;}
+  .nm{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:${nameSize}px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.7);}
+  .vf{width:${badge}px;height:${badge}px;}
+  .hd{font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:${Math.round(nameSize*0.8)}px;color:rgba(255,255,255,0.85);text-shadow:0 2px 8px rgba(0,0,0,0.7);}
+  .hook{font-family:'Barlow Condensed',sans-serif;font-weight:900;text-transform:uppercase;
+    font-size:${fontSize}px;line-height:0.92;letter-spacing:-1.5px;color:#fff;
+    text-shadow:0 3px 16px rgba(0,0,0,0.6),0 1px 2px rgba(0,0,0,0.7);}
+  .hook em{font-style:normal;color:${GOLD};-webkit-text-fill-color:${GOLD};}
+  .cta{margin-top:${Math.round(fontSize*0.26)}px;font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;
+    font-size:${ctaSize}px;letter-spacing:0.5px;color:${GOLD};-webkit-text-fill-color:${GOLD};
+    text-shadow:0 2px 8px rgba(0,0,0,0.6);}
 </style></head><body>
 <div class="stage"><div class="scrim"></div>
-  <div class="block"><div class="hook">${markup(hookText)}</div>${ctaText ? `<div class="cta">${esc(ctaText)}</div>` : ''}</div>
+  <div class="block">${seloHtml}<div class="hook">${markup(hookText)}</div>${ctaText ? `<div class="cta">${esc(ctaText)}</div>` : ''}</div>
 </div></body></html>`;
 }
 
