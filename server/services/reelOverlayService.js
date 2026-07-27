@@ -99,21 +99,22 @@ function buildHtml({ hookText, ctaText = '', fontSize = 96, textY = 0.62, gradie
 }
 
 /**
- * Renderiza o overlay do reel num PNG transparente 1080×1920.
- * @returns {Promise<string>} outPng
+ * Renderiza os overlays do reel em PNGs transparentes 1080×1920 (em 2x internos).
+ * Gera DOIS: o do gancho (selo + gancho, vídeo todo) e o do "Leia a legenda"
+ * (na mesma posição, pra entrar só no meio→fim). Usa visibility:hidden pra os
+ * dois ficarem na posição idêntica (o layout não desloca).
+ * @returns {Promise<{hookPng: string, ctaPng: string|null}>}
  */
-async function renderHookOverlay({ hookText, ctaText = '', outPng, fontSize = 96, textY = 0.62, gradient = true }) {
+async function renderOverlays({ hookText, ctaText = '', hookPng, ctaPng = null, fontSize = 96, textY = 0.62, gradient = true, selo = true }) {
   const browser = await getBrowser();
   if (!browser) throw new Error('Playwright/Chromium indisponível — não dá pra renderizar o estilo Dourado (fmteam).');
   // 2x (deviceScaleFactor) → PNG 2160×3840 = texto bem nítido; o ffmpeg reduz
   // pra 1080 (supersampling) e as letras ficam limpas.
   const ctx = await browser.newContext({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
+  const wantCta = !!(ctaPng && String(ctaText).trim());
   try {
-    await page.setContent(buildHtml({ hookText, ctaText, fontSize, textY, gradient }), { waitUntil: 'load', timeout: 15000 });
-    // Espera as fontes carregarem, mas no MÁXIMO ~4s — se o Google Fonts demorar,
-    // não trava o render (cai na fonte de sistema). Antes o 'networkidle' podia
-    // segurar até 30s por causa do <link> pendente.
+    await page.setContent(buildHtml({ hookText, ctaText, fontSize, textY, gradient, selo }), { waitUntil: 'load', timeout: 15000 });
     try {
       await Promise.race([
         page.evaluate(() => (document.fonts && document.fonts.ready) ? document.fonts.ready : null),
@@ -121,12 +122,21 @@ async function renderHookOverlay({ hookText, ctaText = '', outPng, fontSize = 96
       ]);
     } catch { /* ignora */ }
     await page.waitForTimeout(150);
-    fs.mkdirSync(path.dirname(outPng), { recursive: true });
-    await page.screenshot({ path: outPng, omitBackground: true });
+    fs.mkdirSync(path.dirname(hookPng), { recursive: true });
+    if (wantCta) {
+      // Passo 1: esconde a CTA (mantém o espaço) → só selo + gancho.
+      await page.addStyleTag({ content: '.cta{visibility:hidden!important}' });
+      await page.screenshot({ path: hookPng, omitBackground: true });
+      // Passo 2: mostra só a CTA (esconde selo + gancho) → posição idêntica.
+      await page.addStyleTag({ content: '.cta{visibility:visible!important}.selo,.hook{visibility:hidden!important}' });
+      await page.screenshot({ path: ctaPng, omitBackground: true });
+    } else {
+      await page.screenshot({ path: hookPng, omitBackground: true });
+    }
   } finally {
     try { await ctx.close(); } catch { /* ignora */ }
   }
-  return outPng;
+  return { hookPng, ctaPng: wantCta ? ctaPng : null };
 }
 
-module.exports = { renderHookOverlay, buildHtml, markup };
+module.exports = { renderOverlays, buildHtml, markup };
