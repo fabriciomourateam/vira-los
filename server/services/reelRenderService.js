@@ -349,15 +349,16 @@ async function renderReel({
       cleanup();
       return reject(new Error(`Falha ao iniciar o ffmpeg: ${e.message}`));
     }
-    // Timeout de segurança: se travar (input em loop etc.), mata em 3 min em vez
-    // de segurar o lote pra sempre.
+    // Timeout de segurança: mata o ffmpeg se travar e DEVOLVE o log (o ffmpeg
+    // imprime o progresso: frame=/time= subindo = lento; parado = travado mesmo).
     const killer = setTimeout(() => {
       if (done) return;
       done = true;
       try { proc.kill('SIGKILL'); } catch { /* ignora */ }
       cleanup();
-      reject(new Error('Render passou de 3 min e foi interrompido (possível travamento no ffmpeg).'));
-    }, 180000);
+      const tail = stderr.slice(-1400).trim();
+      reject(new Error(`Render interrompido em 90s. Comando: ffmpeg ${args.join(' ')}\n\nÚltimo log do ffmpeg:\n${tail || '(nada — o ffmpeg não imprimiu nada, pode nem ter começado)'}`));
+    }, 90000);
     proc.stderr.on('data', (d) => { stderr += d.toString(); if (stderr.length > 20000) stderr = stderr.slice(-20000); });
     proc.on('error', (e) => {
       if (done) return; done = true; clearTimeout(killer); cleanup();

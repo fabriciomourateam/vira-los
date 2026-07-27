@@ -644,7 +644,7 @@ export default function ReelsEmLote() {
                   )}
                 </>
               ) : (
-                <span className="text-red-300 truncate flex-1">{r.error}</span>
+                <span className="text-red-300 flex-1 whitespace-pre-wrap break-all font-mono text-[10px] select-all">{r.error}</span>
               )}
             </div>
           ))}
