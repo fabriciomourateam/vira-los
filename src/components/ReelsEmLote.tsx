@@ -32,8 +32,8 @@ function fmtBRT(s: string): string {
 // Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
-const GOLD = 'linear-gradient(165deg, #B8860B 0%, #FFC300 50%, #FFE58A 100%)';
-const goldStyle: React.CSSProperties = { background: GOLD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' };
+const GOLD = '#F7B500';
+const goldStyle: React.CSSProperties = { color: GOLD };
 
 // Renderiza "texto **dourado** aqui" com a palavra entre ** em dourado.
 function goldSegments(text: string) {
@@ -69,7 +69,7 @@ function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301'
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-border bg-gradient-to-b from-neutral-700 to-neutral-900" style={{ aspectRatio: '9 / 16' }}>
       {showGrad && (
-        <div className="absolute inset-x-0 bottom-0" style={{ top: '36%', background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.93) 100%)' }} />
+        <div className="absolute inset-x-0 bottom-0" style={{ top: '24%', background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.85) 70%, rgba(0,0,0,0.97) 100%)' }} />
       )}
       <div className="absolute inset-x-0 -translate-y-1/2 px-3 text-center" style={{ top: `${hookPct}%`, lineHeight: box ? 1.55 : 1.1 }}>
         <span className="font-extrabold" style={{ fontSize: hookFont, ...hookSpan }}>{hookContent}</span>
