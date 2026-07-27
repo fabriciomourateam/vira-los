@@ -284,8 +284,10 @@ async function renderReel({
   const gradient = !fmteam && background === 'gradiente' && fs.existsSync(SCRIM_PATH);
   const VENC = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
   const AENC = ['-c:a', 'aac', '-b:a', '128k'];
-  // CAP de duração: com overlay (imagem) ou música em loop, o -t garante o fim.
-  const capT = (dur && dur > 0) ? ['-t', dur.toFixed(2)] : [];
+  // CAP de duração SEMPRE presente: garante que o ffmpeg termina no tamanho do
+  // clipe (ou num teto de 60s se o ffprobe falhar). Sem isso, input de imagem ou
+  // áudio "infinito" pode rodar sem parar.
+  const capT = ['-t', ((dur && dur > 0) ? dur : 60).toFixed(2)];
 
   let args;
   if (fmteam) {
@@ -297,7 +299,7 @@ async function renderReel({
     ];
     const audio = [];
     if (hasMusic) {
-      inputs.push('-stream_loop', '-1', '-i', musicPath);
+      inputs.push('-i', musicPath);
       chain.push(`[2:a]volume=${vol.toFixed(2)}[aout]`);
       audio.push('-map', '[aout]', '-shortest');
     } else {
@@ -315,7 +317,7 @@ async function renderReel({
     ];
     const audio = [];
     if (hasMusic) {
-      inputs.push('-stream_loop', '-1', '-i', musicPath);
+      inputs.push('-i', musicPath);
       chain.push(`[2:a]volume=${vol.toFixed(2)}[aout]`);
       audio.push('-map', '[aout]', '-shortest');
     } else {
@@ -327,7 +329,7 @@ async function renderReel({
     // o áudio dela (corta o do treino) e corta no tamanho do vídeo (-t + -shortest).
     const filter = buildDrawtextFilter({ layers, fontFile: font });
     args = hasMusic
-      ? ['-y', '-i', rawVideoPath, '-stream_loop', '-1', '-i', musicPath, '-vf', filter, '-af', `volume=${vol.toFixed(2)}`, '-map', '0:v:0', '-map', '1:a:0', '-shortest', ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath]
+      ? ['-y', '-i', rawVideoPath, '-i', musicPath, '-vf', filter, '-af', `volume=${vol.toFixed(2)}`, '-map', '0:v:0', '-map', '1:a:0', '-shortest', ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath]
       : ['-y', '-i', rawVideoPath, '-vf', filter, '-map', '0:v:0', '-map', '0:a:0?', ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
   }
 
