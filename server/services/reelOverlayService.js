@@ -127,8 +127,9 @@ async function renderOverlays({ hookText, ctaText = '', hookPng, ctaPng = null, 
       // Passo 1: esconde a CTA (mantém o espaço) → só selo + gancho.
       await page.addStyleTag({ content: '.cta{visibility:hidden!important}' });
       await page.screenshot({ path: hookPng, omitBackground: true });
-      // Passo 2: mostra só a CTA (esconde selo + gancho) → posição idêntica.
-      await page.addStyleTag({ content: '.cta{visibility:visible!important}.selo,.hook{visibility:hidden!important}' });
+      // Passo 2: mostra só a CTA (esconde a SOMBRA + selo + gancho) → posição
+      // idêntica. Sem a sombra aqui: senão ela entra de novo por cima do gancho.
+      await page.addStyleTag({ content: '.cta{visibility:visible!important}.scrim,.selo,.hook{visibility:hidden!important}' });
       await page.screenshot({ path: ctaPng, omitBackground: true });
     } else {
       await page.screenshot({ path: hookPng, omitBackground: true });
