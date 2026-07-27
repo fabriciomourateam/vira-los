@@ -196,89 +196,109 @@ async function renderReel({
   const work = tmpDir || path.dirname(outPath);
   fs.mkdirSync(work, { recursive: true });
 
-  // Timings calibrados pelos reels reais: o GANCHO fica o vídeo todo e o
-  // "Leia a legenda" entra na METADE do tempo até o fim. Pra isso medimos a
-  // duração com ffprobe. Se falhar, cai pros timings do texto (0-4s / 4-5s).
-  const dur = await probeDuration(rawVideoPath);
-  const fraseStart = parseTiming(fraseTelaTiming, 0, 4).start;
-  let frase, cta;
-  if (dur && dur > 0) {
-    frase = { start: fraseStart, end: Math.round(dur * 100) / 100 };
-    cta = ctaAtMiddle
-      ? { start: Math.round((dur / 2) * 100) / 100, end: Math.round(dur * 100) / 100 }
-      : parseTiming(ctaTelaTiming, dur / 2, dur);
-  } else {
-    frase = parseTiming(fraseTelaTiming, 0, 4);
-    cta = parseTiming(ctaTelaTiming, frase.end, frase.end + 1.5);
-  }
-
-  // Emojis não têm glifo na fonte do sistema → viram quadradinho. Remove antes
-  // de queimar (ex.: "👇 LEIA A LEGENDA" → "LEIA A LEGENDA").
-  const sanitize = (s) => String(s || '').replace(EMOJI_RE, '').replace(/\s+/g, ' ').trim();
-  // Largura segura: quebra o texto pra caber DENTRO do quadro (com margem),
-  // em quantas linhas precisar. Cada linha vira um layer centralizado.
-  const wrapChars = Math.max(10, Math.floor(900 / (fontSize * 0.55)));
-  const fraseLines = wrapText(sanitize(fraseTela), wrapChars, 5);
-  const ctaSize = Math.max(28, Math.round(fontSize * 0.62));
-  const ctaLines = (ctaTela && sanitize(ctaTela)) ? wrapText(sanitize(ctaTela), wrapChars + 6, 2) : [];
-
-  // Estilo: 'caixa' = texto em retângulo preenchido (gancho escuro no amarelo,
-  // CTA amarelo no escuro — invertido); 'contorno' = texto colorido + contorno.
-  const boxMode = textStyle === 'caixa';
-  const border = Math.max(4, Math.round(fontSize * 0.06));
-  const ctaBorder = Math.max(3, Math.round(ctaSize * 0.06));
-  const boxPad = Math.round(fontSize * 0.16);
-  const ctaBoxPad = Math.round(ctaSize * 0.18);
-  const lineH = Math.round(fontSize * (boxMode ? 1.34 : 1.16));   // + folga no modo caixa
-  const ctaLineH = Math.round(ctaSize * (boxMode ? 1.34 : 1.16));
-  const gap = Number.isFinite(ctaGap) ? Math.max(0, ctaGap) : Math.round(fontSize * 0.8);
-
-  // Cores por estilo. Caixa: gancho = texto escuro + caixa amarela; CTA invertido.
-  const hookColor = boxMode ? boxTextColor : (fraseColor || 'white');
-  const ctaTextColor = boxMode ? boxColor : (ctaColor || '#F5B301');
-
-  // Bloco do gancho centralizado verticalmente na fração F; "Leia a legenda"
-  // começa `gap` px abaixo da base do gancho. y do drawtext = topo da linha.
+  const fmteam = textStyle === 'fmteam';
   const F = Math.max(0.2, Math.min(0.9, Number(textY) || 0.6));
-  const hookH = fraseLines.length * lineH;
-  const yExpr = (px) => { const p = Math.round(px); return p >= 0 ? `h*${F}+${p}` : `h*${F}-${-p}`; };
-
   const stamp = `${Date.now()}_${Math.round(process.hrtime()[1] / 1000)}`;
   const files = [];
   const layers = [];
-  const writeLine = (prefix, i, text) => {
-    const f = path.join(work, `.${prefix}_${stamp}_${i}.txt`);
-    fs.writeFileSync(f, text, 'utf8');
-    files.push(f);
-    return f;
-  };
 
-  fraseLines.forEach((line, i) => {
-    layers.push({
-      file: writeLine('frase', i, line), color: hookColor, size: fontSize,
-      stroke: !boxMode, border,
-      box: boxMode, boxColor, boxBorderW: boxPad,
-      y: yExpr(-hookH / 2 + i * lineH), timing: frase,
+  let fmteamPng = null;
+  if (fmteam) {
+    // Estilo Dourado (fmteam): o texto é renderizado como PNG transparente
+    // (fonte condensada + palavra dourada em **) e sobreposto no vídeo.
+    fmteamPng = path.join(work, `.fmteam_${stamp}.png`);
+    const { renderHookOverlay } = require('./reelOverlayService');
+    await renderHookOverlay({
+      hookText: String(fraseTela).replace(EMOJI_RE, '').trim(),
+      ctaText: ctaTela ? String(ctaTela).replace(EMOJI_RE, '').replace(/\*\*/g, '').trim() : '',
+      outPng: fmteamPng, fontSize, textY: F, gradient: true,
     });
-  });
-  const ctaBase = hookH / 2 + gap;
-  ctaLines.forEach((line, j) => {
-    layers.push({
-      file: writeLine('cta', j, line), color: ctaTextColor, size: ctaSize,
-      stroke: !boxMode, border: ctaBorder,
-      box: boxMode, boxColor: boxTextColor, boxBorderW: ctaBoxPad,
-      y: yExpr(ctaBase + j * ctaLineH), timing: cta,
+    files.push(fmteamPng);
+  } else {
+    // Estilos drawtext (contorno / caixa): uma linha centralizada por layer.
+    const dur = await probeDuration(rawVideoPath);
+    const fraseStart = parseTiming(fraseTelaTiming, 0, 4).start;
+    let frase, cta;
+    if (dur && dur > 0) {
+      frase = { start: fraseStart, end: Math.round(dur * 100) / 100 };
+      cta = ctaAtMiddle
+        ? { start: Math.round((dur / 2) * 100) / 100, end: Math.round(dur * 100) / 100 }
+        : parseTiming(ctaTelaTiming, dur / 2, dur);
+    } else {
+      frase = parseTiming(fraseTelaTiming, 0, 4);
+      cta = parseTiming(ctaTelaTiming, frase.end, frase.end + 1.5);
+    }
+
+    // Remove emojis e os marcadores ** (o drawtext pinta a linha inteira de uma
+    // cor — o destaque de palavra em dourado é só no estilo fmteam).
+    const sanitize = (s) => String(s || '').replace(EMOJI_RE, '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+    const wrapChars = Math.max(10, Math.floor(900 / (fontSize * 0.55)));
+    const fraseLines = wrapText(sanitize(fraseTela), wrapChars, 5);
+    const ctaSize = Math.max(28, Math.round(fontSize * 0.62));
+    const ctaLines = (ctaTela && sanitize(ctaTela)) ? wrapText(sanitize(ctaTela), wrapChars + 6, 2) : [];
+
+    const boxMode = textStyle === 'caixa';
+    const border = Math.max(4, Math.round(fontSize * 0.06));
+    const ctaBorder = Math.max(3, Math.round(ctaSize * 0.06));
+    const boxPad = Math.round(fontSize * 0.16);
+    const ctaBoxPad = Math.round(ctaSize * 0.18);
+    const lineH = Math.round(fontSize * (boxMode ? 1.34 : 1.16));
+    const ctaLineH = Math.round(ctaSize * (boxMode ? 1.34 : 1.16));
+    const gap = Number.isFinite(ctaGap) ? Math.max(0, ctaGap) : Math.round(fontSize * 0.8);
+    const hookColor = boxMode ? boxTextColor : (fraseColor || 'white');
+    const ctaTextColor = boxMode ? boxColor : (ctaColor || '#F5B301');
+    const hookH = fraseLines.length * lineH;
+    const yExpr = (px) => { const p = Math.round(px); return p >= 0 ? `h*${F}+${p}` : `h*${F}-${-p}`; };
+    const writeLine = (prefix, i, text) => {
+      const f = path.join(work, `.${prefix}_${stamp}_${i}.txt`);
+      fs.writeFileSync(f, text, 'utf8');
+      files.push(f);
+      return f;
+    };
+
+    fraseLines.forEach((line, i) => {
+      layers.push({
+        file: writeLine('frase', i, line), color: hookColor, size: fontSize,
+        stroke: !boxMode, border,
+        box: boxMode, boxColor, boxBorderW: boxPad,
+        y: yExpr(-hookH / 2 + i * lineH), timing: frase,
+      });
     });
-  });
+    const ctaBase = hookH / 2 + gap;
+    ctaLines.forEach((line, j) => {
+      layers.push({
+        file: writeLine('cta', j, line), color: ctaTextColor, size: ctaSize,
+        stroke: !boxMode, border: ctaBorder,
+        box: boxMode, boxColor: boxTextColor, boxBorderW: ctaBoxPad,
+        y: yExpr(ctaBase + j * ctaLineH), timing: cta,
+      });
+    });
+  }
 
   const hasMusic = musicPath && fs.existsSync(musicPath);
   const vol = Math.max(0, Math.min(1, Number(musicVolume)));
-  const gradient = background === 'gradiente' && fs.existsSync(SCRIM_PATH);
+  const gradient = !fmteam && background === 'gradiente' && fs.existsSync(SCRIM_PATH);
   const VENC = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
   const AENC = ['-c:a', 'aac', '-b:a', '128k'];
 
   let args;
-  if (gradient) {
+  if (fmteam) {
+    // Sobrepõe o PNG fmteam (já tem sombra + gancho dourado + cta). Sem drawtext.
+    const inputs = ['-i', rawVideoPath, '-i', fmteamPng];
+    const chain = [
+      '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v]',
+      '[v][1:v]overlay=0:0[out]',
+    ];
+    const audio = [];
+    if (hasMusic) {
+      inputs.push('-stream_loop', '-1', '-i', musicPath);
+      chain.push(`[2:a]volume=${vol.toFixed(2)}[aout]`);
+      audio.push('-map', '[aout]', '-shortest');
+    } else {
+      audio.push('-map', '0:a:0?');
+    }
+    args = ['-y', ...inputs, '-filter_complex', chain.join(';'), '-map', '[out]', ...audio, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
+  } else if (gradient) {
     // Modo gradiente: corta o vídeo pra 1080×1920 exato, sobrepõe o scrim (2º
     // input) e escreve o texto por cima — via filter_complex. Música = 3º input.
     const inputs = ['-i', rawVideoPath, '-i', SCRIM_PATH];

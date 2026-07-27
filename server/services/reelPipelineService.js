@@ -60,7 +60,7 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
     ctaAtMiddle: cfg.reelCtaAtMiddle !== false,
     textY: typeof cfg.reelTextY === 'number' ? cfg.reelTextY : 0.6,
     ctaGap: typeof cfg.reelCtaGap === 'number' ? cfg.reelCtaGap : 60,
-    textStyle: cfg.reelTextStyle === 'caixa' ? 'caixa' : 'contorno',
+    textStyle: ['caixa', 'fmteam'].includes(cfg.reelTextStyle) ? cfg.reelTextStyle : 'contorno',
     boxColor: cfg.reelBoxColor || '#F5C518',
     boxTextColor: cfg.reelBoxTextColor || '#111111',
     background: cfg.reelBackground === 'gradiente' ? 'gradiente' : 'nenhum',
