@@ -79,7 +79,7 @@ router.get('/settings', (_req, res) => res.json(db.getMlabsSettings()));
 
 router.put('/settings', (req, res) => {
   try {
-    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'autoScheduleReel', 'autoRenderReel', 'defaultTime', 'dateOffsetsMonths', 'reelPostsPerDay', 'reelScheduleDays', 'reelScheduleTimes', 'reelFontSize', 'reelFontFile', 'reelCtaColor', 'reelCtaAtMiddle', 'reelTextY', 'reelCtaGap', 'reelMusicOn', 'reelMusicVolume', 'reelTextStyle', 'reelBoxColor', 'reelBoxTextColor'];
+    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'autoScheduleReel', 'autoRenderReel', 'defaultTime', 'dateOffsetsMonths', 'reelPostsPerDay', 'reelScheduleDays', 'reelScheduleTimes', 'reelFontSize', 'reelFontFile', 'reelCtaColor', 'reelCtaAtMiddle', 'reelTextY', 'reelCtaGap', 'reelMusicOn', 'reelMusicVolume', 'reelTextStyle', 'reelBoxColor', 'reelBoxTextColor', 'reelBackground'];
     const patch = {};
     for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
     res.json(db.setMlabsSettings(patch));

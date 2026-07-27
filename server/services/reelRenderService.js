@@ -41,6 +41,10 @@ function resolveFont(preferred) {
 // Emojis, símbolos e seletores de variação (a sans do sistema não tem glifo).
 const EMOJI_RE = /[\u{1F1E6}-\u{1F1FF}\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{2190}-\u{21FF}]/gu;
 
+// Scrim: gradiente escuro (transparente em cima → preto embaixo) sobreposto no
+// vídeo pro texto ficar legível na metade de baixo. PNG bundlado (1080×1920).
+const SCRIM_PATH = path.join(__dirname, '../assets/reel-scrim.png');
+
 // ── Timing ("0-4s" → { start, end }) ─────────────────────────────────────────
 function parseTiming(str, fallbackStart, fallbackEnd) {
   const m = String(str || '').match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/);
@@ -129,10 +133,9 @@ function ffColor(c) {
 // Layer: { file, color, size, y, timing } + estilo:
 //   box=true → caixa preenchida atrás do texto (boxColor, boxBorderW = padding)
 //   stroke=true → contorno + sombra preta (border)
-function buildDrawtextFilter(opts) {
-  const { layers = [], fontFile, targetWidth = 1080 } = opts;
+// Só a cadeia de drawtexts (sem o scale) — reaproveitada no modo gradiente.
+function textChain(layers, fontFile) {
   assertSafePath(fontFile, 'fontFile');
-
   const draw = (L) => {
     assertSafePath(L.file, 'textfile');
     assertSafeColor(L.color, 'color');
@@ -146,9 +149,13 @@ function buildDrawtextFilter(opts) {
       `fontcolor=${ffColor(L.color)}:fontsize=${L.size}:${strokePart}${boxPart}` +
       `x=(w-text_w)/2:y=${L.y}:enable='between(t,${L.timing.start},${L.timing.end})'`;
   };
+  return layers.map(draw).join(',');
+}
 
+function buildDrawtextFilter(opts) {
+  const { layers = [], fontFile, targetWidth = 1080 } = opts;
   // Normaliza pra 1080 de largura mantendo o 9:16 (altura par), depois as linhas.
-  return [`scale=${targetWidth}:-2`, ...layers.map(draw)].join(',');
+  return [`scale=${targetWidth}:-2`, textChain(layers, fontFile)].join(',');
 }
 
 /**
@@ -174,6 +181,7 @@ async function renderReel({
   ctaGap,               // espaço (px) entre o gancho e o "Leia a legenda"
   musicPath,            // trilha (se definida: corta o áudio do treino e usa ela)
   musicVolume = 0.9,    // volume da trilha (0–1)
+  background = 'nenhum', // 'nenhum' | 'gradiente' (sombra escura embaixo)
   tmpDir,
 }) {
   if (!rawVideoPath || !fs.existsSync(rawVideoPath)) {
@@ -263,39 +271,39 @@ async function renderReel({
     });
   });
 
-  const filter = buildDrawtextFilter({ layers, fontFile: font });
-
-  // Com trilha: 2º input (música em loop pra cobrir clipes curtos), mapeia o
-  // vídeo do clipe e o ÁUDIO da música (corta o áudio do treino), corta no
-  // tamanho do vídeo (-shortest) e ajusta o volume. Sem trilha: áudio original.
   const hasMusic = musicPath && fs.existsSync(musicPath);
   const vol = Math.max(0, Math.min(1, Number(musicVolume)));
-  const args = hasMusic
-    ? [
-        '-y',
-        '-i', rawVideoPath,
-        '-stream_loop', '-1', '-i', musicPath,
-        '-vf', filter,
-        '-af', `volume=${vol.toFixed(2)}`,
-        '-map', '0:v:0',
-        '-map', '1:a:0',
-        '-shortest',
-        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
-        '-c:a', 'aac', '-b:a', '128k',
-        '-movflags', '+faststart',
-        outPath,
-      ]
-    : [
-        '-y',
-        '-i', rawVideoPath,
-        '-vf', filter,
-        '-map', '0:v:0',
-        '-map', '0:a:0?',        // áudio opcional (clipe de treino pode não ter)
-        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
-        '-c:a', 'aac', '-b:a', '128k',
-        '-movflags', '+faststart',
-        outPath,
-      ];
+  const gradient = background === 'gradiente' && fs.existsSync(SCRIM_PATH);
+  const VENC = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
+  const AENC = ['-c:a', 'aac', '-b:a', '128k'];
+
+  let args;
+  if (gradient) {
+    // Modo gradiente: corta o vídeo pra 1080×1920 exato, sobrepõe o scrim (2º
+    // input) e escreve o texto por cima — via filter_complex. Música = 3º input.
+    const inputs = ['-i', rawVideoPath, '-i', SCRIM_PATH];
+    const chain = [
+      '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v]',
+      '[v][1:v]overlay=0:0[bg]',
+      `[bg]${textChain(layers, font)}[out]`,
+    ];
+    const audio = [];
+    if (hasMusic) {
+      inputs.push('-stream_loop', '-1', '-i', musicPath);
+      chain.push(`[2:a]volume=${vol.toFixed(2)}[aout]`);
+      audio.push('-map', '[aout]', '-shortest');
+    } else {
+      audio.push('-map', '0:a:0?');
+    }
+    args = ['-y', ...inputs, '-filter_complex', chain.join(';'), '-map', '[out]', ...audio, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
+  } else {
+    // Sem gradiente: caminho simples com -vf (inalterado). Com trilha, loopa a
+    // música, mapeia o áudio dela (corta o do treino) e corta no tamanho (-shortest).
+    const filter = buildDrawtextFilter({ layers, fontFile: font });
+    args = hasMusic
+      ? ['-y', '-i', rawVideoPath, '-stream_loop', '-1', '-i', musicPath, '-vf', filter, '-af', `volume=${vol.toFixed(2)}`, '-map', '0:v:0', '-map', '1:a:0', '-shortest', ...VENC, ...AENC, '-movflags', '+faststart', outPath]
+      : ['-y', '-i', rawVideoPath, '-vf', filter, '-map', '0:v:0', '-map', '0:a:0?', ...VENC, ...AENC, '-movflags', '+faststart', outPath];
+  }
 
   const cleanup = () => {
     for (const f of files) {

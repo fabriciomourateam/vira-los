@@ -399,6 +399,7 @@ const MLABS_DEFAULTS = {
   reelTextStyle: 'contorno',     // 'contorno' (texto + contorno) | 'caixa' (retângulo atrás)
   reelBoxColor: '#F5C518',       // cor da caixa (amarelo) — modo caixa
   reelBoxTextColor: '#111111',   // cor do texto dentro da caixa (escuro) — modo caixa
+  reelBackground: 'nenhum',      // 'nenhum' | 'gradiente' (sombra escura de baixo até o meio)
   updated_at: null,
 };
 const getMlabsSettings = () => ({ ...MLABS_DEFAULTS, ...readObj('mlabs_settings') });

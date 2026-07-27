@@ -63,6 +63,7 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
     textStyle: cfg.reelTextStyle === 'caixa' ? 'caixa' : 'contorno',
     boxColor: cfg.reelBoxColor || '#F5C518',
     boxTextColor: cfg.reelBoxTextColor || '#111111',
+    background: cfg.reelBackground === 'gradiente' ? 'gradiente' : 'nenhum',
     musicPath: music ? music.path : null,
     musicVolume: typeof cfg.reelMusicVolume === 'number' ? cfg.reelMusicVolume : 0.9,
   });
