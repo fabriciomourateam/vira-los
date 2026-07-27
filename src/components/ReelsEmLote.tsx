@@ -32,29 +32,47 @@ function fmtBRT(s: string): string {
 // Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
+const GOLD = 'linear-gradient(165deg, #B8860B 0%, #FFC300 50%, #FFE58A 100%)';
+const goldStyle: React.CSSProperties = { background: GOLD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' };
+
+// Renderiza "texto **dourado** aqui" com a palavra entre ** em dourado.
+function goldSegments(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((seg, i) => {
+    const m = seg.match(/^\*\*([^*]+)\*\*$/);
+    return m ? <span key={i} style={goldStyle}>{m[1]}</span> : <React.Fragment key={i}>{seg}</React.Fragment>;
+  });
+}
+
 function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301', gap = 60, style = 'contorno', boxColor = '#F5C518', boxTextColor = '#111111', background = 'nenhum' }: { texto: string; cta: string; y?: number; fontScale?: number; ctaColor?: string; gap?: number; style?: string; boxColor?: string; boxTextColor?: string; background?: string }) {
   const stroke = '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000';
   const box = style === 'caixa';
+  const fmteam = style === 'fmteam';
+  const showGrad = background === 'gradiente' || fmteam;
   const hookPct = Math.max(20, Math.min(90, y * 100));
   const ctaPct = Math.min(93, hookPct + 9 + gap / 19.2);
   const k = Math.max(0.5, Math.min(2, fontScale));
   const hookFont = `clamp(${13 * k}px, ${4.2 * k}vw, ${20 * k}px)`;
   const ctaFont = `clamp(${10 * k}px, ${2.9 * k}vw, ${15 * k}px)`;
-  // box-decoration-break: clone → cada linha ganha sua própria caixa (como no render).
   const clone = { WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone' } as React.CSSProperties;
   const hookSpan: React.CSSProperties = box
     ? { color: boxTextColor, background: boxColor, padding: '0.06em 0.3em', borderRadius: 5, ...clone }
-    : { color: '#fff', textShadow: stroke };
+    : fmteam
+      ? { color: '#fff', textShadow: '0 2px 10px rgba(0,0,0,0.6)', textTransform: 'uppercase', letterSpacing: '-0.5px' }
+      : { color: '#fff', textShadow: stroke };
   const ctaSpan: React.CSSProperties = box
     ? { color: boxColor, background: boxTextColor, padding: '0.06em 0.32em', borderRadius: 5, ...clone }
-    : { color: ctaColor, textShadow: stroke };
+    : fmteam
+      ? { ...goldStyle, textTransform: 'uppercase' }
+      : { color: ctaColor, textShadow: stroke };
+  const placeholder = 'Seu texto na tela aparece aqui';
+  const hookContent = fmteam ? goldSegments(texto || placeholder) : (texto || placeholder).replace(/\*\*/g, '');
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-border bg-gradient-to-b from-neutral-700 to-neutral-900" style={{ aspectRatio: '9 / 16' }}>
-      {background === 'gradiente' && (
-        <div className="absolute inset-x-0 bottom-0" style={{ top: '40%', background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.93) 100%)' }} />
+      {showGrad && (
+        <div className="absolute inset-x-0 bottom-0" style={{ top: '36%', background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.93) 100%)' }} />
       )}
-      <div className="absolute inset-x-0 -translate-y-1/2 px-3 text-center" style={{ top: `${hookPct}%`, lineHeight: box ? 1.55 : 1.15 }}>
-        <span className="font-extrabold" style={{ fontSize: hookFont, ...hookSpan }}>{texto || 'Seu texto na tela aparece aqui'}</span>
+      <div className="absolute inset-x-0 -translate-y-1/2 px-3 text-center" style={{ top: `${hookPct}%`, lineHeight: box ? 1.55 : 1.1 }}>
+        <span className="font-extrabold" style={{ fontSize: hookFont, ...hookSpan }}>{hookContent}</span>
       </div>
       <div className="absolute inset-x-0 -translate-y-1/2 px-3 text-center" style={{ top: `${ctaPct}%`, lineHeight: box ? 1.6 : 1.15 }}>
         <span className="font-bold" style={{ fontSize: ctaFont, ...ctaSpan }}>{cta}</span>
@@ -136,7 +154,7 @@ export default function ReelsEmLote() {
   const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 72;
   const ctaColor = cfg?.reelCtaColor || '#F5B301';
   const ctaGap = typeof cfg?.reelCtaGap === 'number' ? cfg.reelCtaGap : 60;
-  const textStyle = cfg?.reelTextStyle === 'caixa' ? 'caixa' : 'contorno';
+  const textStyle = ['caixa', 'fmteam'].includes(cfg?.reelTextStyle) ? cfg.reelTextStyle : 'contorno';
   const boxColor = cfg?.reelBoxColor || '#F5C518';
   const boxTextColor = cfg?.reelBoxTextColor || '#111111';
   const background = cfg?.reelBackground === 'gradiente' ? 'gradiente' : 'nenhum';
@@ -357,24 +375,30 @@ export default function ReelsEmLote() {
 
           {/* Controles de estilo — tudo aqui, ao lado da prévia */}
           <div className="rounded-lg border border-border bg-background/60 p-2.5 space-y-2.5">
-            {/* Estilo do texto: contorno x caixa */}
-            <div className="grid grid-cols-2 gap-1.5">
-              {(['contorno', 'caixa'] as const).map((st) => (
+            {/* Estilo do texto: contorno x caixa x dourado (fmteam) */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {([['contorno', 'Contorno'], ['caixa', 'Caixa'], ['fmteam', 'Dourado']] as const).map(([st, label]) => (
                 <button key={st} onClick={() => saveSetting({ reelTextStyle: st })}
                   className={`text-xs font-semibold py-1.5 rounded-lg border transition-colors ${textStyle === st ? 'bg-blue-600 text-foreground border-blue-500' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}>
-                  {st === 'contorno' ? 'Contorno' : 'Caixa'}
-                </button>
-              ))}
-            </div>
-            {/* Fundo: nenhum x sombra (gradiente embaixo) */}
-            <div className="grid grid-cols-2 gap-1.5">
-              {([['nenhum', 'Sem sombra'], ['gradiente', 'Sombra embaixo']] as const).map(([bg, label]) => (
-                <button key={bg} onClick={() => saveSetting({ reelBackground: bg })}
-                  className={`text-xs font-semibold py-1.5 rounded-lg border transition-colors ${background === bg ? 'bg-blue-600 text-foreground border-blue-500' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}>
                   {label}
                 </button>
               ))}
             </div>
+            {/* Fundo: nenhum x sombra (gradiente embaixo). No Dourado a sombra é fixa. */}
+            {textStyle === 'fmteam' ? (
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Estilo dos teus posts campeões: fonte condensada + sombra embaixo. Marque a palavra que vira <span style={goldStyle} className="font-bold">dourada</span> com <code>**asteriscos**</code> no texto. Ex.: A <code>**vontade de doce**</code> à noite.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5">
+                {([['nenhum', 'Sem sombra'], ['gradiente', 'Sombra embaixo']] as const).map(([bg, label]) => (
+                  <button key={bg} onClick={() => saveSetting({ reelBackground: bg })}
+                    className={`text-xs font-semibold py-1.5 rounded-lg border transition-colors ${background === bg ? 'bg-blue-600 text-foreground border-blue-500' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             {textStyle === 'caixa' && (
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex items-center justify-between gap-1">
