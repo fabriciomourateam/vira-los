@@ -32,7 +32,7 @@ function fmtBRT(s: string): string {
 // Preview aproximada de como o texto fica queimado no vídeo (branco, negrito,
 // contorno/sombra preta, terço inferior). Não é o render real — é pra você
 // julgar o texto/tamanho antes de gastar processamento.
-function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301', gap = 60, style = 'contorno', boxColor = '#F5C518', boxTextColor = '#111111' }: { texto: string; cta: string; y?: number; fontScale?: number; ctaColor?: string; gap?: number; style?: string; boxColor?: string; boxTextColor?: string }) {
+function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301', gap = 60, style = 'contorno', boxColor = '#F5C518', boxTextColor = '#111111', background = 'nenhum' }: { texto: string; cta: string; y?: number; fontScale?: number; ctaColor?: string; gap?: number; style?: string; boxColor?: string; boxTextColor?: string; background?: string }) {
   const stroke = '0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px 1px 0 #000';
   const box = style === 'caixa';
   const hookPct = Math.max(20, Math.min(90, y * 100));
@@ -50,6 +50,9 @@ function FramePreview({ texto, cta, y = 0.6, fontScale = 1, ctaColor = '#F5B301'
     : { color: ctaColor, textShadow: stroke };
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-border bg-gradient-to-b from-neutral-700 to-neutral-900" style={{ aspectRatio: '9 / 16' }}>
+      {background === 'gradiente' && (
+        <div className="absolute inset-x-0 bottom-0" style={{ top: '40%', background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.93) 100%)' }} />
+      )}
       <div className="absolute inset-x-0 -translate-y-1/2 px-3 text-center" style={{ top: `${hookPct}%`, lineHeight: box ? 1.55 : 1.15 }}>
         <span className="font-extrabold" style={{ fontSize: hookFont, ...hookSpan }}>{texto || 'Seu texto na tela aparece aqui'}</span>
       </div>
@@ -136,6 +139,7 @@ export default function ReelsEmLote() {
   const textStyle = cfg?.reelTextStyle === 'caixa' ? 'caixa' : 'contorno';
   const boxColor = cfg?.reelBoxColor || '#F5C518';
   const boxTextColor = cfg?.reelBoxTextColor || '#111111';
+  const background = cfg?.reelBackground === 'gradiente' ? 'gradiente' : 'nenhum';
 
   function loadClips() {
     fetch(`${API}/api/reels/raw-videos`).then((r) => r.json()).then((d) => setClips(Array.isArray(d) ? d : [])).catch(() => {});
@@ -348,7 +352,7 @@ export default function ReelsEmLote() {
 
         {/* Preview + estilo + gerar */}
         <div className="space-y-3 md:sticky md:top-4">
-          <FramePreview texto={rows[focused]?.texto || ''} cta="LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} gap={ctaGap} style={textStyle} boxColor={boxColor} boxTextColor={boxTextColor} />
+          <FramePreview texto={rows[focused]?.texto || ''} cta="LEIA A LEGENDA" y={textY} fontScale={fontSize / 96} ctaColor={ctaColor} gap={ctaGap} style={textStyle} boxColor={boxColor} boxTextColor={boxTextColor} background={background} />
           <p className="text-[10px] text-muted-foreground text-center -mt-1">Prévia da linha em foco — mexa no estilo abaixo e veja aqui</p>
 
           {/* Controles de estilo — tudo aqui, ao lado da prévia */}
@@ -359,6 +363,15 @@ export default function ReelsEmLote() {
                 <button key={st} onClick={() => saveSetting({ reelTextStyle: st })}
                   className={`text-xs font-semibold py-1.5 rounded-lg border transition-colors ${textStyle === st ? 'bg-blue-600 text-foreground border-blue-500' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}>
                   {st === 'contorno' ? 'Contorno' : 'Caixa'}
+                </button>
+              ))}
+            </div>
+            {/* Fundo: nenhum x sombra (gradiente embaixo) */}
+            <div className="grid grid-cols-2 gap-1.5">
+              {([['nenhum', 'Sem sombra'], ['gradiente', 'Sombra embaixo']] as const).map(([bg, label]) => (
+                <button key={bg} onClick={() => saveSetting({ reelBackground: bg })}
+                  className={`text-xs font-semibold py-1.5 rounded-lg border transition-colors ${background === bg ? 'bg-blue-600 text-foreground border-blue-500' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`}>
+                  {label}
                 </button>
               ))}
             </div>
