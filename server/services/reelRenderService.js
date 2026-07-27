@@ -285,7 +285,7 @@ async function renderReel({
   // Encode leve pra CPU fraca do Fly: 30fps (o clipe pode vir a 60 → metade do
   // trabalho), preset ultrafast e crf 23. Reel não precisa de 60fps nem H.264
   // pesado — o Instagram recomprime de qualquer jeito.
-  const VENC = ['-r', '30', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p'];
+  const VENC = ['-r', '30', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
   const AENC = ['-c:a', 'aac', '-b:a', '128k'];
   // CAP de duração: no máx 20s (reel de "leia a legenda" não precisa mais), o que
   // também evita encode longo demais. Usa a duração do clipe se for menor.
@@ -298,7 +298,8 @@ async function renderReel({
     const inputs = ['-i', rawVideoPath, '-i', fmteamPng];
     const chain = [
       '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v]',
-      '[v][1:v]overlay=0:0[out]',
+      '[1:v]scale=1080:1920:flags=lanczos[ov]',   // reduz o PNG 2x (supersampling = texto nítido)
+      '[v][ov]overlay=0:0[out]',
     ];
     const audio = [];
     if (hasMusic) {
