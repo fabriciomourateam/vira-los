@@ -60,10 +60,12 @@ function buildHtml({ hookText, ctaText = '', fontSize = 96, textY = 0.62, gradie
   const badge = Math.round(nameSize * 0.9);
   const showSelo = selo && FABRICIO_AVATAR_DATA_URL;
   const seloHtml = showSelo ? `<div class="selo">
-      <img class="ava" src="${FABRICIO_AVATAR_DATA_URL}" />
-      <div class="who"><span class="nm">${esc(displayName)}</span>
-        <svg class="vf" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#3897F0"/><path d="M6.8 12.4l3.1 3.1 7-7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="hd">${esc(handle)}</span></div>
+      <span class="ring"><img class="ava" src="${FABRICIO_AVATAR_DATA_URL}" /></span>
+      <div class="who">
+        <div class="l1"><span class="nm">${esc(displayName)}</span>
+          <svg class="vf" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#3897F0"/><path d="M6.8 12.4l3.1 3.1 7-7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="hd">${esc(handle)}</div>
+      </div>
     </div>` : '';
   return `<!doctype html><html><head><meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -74,12 +76,15 @@ function buildHtml({ hookText, ctaText = '', fontSize = 96, textY = 0.62, gradie
   .stage{position:relative;width:1080px;height:1920px;}
   .scrim{position:absolute;inset:0;${scrim}}
   .block{position:absolute;left:52px;right:52px;top:${topPx}px;transform:translateY(-50%);text-align:center;}
-  .selo{display:flex;align-items:center;justify-content:center;gap:${Math.round(avaSize*0.28)}px;margin-bottom:${Math.round(fontSize*0.22)}px;}
-  .ava{width:${avaSize}px;height:${avaSize}px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 3px rgba(255,255,255,0.9),0 2px 10px rgba(0,0,0,0.5);}
-  .who{display:flex;align-items:center;gap:${Math.round(nameSize*0.28)}px;flex-wrap:wrap;justify-content:center;}
-  .nm{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:${nameSize}px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.7);}
+  .selo{display:flex;align-items:center;justify-content:center;gap:${Math.round(avaSize*0.30)}px;margin-bottom:${Math.round(fontSize*0.24)}px;}
+  .ring{display:inline-flex;padding:${Math.round(avaSize*0.06)}px;border-radius:50%;
+    background:linear-gradient(45deg,#feda75,#fa7e1e,#d62976,#962fbf,#4f5bd5);box-shadow:0 2px 10px rgba(0,0,0,0.5);}
+  .ava{width:${avaSize}px;height:${avaSize}px;border-radius:50%;object-fit:cover;border:${Math.round(avaSize*0.04)}px solid #0a0a0b;display:block;}
+  .who{display:flex;flex-direction:column;align-items:flex-start;gap:${Math.round(nameSize*0.06)}px;}
+  .l1{display:flex;align-items:center;gap:${Math.round(nameSize*0.24)}px;}
+  .nm{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:${nameSize}px;line-height:1;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.7);}
   .vf{width:${badge}px;height:${badge}px;}
-  .hd{font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:${Math.round(nameSize*0.8)}px;color:rgba(255,255,255,0.85);text-shadow:0 2px 8px rgba(0,0,0,0.7);}
+  .hd{font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:${Math.round(nameSize*0.78)}px;line-height:1;color:rgba(255,255,255,0.82);text-shadow:0 2px 8px rgba(0,0,0,0.7);}
   .hook{font-family:'Barlow Condensed',sans-serif;font-weight:900;text-transform:uppercase;
     font-size:${fontSize}px;line-height:0.92;letter-spacing:-1.5px;color:#fff;
     text-shadow:0 3px 16px rgba(0,0,0,0.6),0 1px 2px rgba(0,0,0,0.7);}
@@ -100,7 +105,9 @@ function buildHtml({ hookText, ctaText = '', fontSize = 96, textY = 0.62, gradie
 async function renderHookOverlay({ hookText, ctaText = '', outPng, fontSize = 96, textY = 0.62, gradient = true }) {
   const browser = await getBrowser();
   if (!browser) throw new Error('Playwright/Chromium indisponível — não dá pra renderizar o estilo Dourado (fmteam).');
-  const ctx = await browser.newContext({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
+  // 2x (deviceScaleFactor) → PNG 2160×3840 = texto bem nítido; o ffmpeg reduz
+  // pra 1080 (supersampling) e as letras ficam limpas.
+  const ctx = await browser.newContext({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
   try {
     await page.setContent(buildHtml({ hookText, ctaText, fontSize, textY, gradient }), { waitUntil: 'load', timeout: 15000 });
