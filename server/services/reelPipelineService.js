@@ -34,7 +34,9 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
     throw new Error('Esse reel não tem fraseTela (gancho de tela). Gere o reel curto antes de renderizar.');
   }
 
-  const raw = rawVideoId ? db.getRawVideo(rawVideoId) : db.pickUnusedRawVideo();
+  // Clipe informado, ou sorteia um aleatório do banco (reutilizável — poucos
+  // clipes servem muitos reels, com variedade).
+  const raw = rawVideoId ? db.getRawVideo(rawVideoId) : db.pickRandomRawVideo();
   if (!raw) throw new Error('Nenhum vídeo cru disponível no banco. Suba um clipe de treino antes.');
   if (!raw.path || !fs.existsSync(raw.path)) {
     throw new Error(`O arquivo do vídeo cru sumiu do disco (${raw.file || raw.id}).`);
@@ -76,7 +78,8 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
     rawVideoId: raw.id,
     renderedAt: new Date().toISOString(),
   });
-  db.updateRawVideo(raw.id, { used: true, usedByReelId: reelId });
+  // Marca que foi usado (só informativo — clipes são reutilizáveis no sorteio).
+  db.updateRawVideo(raw.id, { usedByReelId: reelId });
 
   return { outPath, rawVideoId: raw.id };
 }
