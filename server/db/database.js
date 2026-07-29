@@ -284,6 +284,12 @@ const deleteRawVideo = (id) => writeDb('raw_videos', readDb('raw_videos').filter
 const pickUnusedRawVideo = () => getAllRawVideos()
   .filter((v) => !v.used && v.path && fs.existsSync(v.path))
   .sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || null;
+// Sorteia um clipe cru qualquer (REUTILIZÁVEL — não gasta). É o que o lote usa:
+// poucos clipes servem muitos reels, com variedade.
+const pickRandomRawVideo = () => {
+  const live = getAllRawVideos().filter((v) => v.path && fs.existsSync(v.path));
+  return live.length ? live[Math.floor(Math.random() * live.length)] : null;
+};
 
 // ── Banco de músicas (trilhas livres de direito pra queimar no reel) ───────────
 // Cada item: { id, path, file, originalName, size, created_at }. Reutilizável
@@ -471,7 +477,7 @@ module.exports = {
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
-  getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo,
+  getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo, pickRandomRawVideo,
   getAllMusicTracks, getMusicTrack, saveMusicTrack, deleteMusicTrack, pickRandomMusic,
   getAllDailyBatches, saveDailyBatch, updateDailyBatch,
   getDoc, setDoc,  // Reels Sessions (fila de gravação)

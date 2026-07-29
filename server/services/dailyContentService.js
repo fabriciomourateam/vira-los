@@ -301,7 +301,7 @@ async function buildOne(theme) {
   if (reelId) {
     try {
       const cfg = db.getMlabsSettings();
-      if (cfg.autoRenderReel && db.pickUnusedRawVideo()) {
+      if (cfg.autoRenderReel && db.pickRandomRawVideo()) {
         const { renderReelVideo, scheduleReelNow } = require('./reelPipelineService');
         await renderReelVideo(reelId);
         console.log(`[DailyContent] reel ${reelId} renderizado (texto queimado no clipe cru).`);
