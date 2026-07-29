@@ -85,6 +85,34 @@ async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
 }
 
 /**
+ * Cria um reel a partir de um vídeo JÁ PRONTO (editado fora, no banco de
+ * ready_videos) apontando videoPath direto pro arquivo — SEM passar pelo render
+ * (sem queimar texto). Devolve o reelId pra ser agendado com scheduleReelNow.
+ * @returns {{ reelId, videoPath }}
+ */
+function makeReelFromReadyVideo(readyVideoId, { legenda = '', title = null } = {}) {
+  const rv = db.getReadyVideo(readyVideoId);
+  if (!rv) throw new Error('Vídeo pronto não encontrado no banco.');
+  if (!rv.path || !fs.existsSync(rv.path)) {
+    throw new Error(`O arquivo do vídeo pronto sumiu do disco (${rv.originalName || rv.file || rv.id}).`);
+  }
+  const reelId = `reel_ready_${Date.now()}_${uuidv4().slice(0, 6)}`;
+  db.saveReel({
+    id: reelId,
+    fraseTela: '',
+    legendaPost: legenda || '',
+    title: (title || legenda || rv.originalName || 'Vídeo pronto').slice(0, 60),
+    videoPath: rv.path,
+    videoFile: path.basename(rv.path),
+    readyVideoId,
+    source: 'ready',
+    renderedAt: new Date().toISOString(),
+    archived: false,
+  });
+  return { reelId, videoPath: rv.path };
+}
+
+/**
  * Agenda um reel já renderizado (tem videoPath) no próximo slot livre — ou nas
  * datas passadas. Mesma mecânica da rota /api/mlabs/schedule, registrando o
  * agendamento no histórico do mLabs.
@@ -126,4 +154,4 @@ async function scheduleReelNow(reelId, { dates = null, caption = null, platforms
   }
 }
 
-module.exports = { renderReelVideo, scheduleReelNow, RENDERED_DIR };
+module.exports = { renderReelVideo, makeReelFromReadyVideo, scheduleReelNow, RENDERED_DIR };
