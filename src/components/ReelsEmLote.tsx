@@ -9,13 +9,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play, Repeat, Music } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play, Repeat, Music, CheckCircle2 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface RawVideo { id: string; file: string; originalName?: string; used: boolean; }
+interface ReadyVideo { id: string; file: string; originalName?: string; }
 interface Row { texto: string; legenda: string; data: string; rawVideoId: string; }
-interface RowResult { row: number; ok: boolean; reelId?: string; videoFile?: string | null; dates?: string[] | null; error?: string; }
+interface RowResult { row: number; ok: boolean; reelId?: string; videoFile?: string | null; videoUrl?: string | null; ready?: boolean; dates?: string[] | null; error?: string; }
 
 const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' });
 
@@ -104,6 +105,17 @@ function parseImport(text: string): Row[] {
 }
 
 const DRAFT_KEY = 'viralos.emLote.rows';
+const READY_META_KEY = 'viralos.emLote.readyMeta';
+
+// Legendas/datas dos vídeos prontos ficam salvas no navegador (por id do vídeo),
+// então trocar de aba ou atualizar a página não perde o que você digitou.
+function loadReadyMeta(): Record<string, { legenda: string; data: string }> {
+  try {
+    const raw = localStorage.getItem(READY_META_KEY);
+    if (raw) { const o = JSON.parse(raw); if (o && typeof o === 'object') return o; }
+  } catch { /* ignora */ }
+  return {};
+}
 
 // Rascunho automático: as linhas que você digita ficam salvas no navegador,
 // então trocar de aba / atualizar a página não perde nada.
@@ -150,6 +162,11 @@ export default function ReelsEmLote() {
   const [uploadingClip, setUploadingClip] = useState(false);
   const [tracks, setTracks] = useState<{ id: string; file: string; originalName?: string }[]>([]);
   const [uploadingMusic, setUploadingMusic] = useState(false);
+  const [readyVideos, setReadyVideos] = useState<ReadyVideo[]>([]);
+  const [readyMeta, setReadyMeta] = useState<Record<string, { legenda: string; data: string }>>(loadReadyMeta);
+  const [uploadingReady, setUploadingReady] = useState(false);
+  const [readyOpen, setReadyOpen] = useState(false);
+  const [runningReady, setRunningReady] = useState(false);
   const textY = typeof cfg?.reelTextY === 'number' ? cfg.reelTextY : 0.6;
   const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 72;
   const ctaColor = cfg?.reelCtaColor || '#F5B301';
@@ -165,7 +182,70 @@ export default function ReelsEmLote() {
   function loadSettings() {
     fetch(`${API}/api/mlabs/settings`).then((r) => r.json()).then(setCfg).catch(() => {});
   }
-  useEffect(() => { loadClips(); loadSettings(); loadMusic(); }, []);
+  function loadReady() {
+    fetch(`${API}/api/reels/ready-videos`).then((r) => r.json()).then((d) => setReadyVideos(Array.isArray(d) ? d : [])).catch(() => {});
+  }
+  useEffect(() => { loadClips(); loadSettings(); loadMusic(); loadReady(); }, []);
+
+  // Persiste as legendas/datas dos prontos por id.
+  useEffect(() => {
+    try { localStorage.setItem(READY_META_KEY, JSON.stringify(readyMeta)); } catch { /* ignora */ }
+  }, [readyMeta]);
+  function setReadyField(id: string, patch: Partial<{ legenda: string; data: string }>) {
+    setReadyMeta((p) => ({ ...p, [id]: { legenda: '', data: '', ...p[id], ...patch } }));
+  }
+
+  async function uploadReady(files: FileList) {
+    setUploadingReady(true);
+    try {
+      const fd = new FormData();
+      Array.from(files).forEach((f) => fd.append('videos', f));
+      const r = await fetch(`${API}/api/reels/ready-videos`, { method: 'POST', body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha no upload.');
+      toast.success(`${d.count} vídeo(s) pronto(s) no banco.`);
+      loadReady();
+    } catch (e: any) { toast.error(e?.message || 'Erro ao subir vídeos prontos.'); }
+    finally { setUploadingReady(false); }
+  }
+  async function deleteReady(id: string) {
+    try {
+      await fetch(`${API}/api/reels/ready-videos/${id}`, { method: 'DELETE' });
+      setReadyVideos((p) => p.filter((v) => v.id !== id));
+      setReadyMeta((p) => { const { [id]: _, ...rest } = p; return rest; });
+    } catch { /* ignora */ }
+  }
+
+  // Agenda os vídeos prontos (sem render): 1 linha por vídeo, só com a legenda.
+  async function scheduleReady() {
+    if (!readyVideos.length) { toast.error('Suba ao menos um vídeo pronto.'); return; }
+    setRunningReady(true);
+    setResults(null);
+    setStep('Enviando vídeos prontos...');
+    try {
+      const payload = {
+        schedule: true,
+        repost: repostOn ? { months: repostMonths, count: repostCount } : null,
+        rows: readyVideos.map((v) => ({
+          readyVideoId: v.id,
+          legenda: (readyMeta[v.id]?.legenda || '').trim(),
+          data: readyMeta[v.id]?.data || null,
+        })),
+      };
+      const r = await fetch(`${API}/api/reels/bulk`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao agendar prontos.');
+      setRunning(true);       // reaproveita o polling/estado do lote
+      await pollJob(d.jobId);
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao agendar prontos.');
+      setStep('');
+    } finally {
+      setRunningReady(false);
+    }
+  }
 
   // Salva um ajuste de estilo/automação (otimista: reflete na hora + PUT no servidor).
   function saveSetting(patch: Record<string, any>) {
@@ -507,6 +587,77 @@ export default function ReelsEmLote() {
         </div>
       </div>
 
+      {/* Vídeos prontos (já editados) — sobem só com legenda, sem passar pelo editor */}
+      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.03]">
+        <button onClick={() => setReadyOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-foreground">
+          <span className="inline-flex items-center gap-2"><CheckCircle2 size={15} className="text-emerald-400" /> Vídeos prontos (só legenda)</span>
+          <span className="text-xs text-muted-foreground">{readyVideos.length} pronto(s) {readyOpen ? '▲' : '▼'}</span>
+        </button>
+        {readyOpen && (
+          <div className="px-3 pb-3 space-y-3 border-t border-emerald-500/20 pt-3">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs text-muted-foreground leading-snug flex-1">
+                Vídeo que você <b>já editou</b> (ex.: comparação de alimentos). Não passa pelo editor de texto —
+                sobe do jeito que está e vai pro mLabs só com a <b>legenda</b>. Se deixar a data vazia, cai no
+                próximo horário livre.
+              </p>
+              <label className="text-xs font-medium text-foreground bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer shrink-0">
+                {uploadingReady ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Subir prontos
+                <input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" multiple className="hidden"
+                  disabled={uploadingReady} onChange={(e) => e.target.files?.length && uploadReady(e.target.files)} />
+              </label>
+            </div>
+
+            {readyVideos.length > 0 ? (
+              <div className="space-y-2">
+                {readyVideos.map((v) => (
+                  <div key={v.id} className="rounded-lg border border-border bg-background p-2 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Film size={13} className="text-emerald-400 shrink-0" />
+                      <span className="text-xs text-foreground truncate flex-1">{v.originalName || v.file}</span>
+                      <a href={`${API}/uploads/reels/ready/${v.file}`} target="_blank" rel="noreferrer"
+                        className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 shrink-0 text-xs"><Play size={12} /> ver</a>
+                      <button onClick={() => deleteReady(v.id)} className="text-muted-foreground hover:text-red-400 p-0.5 shrink-0"><Trash2 size={13} /></button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_170px] gap-2">
+                      <textarea
+                        value={readyMeta[v.id]?.legenda || ''} onChange={(e) => setReadyField(v.id, { legenda: e.target.value })}
+                        placeholder="Legenda do post + Comenta DIETA que eu te mando o cardápio..."
+                        rows={2}
+                        className="bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground resize-y min-h-[42px]"
+                      />
+                      <input
+                        type="datetime-local" value={readyMeta[v.id]?.data || ''} onChange={(e) => setReadyField(v.id, { data: e.target.value })}
+                        className="bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground self-start"
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                <label className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/60 px-2.5 py-2 cursor-pointer">
+                  <span className="text-xs text-foreground inline-flex items-center gap-1.5"><Repeat size={13} /> Repostar de tempos em tempos</span>
+                  <input type="checkbox" checked={repostOn} onChange={(e) => setRepostOn(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
+                </label>
+                {repostOn && (
+                  <p className="text-[10px] text-muted-foreground pl-1">Cada vídeo será reposto {repostCount}× (mesmo vídeo), a cada {repostMonths} meses — a config é a mesma do lote acima.</p>
+                )}
+
+                <button
+                  onClick={scheduleReady} disabled={runningReady || running}
+                  className="w-full text-sm font-semibold text-foreground bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {runningReady ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />}
+                  {runningReady ? 'Agendando...' : `Agendar ${readyVideos.length} vídeo(s) pronto(s)`}
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">Nenhum vídeo pronto ainda. Suba os que já estão editados aqui em cima.</p>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Clipes + automação — recolhível, tudo do reel numa página só */}
       <div className="rounded-lg border border-border">
         <button onClick={() => setConfigOpen((v) => !v)}
@@ -636,8 +787,8 @@ export default function ReelsEmLote() {
                   <span className="text-muted-foreground truncate flex-1">
                     pronto{r.dates?.length ? ` · agendado ${fmtBRT(r.dates[0])} (Brasília)${r.dates.length > 1 ? ` +${r.dates.length - 1} repost` : ''}` : ''}
                   </span>
-                  {r.videoFile && (
-                    <a href={`${API}/uploads/reels/rendered/${r.videoFile}`} target="_blank" rel="noreferrer"
+                  {(r.videoUrl || r.videoFile) && (
+                    <a href={r.videoUrl ? `${API}${r.videoUrl}` : `${API}/uploads/reels/rendered/${r.videoFile}`} target="_blank" rel="noreferrer"
                       className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 shrink-0">
                       <Play size={12} /> ver vídeo
                     </a>

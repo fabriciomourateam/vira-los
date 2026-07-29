@@ -17,7 +17,7 @@ const axios = require('axios');
 const archiver = require('archiver');
 const { generateReelsFromCarousel, generateShortReelFromCarousel } = require('../services/reelsGeneratorService');
 const { fetchOneImage } = require('../services/carouselService');
-const { renderReelVideo, scheduleReelNow } = require('../services/reelPipelineService');
+const { renderReelVideo, makeReelFromReadyVideo, scheduleReelNow } = require('../services/reelPipelineService');
 const db = require('../db/database');
 
 const router = express.Router();
@@ -26,6 +26,7 @@ const router = express.Router();
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
 const RAW_DIR = path.join(UPLOADS_DIR, 'reels', 'raw');
 const MUSIC_DIR = path.join(UPLOADS_DIR, 'reels', 'music');
+const READY_DIR = path.join(UPLOADS_DIR, 'reels', 'ready');
 
 const rawStorage = multer.diskStorage({
   destination: (_req, _file, cb) => { fs.mkdirSync(RAW_DIR, { recursive: true }); cb(null, RAW_DIR); },
@@ -128,6 +129,51 @@ router.delete('/raw-videos/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Banco de vídeos PRONTOS (já editados — sobem só com legenda, sem render) ──
+const readyStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => { fs.mkdirSync(READY_DIR, { recursive: true }); cb(null, READY_DIR); },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '.mp4') || '.mp4';
+    cb(null, `ready_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+  },
+});
+const uploadReady = multer({
+  storage: readyStorage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+  fileFilter: (_req, file, cb) => cb(null, /video\//.test(file.mimetype) || /\.(mp4|mov|m4v|webm)$/i.test(file.originalname)),
+});
+
+router.post('/ready-videos', uploadReady.array('videos', 20), (req, res) => {
+  try {
+    if (!req.files || !req.files.length) return res.status(400).json({ error: 'Envie ao menos um arquivo no campo "videos".' });
+    const saved = req.files.map((f) => {
+      const id = `ready_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      db.saveReadyVideo({ id, path: f.path, file: path.basename(f.path), originalName: f.originalname, size: f.size });
+      return { id, file: path.basename(f.path), originalName: f.originalname, size: f.size };
+    });
+    res.json({ ok: true, count: saved.length, videos: saved });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/ready-videos', (_req, res) => {
+  const live = [];
+  for (const v of db.getAllReadyVideos()) {
+    if (v.path && fs.existsSync(v.path)) live.push(v);
+    else db.deleteReadyVideo(v.id);
+  }
+  res.json(live.map((v) => ({ id: v.id, file: v.file, originalName: v.originalName, size: v.size, created_at: v.created_at })));
+});
+
+router.delete('/ready-videos/:id', (req, res) => {
+  const v = db.getReadyVideo(req.params.id);
+  if (!v) return res.status(404).json({ error: 'Vídeo pronto não encontrado.' });
+  try { if (v.path && fs.existsSync(v.path)) fs.unlinkSync(v.path); } catch { /* ignora */ }
+  db.deleteReadyVideo(req.params.id);
+  res.json({ ok: true });
+});
+
 // Renderiza o reel: queima a fraseTela no clipe cru (auto-pick ou rawVideoId) e
 // grava em videoPath. Se autoScheduleReel estiver ligado, já agenda no mLabs.
 router.post('/saved/:id/render', async (req, res) => {
@@ -171,10 +217,12 @@ router.post('/bulk', (req, res) => {
       legenda: String(r.legenda || '').trim(),
       data: r.data || null,
       rawVideoId: r.rawVideoId || null,
+      readyVideoId: r.readyVideoId || null, // vídeo já pronto → só agenda, sem render
       row: i + 1,
     }))
-    .filter((r) => r.texto);
-  if (!clean.length) return res.status(400).json({ error: 'Nenhuma linha com "texto na tela" preenchido.' });
+    // Válida se tem texto pra queimar OU é um vídeo pronto (só legenda).
+    .filter((r) => r.texto || r.readyVideoId);
+  if (!clean.length) return res.status(400).json({ error: 'Nenhuma linha com "texto na tela" ou vídeo pronto.' });
 
   const jobId = createJob();
   res.json({ jobId, total: clean.length });
@@ -183,23 +231,39 @@ router.post('/bulk', (req, res) => {
     const results = [];
     for (let k = 0; k < clean.length; k++) {
       const item = clean[k];
-      setJobStep(jobId, `Renderizando ${k + 1}/${clean.length}${schedule ? ' e agendando' : ''}...`);
-      const reelId = `reel_bulk_${Date.now()}_${k}`;
+      const isReady = !!item.readyVideoId;
+      setJobStep(jobId, `${isReady ? 'Agendando pronto' : 'Renderizando'} ${k + 1}/${clean.length}${schedule && !isReady ? ' e agendando' : ''}...`);
       try {
-        db.saveReel({
-          id: reelId,
-          fraseTela: item.texto,
-          fraseTelaTiming: '0-4s',
-          ctaTela: '👇 LEIA A LEGENDA',
-          ctaTelaTiming: '4-5s',
-          legendaPost: item.legenda,
-          title: item.texto.slice(0, 60),
-          source: 'bulk',
-          archived: false,
-        });
-        const rend = await renderReelVideo(reelId, { rawVideoId: item.rawVideoId });
+        let scheduleId;   // qual reel vai pro agendador
+        let videoFile = null;
+        let videoUrl = null;
+        if (isReady) {
+          // Vídeo já editado: não passa pelo render. Cria o reel apontando pro
+          // arquivo pronto e agenda com a legenda.
+          const made = makeReelFromReadyVideo(item.readyVideoId, { legenda: item.legenda });
+          scheduleId = made.reelId;
+          videoFile = path.basename(made.videoPath);
+          videoUrl = `/uploads/reels/ready/${videoFile}`;
+        } else {
+          scheduleId = `reel_bulk_${Date.now()}_${k}`;
+          db.saveReel({
+            id: scheduleId,
+            fraseTela: item.texto,
+            fraseTelaTiming: '0-4s',
+            ctaTela: '👇 LEIA A LEGENDA',
+            ctaTelaTiming: '4-5s',
+            legendaPost: item.legenda,
+            title: item.texto.slice(0, 60),
+            source: 'bulk',
+            archived: false,
+          });
+          const rend = await renderReelVideo(scheduleId, { rawVideoId: item.rawVideoId });
+          videoFile = rend && rend.outPath ? path.basename(rend.outPath) : null;
+        }
+        // Vídeo pronto sempre é agendado (é o objetivo dele); os renderizados
+        // seguem o toggle "Agendar" do lote.
         let scheduled = null;
-        if (schedule) {
+        if (schedule || isReady) {
           // Data-base: a informada, ou o próximo slot livre. Com repost ligado,
           // expande em N repostagens evergreen (mesmo vídeo, a cada X meses).
           let dates = item.data ? [item.data] : null;
@@ -208,13 +272,9 @@ router.post('/bulk', (req, res) => {
             const base = item.data || (mlabs.computeNextReelSlots(1)[0]);
             dates = mlabs.expandMonthly(base, repMonths, repCount);
           }
-          scheduled = await scheduleReelNow(reelId, {
-            dates,
-            caption: item.legenda || null,
-          });
+          scheduled = await scheduleReelNow(scheduleId, { dates, caption: item.legenda || null });
         }
-        const videoFile = rend && rend.outPath ? path.basename(rend.outPath) : null;
-        results.push({ row: item.row, ok: true, reelId, videoFile, dates: scheduled ? scheduled.dates : null });
+        results.push({ row: item.row, ok: true, reelId: scheduleId, videoFile, videoUrl, ready: isReady, dates: scheduled ? scheduled.dates : null });
       } catch (e) {
         results.push({ row: item.row, ok: false, error: e.message });
         console.warn(`[ReelsBulk] linha ${item.row} falhou:`, e.message);

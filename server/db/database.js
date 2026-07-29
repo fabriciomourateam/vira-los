@@ -284,12 +284,44 @@ const deleteRawVideo = (id) => writeDb('raw_videos', readDb('raw_videos').filter
 const pickUnusedRawVideo = () => getAllRawVideos()
   .filter((v) => !v.used && v.path && fs.existsSync(v.path))
   .sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || null;
-// Sorteia um clipe cru qualquer (REUTILIZÁVEL — não gasta). É o que o lote usa:
-// poucos clipes servem muitos reels, com variedade.
+// Sorteia um clipe cru (REUTILIZÁVEL — não gasta). É o que o lote usa: poucos
+// clipes servem muitos reels. Usa "saco embaralhado": passa por TODOS os clipes
+// uma vez (em ordem aleatória) antes de repetir qualquer um — então não sai o
+// mesmo clipe duas vezes seguidas e a distribuição fica pareja. O saco é
+// persistido; clipes novos entram no próximo ciclo, clipes apagados somem dele.
+function _shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 const pickRandomRawVideo = () => {
   const live = getAllRawVideos().filter((v) => v.path && fs.existsSync(v.path));
-  return live.length ? live[Math.floor(Math.random() * live.length)] : null;
+  if (!live.length) return null;
+  if (live.length === 1) { writeObj('raw_video_bag', { queue: [], last: live[0].id, updated_at: now() }); return live[0]; }
+  const liveIds = new Set(live.map((v) => v.id));
+  const st = readObj('raw_video_bag');
+  let bag = (Array.isArray(st.queue) ? st.queue : []).filter((id) => liveIds.has(id));
+  if (!bag.length) {
+    bag = _shuffle(live.map((v) => v.id));
+    // Evita repetir no "encaixe" entre um ciclo e o próximo (último do ciclo
+    // anterior sair de novo como primeiro do novo ciclo).
+    if (st.last && bag[0] === st.last && bag.length > 1) { [bag[0], bag[1]] = [bag[1], bag[0]]; }
+  }
+  const id = bag.shift();
+  writeObj('raw_video_bag', { queue: bag, last: id, updated_at: now() });
+  return live.find((v) => v.id === id) || live[0];
 };
+
+// ── Banco de vídeos PRONTOS (já editados — sobem só com legenda, sem render) ──
+// Cada item: { id, path, file, originalName, size, created_at }. Não passa pelo
+// editor de texto; o lote só agenda o arquivo no mLabs com a legenda.
+const getAllReadyVideos = () => readDb('ready_videos').sort((a, b) => b.created_at.localeCompare(a.created_at));
+const getReadyVideo    = (id) => readDb('ready_videos').find((v) => v.id === id) || null;
+const saveReadyVideo   = (v) => { const db = readDb('ready_videos'); db.push({ ...v, created_at: now() }); writeDb('ready_videos', db); };
+const deleteReadyVideo = (id) => writeDb('ready_videos', readDb('ready_videos').filter((v) => v.id !== id));
 
 // ── Banco de músicas (trilhas livres de direito pra queimar no reel) ───────────
 // Cada item: { id, path, file, originalName, size, created_at }. Reutilizável
@@ -478,6 +510,7 @@ module.exports = {
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
   getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo, pickRandomRawVideo,
+  getAllReadyVideos, getReadyVideo, saveReadyVideo, deleteReadyVideo,
   getAllMusicTracks, getMusicTrack, saveMusicTrack, deleteMusicTrack, pickRandomMusic,
   getAllDailyBatches, saveDailyBatch, updateDailyBatch,
   getDoc, setDoc,  // Reels Sessions (fila de gravação)

@@ -29,6 +29,11 @@ primary_region = 'ams'
   initial_size = '3gb'
 
 [[vm]]
-  memory = '1gb'
+  # Render de vídeo (ffmpeg libx264 + Chromium do overlay) é pesado. Com 1GB a
+  # máquina estourava memória (OOM) e reiniciava no meio do lote. 2GB dá folga
+  # pros dois rodarem juntos e 2 vCPUs deixam o libx264 encodar em 2 threads —
+  # corta o tempo de render quase pela metade. Como a máquina dorme por
+  # inatividade (scale-to-zero), só paga enquanto está renderizando.
+  memory = '2gb'
   cpu_kind = 'shared'
-  cpus = 1
+  cpus = 2
