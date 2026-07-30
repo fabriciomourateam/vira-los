@@ -28,11 +28,12 @@ interface Entry {
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-// Estilo por tipo de conteúdo (cor sempre visível na célula).
-const KIND: Record<Entry['kind'], { label: string; dot: string; chip: string; bar: string }> = {
-  'carrossel':   { label: 'Carrossel',      dot: 'bg-blue-400',    chip: 'bg-blue-500/15 text-blue-300 border-blue-500/30',       bar: 'border-l-blue-400' },
-  'reel-ffmpeg': { label: 'Reel editado',   dot: 'bg-amber-400',   chip: 'bg-amber-500/15 text-amber-300 border-amber-500/30',    bar: 'border-l-amber-400' },
-  'reel-pronto': { label: 'Reel pronto',    dot: 'bg-emerald-400', chip: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', bar: 'border-l-emerald-400' },
+// Estilo por tipo de conteúdo — pílula de fundo SÓLIDO e texto de alto contraste
+// (lê bem no tema claro e no escuro; o translúcido sumia no fundo branco).
+const KIND: Record<Entry['kind'], { label: string; dot: string; pill: string; bar: string }> = {
+  'carrossel':   { label: 'Carrossel',    dot: 'bg-blue-600',    pill: 'bg-blue-600 text-white',     bar: 'border-l-blue-600' },
+  'reel-ffmpeg': { label: 'Reel editado', dot: 'bg-amber-500',   pill: 'bg-amber-500 text-black',    bar: 'border-l-amber-500' },
+  'reel-pronto': { label: 'Reel pronto',  dot: 'bg-emerald-600', pill: 'bg-emerald-600 text-white',  bar: 'border-l-emerald-600' },
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -86,12 +87,12 @@ function MonthGrid({ year, month, byDate, todayKey, selected, onSelect }: {
               </span>
               <div className="flex flex-col gap-0.5 overflow-hidden">
                 {items.slice(0, 3).map((e, j) => (
-                  <span key={j} className={`text-[9px] leading-tight rounded border-l-2 pl-1 pr-0.5 py-0.5 truncate ${KIND[e.kind].bar} ${KIND[e.kind].chip}`}
+                  <span key={j} className={`text-[10px] leading-tight rounded px-1 py-0.5 truncate font-semibold ${KIND[e.kind].pill}`}
                     title={`${e.time} · ${e.typeLabel}`}>
-                    <b className="tabular-nums">{e.time}</b> {e.typeLabel.replace('Reel ', 'R. ')}
+                    <span className="tabular-nums">{e.time}</span> {e.typeLabel.replace('Reel ', 'R. ')}
                   </span>
                 ))}
-                {items.length > 3 && <span className="text-[9px] text-muted-foreground pl-1">+{items.length - 3} mais</span>}
+                {items.length > 3 && <span className="text-[9px] font-medium text-muted-foreground pl-0.5">+{items.length - 3} mais</span>}
               </div>
             </button>
           );
@@ -202,7 +203,7 @@ export default function AgendaCalendario() {
                 <div key={i} className={`text-xs rounded-lg border border-border bg-background px-2.5 py-2 border-l-4 ${KIND[e.kind].bar}`}>
                   <div className="flex items-center gap-2">
                     <span className="tabular-nums font-bold text-foreground">{e.time}</span>
-                    <span className={`px-1.5 py-0.5 rounded border text-[10px] ${KIND[e.kind].chip}`}>{e.typeLabel}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${KIND[e.kind].pill}`}>{e.typeLabel}</span>
                     {e.platformsCount > 0 && <span className="text-[10px] text-muted-foreground">{e.platformsCount} canal(is)</span>}
                     {e.status !== 'agendado' && <span className="text-[10px] text-amber-400">{e.status}</span>}
                   </div>
