@@ -87,12 +87,12 @@ function MonthGrid({ year, month, byDate, todayKey, selected, onSelect }: {
               </span>
               <div className="flex flex-col gap-1 w-full">
                 {items.slice(0, 4).map((e, j) => (
-                  <span key={j} className={`text-[11px] leading-tight rounded px-1.5 py-0.5 font-semibold ${KIND[e.kind].pill}`}
+                  <span key={j} className={`text-[9px] leading-tight rounded px-1.5 py-0.5 font-semibold ${KIND[e.kind].pill}`}
                     title={`${e.time} · ${e.typeLabel}`}>
-                    <span className="tabular-nums">{e.time}</span> {e.typeLabel}
+                    <span className="tabular-nums">{e.time}</span>{e.kind === 'carrossel' ? ` ${e.typeLabel}` : ''}
                   </span>
                 ))}
-                {items.length > 4 && <span className="text-[10px] font-medium text-muted-foreground pl-0.5">+{items.length - 4} mais</span>}
+                {items.length > 4 && <span className="text-[9px] font-medium text-muted-foreground pl-0.5">+{items.length - 4} mais</span>}
               </div>
             </button>
           );
