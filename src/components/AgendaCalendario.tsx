@@ -79,20 +79,20 @@ function MonthGrid({ year, month, byDate, todayKey, selected, onSelect }: {
             <button
               key={i}
               onClick={() => onSelect(key)}
-              className={`min-h-[70px] border-b border-r border-border/50 p-1 text-left align-top flex flex-col gap-0.5 transition-colors
+              className={`min-h-[104px] border-b border-r border-border/50 p-1.5 text-left align-top flex flex-col gap-1 transition-colors
                 ${isSel ? 'bg-blue-500/10 ring-1 ring-inset ring-blue-500/40' : 'hover:bg-background/60'}`}
             >
-              <span className={`text-[11px] font-semibold self-end leading-none ${isToday ? 'text-blue-400' : 'text-muted-foreground'}`}>
+              <span className={`text-xs font-semibold self-end leading-none ${isToday ? 'text-blue-500' : 'text-muted-foreground'}`}>
                 {isToday ? `${d} • hoje` : d}
               </span>
-              <div className="flex flex-col gap-0.5 overflow-hidden">
-                {items.slice(0, 3).map((e, j) => (
-                  <span key={j} className={`text-[10px] leading-tight rounded px-1 py-0.5 truncate font-semibold ${KIND[e.kind].pill}`}
+              <div className="flex flex-col gap-1 w-full">
+                {items.slice(0, 4).map((e, j) => (
+                  <span key={j} className={`text-[11px] leading-tight rounded px-1.5 py-0.5 font-semibold ${KIND[e.kind].pill}`}
                     title={`${e.time} · ${e.typeLabel}`}>
-                    <span className="tabular-nums">{e.time}</span> {e.typeLabel.replace('Reel ', 'R. ')}
+                    <span className="tabular-nums">{e.time}</span> {e.typeLabel}
                   </span>
                 ))}
-                {items.length > 3 && <span className="text-[9px] font-medium text-muted-foreground pl-0.5">+{items.length - 3} mais</span>}
+                {items.length > 4 && <span className="text-[10px] font-medium text-muted-foreground pl-0.5">+{items.length - 4} mais</span>}
               </div>
             </button>
           );
@@ -147,7 +147,7 @@ export default function AgendaCalendario() {
   }, [entries]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
+    <div className="max-w-[1500px] mx-auto space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-foreground inline-flex items-center gap-2">
