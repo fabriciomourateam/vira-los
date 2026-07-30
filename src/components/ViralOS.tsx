@@ -690,7 +690,7 @@ export default function ViralOS() {
       {/* Barra de gastos/economia com Claude */}
       <UsageBar />
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 pt-5 sm:pt-8">
+      <main className={`${activeTab === 'agenda' ? 'max-w-[1600px]' : 'max-w-7xl'} mx-auto px-3 sm:px-4 pt-5 sm:pt-8`}>
 
         {/* ── DESCOBRIR ── */}
         {activeTab === 'descobrir' && (
