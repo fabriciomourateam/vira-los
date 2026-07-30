@@ -97,6 +97,41 @@ router.get('/reel-slots', (req, res) => {
 
 // ── Agendados (registro local do que mandamos) ──────────────────────────────────
 router.get('/agendados', (_req, res) => res.json(db.getAllMlabsSchedules()));
+
+// ── Calendário (uma entrada por data agendada, pra planejar o conteúdo) ─────────
+// Junta carrosséis + reels do banco. Cada agendamento pode ter várias datas
+// (repost evergreen) → vira uma entrada por data. Classifica o reel em
+// "pronto" (subido já editado) x "editado" (texto queimado com ffmpeg).
+router.get('/calendar', (_req, res) => {
+  const out = [];
+  for (const s of db.getAllMlabsSchedules()) {
+    if (s.status === 'erro' || s.status === 'cancelado') continue; // não entrou de fato no mLabs
+    let kind = 'carrossel';
+    let typeLabel = 'Carrossel';
+    if (s.contentType === 'reel') {
+      const r = db.getReel(s.contentId);
+      const isReady = !!(r && (r.source === 'ready' || r.readyVideoId));
+      kind = isReady ? 'reel-pronto' : 'reel-ffmpeg';
+      typeLabel = isReady ? 'Reel pronto' : 'Reel editado';
+    }
+    for (const d of (s.dates || [])) {
+      const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+      if (!m) continue;
+      out.push({
+        scheduleId: s.id,
+        date: `${m[1]}-${m[2]}-${m[3]}`,   // já em horário de Brasília
+        time: `${m[4]}:${m[5]}`,
+        kind, typeLabel,
+        contentType: s.contentType,
+        caption: String(s.caption || '').slice(0, 200),
+        status: s.status || 'agendado',
+        platformsCount: Array.isArray(s.platforms) ? s.platforms.length : 0,
+      });
+    }
+  }
+  out.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  res.json(out);
+});
 router.delete('/agendados/:id', (req, res) => {
   db.deleteMlabsSchedule(req.params.id);
   res.json({ ok: true });
