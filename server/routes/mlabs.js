@@ -79,7 +79,7 @@ router.get('/settings', (_req, res) => res.json(db.getMlabsSettings()));
 
 router.put('/settings', (req, res) => {
   try {
-    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'autoScheduleReel', 'autoRenderReel', 'defaultTime', 'dateOffsetsMonths', 'reelPostsPerDay', 'reelScheduleDays', 'reelScheduleTimes', 'reelFontSize', 'reelFontFile', 'reelCtaColor', 'reelCtaAtMiddle', 'reelTextY', 'reelCtaGap', 'reelMusicOn', 'reelMusicVolume', 'reelTextStyle', 'reelBoxColor', 'reelBoxTextColor', 'reelBackground'];
+    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'autoScheduleReel', 'autoRenderReel', 'defaultTime', 'dateOffsetsMonths', 'reelPostsPerDay', 'reelScheduleDays', 'reelScheduleTimes', 'reelFontSize', 'reelFontFile', 'reelCtaColor', 'reelCtaAtMiddle', 'reelTextY', 'reelCtaGap', 'reelMusicOn', 'reelMusicVolume', 'reelTextStyle', 'reelBoxColor', 'reelBoxTextColor', 'reelBackground', 'reelMinGapMinutes'];
     const patch = {};
     for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
     res.json(db.setMlabsSettings(patch));
@@ -135,6 +135,43 @@ router.get('/calendar', (_req, res) => {
 router.delete('/agendados/:id', (req, res) => {
   db.deleteMlabsSchedule(req.params.id);
   res.json({ ok: true });
+});
+
+// ── Agendamentos DO mLabs (busca na API deles, cacheia localmente) ──────────
+// Retorna o cache por padrão (rápido); com ?refresh=true abre o browser e busca
+// de verdade (lento, ~30s). O cache é usado pelo computeNextReelSlots pra garantir
+// o gap de 2h entre posts.
+router.get('/mlabs-schedules', async (req, res) => {
+  const refresh = req.query.refresh === 'true';
+  const pad = (n) => String(n).padStart(2, '0');
+
+  if (!refresh) {
+    try {
+      const cached = db.getDoc('mlabs_external_schedules');
+      if (cached && cached.items) {
+        return res.json({ items: cached.items, cached: true, fetchedAt: cached.fetchedAt });
+      }
+    } catch {}
+  }
+
+  try {
+    const now = new Date();
+    const startStr = req.query.start || `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+    const end = new Date(now);
+    end.setDate(end.getDate() + 90);
+    const endStr = req.query.end || `${pad(end.getDate())}/${pad(end.getMonth() + 1)}/${end.getFullYear()}`;
+
+    const items = await mlabs().fetchMlabsSchedules(startStr, endStr);
+    res.json({ items, cached: false, fetchedAt: new Date().toISOString() });
+  } catch (e) {
+    try {
+      const cached = db.getDoc('mlabs_external_schedules');
+      if (cached && cached.items) {
+        return res.json({ items: cached.items, cached: true, fetchedAt: cached.fetchedAt, error: e.message });
+      }
+    } catch {}
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Upload do .mp4 editado do reel ──────────────────────────────────────────────

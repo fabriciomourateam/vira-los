@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Loader2, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Loader2, Trash2, CloudDownload } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -18,12 +18,13 @@ interface Entry {
   scheduleId: string;
   date: string;   // YYYY-MM-DD (Brasília)
   time: string;   // HH:MM
-  kind: 'carrossel' | 'reel-ffmpeg' | 'reel-pronto';
+  kind: 'carrossel' | 'reel-ffmpeg' | 'reel-pronto' | 'mlabs';
   typeLabel: string;
   contentType: string;
   caption: string;
   status: string;
   platformsCount: number;
+  source?: 'local' | 'mlabs';
 }
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -35,6 +36,7 @@ const KIND: Record<Entry['kind'], { label: string; dot: string; pill: string; ba
   'carrossel':   { label: 'Carrossel',    dot: 'bg-blue-600',    pill: 'bg-blue-600 text-white',     bar: 'border-l-blue-600' },
   'reel-ffmpeg': { label: 'Reel editado', dot: 'bg-amber-500',   pill: 'bg-amber-500 text-black',    bar: 'border-l-amber-500' },
   'reel-pronto': { label: 'Reel pronto',  dot: 'bg-emerald-600', pill: 'bg-emerald-600 text-white',  bar: 'border-l-emerald-600' },
+  'mlabs':       { label: 'mLabs',        dot: 'bg-purple-500',  pill: 'bg-purple-500 text-white',   bar: 'border-l-purple-500' },
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -111,6 +113,9 @@ export default function AgendaCalendario() {
   const [anchor, setAnchor] = useState<{ y: number; m: number }>({ y: now.getFullYear(), m: now.getMonth() });
   const [selected, setSelected] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [mlabsItems, setMlabsItems] = useState<Entry[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   // Apaga o registro do PLANEJAMENTO aqui no app. Isso NÃO cancela no mLabs —
   // o post já está na fila de lá. Por isso o aviso forte antes de confirmar.
@@ -141,18 +146,57 @@ export default function AgendaCalendario() {
       .catch(() => setEntries([]))
       .finally(() => setLoading(false));
   }
-  useEffect(() => { load(); }, []);
+
+  function loadMlabs(refresh = false) {
+    setSyncing(true);
+    fetch(`${API}/api/mlabs/mlabs-schedules${refresh ? '?refresh=true' : ''}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.fetchedAt) setLastSync(data.fetchedAt);
+        const items: Entry[] = ((data.items || []) as { id: string; date: string; message?: string; status?: number }[])
+          .map((item) => {
+            const m = String(item.date).match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+            if (!m) return null;
+            return {
+              scheduleId: `mlabs_${item.id}`,
+              date: m[1],
+              time: m[2],
+              kind: 'mlabs' as const,
+              typeLabel: 'mLabs',
+              contentType: 'mlabs',
+              caption: item.message || '',
+              status: item.status === 1 ? 'agendado' : `status ${item.status}`,
+              platformsCount: 0,
+              source: 'mlabs' as const,
+            };
+          })
+          .filter((x): x is Entry => x !== null);
+        setMlabsItems(items);
+        if (refresh) toast.success(`mLabs sincronizado: ${items.length} agendamento(s) encontrado(s).`);
+      })
+      .catch(() => { if (refresh) toast.error('Falha ao sincronizar com mLabs.'); })
+      .finally(() => setSyncing(false));
+  }
+
+  useEffect(() => { load(); loadMlabs(); }, []);
+
+  // Merge local + mLabs entries, deduplicando (se mesmo date+time existe no local, pula o do mLabs).
+  const allEntries = useMemo(() => {
+    const localKeys = new Set(entries.map((e) => `${e.date}_${e.time}`));
+    const uniqueMlabs = mlabsItems.filter((e) => !localKeys.has(`${e.date}_${e.time}`));
+    return [...entries, ...uniqueMlabs];
+  }, [entries, mlabsItems]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, Entry[]>();
-    for (const e of entries) {
+    for (const e of allEntries) {
       const arr = m.get(e.date) || [];
       arr.push(e);
       m.set(e.date, arr);
     }
     for (const arr of m.values()) arr.sort((a, b) => a.time.localeCompare(b.time));
     return m;
-  }, [entries]);
+  }, [allEntries]);
 
   const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
   const second = anchor.m === 11 ? { y: anchor.y + 1, m: 0 } : { y: anchor.y, m: anchor.m + 1 };
@@ -164,10 +208,10 @@ export default function AgendaCalendario() {
 
   const selItems = selected ? (byDate.get(selected) || []) : [];
   const counts = useMemo(() => {
-    const c = { carrossel: 0, 'reel-ffmpeg': 0, 'reel-pronto': 0 } as Record<Entry['kind'], number>;
-    for (const e of entries) c[e.kind]++;
+    const c = { carrossel: 0, 'reel-ffmpeg': 0, 'reel-pronto': 0, mlabs: 0 } as Record<Entry['kind'], number>;
+    for (const e of allEntries) c[e.kind]++;
     return c;
-  }, [entries]);
+  }, [allEntries]);
 
   return (
     <div className="max-w-[1500px] mx-auto space-y-4">
@@ -177,13 +221,20 @@ export default function AgendaCalendario() {
             <CalendarDays size={20} className="text-blue-400" /> Agenda de conteúdo
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Tudo o que você agendou pelo app (carrosséis e reels), em horário de Brasília. Use pra planejar os próximos.
+            Seus agendamentos (app + mLabs) em horário de Brasília. Sincronize o mLabs pra ver tudo e manter o gap de 2h.
           </p>
         </div>
-        <button onClick={load} disabled={loading}
-          className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 border border-border rounded-lg px-2.5 py-1.5">
-          {loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => loadMlabs(true)} disabled={syncing}
+            className="text-xs font-medium text-purple-400 hover:text-purple-300 inline-flex items-center gap-1.5 border border-purple-500/30 rounded-lg px-2.5 py-1.5"
+            title={lastSync ? `Último sync: ${new Date(lastSync).toLocaleString('pt-BR')}` : 'Nunca sincronizado'}>
+            {syncing ? <Loader2 size={13} className="animate-spin" /> : <CloudDownload size={13} />} Sincronizar mLabs
+          </button>
+          <button onClick={load} disabled={loading}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 border border-border rounded-lg px-2.5 py-1.5">
+            {loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Legenda + navegação */}
@@ -229,14 +280,18 @@ export default function AgendaCalendario() {
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${KIND[e.kind].pill}`}>{e.typeLabel}</span>
                     {e.platformsCount > 0 && <span className="text-[10px] text-muted-foreground">{e.platformsCount} canal(is)</span>}
                     {e.status !== 'agendado' && <span className="text-[10px] text-amber-400">{e.status}</span>}
-                    <button
-                      onClick={() => removeEntry(e.scheduleId)}
-                      disabled={deleting === e.scheduleId}
-                      className="ml-auto text-muted-foreground hover:text-red-400 p-1 disabled:opacity-50"
-                      title="Remover do planejamento (não cancela no mLabs)"
-                    >
-                      {deleting === e.scheduleId ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                    </button>
+                    {e.source === 'mlabs' ? (
+                      <span className="ml-auto text-[10px] text-purple-400 italic">do mLabs</span>
+                    ) : (
+                      <button
+                        onClick={() => removeEntry(e.scheduleId)}
+                        disabled={deleting === e.scheduleId}
+                        className="ml-auto text-muted-foreground hover:text-red-400 p-1 disabled:opacity-50"
+                        title="Remover do planejamento (não cancela no mLabs)"
+                      >
+                        {deleting === e.scheduleId ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      </button>
+                    )}
                   </div>
                   {e.caption && <p className="text-muted-foreground mt-1 line-clamp-2">{e.caption}</p>}
                 </div>
@@ -249,9 +304,15 @@ export default function AgendaCalendario() {
         </div>
       )}
 
-      {!loading && entries.length === 0 && (
+      {lastSync && (
+        <p className="text-[10px] text-muted-foreground text-center">
+          mLabs sincronizado em {new Date(lastSync).toLocaleString('pt-BR')} · A distância mínima de 2h entre posts está ativa.
+        </p>
+      )}
+
+      {!loading && allEntries.length === 0 && (
         <p className="text-sm text-muted-foreground italic text-center py-8">
-          Nenhum agendamento ainda. Assim que você agendar carrosséis ou reels pelo app, eles aparecem aqui.
+          Nenhum agendamento ainda. Agende carrosséis/reels pelo app ou clique "Sincronizar mLabs" pra puxar os agendamentos de lá.
         </p>
       )}
     </div>

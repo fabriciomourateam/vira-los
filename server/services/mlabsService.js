@@ -454,30 +454,47 @@ function computeNextReelSlots(count = 1) {
     return `${y}-${mo}-${da}T${hhmm}`;
   };
 
-  // Slots já ocupados por reels agendados (normaliza pra minuto).
-  const taken = new Set();
+  // Distância mínima entre posts (ms). Default 2h, configurável via settings.
+  const gapMin = typeof cfg.reelMinGapMinutes === 'number' ? cfg.reelMinGapMinutes : 120;
+  const GAP_MS = gapMin * 60 * 1000;
+
+  // Todos os horários já ocupados (locais + mLabs externo) como timestamps (ms).
+  const occupiedMs = [];
   try {
     for (const s of db.getAllMlabsSchedules()) {
-      if (s.contentType !== 'reel') continue;
-      if (s.status === 'error' || s.status === 'cancelado') continue;
-      for (const d of (s.dates || [])) taken.add(String(d).slice(0, 16));
+      if (s.status === 'erro' || s.status === 'cancelado') continue;
+      for (const d of (s.dates || [])) {
+        const mt = String(d).match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+        if (mt) occupiedMs.push(new Date(`${mt[1]}T${mt[2]}:00${SP_OFFSET}`).getTime());
+      }
     }
   } catch { /* sem histórico ainda */ }
+  try {
+    const cached = db.getDoc('mlabs_external_schedules');
+    if (cached && Array.isArray(cached.items)) {
+      for (const item of cached.items) {
+        if (!item.date) continue;
+        const ts = new Date(item.date).getTime();
+        if (!isNaN(ts)) occupiedMs.push(ts);
+      }
+    }
+  } catch { /* sem cache do mLabs */ }
+
+  const hasConflict = (ms) => occupiedMs.some((o) => Math.abs(ms - o) < GAP_MS);
 
   const base = new Date();
-  base.setDate(base.getDate() + 1); // começa amanhã
+  base.setDate(base.getDate() + 1);
   const slots = [];
-  // Estende a janela além de maxDays só se a grade toda estiver tomada, até
-  // achar os `count` livres (cap em 365 dias pra não rodar sem fim).
   for (let day = 0; day < 365 && slots.length < count; day++) {
     if (day >= maxDays && slots.length === 0 && day > maxDays + 30) break;
     const d = new Date(base);
     d.setDate(base.getDate() + day);
     for (const t of times) {
       const slot = fmt(d, t);
-      if (!taken.has(slot.slice(0, 16))) {
+      const slotMs = new Date(`${slot}:00${SP_OFFSET}`).getTime();
+      if (!hasConflict(slotMs)) {
         slots.push(slot);
-        taken.add(slot.slice(0, 16));
+        occupiedMs.push(slotMs);
         if (slots.length >= count) break;
       }
     }
@@ -726,4 +743,55 @@ async function calibrate() {
   }
 }
 
-module.exports = { scheduleContent, calibrate, computeDefaultDates, computeNextReelSlots, expandMonthly, spToUtcIso, buildSchedulePayload };
+// ── Busca agendamentos DO mLabs (GET /schedules) e cacheia localmente ──────────
+// Usa a sessão Playwright pra pegar os headers de auth e fazer a chamada
+// autenticada. O resultado fica em db.setDoc('mlabs_external_schedules') pro
+// computeNextReelSlots usar na regra de gap de 2h.
+async function fetchMlabsSchedules(dateStartDDMMYYYY, dateEndDDMMYYYY) {
+  const { browser } = await connectBrowser();
+  try {
+    const ctx = await newContext(browser);
+    const page = await ensureSession(ctx);
+    const auth = await learnAuthHeaders(page);
+
+    const qs = new URLSearchParams({
+      'page[number]': '0',
+      'page[limit]': '500',
+      'filter[date-start]': dateStartDDMMYYYY,
+      'filter[date-end]': dateEndDDMMYYYY,
+    });
+    const url = `${MLABS.schedules}?${qs}`;
+
+    const res = await apiFetch(page, url, {
+      method: 'GET',
+      headers: { accept: 'application/vnd.api+json' },
+    }, auth);
+
+    saveSession(await ctx.storageState());
+
+    if (!res.ok) {
+      throw new Error(`GET /schedules falhou (${res.status}): ${JSON.stringify(res.body).slice(0, 400)}`);
+    }
+
+    const items = ((res.body && res.body.data) || []).map((item) => ({
+      id: item.id,
+      date: (item.attributes && item.attributes.date) || '',
+      status: item.attributes && item.attributes.status,
+      channelSourceId: item.attributes && item.attributes['channel-source-id'],
+      message: String((item.attributes && item.attributes.message) || '').slice(0, 200),
+    }));
+
+    db.setDoc('mlabs_external_schedules', {
+      items,
+      fetchedAt: new Date().toISOString(),
+      startDate: dateStartDDMMYYYY,
+      endDate: dateEndDDMMYYYY,
+    });
+
+    return items;
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
+module.exports = { scheduleContent, calibrate, computeDefaultDates, computeNextReelSlots, expandMonthly, spToUtcIso, buildSchedulePayload, fetchMlabsSchedules };
