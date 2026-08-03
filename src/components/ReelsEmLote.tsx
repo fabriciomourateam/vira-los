@@ -378,7 +378,19 @@ export default function ReelsEmLote() {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao iniciar o lote.');
-      const res = await pollJob(d.jobId);
+      let res = await pollJob(d.jobId);
+      // Se o job sumiu no meio (404 = servidor reiniciou), recupera do disco o
+      // que já tinha sido agendado — pra marcar como feito e NÃO duplicar.
+      if (!res) {
+        try {
+          const pr = await fetch(`${API}/api/reels/bulk-progress?jobId=${d.jobId}`).then((x) => x.json());
+          if (Array.isArray(pr.results) && pr.results.length) {
+            res = pr.results;
+            const okN = pr.results.filter((x: RowResult) => x.ok).length;
+            if (okN) toast.info(`Recuperei ${okN} que já tinham sido agendados antes de parar — marquei como concluídos pra você não duplicar.`);
+          }
+        } catch { /* ignora */ }
+      }
       // Marca como concluídas as linhas que deram certo (res.row é 1-based na
       // ordem enviada → mapeia pro índice original da tabela).
       if (res && res.length) {

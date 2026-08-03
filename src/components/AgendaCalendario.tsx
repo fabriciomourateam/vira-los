@@ -9,7 +9,8 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Loader2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Loader2, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -109,6 +110,28 @@ export default function AgendaCalendario() {
   const now = new Date();
   const [anchor, setAnchor] = useState<{ y: number; m: number }>({ y: now.getFullYear(), m: now.getMonth() });
   const [selected, setSelected] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  // Apaga o registro do PLANEJAMENTO aqui no app. Isso NÃO cancela no mLabs —
+  // o post já está na fila de lá. Por isso o aviso forte antes de confirmar.
+  function removeEntry(scheduleId: string) {
+    const ok = window.confirm(
+      'ATENÇÃO: isso remove o item só do SEU planejamento aqui no app.\n\n' +
+      'NÃO cancela no mLabs — o post continua na fila e VAI ser publicado.\n' +
+      'Pra ele NÃO ser postado, apague também dentro do mLabs.\n\n' +
+      'Remover do planejamento aqui?'
+    );
+    if (!ok) return;
+    setDeleting(scheduleId);
+    fetch(`${API}/api/mlabs/agendados/${scheduleId}`, { method: 'DELETE' })
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(() => {
+        setEntries((prev) => prev.filter((e) => e.scheduleId !== scheduleId));
+        toast.success('Removido do planejamento. Lembra de apagar no mLabs pra não postar.');
+      })
+      .catch(() => toast.error('Não consegui remover. Tenta de novo.'))
+      .finally(() => setDeleting(null));
+  }
 
   function load() {
     setLoading(true);
@@ -206,10 +229,21 @@ export default function AgendaCalendario() {
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${KIND[e.kind].pill}`}>{e.typeLabel}</span>
                     {e.platformsCount > 0 && <span className="text-[10px] text-muted-foreground">{e.platformsCount} canal(is)</span>}
                     {e.status !== 'agendado' && <span className="text-[10px] text-amber-400">{e.status}</span>}
+                    <button
+                      onClick={() => removeEntry(e.scheduleId)}
+                      disabled={deleting === e.scheduleId}
+                      className="ml-auto text-muted-foreground hover:text-red-400 p-1 disabled:opacity-50"
+                      title="Remover do planejamento (não cancela no mLabs)"
+                    >
+                      {deleting === e.scheduleId ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    </button>
                   </div>
                   {e.caption && <p className="text-muted-foreground mt-1 line-clamp-2">{e.caption}</p>}
                 </div>
               ))}
+              <p className="text-[10px] text-amber-500/90 pt-1">
+                Apagar aqui limpa só o seu planejamento. Pra o post <b>não ser publicado</b>, apague também dentro do mLabs.
+              </p>
             </div>
           )}
         </div>
