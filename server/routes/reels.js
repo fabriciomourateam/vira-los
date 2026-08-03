@@ -305,9 +305,20 @@ router.post('/bulk', (req, res) => {
         results.push({ row: item.row, ok: false, error: e.message });
         console.warn(`[ReelsBulk] linha ${item.row} falhou:`, e.message);
       }
+      // Salva o progresso em DISCO a cada linha. Se a máquina reiniciar no meio
+      // (ex.: memória), dá pra recuperar quais já foram agendados e não duplicar.
+      try { db.setDoc('bulk_last', { jobId, results }); } catch { /* ignora */ }
     }
     finishJob(jobId, { results, ok: results.filter((r) => r.ok).length, fail: results.filter((r) => !r.ok).length });
   })();
+});
+
+// Progresso salvo do último lote (pra recuperar depois de um crash/404).
+router.get('/bulk-progress', (req, res) => {
+  const d = db.getDoc('bulk_last');
+  if (!d) return res.json({ results: [] });
+  if (req.query.jobId && d.jobId !== req.query.jobId) return res.json({ results: [] });
+  res.json({ jobId: d.jobId, results: Array.isArray(d.results) ? d.results : [] });
 });
 
 // ─── Job store em memória ─────────────────────────────────────────────────────
