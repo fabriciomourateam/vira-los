@@ -169,6 +169,20 @@ export default function ReelsEmLote() {
   const [runningReady, setRunningReady] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);   // já leu o rascunho do servidor?
   const [cloudState, setCloudState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [cleaning, setCleaning] = useState(false);
+
+  async function cleanupDisk() {
+    setCleaning(true);
+    try {
+      const r = await fetch(`${API}/api/reels/cleanup-rendered`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ maxAgeMin: 0 }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error();
+      toast.success(d.removed ? `Liberei ${d.mb} MB (${d.removed} arquivo(s)).` : 'Nada pra limpar — disco já está ok.');
+    } catch { toast.error('Não consegui limpar agora.'); }
+    finally { setCleaning(false); }
+  }
   const textY = typeof cfg?.reelTextY === 'number' ? cfg.reelTextY : 0.6;
   const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 72;
   const ctaColor = cfg?.reelCtaColor || '#F5B301';
@@ -485,6 +499,11 @@ export default function ReelsEmLote() {
             {cloudState === 'saved' && <><Cloud size={12} className="text-emerald-500" /> <span className="text-muted-foreground">salvo na nuvem (abre em qualquer aparelho)</span></>}
             {cloudState === 'error' && <><CloudOff size={12} className="text-amber-500" /> <span className="text-amber-500">sem conexão, salvo só neste aparelho</span></>}
           </span>
+          <button onClick={cleanupDisk} disabled={cleaning}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 disabled:opacity-50"
+            title="Apaga os vídeos renderizados que já foram agendados (o mLabs já tem a cópia). Libera espaço se der 'disco cheio'.">
+            {cleaning ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Liberar espaço
+          </button>
         </div>
       </div>
 

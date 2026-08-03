@@ -154,4 +154,32 @@ async function scheduleReelNow(reelId, { dates = null, caption = null, platforms
   }
 }
 
-module.exports = { renderReelVideo, makeReelFromReadyVideo, scheduleReelNow, RENDERED_DIR };
+/**
+ * Limpa a pasta de renderizados pra não estourar o disco (ENOSPC). O mLabs sobe
+ * a mídia pro S3 dele na hora de agendar, então o MP4 local vira descartável
+ * depois. Remove: (a) temporários (.fmteam_*.png e afins) sempre; (b) MP4 mais
+ * velhos que maxAgeMs (a essa altura já foram agendados; se não foram, o retry
+ * re-renderiza). Retorna { removed, bytes }.
+ */
+function pruneRendered({ maxAgeMs = 2 * 60 * 60 * 1000 } = {}) {
+  let removed = 0;
+  let bytes = 0;
+  try {
+    if (!fs.existsSync(RENDERED_DIR)) return { removed, bytes };
+    const now = Date.now();
+    for (const name of fs.readdirSync(RENDERED_DIR)) {
+      const full = path.join(RENDERED_DIR, name);
+      let st;
+      try { st = fs.statSync(full); } catch { continue; }
+      if (!st.isFile()) continue;
+      const isTemp = name.startsWith('.'); // .fmteam_*.png e outros temporários
+      const isOldMp4 = name.toLowerCase().endsWith('.mp4') && (now - st.mtimeMs) > maxAgeMs;
+      if (isTemp || isOldMp4) {
+        try { fs.unlinkSync(full); removed++; bytes += st.size; } catch { /* ignora */ }
+      }
+    }
+  } catch { /* ignora */ }
+  return { removed, bytes };
+}
+
+module.exports = { renderReelVideo, makeReelFromReadyVideo, scheduleReelNow, pruneRendered, RENDERED_DIR };

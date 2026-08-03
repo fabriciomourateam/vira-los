@@ -130,6 +130,16 @@ app.get('/api/health', (_req, res) =>
 // ── Inicia Scheduler ──────────────────────────────────────────────────────────
 require('./services/schedulerService').start();
 
+// ── Limpeza de disco no boot ──────────────────────────────────────────────────
+// Reels renderizados viram descartáveis após agendar (o mLabs guarda a cópia no
+// S3 dele). Limpa temporários + MP4 velhos no start pra recuperar de um disco
+// cheio (ENOSPC) logo que o deploy sobe.
+try {
+  const { pruneRendered } = require('./services/reelPipelineService');
+  const p = pruneRendered({ maxAgeMs: 30 * 60 * 1000 });
+  if (p.removed) console.log(`🧹 Limpeza de boot: ${p.removed} arquivos (${(p.bytes / 1e6).toFixed(0)}MB) liberados.`);
+} catch (e) { console.warn('Limpeza de boot falhou (ignorado):', e.message); }
+
 // ── Inicia Servidor ───────────────────────────────────────────────────────────
 server.listen(PORT, () => {
   console.log(`\n🚀 ViralOS Server rodando em http://localhost:${PORT}`);
