@@ -17,7 +17,7 @@ const axios = require('axios');
 const archiver = require('archiver');
 const { generateReelsFromCarousel, generateShortReelFromCarousel } = require('../services/reelsGeneratorService');
 const { fetchOneImage } = require('../services/carouselService');
-const { renderReelVideo, makeReelFromReadyVideo, scheduleReelNow } = require('../services/reelPipelineService');
+const { renderReelVideo, makeReelFromReadyVideo, scheduleReelNow, pruneRendered } = require('../services/reelPipelineService');
 const db = require('../db/database');
 
 const router = express.Router();
@@ -253,12 +253,17 @@ router.post('/bulk', (req, res) => {
   const jobId = createJob();
   res.json({ jobId, total: clean.length });
 
+  // Antes de renderizar, libera espaço: temporários + MP4 velhos (já agendados).
+  // Evita o ENOSPC (disco cheio) que fazia o ffmpeg falhar linha a linha.
+  try { const p = pruneRendered({ maxAgeMs: 30 * 60 * 1000 }); if (p.removed) console.log(`[ReelsBulk] limpou ${p.removed} arquivos (${(p.bytes / 1e6).toFixed(0)}MB) antes de começar.`); } catch { /* ignora */ }
+
   (async () => {
     const results = [];
     for (let k = 0; k < clean.length; k++) {
       const item = clean[k];
       const isReady = !!item.readyVideoId;
       setJobStep(jobId, `${isReady ? 'Agendando pronto' : 'Renderizando'} ${k + 1}/${clean.length}${schedule && !isReady ? ' e agendando' : ''}...`);
+      let renderedOutPath = null;   // MP4 renderizado (descartável após agendar)
       try {
         let scheduleId;   // qual reel vai pro agendador
         let videoFile = null;
@@ -285,6 +290,7 @@ router.post('/bulk', (req, res) => {
           });
           const rend = await renderReelVideo(scheduleId, { rawVideoId: item.rawVideoId });
           videoFile = rend && rend.outPath ? path.basename(rend.outPath) : null;
+          renderedOutPath = rend && rend.outPath ? rend.outPath : null;
         }
         // Vídeo pronto sempre é agendado (é o objetivo dele); os renderizados
         // seguem o toggle "Agendar" do lote.
@@ -300,6 +306,11 @@ router.post('/bulk', (req, res) => {
           }
           scheduled = await scheduleReelNow(scheduleId, { dates, caption: item.legenda || null });
         }
+        // Agendou o renderizado → o mLabs já tem a cópia no S3 dele. Apaga o MP4
+        // local pra não lotar o disco (era a causa do ENOSPC).
+        if (scheduled && renderedOutPath) {
+          try { if (fs.existsSync(renderedOutPath)) fs.unlinkSync(renderedOutPath); } catch { /* ignora */ }
+        }
         results.push({ row: item.row, ok: true, reelId: scheduleId, videoFile, videoUrl, ready: isReady, dates: scheduled ? scheduled.dates : null });
       } catch (e) {
         results.push({ row: item.row, ok: false, error: e.message });
@@ -311,6 +322,15 @@ router.post('/bulk', (req, res) => {
     }
     finishJob(jobId, { results, ok: results.filter((r) => r.ok).length, fail: results.filter((r) => !r.ok).length });
   })();
+});
+
+// Libera espaço em disco: apaga temporários + MP4 renderizados já agendados.
+// maxAgeMin = idade mínima do MP4 pra apagar (default 60min; já foram pro mLabs).
+router.post('/cleanup-rendered', (req, res) => {
+  const min = Number(req.body?.maxAgeMin);
+  const maxAgeMs = (Number.isFinite(min) && min >= 0 ? min : 60) * 60 * 1000;
+  const r = pruneRendered({ maxAgeMs });
+  res.json({ ok: true, removed: r.removed, mb: +(r.bytes / 1e6).toFixed(1) });
 });
 
 // Progresso salvo do último lote (pra recuperar depois de um crash/404).
