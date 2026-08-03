@@ -15,10 +15,10 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface RawVideo { id: string; file: string; originalName?: string; used: boolean; }
 interface ReadyVideo { id: string; file: string; originalName?: string; }
-interface Row { texto: string; legenda: string; data: string; rawVideoId: string; }
+interface Row { texto: string; legenda: string; data: string; rawVideoId: string; done?: boolean; }
 interface RowResult { row: number; ok: boolean; reelId?: string; videoFile?: string | null; videoUrl?: string | null; ready?: boolean; dates?: string[] | null; error?: string; }
 
-const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '' });
+const emptyRow = (): Row => ({ texto: '', legenda: '', data: '', rawVideoId: '', done: false });
 
 // Mostra a data agendada em horário de Brasília (o backend devolve em UTC "…Z").
 function fmtBRT(s: string): string {
@@ -125,7 +125,7 @@ function loadDraft(): Row[] {
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr) && arr.length) {
-        return arr.map((r: any) => ({ texto: r.texto || '', legenda: r.legenda || '', data: r.data || '', rawVideoId: r.rawVideoId || '' }));
+        return arr.map((r: any) => ({ texto: r.texto || '', legenda: r.legenda || '', data: r.data || '', rawVideoId: r.rawVideoId || '', done: !!r.done }));
       }
     }
   } catch { /* ignora */ }
@@ -312,7 +312,7 @@ export default function ReelsEmLote() {
       .then((r) => r.json())
       .then((d) => {
         const serverRows: Row[] = Array.isArray(d.rows) ? d.rows.map((r: any) => ({
-          texto: r.texto || '', legenda: r.legenda || '', data: r.data || '', rawVideoId: r.rawVideoId || '',
+          texto: r.texto || '', legenda: r.legenda || '', data: r.data || '', rawVideoId: r.rawVideoId || '', done: !!r.done,
         })) : [];
         const hasServer = serverRows.some((r) => r.texto.trim() || r.legenda.trim());
         if (hasServer) {
@@ -337,14 +337,21 @@ export default function ReelsEmLote() {
   }, [rows, readyMeta, draftLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const freeClips = useMemo(() => clips.filter((c) => !c.used), [clips]);
-  const filled = rows.filter((r) => r.texto.trim());
+  // "Pra gerar" = linhas com texto que AINDA não foram concluídas (não reenvia
+  // o que já saiu, então não duplica).
+  const filled = rows.filter((r) => r.texto.trim() && !r.done);
+  const doneCount = rows.filter((r) => r.done).length;
 
   function setRow(i: number, patch: Partial<Row>) {
     setRows((p) => p.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
   function addRow() { setRows((p) => [...p, emptyRow()]); }
   function removeRow(i: number) {
-    setRows((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : p));
+    setRows((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : [emptyRow()]));
+    setFocused(0);
+  }
+  function removeDoneRows() {
+    setRows((p) => { const rest = p.filter((r) => !r.done); return rest.length ? rest : [emptyRow()]; });
     setFocused(0);
   }
 
@@ -358,18 +365,26 @@ export default function ReelsEmLote() {
     setRunning(true);
     setResults(null);
     setStep('Enviando lote...');
+    // Índices originais das linhas enviadas (pra marcar como concluídas na volta).
+    const sentIdx = rows.map((r, i) => (r.texto.trim() && !r.done ? i : -1)).filter((i) => i >= 0);
     try {
       const payload = {
         schedule,
         repost: schedule && repostOn ? { months: repostMonths, count: repostCount } : null,
-        rows: filled.map((r) => ({ texto: r.texto.trim(), legenda: r.legenda.trim(), data: r.data || null, rawVideoId: r.rawVideoId || null })),
+        rows: sentIdx.map((i) => ({ texto: rows[i].texto.trim(), legenda: rows[i].legenda.trim(), data: rows[i].data || null, rawVideoId: rows[i].rawVideoId || null })),
       };
       const r = await fetch(`${API}/api/reels/bulk`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao iniciar o lote.');
-      await pollJob(d.jobId);
+      const res = await pollJob(d.jobId);
+      // Marca como concluídas as linhas que deram certo (res.row é 1-based na
+      // ordem enviada → mapeia pro índice original da tabela).
+      if (res && res.length) {
+        const okOrigIdx = new Set(res.filter((x) => x.ok).map((x) => sentIdx[x.row - 1]).filter((i) => i != null));
+        if (okOrigIdx.size) setRows((p) => p.map((r2, i) => (okOrigIdx.has(i) ? { ...r2, done: true } : r2)));
+      }
     } catch (e: any) {
       toast.error(e?.message || 'Erro no lote.');
       setRunning(false);
@@ -377,7 +392,7 @@ export default function ReelsEmLote() {
     }
   }
 
-  async function pollJob(jobId: string) {
+  async function pollJob(jobId: string): Promise<RowResult[] | null> {
     let notFound = 0;
     for (;;) {
       await new Promise((res) => setTimeout(res, 1300));
@@ -393,7 +408,7 @@ export default function ReelsEmLote() {
         if (++notFound >= 3) {
           toast.error('O processamento parou (o servidor reiniciou no meio — pode ser memória). Os reels que já apareceram no resultado estão salvos. Tente gerar o restante de novo.');
           setRunning(false); setStep('');
-          return;
+          return null;
         }
         continue;
       }
@@ -408,9 +423,9 @@ export default function ReelsEmLote() {
         const fail = res.length - ok;
         if (fail === 0) toast.success(`${ok} reel(s) prontos${schedule ? ' e agendados' : ''}!`);
         else toast.warning(`${ok} ok, ${fail} com erro. Veja os detalhes abaixo.`);
-        return;
+        return res;
       }
-      if (d.status === 'error') { toast.error(d.error || 'Erro no lote.'); setRunning(false); setStep(''); return; }
+      if (d.status === 'error') { toast.error(d.error || 'Erro no lote.'); setRunning(false); setStep(''); return null; }
       if (d.step) setStep(d.step);
     }
   }
@@ -474,14 +489,21 @@ export default function ReelsEmLote() {
             <div
               key={i}
               onFocusCapture={() => setFocused(i)}
-              className={`grid grid-cols-1 md:grid-cols-[1.3fr_1.3fr_150px_120px_28px] gap-2 items-start rounded-lg p-1.5 ${focused === i ? 'bg-blue-500/5 ring-1 ring-blue-500/30' : ''}`}
+              className={`grid grid-cols-1 md:grid-cols-[1.3fr_1.3fr_150px_120px_28px] gap-2 items-start rounded-lg p-1.5 ${r.done ? 'bg-emerald-500/[0.07] ring-1 ring-emerald-500/30' : focused === i ? 'bg-blue-500/5 ring-1 ring-blue-500/30' : ''}`}
             >
-              <textarea
-                value={r.texto} onChange={(e) => setRow(i, { texto: e.target.value })}
-                placeholder="Ex.: Você treina e não seca? O problema é a insulina."
-                rows={2}
-                className="bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground resize-y min-h-[42px]"
-              />
+              <div className="relative">
+                {r.done && (
+                  <span className="absolute -top-1.5 left-1 z-10 inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 bg-emerald-500/15 border border-emerald-500/40 rounded px-1 py-0.5">
+                    <CheckCircle2 size={10} /> CONCLUÍDO
+                  </span>
+                )}
+                <textarea
+                  value={r.texto} onChange={(e) => setRow(i, { texto: e.target.value })}
+                  placeholder="Ex.: Você treina e não seca? O problema é a insulina."
+                  rows={2}
+                  className={`w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground resize-y min-h-[42px] ${r.done ? 'opacity-60' : ''}`}
+                />
+              </div>
               <textarea
                 value={r.legenda} onChange={(e) => setRow(i, { legenda: e.target.value })}
                 placeholder="Legenda completa + Comenta DIETA que eu te mando o cardápio..."
@@ -501,12 +523,23 @@ export default function ReelsEmLote() {
                   <option key={c.id} value={c.id}>{(c.originalName || c.file).slice(0, 22)}</option>
                 ))}
               </select>
-              <button onClick={() => removeRow(i)} className="text-muted-foreground hover:text-red-400 p-1 mt-1" title="Remover linha"><Trash2 size={15} /></button>
+              {r.done ? (
+                <button onClick={() => removeRow(i)} className="text-emerald-600 hover:text-emerald-500 p-1 mt-1" title="Concluído — clique pra tirar da lista"><CheckCircle2 size={16} /></button>
+              ) : (
+                <button onClick={() => removeRow(i)} className="text-muted-foreground hover:text-red-400 p-1 mt-1" title="Remover linha"><Trash2 size={15} /></button>
+              )}
             </div>
           ))}
-          <button onClick={addRow} className="text-xs text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 mt-1">
-            <Plus size={13} /> Adicionar linha
-          </button>
+          <div className="flex items-center gap-4 mt-1">
+            <button onClick={addRow} className="text-xs text-blue-400 hover:text-blue-300 inline-flex items-center gap-1">
+              <Plus size={13} /> Adicionar linha
+            </button>
+            {doneCount > 0 && (
+              <button onClick={removeDoneRows} className="text-xs text-emerald-600 hover:text-emerald-500 inline-flex items-center gap-1" title="Tira da lista todos os que já foram gerados">
+                <CheckCircle2 size={13} /> Remover concluídos ({doneCount})
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Preview + estilo + gerar */}

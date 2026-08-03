@@ -193,6 +193,7 @@ router.put('/lote-draft', (req, res) => {
     legenda: String(r.legenda || ''),
     data: String(r.data || ''),
     rawVideoId: String(r.rawVideoId || ''),
+    done: !!r.done,
   }));
   const readyMeta = (req.body?.readyMeta && typeof req.body.readyMeta === 'object') ? req.body.readyMeta : {};
   db.setDoc('lote_draft', { rows, readyMeta });
