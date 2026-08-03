@@ -170,6 +170,7 @@ export default function ReelsEmLote() {
   const [draftLoaded, setDraftLoaded] = useState(false);   // já leu o rascunho do servidor?
   const [cloudState, setCloudState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [cleaning, setCleaning] = useState(false);
+  const [runningOne, setRunningOne] = useState<number | null>(null); // qual linha está subindo sozinha
 
   async function cleanupDisk() {
     setCleaning(true);
@@ -397,6 +398,37 @@ export default function ReelsEmLote() {
     return { row: origIdx + 1, ok: false, error: (first && first.error) || 'Não confirmou (o servidor pode ter reiniciado).' };
   }
 
+  // Gera/agenda UMA linha específica (o botão de cada vídeo). Dá controle total:
+  // você sobe só o que quiser, na hora que quiser, um por um.
+  async function generateOne(origIdx: number) {
+    if (running || runningOne != null) return;
+    const row = rows[origIdx];
+    if (!row.texto.trim()) { toast.error('Essa linha está sem o texto na tela.'); return; }
+    if (schedule && !freeClips.length && !row.rawVideoId) {
+      toast.error('Banco de clipes vazio. Suba clipes ou escolha um clipe pra essa linha.'); return;
+    }
+    setRunning(true);
+    setRunningOne(origIdx);
+    setResults(null);
+    setStep('Gerando este...');
+    let out = await runRow(origIdx);
+    if (!out.ok) {
+      setStep('Tentando de novo...');
+      await new Promise((res) => setTimeout(res, 4000));
+      out = await runRow(origIdx);
+    }
+    setResults([out]);
+    if (out.ok) {
+      setRows((p) => p.map((r2, i) => (i === origIdx ? { ...r2, done: true } : r2)));
+      toast.success(`Reel da linha ${origIdx + 1} pronto${schedule ? ' e agendado' : ''}!`);
+    } else {
+      toast.error(`Não deu certo: ${out.error || 'erro'}`);
+    }
+    setRunningOne(null);
+    setRunning(false);
+    setStep('');
+  }
+
   async function generate() {
     if (!filled.length) { toast.error('Preencha ao menos uma linha com o texto na tela.'); return; }
     if (schedule && !freeClips.length && rows.every((r) => !r.rawVideoId)) {
@@ -487,7 +519,9 @@ export default function ReelsEmLote() {
           (vazio = aleatório do banco) e a data também (vazia = próximo horário livre). Clique em
           <b> Gerar lote</b>: o sistema processa <b>um de cada vez</b> (seguro, não trava com
           muitos vídeos), mostrando o progresso. Cada um que fica pronto vira <b>verde</b> e não é
-          reenviado — se algum falhar, só ele fica na lista pra tentar de novo.
+          reenviado — se algum falhar, só ele fica na lista pra tentar de novo. Prefere controle
+          total? Use o botão <b>↑ (subir só este)</b> em cada linha pra mandar um por um, na ordem
+          que você quiser.
         </p>
         <div className="mt-2 flex items-center gap-3 flex-wrap">
           <button onClick={() => setImportOpen((v) => !v)}
@@ -535,14 +569,14 @@ export default function ReelsEmLote() {
       <div className="grid md:grid-cols-[1fr_220px] gap-4 items-start">
         {/* Tabela */}
         <div className="space-y-2">
-          <div className="hidden md:grid grid-cols-[1.3fr_1.3fr_150px_120px_28px] gap-2 px-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-            <span>Texto na tela</span><span>Legenda do post</span><span>Data (opcional)</span><span>Clipe</span><span></span>
+          <div className="hidden md:grid grid-cols-[1.3fr_1.3fr_150px_120px_72px] gap-2 px-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+            <span>Texto na tela</span><span>Legenda do post</span><span>Data (opcional)</span><span>Clipe</span><span className="text-center">Ações</span>
           </div>
           {rows.map((r, i) => (
             <div
               key={i}
               onFocusCapture={() => setFocused(i)}
-              className={`grid grid-cols-1 md:grid-cols-[1.3fr_1.3fr_150px_120px_28px] gap-2 items-start rounded-lg p-1.5 ${r.done ? 'bg-emerald-500/[0.07] ring-1 ring-emerald-500/30' : focused === i ? 'bg-blue-500/5 ring-1 ring-blue-500/30' : ''}`}
+              className={`grid grid-cols-1 md:grid-cols-[1.3fr_1.3fr_150px_120px_72px] gap-2 items-start rounded-lg p-1.5 ${r.done ? 'bg-emerald-500/[0.07] ring-1 ring-emerald-500/30' : focused === i ? 'bg-blue-500/5 ring-1 ring-blue-500/30' : ''}`}
             >
               <div className="relative">
                 {r.done && (
@@ -576,11 +610,23 @@ export default function ReelsEmLote() {
                   <option key={c.id} value={c.id}>{(c.originalName || c.file).slice(0, 22)}</option>
                 ))}
               </select>
-              {r.done ? (
-                <button onClick={() => removeRow(i)} className="text-emerald-600 hover:text-emerald-500 p-1 mt-1" title="Concluído — clique pra tirar da lista"><CheckCircle2 size={16} /></button>
-              ) : (
-                <button onClick={() => removeRow(i)} className="text-muted-foreground hover:text-red-400 p-1 mt-1" title="Remover linha"><Trash2 size={15} /></button>
-              )}
+              <div className="flex items-center justify-center gap-1 mt-1">
+                {r.done ? (
+                  <button onClick={() => removeRow(i)} className="text-emerald-600 hover:text-emerald-500 p-1" title="Concluído — clique pra tirar da lista"><CheckCircle2 size={16} /></button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => generateOne(i)}
+                      disabled={running || runningOne != null || !r.texto.trim()}
+                      className="text-blue-500 hover:text-blue-400 p-1 disabled:opacity-40"
+                      title="Gerar e subir SÓ este agora"
+                    >
+                      {runningOne === i ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                    </button>
+                    <button onClick={() => removeRow(i)} disabled={running} className="text-muted-foreground hover:text-red-400 p-1 disabled:opacity-40" title="Remover linha"><Trash2 size={15} /></button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
           <div className="flex items-center gap-4 mt-1">
