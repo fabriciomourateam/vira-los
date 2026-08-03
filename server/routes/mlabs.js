@@ -140,7 +140,7 @@ router.delete('/agendados/:id', (req, res) => {
 // ── Agendamentos DO mLabs (busca na API deles, cacheia localmente) ──────────
 // Retorna o cache por padrão (rápido); com ?refresh=true abre o browser e busca
 // de verdade (lento, ~30s). O cache é usado pelo computeNextReelSlots pra garantir
-// o gap de 2h entre posts.
+// o gap de 1h entre posts.
 router.get('/mlabs-schedules', async (req, res) => {
   const refresh = req.query.refresh === 'true';
   const pad = (n) => String(n).padStart(2, '0');
