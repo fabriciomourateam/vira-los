@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play, Repeat, Music, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, Wand2, ListChecks, Film, Calendar, ClipboardPaste, Upload, Type, MoveVertical, Play, Repeat, Music, CheckCircle2, Cloud, CloudOff } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -167,6 +167,8 @@ export default function ReelsEmLote() {
   const [uploadingReady, setUploadingReady] = useState(false);
   const [readyOpen, setReadyOpen] = useState(false);
   const [runningReady, setRunningReady] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);   // já leu o rascunho do servidor?
+  const [cloudState, setCloudState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const textY = typeof cfg?.reelTextY === 'number' ? cfg.reelTextY : 0.6;
   const fontSize = typeof cfg?.reelFontSize === 'number' ? cfg.reelFontSize : 72;
   const ctaColor = cfg?.reelCtaColor || '#F5B301';
@@ -290,10 +292,49 @@ export default function ReelsEmLote() {
     try { await fetch(`${API}/api/reels/music/${id}`, { method: 'DELETE' }); setTracks((p) => p.filter((m) => m.id !== id)); } catch { /* ignora */ }
   }
 
-  // Salva o rascunho sempre que a tabela muda (as frases não se perdem mais).
+  // Salva o rascunho no NAVEGADOR sempre que a tabela muda (cache local rápido).
   useEffect(() => {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(rows)); } catch { /* ignora */ }
   }, [rows]);
+
+  // Rascunho no SERVIDOR (sincroniza entre dispositivos). No 1º load, lê do
+  // servidor; se o servidor já tem rascunho, ele manda (você vê o mesmo no
+  // celular). Se o servidor está vazio mas você tem rascunho local, sobe ele.
+  function putDraft(rowsToSave: Row[], meta: Record<string, { legenda: string; data: string }>) {
+    setCloudState('saving');
+    fetch(`${API}/api/reels/lote-draft`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: rowsToSave, readyMeta: meta }),
+    }).then((r) => setCloudState(r.ok ? 'saved' : 'error')).catch(() => setCloudState('error'));
+  }
+  useEffect(() => {
+    fetch(`${API}/api/reels/lote-draft`)
+      .then((r) => r.json())
+      .then((d) => {
+        const serverRows: Row[] = Array.isArray(d.rows) ? d.rows.map((r: any) => ({
+          texto: r.texto || '', legenda: r.legenda || '', data: r.data || '', rawVideoId: r.rawVideoId || '',
+        })) : [];
+        const hasServer = serverRows.some((r) => r.texto.trim() || r.legenda.trim());
+        if (hasServer) {
+          setRows(serverRows);
+          setFocused(0);
+          if (d.readyMeta && Object.keys(d.readyMeta).length) setReadyMeta((p) => ({ ...d.readyMeta, ...p }));
+          setCloudState('saved');
+        } else if (rows.some((r) => r.texto.trim() || r.legenda.trim())) {
+          // servidor vazio + tenho rascunho local → migra pro servidor.
+          putDraft(rows, readyMeta);
+        }
+      })
+      .catch(() => { /* offline → segue com o local */ })
+      .finally(() => setDraftLoaded(true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Depois de carregado, salva no servidor (debounce) a cada mudança.
+  useEffect(() => {
+    if (!draftLoaded) return;
+    const t = setTimeout(() => putDraft(rows, readyMeta), 900);
+    return () => clearTimeout(t);
+  }, [rows, readyMeta, draftLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const freeClips = useMemo(() => clips.filter((c) => !c.used), [clips]);
   const filled = rows.filter((r) => r.texto.trim());
@@ -385,10 +426,17 @@ export default function ReelsEmLote() {
           (vazio = aleatório do banco) e a data também (vazia = próximo horário livre). Clique em
           <b> Gerar lote</b> e o sistema queima o texto no vídeo e agenda tudo.
         </p>
-        <button onClick={() => setImportOpen((v) => !v)}
-          className="mt-2 text-xs font-medium text-blue-400 hover:text-blue-300 inline-flex items-center gap-1.5">
-          <ClipboardPaste size={13} /> Importar / colar lote (do Claude)
-        </button>
+        <div className="mt-2 flex items-center gap-3 flex-wrap">
+          <button onClick={() => setImportOpen((v) => !v)}
+            className="text-xs font-medium text-blue-400 hover:text-blue-300 inline-flex items-center gap-1.5">
+            <ClipboardPaste size={13} /> Importar / colar lote (do Claude)
+          </button>
+          <span className="text-xs inline-flex items-center gap-1.5" title="Seu rascunho é salvo no servidor e aparece nos seus outros aparelhos">
+            {cloudState === 'saving' && <><Loader2 size={12} className="animate-spin text-muted-foreground" /> <span className="text-muted-foreground">salvando...</span></>}
+            {cloudState === 'saved' && <><Cloud size={12} className="text-emerald-500" /> <span className="text-muted-foreground">salvo na nuvem (abre em qualquer aparelho)</span></>}
+            {cloudState === 'error' && <><CloudOff size={12} className="text-amber-500" /> <span className="text-amber-500">sem conexão, salvo só neste aparelho</span></>}
+          </span>
+        </div>
       </div>
 
       {importOpen && (
