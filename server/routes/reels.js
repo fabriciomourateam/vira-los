@@ -174,6 +174,31 @@ router.delete('/ready-videos/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Rascunho do lote (salvo no SERVIDOR — sincroniza entre dispositivos) ──────
+// O que você digita na tabela do Em Lote fica salvo aqui, então você monta no PC
+// e continua no celular vendo a mesma coisa. Guarda linhas + legendas dos prontos.
+router.get('/lote-draft', (_req, res) => {
+  const d = db.getDoc('lote_draft');
+  res.json({
+    rows: d && Array.isArray(d.rows) ? d.rows : [],
+    readyMeta: d && d.readyMeta && typeof d.readyMeta === 'object' ? d.readyMeta : {},
+    updated_at: d ? d.updated_at || null : null,
+  });
+});
+
+router.put('/lote-draft', (req, res) => {
+  const rowsIn = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  const rows = rowsIn.slice(0, 200).map((r) => ({
+    texto: String(r.texto || ''),
+    legenda: String(r.legenda || ''),
+    data: String(r.data || ''),
+    rawVideoId: String(r.rawVideoId || ''),
+  }));
+  const readyMeta = (req.body?.readyMeta && typeof req.body.readyMeta === 'object') ? req.body.readyMeta : {};
+  db.setDoc('lote_draft', { rows, readyMeta });
+  res.json({ ok: true, count: rows.length });
+});
+
 // Renderiza o reel: queima a fraseTela no clipe cru (auto-pick ou rawVideoId) e
 // grava em videoPath. Se autoScheduleReel estiver ligado, já agenda no mLabs.
 router.post('/saved/:id/render', async (req, res) => {
