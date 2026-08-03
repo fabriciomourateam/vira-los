@@ -454,8 +454,8 @@ function computeNextReelSlots(count = 1) {
     return `${y}-${mo}-${da}T${hhmm}`;
   };
 
-  // Distância mínima entre posts (ms). Default 2h, configurável via settings.
-  const gapMin = typeof cfg.reelMinGapMinutes === 'number' ? cfg.reelMinGapMinutes : 120;
+  // Distância mínima entre posts (ms). Default 1h, configurável via settings.
+  const gapMin = typeof cfg.reelMinGapMinutes === 'number' ? cfg.reelMinGapMinutes : 60;
   const GAP_MS = gapMin * 60 * 1000;
 
   // Todos os horários já ocupados (locais + mLabs externo) como timestamps (ms).
@@ -773,13 +773,23 @@ async function fetchMlabsSchedules(dateStartDDMMYYYY, dateEndDDMMYYYY) {
       throw new Error(`GET /schedules falhou (${res.status}): ${JSON.stringify(res.body).slice(0, 400)}`);
     }
 
-    const items = ((res.body && res.body.data) || []).map((item) => ({
+    const raw = ((res.body && res.body.data) || []).map((item) => ({
       id: item.id,
       date: (item.attributes && item.attributes.date) || '',
       status: item.attributes && item.attributes.status,
       channelSourceId: item.attributes && item.attributes['channel-source-id'],
       message: String((item.attributes && item.attributes.message) || '').slice(0, 200),
     }));
+
+    // Deduplica por data/hora: mesmo conteúdo agendado em 4 canais gera 4 entradas
+    // no mesmo timestamp — mantém só a primeira de cada horário.
+    const seen = new Set();
+    const items = raw.filter((it) => {
+      const key = it.date.replace(/\.\d{3}/, '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     db.setDoc('mlabs_external_schedules', {
       items,

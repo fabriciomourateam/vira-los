@@ -88,7 +88,7 @@ function MonthGrid({ year, month, byDate, todayKey, selected, onSelect }: {
               <span className={`text-xs font-semibold self-end leading-none ${isToday ? 'text-blue-500' : 'text-muted-foreground'}`}>
                 {(() => {
                   const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-                  const hasClash = items.length > 1 && items.some((a, ai) => items.some((b, bi) => ai !== bi && Math.abs(toMin(a.time) - toMin(b.time)) < 120));
+                  const hasClash = items.length > 1 && items.some((a, ai) => items.some((b, bi) => ai !== bi && Math.abs(toMin(a.time) - toMin(b.time)) < 60));
                   return <>{hasClash && <span className="text-red-400 mr-0.5" title="Conflito de horário!">!</span>}{isToday ? `${d} • hoje` : d}</>;
                 })()}
               </span>
@@ -231,7 +231,7 @@ export default function AgendaCalendario() {
             <CalendarDays size={20} className="text-blue-400" /> Agenda de conteúdo
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Seus agendamentos (app + mLabs) em horário de Brasília. Sincronize o mLabs pra ver tudo e manter o gap de 2h.
+            Seus agendamentos (app + mLabs) em horário de Brasília. Sincronize o mLabs pra ver tudo e manter o gap de 1h.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -268,7 +268,7 @@ export default function AgendaCalendario() {
         <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2 flex items-center gap-2">
           <CloudDownload size={16} className="text-purple-400 shrink-0" />
           <p className="text-xs text-purple-300">
-            Os agendamentos do mLabs ainda não foram puxados. Clique <button onClick={() => loadMlabs(true)} className="underline font-semibold text-purple-400 hover:text-purple-300">Sincronizar mLabs</button> pra ver tudo aqui e ativar o gap de 2h.
+            Os agendamentos do mLabs ainda não foram puxados. Clique <button onClick={() => loadMlabs(true)} className="underline font-semibold text-purple-400 hover:text-purple-300">Sincronizar mLabs</button> pra ver tudo aqui e ativar o gap de 1h.
           </p>
         </div>
       )}
@@ -295,11 +295,11 @@ export default function AgendaCalendario() {
               {selItems.map((e, i) => {
                 const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
                 const mine = toMin(e.time);
-                const conflict = selItems.some((o, j) => j !== i && Math.abs(toMin(o.time) - mine) < 120);
+                const conflict = selItems.some((o, j) => j !== i && Math.abs(toMin(o.time) - mine) < 60);
                 return (
                   <div key={i} className={`text-xs rounded-lg border bg-background px-2.5 py-2 border-l-4 ${KIND[e.kind].bar} ${conflict ? 'border-red-500/60 bg-red-500/5' : 'border-border'}`}>
                     <div className="flex items-center gap-2">
-                      {conflict && <AlertTriangle size={13} className="text-red-400 shrink-0" title="Menos de 2h de outro post!" />}
+                      {conflict && <AlertTriangle size={13} className="text-red-400 shrink-0" title="Menos de 1h de outro post!" />}
                       <span className="tabular-nums font-bold text-foreground">{e.time}</span>
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${KIND[e.kind].pill}`}>{e.typeLabel}</span>
                       {e.platformsCount > 0 && <span className="text-[10px] text-muted-foreground">{e.platformsCount} canal(is)</span>}
@@ -317,7 +317,7 @@ export default function AgendaCalendario() {
                         </button>
                       )}
                     </div>
-                    {conflict && <p className="text-[10px] text-red-400 mt-0.5">Menos de 2h de outro post nesse dia</p>}
+                    {conflict && <p className="text-[10px] text-red-400 mt-0.5">Menos de 1h de outro post nesse dia</p>}
                     {e.caption && <p className="text-muted-foreground mt-1 line-clamp-2">{e.caption}</p>}
                   </div>
                 );
@@ -332,7 +332,7 @@ export default function AgendaCalendario() {
 
       {lastSync && (
         <p className="text-[10px] text-muted-foreground text-center">
-          mLabs sincronizado em {new Date(lastSync).toLocaleString('pt-BR')} · A distância mínima de 2h entre posts está ativa.
+          mLabs sincronizado em {new Date(lastSync).toLocaleString('pt-BR')} · A distância mínima de 1h entre posts está ativa.
         </p>
       )}
 
