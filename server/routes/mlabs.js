@@ -145,6 +145,7 @@ router.get('/mlabs-schedules', async (req, res) => {
   const refresh = req.query.refresh === 'true';
   const pad = (n) => String(n).padStart(2, '0');
 
+  // Sem refresh: retorna cache (rápido) ou vazio. NÃO abre browser automaticamente.
   if (!refresh) {
     try {
       const cached = db.getDoc('mlabs_external_schedules');
@@ -152,8 +153,10 @@ router.get('/mlabs-schedules', async (req, res) => {
         return res.json({ items: cached.items, cached: true, fetchedAt: cached.fetchedAt });
       }
     } catch {}
+    return res.json({ items: [], cached: false, fetchedAt: null, needsSync: true });
   }
 
+  // Com refresh=true: abre browser e busca de verdade (~30s).
   try {
     const now = new Date();
     const startStr = req.query.start || `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;

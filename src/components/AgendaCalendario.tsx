@@ -151,12 +151,20 @@ export default function AgendaCalendario() {
       .finally(() => setLoading(false));
   }
 
+  const [needsSync, setNeedsSync] = useState(false);
+
   function loadMlabs(refresh = false) {
     setSyncing(true);
     fetch(`${API}/api/mlabs/mlabs-schedules${refresh ? '?refresh=true' : ''}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      })
       .then((data) => {
+        if (data.needsSync) { setNeedsSync(true); setSyncing(false); return; }
+        setNeedsSync(false);
         if (data.fetchedAt) setLastSync(data.fetchedAt);
+        if (data.error && refresh) toast.error(`Usando cache — erro ao buscar: ${data.error}`);
         const items: Entry[] = ((data.items || []) as { id: string; date: string; message?: string; status?: number }[])
           .map((item) => {
             const m = String(item.date).match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
@@ -176,9 +184,11 @@ export default function AgendaCalendario() {
           })
           .filter((x): x is Entry => x !== null);
         setMlabsItems(items);
-        if (refresh) toast.success(`mLabs sincronizado: ${items.length} agendamento(s) encontrado(s).`);
+        if (refresh && !data.error) toast.success(`mLabs sincronizado: ${items.length} agendamento(s) encontrado(s).`);
       })
-      .catch(() => { if (refresh) toast.error('Falha ao sincronizar com mLabs.'); })
+      .catch((e) => {
+        if (refresh) toast.error(`Falha ao sincronizar com mLabs: ${e.message}`);
+      })
       .finally(() => setSyncing(false));
   }
 
@@ -253,6 +263,15 @@ export default function AgendaCalendario() {
           <button onClick={() => shift(1)} className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground" title="Próximos meses"><ChevronRight size={16} /></button>
         </div>
       </div>
+
+      {needsSync && (
+        <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2 flex items-center gap-2">
+          <CloudDownload size={16} className="text-purple-400 shrink-0" />
+          <p className="text-xs text-purple-300">
+            Os agendamentos do mLabs ainda não foram puxados. Clique <button onClick={() => loadMlabs(true)} className="underline font-semibold text-purple-400 hover:text-purple-300">Sincronizar mLabs</button> pra ver tudo aqui e ativar o gap de 2h.
+          </p>
+        </div>
+      )}
 
       {/* Dois meses lado a lado (empilha no mobile) */}
       <div className="grid md:grid-cols-2 gap-4">
