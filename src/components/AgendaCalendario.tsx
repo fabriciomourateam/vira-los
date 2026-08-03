@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Loader2, Trash2, CloudDownload } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Loader2, Trash2, CloudDownload, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -86,7 +86,11 @@ function MonthGrid({ year, month, byDate, todayKey, selected, onSelect }: {
                 ${isSel ? 'bg-blue-500/10 ring-1 ring-inset ring-blue-500/40' : 'hover:bg-background/60'}`}
             >
               <span className={`text-xs font-semibold self-end leading-none ${isToday ? 'text-blue-500' : 'text-muted-foreground'}`}>
-                {isToday ? `${d} • hoje` : d}
+                {(() => {
+                  const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                  const hasClash = items.length > 1 && items.some((a, ai) => items.some((b, bi) => ai !== bi && Math.abs(toMin(a.time) - toMin(b.time)) < 120));
+                  return <>{hasClash && <span className="text-red-400 mr-0.5" title="Conflito de horário!">!</span>}{isToday ? `${d} • hoje` : d}</>;
+                })()}
               </span>
               <div className="flex flex-col gap-1 w-full">
                 {items.slice(0, 4).map((e, j) => (
@@ -180,12 +184,8 @@ export default function AgendaCalendario() {
 
   useEffect(() => { load(); loadMlabs(); }, []);
 
-  // Merge local + mLabs entries, deduplicando (se mesmo date+time existe no local, pula o do mLabs).
-  const allEntries = useMemo(() => {
-    const localKeys = new Set(entries.map((e) => `${e.date}_${e.time}`));
-    const uniqueMlabs = mlabsItems.filter((e) => !localKeys.has(`${e.date}_${e.time}`));
-    return [...entries, ...uniqueMlabs];
-  }, [entries, mlabsItems]);
+  // Mostra TUDO (local + mLabs) sem dedup — assim vc vê quando dois posts batem no mesmo horário.
+  const allEntries = useMemo(() => [...entries, ...mlabsItems], [entries, mlabsItems]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, Entry[]>();
@@ -273,29 +273,36 @@ export default function AgendaCalendario() {
             <p className="text-xs text-muted-foreground italic">Nada agendado nesse dia. Bom candidato pra encaixar conteúdo novo.</p>
           ) : (
             <div className="space-y-1.5">
-              {selItems.map((e, i) => (
-                <div key={i} className={`text-xs rounded-lg border border-border bg-background px-2.5 py-2 border-l-4 ${KIND[e.kind].bar}`}>
-                  <div className="flex items-center gap-2">
-                    <span className="tabular-nums font-bold text-foreground">{e.time}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${KIND[e.kind].pill}`}>{e.typeLabel}</span>
-                    {e.platformsCount > 0 && <span className="text-[10px] text-muted-foreground">{e.platformsCount} canal(is)</span>}
-                    {e.status !== 'agendado' && <span className="text-[10px] text-amber-400">{e.status}</span>}
-                    {e.source === 'mlabs' ? (
-                      <span className="ml-auto text-[10px] text-purple-400 italic">do mLabs</span>
-                    ) : (
-                      <button
-                        onClick={() => removeEntry(e.scheduleId)}
-                        disabled={deleting === e.scheduleId}
-                        className="ml-auto text-muted-foreground hover:text-red-400 p-1 disabled:opacity-50"
-                        title="Remover do planejamento (não cancela no mLabs)"
-                      >
-                        {deleting === e.scheduleId ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                      </button>
-                    )}
+              {selItems.map((e, i) => {
+                const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                const mine = toMin(e.time);
+                const conflict = selItems.some((o, j) => j !== i && Math.abs(toMin(o.time) - mine) < 120);
+                return (
+                  <div key={i} className={`text-xs rounded-lg border bg-background px-2.5 py-2 border-l-4 ${KIND[e.kind].bar} ${conflict ? 'border-red-500/60 bg-red-500/5' : 'border-border'}`}>
+                    <div className="flex items-center gap-2">
+                      {conflict && <AlertTriangle size={13} className="text-red-400 shrink-0" title="Menos de 2h de outro post!" />}
+                      <span className="tabular-nums font-bold text-foreground">{e.time}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${KIND[e.kind].pill}`}>{e.typeLabel}</span>
+                      {e.platformsCount > 0 && <span className="text-[10px] text-muted-foreground">{e.platformsCount} canal(is)</span>}
+                      {e.status !== 'agendado' && <span className="text-[10px] text-amber-400">{e.status}</span>}
+                      {e.source === 'mlabs' ? (
+                        <span className="ml-auto text-[10px] text-purple-400 italic">do mLabs</span>
+                      ) : (
+                        <button
+                          onClick={() => removeEntry(e.scheduleId)}
+                          disabled={deleting === e.scheduleId}
+                          className="ml-auto text-muted-foreground hover:text-red-400 p-1 disabled:opacity-50"
+                          title="Remover do planejamento (não cancela no mLabs)"
+                        >
+                          {deleting === e.scheduleId ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        </button>
+                      )}
+                    </div>
+                    {conflict && <p className="text-[10px] text-red-400 mt-0.5">Menos de 2h de outro post nesse dia</p>}
+                    {e.caption && <p className="text-muted-foreground mt-1 line-clamp-2">{e.caption}</p>}
                   </div>
-                  {e.caption && <p className="text-muted-foreground mt-1 line-clamp-2">{e.caption}</p>}
-                </div>
-              ))}
+                );
+              })}
               <p className="text-[10px] text-amber-500/90 pt-1">
                 Apagar aqui limpa só o seu planejamento. Pra o post <b>não ser publicado</b>, apague também dentro do mLabs.
               </p>

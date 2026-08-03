@@ -158,7 +158,7 @@ router.get('/mlabs-schedules', async (req, res) => {
     const now = new Date();
     const startStr = req.query.start || `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
     const end = new Date(now);
-    end.setDate(end.getDate() + 90);
+    end.setDate(end.getDate() + 150);
     const endStr = req.query.end || `${pad(end.getDate())}/${pad(end.getMonth() + 1)}/${end.getFullYear()}`;
 
     const items = await mlabs().fetchMlabsSchedules(startStr, endStr);
