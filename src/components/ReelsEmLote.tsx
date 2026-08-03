@@ -355,6 +355,34 @@ export default function ReelsEmLote() {
     setFocused(0);
   }
 
+  // Gera UMA linha (um job curtinho). Assim a memória não acumula e, se travar,
+  // só essa cai — as outras seguem. Recupera do disco em caso de 404.
+  async function runRow(origIdx: number): Promise<RowResult> {
+    const row = rows[origIdx];
+    const payload = {
+      schedule,
+      repost: schedule && repostOn ? { months: repostMonths, count: repostCount } : null,
+      rows: [{ texto: row.texto.trim(), legenda: row.legenda.trim(), data: row.data || null, rawVideoId: row.rawVideoId || null }],
+    };
+    let r: Response;
+    try {
+      r = await fetch(`${API}/api/reels/bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    } catch { return { row: origIdx + 1, ok: false, error: 'Sem conexão com o servidor.' }; }
+    const d = await r.json().catch(() => ({} as any));
+    if (!r.ok || !d.jobId) return { row: origIdx + 1, ok: false, error: d.error || 'Falha ao iniciar.' };
+    let res = await pollJob(d.jobId, true);
+    if (!res) {
+      // 404 = servidor reiniciou. Vê no disco se esse já chegou a ser agendado.
+      try {
+        const pr = await fetch(`${API}/api/reels/bulk-progress?jobId=${d.jobId}`).then((x) => x.json());
+        if (Array.isArray(pr.results) && pr.results.length) res = pr.results;
+      } catch { /* ignora */ }
+    }
+    const first = res && res[0];
+    if (first && first.ok) return { ...first, row: origIdx + 1 };
+    return { row: origIdx + 1, ok: false, error: (first && first.error) || 'Não confirmou (o servidor pode ter reiniciado).' };
+  }
+
   async function generate() {
     if (!filled.length) { toast.error('Preencha ao menos uma linha com o texto na tela.'); return; }
     if (schedule && !freeClips.length && rows.every((r) => !r.rawVideoId)) {
@@ -364,47 +392,35 @@ export default function ReelsEmLote() {
     }
     setRunning(true);
     setResults(null);
-    setStep('Enviando lote...');
-    // Índices originais das linhas enviadas (pra marcar como concluídas na volta).
+    // Índices das linhas com texto ainda não concluídas → processa 1 a 1, na ordem.
     const sentIdx = rows.map((r, i) => (r.texto.trim() && !r.done ? i : -1)).filter((i) => i >= 0);
-    try {
-      const payload = {
-        schedule,
-        repost: schedule && repostOn ? { months: repostMonths, count: repostCount } : null,
-        rows: sentIdx.map((i) => ({ texto: rows[i].texto.trim(), legenda: rows[i].legenda.trim(), data: rows[i].data || null, rawVideoId: rows[i].rawVideoId || null })),
-      };
-      const r = await fetch(`${API}/api/reels/bulk`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha ao iniciar o lote.');
-      let res = await pollJob(d.jobId);
-      // Se o job sumiu no meio (404 = servidor reiniciou), recupera do disco o
-      // que já tinha sido agendado — pra marcar como feito e NÃO duplicar.
-      if (!res) {
-        try {
-          const pr = await fetch(`${API}/api/reels/bulk-progress?jobId=${d.jobId}`).then((x) => x.json());
-          if (Array.isArray(pr.results) && pr.results.length) {
-            res = pr.results;
-            const okN = pr.results.filter((x: RowResult) => x.ok).length;
-            if (okN) toast.info(`Recuperei ${okN} que já tinham sido agendados antes de parar — marquei como concluídos pra você não duplicar.`);
-          }
-        } catch { /* ignora */ }
+    const total = sentIdx.length;
+    const acc: RowResult[] = [];
+    for (let n = 0; n < total; n++) {
+      const origIdx = sentIdx[n];
+      setStep(`Gerando ${n + 1} de ${total}${schedule ? ' e agendando' : ''}...`);
+      let out = await runRow(origIdx);
+      if (!out.ok) {
+        // Uma tentativa extra (dá tempo se o servidor tiver reiniciado).
+        setStep(`Tentando de novo ${n + 1} de ${total}...`);
+        await new Promise((res) => setTimeout(res, 4000));
+        out = await runRow(origIdx);
       }
-      // Marca como concluídas as linhas que deram certo (res.row é 1-based na
-      // ordem enviada → mapeia pro índice original da tabela).
-      if (res && res.length) {
-        const okOrigIdx = new Set(res.filter((x) => x.ok).map((x) => sentIdx[x.row - 1]).filter((i) => i != null));
-        if (okOrigIdx.size) setRows((p) => p.map((r2, i) => (okOrigIdx.has(i) ? { ...r2, done: true } : r2)));
-      }
-    } catch (e: any) {
-      toast.error(e?.message || 'Erro no lote.');
-      setRunning(false);
-      setStep('');
+      acc.push(out);
+      setResults([...acc]);
+      if (out.ok) setRows((p) => p.map((r2, i) => (i === origIdx ? { ...r2, done: true } : r2)));
+      await new Promise((res) => setTimeout(res, 500)); // respiro pra memória assentar
     }
+    setRunning(false);
+    setStep('');
+    const ok = acc.filter((x) => x.ok).length;
+    const fail = acc.length - ok;
+    if (fail === 0) toast.success(`${ok} reel(s) prontos${schedule ? ' e agendados' : ''}!`);
+    else toast.warning(`${ok} ok, ${fail} não deram certo. Os que faltaram continuam na lista — é só clicar em Gerar de novo pra tentar só eles.`);
   }
 
-  async function pollJob(jobId: string): Promise<RowResult[] | null> {
+  // silent = o chamador controla toasts/estado (usado no modo 1-a-1).
+  async function pollJob(jobId: string, silent = false): Promise<RowResult[] | null> {
     let notFound = 0;
     for (;;) {
       await new Promise((res) => setTimeout(res, 1300));
@@ -418,8 +434,10 @@ export default function ReelsEmLote() {
       // Tolera 2 blips e então para com aviso, em vez de tentar pra sempre.
       if (status === 404) {
         if (++notFound >= 3) {
-          toast.error('O processamento parou (o servidor reiniciou no meio — pode ser memória). Os reels que já apareceram no resultado estão salvos. Tente gerar o restante de novo.');
-          setRunning(false); setStep('');
+          if (!silent) {
+            toast.error('O processamento parou (o servidor reiniciou no meio — pode ser memória). Os reels que já apareceram no resultado estão salvos. Tente gerar o restante de novo.');
+            setRunning(false); setStep('');
+          }
           return null;
         }
         continue;
@@ -427,18 +445,20 @@ export default function ReelsEmLote() {
       notFound = 0;
       if (d.status === 'done') {
         const res: RowResult[] = d.result?.results || [];
-        setResults(res);
-        setRunning(false);
-        setStep('');
         loadClips();
-        const ok = res.filter((x) => x.ok).length;
-        const fail = res.length - ok;
-        if (fail === 0) toast.success(`${ok} reel(s) prontos${schedule ? ' e agendados' : ''}!`);
-        else toast.warning(`${ok} ok, ${fail} com erro. Veja os detalhes abaixo.`);
+        if (!silent) {
+          setResults(res);
+          setRunning(false);
+          setStep('');
+          const ok = res.filter((x) => x.ok).length;
+          const fail = res.length - ok;
+          if (fail === 0) toast.success(`${ok} reel(s) prontos${schedule ? ' e agendados' : ''}!`);
+          else toast.warning(`${ok} ok, ${fail} com erro. Veja os detalhes abaixo.`);
+        }
         return res;
       }
-      if (d.status === 'error') { toast.error(d.error || 'Erro no lote.'); setRunning(false); setStep(''); return null; }
-      if (d.step) setStep(d.step);
+      if (d.status === 'error') { if (!silent) { toast.error(d.error || 'Erro no lote.'); setRunning(false); setStep(''); } return null; }
+      if (d.step && !silent) setStep(d.step);
     }
   }
 
@@ -451,7 +471,9 @@ export default function ReelsEmLote() {
         <p className="text-sm text-muted-foreground mt-1">
           Preencha o texto que vai <b>na tela</b> e a <b>legenda</b> de cada reel. O clipe é opcional
           (vazio = aleatório do banco) e a data também (vazia = próximo horário livre). Clique em
-          <b> Gerar lote</b> e o sistema queima o texto no vídeo e agenda tudo.
+          <b> Gerar lote</b>: o sistema processa <b>um de cada vez</b> (seguro, não trava com
+          muitos vídeos), mostrando o progresso. Cada um que fica pronto vira <b>verde</b> e não é
+          reenviado — se algum falhar, só ele fica na lista pra tentar de novo.
         </p>
         <div className="mt-2 flex items-center gap-3 flex-wrap">
           <button onClick={() => setImportOpen((v) => !v)}
