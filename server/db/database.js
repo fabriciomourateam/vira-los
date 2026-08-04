@@ -330,9 +330,22 @@ const getAllMusicTracks = () => readDb('music_tracks').sort((a, b) => b.created_
 const getMusicTrack  = (id) => readDb('music_tracks').find((m) => m.id === id) || null;
 const saveMusicTrack = (m) => { const db = readDb('music_tracks'); db.push({ ...m, created_at: now() }); writeDb('music_tracks', db); };
 const deleteMusicTrack = (id) => writeDb('music_tracks', readDb('music_tracks').filter((m) => m.id !== id));
+// Sorteia uma música usando "saco embaralhado" (igual raw videos): passa por TODAS
+// as faixas antes de repetir qualquer uma, sem repetir consecutivamente.
 const pickRandomMusic = () => {
   const live = getAllMusicTracks().filter((m) => m.path && fs.existsSync(m.path));
-  return live.length ? live[Math.floor(Math.random() * live.length)] : null;
+  if (!live.length) return null;
+  if (live.length === 1) { writeObj('music_bag', { queue: [], last: live[0].id, updated_at: now() }); return live[0]; }
+  const liveIds = new Set(live.map((m) => m.id));
+  const st = readObj('music_bag');
+  let bag = (Array.isArray(st.queue) ? st.queue : []).filter((id) => liveIds.has(id));
+  if (!bag.length) {
+    bag = _shuffle(live.map((m) => m.id));
+    if (st.last && bag[0] === st.last && bag.length > 1) { [bag[0], bag[1]] = [bag[1], bag[0]]; }
+  }
+  const id = bag.shift();
+  writeObj('music_bag', { queue: bag, last: id, updated_at: now() });
+  return live.find((m) => m.id === id) || live[0];
 };
 
 // ── Conteúdo diário (rotina automática: 2 carrosséis + 2 reels/dia) ───────────
