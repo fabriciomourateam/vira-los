@@ -257,6 +257,7 @@ ${handleAt} · Nicho: ${niche}
    • TOM INFORMAL, papo reto de treinador — do jeito que você fala no dia a dia. Gíria leve é bem-vinda ("ó", "se liga", "presta atenção", "cara", "tá"). NADA corporativo ou formal demais.
    • Use gancho de número, contra-intuição ou dor nomeada. PROIBIDO morno ("dicas pra...", "você sabia").
    • Molde de gancho (inspiração dos tops do nicho — use a estrutura, NÃO copie): ${HOOK_FORMULAS.join(' · ')}.
+   • DESTAQUE DOURADO: coloque EXATAMENTE 1 palavra-chave entre **duplo asterisco** — ela aparecerá em dourado na tela. Ex.: "Eu parei de fazer **ISSO** e a barriga secou" / "Tem 1 **erro** que trava o teu emagrecimento".
 
 2. LEGENDA (legendaPost) — é onde mora o conteúdo, capricha:
    • PRIMEIRA LINHA tem que RE-FISGAR sozinha (o Instagram corta em "... mais"). Não começa com "Bom," nem repete a frase da tela igual.
@@ -291,7 +292,7 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
     "heygen": "PT-BR. Use o vídeo/foto de referência enviado pelo criador como base (NÃO cite nome de arquivo), mesma cara e corpo. O avatar fala em português: '<frase de impacto>'. 9:16, ~${duration}s. Realismo anti-IA: pele e poros reais, luz natural, leve tremida de câmera. Texto na tela em PT. 4-6 frases.",
     "broll": "Scene description in ENGLISH. Use the reference video/photo provided by the creator as the base (do NOT name any file); same face and body. <cinematic realistic B-roll: action, real environment, energy, emotion; handheld slight shake, natural imperfect light, real skin texture and pores, subtle motion blur, candid phone-documentary look; no plastic/over-smoothed skin>. Vertical 9:16, ~${duration}s, silent. On-screen text stays in Portuguese. 4-6 sentences."
   },
-  "fraseTela": "a frase que para o scroll (lacuna aberta, ≤12 palavras, máx 2 linhas)",
+  "fraseTela": "frase que para o scroll (lacuna aberta, ≤12 palavras) com **1 palavra** em destaque dourado",
   "fraseTelaTiming": "0-4s",
   "ctaTela": "👇 LEIA A LEGENDA",
   "ctaTelaTiming": "4-5s",
