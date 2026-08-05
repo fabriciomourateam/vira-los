@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Check,
   ChevronRight,
@@ -374,9 +375,14 @@ function SubTabBar<T extends string>({
 }
 
 export default function ViralOS() {
-  const [activeTab, setActiveTab] = usePersistedTab<TabId>(
-    'viralos.activeTab', ['metodo','publico','descobrir','ideias','criar','lote','agenda','diario','avaliar','analytics','seo'], 'metodo'
-  );
+  const ALLOWED_TABS: readonly TabId[] = ['metodo','publico','descobrir','ideias','criar','lote','agenda','diario','avaliar','analytics','seo'];
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab') as TabId | null;
+  const activeTab: TabId = tabFromUrl && (ALLOWED_TABS as readonly string[]).includes(tabFromUrl) ? tabFromUrl : 'metodo';
+  const setActiveTab = useCallback((t: TabId | ((prev: TabId) => TabId)) => {
+    const next = typeof t === 'function' ? t(activeTab) : t;
+    setSearchParams(prev => { prev.set('tab', next); return prev; }, { replace: true });
+  }, [activeTab, setSearchParams]);
   const [metodoSubTab,    setMetodoSubTab]    = usePersistedTab('viralos.metodoSubTab', ['roteiro','produtos','metricas'] as const, 'roteiro');
   const [descobrirSubTab, setDescobrirSubTab] = usePersistedTab('viralos.descobrirSubTab', ['pesquisa','radar','agente'] as const, 'pesquisa');
   const [avaliarSubTab,   setAvaliarSubTab]   = usePersistedTab('viralos.avaliarSubTab', ['analisador','score'] as const, 'analisador');
@@ -663,15 +669,16 @@ export default function ViralOS() {
             </button>
           </div>
         </div>
-        {/* Tab Bar — ícone+label no desktop, só ícone no mobile */}
+        {/* Tab Bar — ícone+label no desktop, só ícone no mobile. <a> permite abrir em nova aba */}
         <div className="max-w-7xl mx-auto flex">
           {tabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
-              <button
+              <a
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                href={`?tab=${tab.id}`}
+                onClick={(e) => { e.preventDefault(); setActiveTab(tab.id); }}
                 title={tab.label}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
                   isActive
@@ -681,7 +688,7 @@ export default function ViralOS() {
               >
                 <Icon size={15} />
                 <span className="hidden sm:inline">{tab.label}</span>
-              </button>
+              </a>
             );
           })}
         </div>
