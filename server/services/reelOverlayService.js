@@ -88,9 +88,9 @@ function buildHtml({ hookText, ctaText = '', fontSize = 96, textY = 0.62, gradie
   .hook{font-family:'Barlow Condensed',sans-serif;font-weight:900;text-transform:uppercase;
     font-size:${fontSize}px;line-height:0.92;letter-spacing:-1.5px;color:#fff;
     text-shadow:0 3px 16px rgba(0,0,0,0.6),0 1px 2px rgba(0,0,0,0.7);}
-  .hook em{font-style:normal;color:${GOLD};-webkit-text-fill-color:${GOLD};}
+  .hook em{font-style:normal;color:${GOLD}!important;-webkit-text-fill-color:${GOLD}!important;}
   .cta{margin-top:${Math.round(fontSize*0.26)}px;font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;
-    font-size:${ctaSize}px;letter-spacing:0.5px;color:${GOLD};-webkit-text-fill-color:${GOLD};
+    font-size:${ctaSize}px;letter-spacing:0.5px;color:${GOLD}!important;-webkit-text-fill-color:${GOLD}!important;
     text-shadow:0 2px 8px rgba(0,0,0,0.6);}
 </style></head><body>
 <div class="stage"><div class="scrim"></div>

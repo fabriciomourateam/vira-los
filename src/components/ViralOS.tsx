@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Check,
   ChevronRight,
@@ -56,19 +57,23 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'lote' | 'agenda' | 'diario' | 'avaliar' | 'analytics' | 'seo';
 
-// Lembra a última aba/sub-aba visitada (localStorage) pra não voltar pro
-// início a cada F5. Valida contra a lista de valores aceitos antes de usar
-// (evita travar em algo inválido se a lista de abas mudar no futuro).
-function usePersistedTab<T extends string>(key: string, allowed: readonly T[], fallback: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [value, setValue] = useState<T>(() => {
+// Lê a aba da URL (?tab=xxx). Se não houver, pega do localStorage. Ao trocar,
+// atualiza ambos. Assim as abas viram links de verdade (clique-direito → nova janela).
+function usePersistedTab<T extends string>(key: string, allowed: readonly T[], fallback: T): [T, (v: T) => void] {
+  const [sp, setSp] = useSearchParams();
+  const [value, setRaw] = useState<T>(() => {
+    const fromUrl = sp.get(key);
+    if (fromUrl && (allowed as readonly string[]).includes(fromUrl)) return fromUrl as T;
     try {
       const saved = localStorage.getItem(key);
       return (saved && (allowed as readonly string[]).includes(saved)) ? (saved as T) : fallback;
     } catch { return fallback; }
   });
-  useEffect(() => {
-    try { localStorage.setItem(key, value); } catch { /* ignora (modo privado etc.) */ }
-  }, [key, value]);
+  const setValue = useCallback((v: T) => {
+    setRaw(v);
+    setSp((prev) => { const n = new URLSearchParams(prev); n.set(key, v); return n; }, { replace: true });
+    try { localStorage.setItem(key, v); } catch {}
+  }, [key, setSp]);
   return [value, setValue];
 }
 
@@ -663,17 +668,18 @@ export default function ViralOS() {
             </button>
           </div>
         </div>
-        {/* Tab Bar — ícone+label no desktop, só ícone no mobile */}
+        {/* Tab Bar — ícone+label no desktop, só ícone no mobile. Links reais pra abrir em nova janela. */}
         <div className="max-w-7xl mx-auto flex">
           {tabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
-              <button
+              <a
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                href={`/?tab=${tab.id}`}
+                onClick={(e) => { e.preventDefault(); setActiveTab(tab.id); }}
                 title={tab.label}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 no-underline ${
                   isActive
                     ? 'border-foreground text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground/70'
@@ -681,7 +687,7 @@ export default function ViralOS() {
               >
                 <Icon size={15} />
                 <span className="hidden sm:inline">{tab.label}</span>
-              </button>
+              </a>
             );
           })}
         </div>
