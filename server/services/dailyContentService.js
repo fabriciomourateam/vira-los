@@ -2,10 +2,11 @@
  * dailyContentService.js — Rotina diária automática do Fabricio Moura.
  *
  * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de temas DISTINTOS
- * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e, pra
- * cada um, 1 REEL CURTO de ~7s (formato vídeo + frase de tela + "leia a legenda",
- * com o conteúdo completo na legenda). Salva tudo DENTRO do
- * viralos (carousels.json + reels.json + daily_content.json) — sem Notion.
+ * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e 1 REEL
+ * CURTO tirado da FILA de roteiros pré-escritos (reel_content_queue), renderizado
+ * no estilo dourado com um clipe cru DIFERENTE dos últimos dias e agendado às
+ * 19h30. Fila vazia → reel por IA (reserva). Salva tudo DENTRO do viralos
+ * (carousels.json + reels.json + daily_content.json) — sem Notion.
  *
  * Substitui a rotina do fmteam-gerador. Mira o HOMEM 25-40, evita repetir
  * temas das últimas 2 semanas.
@@ -269,55 +270,106 @@ async function buildOne(theme) {
     console.warn('[DailyContent] auto-agendamento mLabs indisponível:', e.message);
   }
 
-  // 4) Reel curto de ~7s a partir do carrossel (mesmo tema): vídeo + frase de tela
-  //    + "leia a legenda", com o conteúdo completo na legenda.
+  // Reel NÃO é mais gerado por carrossel aqui. Agora sai 1/dia da FILA de roteiros
+  // pré-escritos (generateQueuedReel), postado às 19h30. Ver generateDailyBatch.
+  // Devolve o html do carrossel pra ser usado só na RESERVA (fila vazia → reel por IA).
+  return {
+    theme, carouselId, reelId: null, photosUsed: carouselResult.unsplashImagesUsed || 0,
+    carousel: { id: carouselId, topic: carousel.topic, legenda: carousel.legenda, numSlides: carousel.numSlides, _html: carouselResult.html },
+  };
+}
+
+// Ids dos clipes crus usados nos últimos N reels — pra o sorteio EVITAR repetir
+// vídeo em dias seguidos (anti-repetição robusta, sobrevive a reset do "saco").
+function recentRawVideoIds(n = 6) {
+  const used = [];
+  for (const r of db.getAllReels()) {            // já vem ordenado do mais novo
+    if (r.rawVideoId) used.push(r.rawVideoId);
+    if (used.length >= n) break;
+  }
+  return used;
+}
+
+// 1 REEL/DIA a partir da fila de roteiros meus (qualidade). Renderiza no estilo
+// dourado com um clipe cru DIFERENTE dos últimos dias e agenda às 19h30. Se a
+// fila esgotar, cai no gerador por IA a partir de um carrossel do dia (reserva —
+// nunca fica sem reel). Isolado: falha aqui não derruba o batch de carrosséis.
+async function generateQueuedReel({ carousels = [] } = {}) {
+  const cfg = db.getMlabsSettings();
+  const dailyTime = (cfg.reelDailyTime && /^\d{2}:\d{2}$/.test(cfg.reelDailyTime)) ? cfg.reelDailyTime : '19:30';
+
+  // 1) Monta o conteúdo do reel: fila primeiro; IA de reserva se a fila acabou.
   let reelId = null;
-  try {
-    const reel = await generateShortReelFromCarousel({
-      carousel: { id: carouselId, topic: carousel.topic, html: carouselResult.html, legenda: carousel.legenda, numSlides: carousel.numSlides },
-      duration: 7,
-      niche: NICHE,
-      instagramHandle: `@${HANDLE}`,
-    });
-    reelId = `reel_${Date.now()}_${theme.id}`;
+  let queueSlug = null;
+  const item = db.getNextReelQueueItem();
+  if (item) {
+    reelId = `reel_q_${Date.now()}_${item.slug}`;
+    queueSlug = item.slug;
     db.saveReel({
-      ...reel,
       id: reelId,
-      carouselId,
-      carouselTopic: carousel.topic,
+      fraseTela: item.fraseTela,
+      fraseTelaTiming: '0-4s',
+      ctaTela: item.ctaTela || '👇 LEIA A LEGENDA',
+      ctaTelaTiming: '4-5s',
+      legendaPost: item.legendaPost,
+      title: item.title || (item.fraseTela || '').replace(/\*\*/g, '').slice(0, 60),
       niche: NICHE,
       instagramHandle: `@${HANDLE}`,
-      source: 'daily',
-      themeId: theme.id,
+      source: 'queue',
+      queueSlug,
+      audience: item.audience || null,
       archived: false,
     });
-  } catch (e) {
-    console.warn(`[DailyContent] reel falhou (${theme.id}):`, e.message);
-  }
-
-  // 5) Esteira automática do reel: se ligado e houver clipe cru livre no banco,
-  //    queima a fraseTela no vídeo e (se autoScheduleReel) agenda no próximo
-  //    slot livre. Isolado — falha aqui não derruba o carrossel nem o batch.
-  if (reelId) {
+    console.log(`[DailyContent] reel da FILA: ${item.slug} (${item.audience}).`);
+  } else if (carousels.length) {
+    // Reserva: fila vazia → gera reel por IA a partir do 1º carrossel do dia.
     try {
-      const cfg = db.getMlabsSettings();
-      if (cfg.autoRenderReel && db.pickRandomRawVideo()) {
-        const { renderReelVideo, scheduleReelNow } = require('./reelPipelineService');
-        await renderReelVideo(reelId);
-        console.log(`[DailyContent] reel ${reelId} renderizado (texto queimado no clipe cru).`);
-        if (cfg.autoScheduleReel) {
-          const sch = await scheduleReelNow(reelId);
-          console.log(`[DailyContent] reel ${reelId} agendado no mLabs →`, (sch.dates || []).join(', '));
-        }
-      } else if (cfg.autoRenderReel) {
-        console.warn(`[DailyContent] auto-render ligado mas banco de vídeos crus vazio — reel ${reelId} ficou sem vídeo.`);
-      }
+      const c = carousels[0];
+      const reel = await generateShortReelFromCarousel({
+        carousel: { id: c.id, topic: c.topic, html: c._html || '', legenda: c.legenda, numSlides: c.numSlides },
+        duration: 7, niche: NICHE, instagramHandle: `@${HANDLE}`,
+      });
+      reelId = `reel_${Date.now()}_ia`;
+      db.saveReel({
+        ...reel, id: reelId, carouselId: c.id, carouselTopic: c.topic,
+        niche: NICHE, instagramHandle: `@${HANDLE}`, source: 'daily', archived: false,
+      });
+      console.log('[DailyContent] fila vazia — reel gerado por IA (reserva).');
     } catch (e) {
-      console.warn(`[DailyContent] auto-render/agendar reel falhou (${reelId}):`, e.message);
+      console.warn('[DailyContent] reserva IA do reel falhou:', e.message);
+      return { reelId: null };
     }
+  } else {
+    console.warn('[DailyContent] sem item na fila e sem carrossel — nenhum reel gerado.');
+    return { reelId: null };
   }
 
-  return { theme, carouselId, reelId, photosUsed: carouselResult.unsplashImagesUsed || 0 };
+  // 2) Render (dourado) + agendamento às 19h30, respeitando os toggles de settings.
+  try {
+    if (cfg.autoRenderReel && db.countUsableRawVideos() > 0) {
+      const { renderReelVideo, scheduleReelNow } = require('./reelPipelineService');
+      // Evita repetir o clipe dos últimos dias (anti-repetição robusta).
+      await renderReelVideo(reelId, { avoidRawVideoIds: recentRawVideoIds(6) });
+      console.log(`[DailyContent] reel ${reelId} renderizado (dourado).`);
+      // Só marca o roteiro como usado DEPOIS de renderizar — se falhar, não queima o script.
+      if (queueSlug) db.markReelQueueItemUsed(queueSlug, reelId);
+      if (cfg.autoScheduleReel) {
+        const dates = require('./mlabsService').computeNextReelSlots(1, { times: [dailyTime] });
+        const sch = await scheduleReelNow(reelId, { dates });
+        console.log(`[DailyContent] reel ${reelId} agendado (${dailyTime}) →`, (sch.dates || []).join(', '));
+      }
+    } else if (cfg.autoRenderReel) {
+      console.warn(`[DailyContent] auto-render ligado mas sem vídeo cru — reel ${reelId} ficou sem vídeo (roteiro NÃO consumido).`);
+    } else if (queueSlug) {
+      // Auto-render desligado: o reel fica de rascunho pra render manual. Marca usado
+      // pra não repetir o mesmo roteiro amanhã (você renderiza pela UI quando quiser).
+      db.markReelQueueItemUsed(queueSlug, reelId);
+    }
+  } catch (e) {
+    console.warn(`[DailyContent] render/agendar reel da fila falhou (${reelId}):`, e.message);
+  }
+
+  return { reelId };
 }
 
 // Gera o batch do dia (2 temas). Resiliente: falha de 1 tema não derruba o outro.
@@ -357,18 +409,29 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
       const themes = pickThemes();
       resolved = themes.map((t) => ({ ...t, topic: pickAngle(t) }));
 
+      const dayCarousels = [];
       for (const theme of resolved) {
         try {
           // Teto por tema: se travar, cai no catch e a geração segue (não pendura tudo).
           const r = await withTimeout(buildOne(theme), DAILY_THEME_TIMEOUT_MS, `tema ${theme.id}`);
           if (r.carouselId) carouselIds.push(r.carouselId);
-          if (r.reelId) reelIds.push(r.reelId);
+          if (r.carousel) dayCarousels.push(r.carousel);
           photosUsed += r.photosUsed;
           try { if (db.addRecentTopics) db.addRecentTopics([theme.topic]); } catch (_) {}
         } catch (e) {
           console.error(`[DailyContent] tema ${theme.id} falhou:`, e.message);
           errors.push(`${theme.id}: ${e.message}`);
         }
+      }
+
+      // 1 reel/dia da FILA de roteiros meus (dourado, 19h30). Reserva: IA a partir
+      // de um carrossel do dia se a fila esgotou. Isolado do loop de carrosséis.
+      try {
+        const rq = await withTimeout(generateQueuedReel({ carousels: dayCarousels }), DAILY_THEME_TIMEOUT_MS, 'reel-fila');
+        if (rq.reelId) reelIds.push(rq.reelId);
+      } catch (e) {
+        console.error('[DailyContent] reel da fila falhou:', e.message);
+        errors.push(`reel-fila: ${e.message}`);
       }
     } catch (e) {
       // Falha ANTES/FORA do loop (ex.: pickThemes). Registra pra não sumir.

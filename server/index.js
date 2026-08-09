@@ -130,6 +130,17 @@ app.get('/api/health', (_req, res) =>
 // ── Inicia Scheduler ──────────────────────────────────────────────────────────
 require('./services/schedulerService').start();
 
+// ── Seed da fila de roteiros de reel (conteúdo pré-escrito, 1/dia às 19h30) ────
+// Idempotente por slug: re-deploy não duplica nem revive item já postado. Novos
+// roteiros adicionados ao JSON entram no próximo boot. A fila vive no volume.
+try {
+  const seed = require('./data/seeds/reel-scripts.json');
+  const db = require('./db/database');
+  const r = db.seedReelQueue(seed.scripts || [], seed.version);
+  const st = db.getReelQueueStats();
+  if (r.added) console.log(`🎬 Fila de reels: +${r.added} roteiros semeados (${st.remaining} na fila, ${st.used} já usados).`);
+} catch (e) { console.warn('Seed da fila de reels falhou (ignorado):', e.message); }
+
 // ── Limpeza de disco no boot ──────────────────────────────────────────────────
 // Reels renderizados viram descartáveis após agendar (o mLabs guarda a cópia no
 // S3 dele). Limpa temporários + MP4 velhos no start pra recuperar de um disco

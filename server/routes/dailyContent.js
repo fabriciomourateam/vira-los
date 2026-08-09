@@ -1,9 +1,11 @@
 /**
- * dailyContent.js — rotina diária de conteúdo (2 carrosséis + 2 reels/dia).
+ * dailyContent.js — rotina diária de conteúdo (2 carrosséis por IA + 1 reel/dia
+ * da FILA de roteiros pré-escritos, postado às 19h30).
  *
- * GET  /api/daily-content        → estado + batches (hidratados com carrosséis/reels)
- * POST /api/daily-content/generate → dispara geração manual ("Gerar agora")
- * GET  /api/daily-content/themes → banco de temas
+ * GET  /api/daily-content            → estado + batches (hidratados)
+ * POST /api/daily-content/generate   → dispara geração manual ("Gerar agora")
+ * GET  /api/daily-content/themes     → banco de temas
+ * GET  /api/daily-content/reel-queue → fila de roteiros de reel (quantos faltam)
  */
 
 const express = require('express');
@@ -18,6 +20,18 @@ router.get('/', (req, res) => {
 
 router.get('/themes', (req, res) => {
   res.json(daily.THEMES);
+});
+
+// Fila de roteiros de reel: quantos ainda faltam postar + lista (pra você ver
+// quantos dias de conteúdo tem na frente). ?full=true traz o texto completo.
+router.get('/reel-queue', (req, res) => {
+  const stats = db.getReelQueueStats();
+  const full = req.query.full === 'true';
+  const items = db.getReelQueue().map((it) => full ? it : {
+    slug: it.slug, audience: it.audience, title: it.title, order: it.order,
+    used: !!it.used, usedAt: it.usedAt || null,
+  });
+  res.json({ ...stats, items });
 });
 
 router.post('/generate', (req, res) => {

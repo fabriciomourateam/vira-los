@@ -27,16 +27,16 @@ function mlabs() {
  * a fraseTela/ctaTela e grava o resultado em reel.videoPath.
  * @returns {Promise<{ outPath, rawVideoId }>}
  */
-async function renderReelVideo(reelId, { rawVideoId = null } = {}) {
+async function renderReelVideo(reelId, { rawVideoId = null, avoidRawVideoIds = [] } = {}) {
   const reel = db.getReel(reelId);
   if (!reel) throw new Error('Reel não encontrado.');
   if (!reel.fraseTela || !String(reel.fraseTela).trim()) {
     throw new Error('Esse reel não tem fraseTela (gancho de tela). Gere o reel curto antes de renderizar.');
   }
 
-  // Clipe informado, ou sorteia um aleatório do banco (reutilizável — poucos
-  // clipes servem muitos reels, com variedade).
-  const raw = rawVideoId ? db.getRawVideo(rawVideoId) : db.pickRandomRawVideo();
+  // Clipe informado, ou sorteia um do banco (reutilizável) evitando os últimos
+  // usados (avoidRawVideoIds) — variedade real, sem repetir o vídeo de ontem.
+  const raw = rawVideoId ? db.getRawVideo(rawVideoId) : db.pickRandomRawVideo({ avoidIds: avoidRawVideoIds });
   if (!raw) throw new Error('Nenhum vídeo cru disponível no banco. Suba um clipe de treino antes.');
   if (!raw.path || !fs.existsSync(raw.path)) {
     throw new Error(`O arquivo do vídeo cru sumiu do disco (${raw.file || raw.id}).`);

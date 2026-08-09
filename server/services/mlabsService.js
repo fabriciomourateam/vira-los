@@ -436,13 +436,17 @@ function expandMonthly(base, months = 3, count = 4) {
 // (reelScheduleTimes × reelScheduleDays) a partir de amanhã e devolve os
 // primeiros `count` slots que AINDA não foram tomados por outro reel agendado.
 // Sem trava artificial de "2/dia": é tudo configurável nas settings.
-function computeNextReelSlots(count = 1) {
+function computeNextReelSlots(count = 1, opts = {}) {
   const cfg = (db.getMlabsSettings && db.getMlabsSettings()) || {};
   const perDay = Math.max(1, parseInt(cfg.reelPostsPerDay, 10) || 1);
-  const times = (Array.isArray(cfg.reelScheduleTimes) && cfg.reelScheduleTimes.length
-    ? cfg.reelScheduleTimes
-    : [cfg.defaultTime || '11:00'])
-    .slice(0, perDay)                     // no máx `perDay` horários por dia
+  // `opts.times` força os horários (ex.: a fila diária pede ['19:30']); senão usa
+  // os das settings. Quando forçado, ignora o teto perDay (você mandou os horários).
+  const forced = Array.isArray(opts.times) && opts.times.length ? opts.times : null;
+  const times = (forced
+    ? forced
+    : (Array.isArray(cfg.reelScheduleTimes) && cfg.reelScheduleTimes.length
+      ? cfg.reelScheduleTimes
+      : [cfg.defaultTime || '11:00']).slice(0, perDay))  // no máx `perDay` horários por dia
     .map((t) => String(t).slice(0, 5))
     .sort();                              // cronológico dentro do dia
   const maxDays = Math.min(365, Math.max(1, parseInt(cfg.reelScheduleDays, 10) || 14));
