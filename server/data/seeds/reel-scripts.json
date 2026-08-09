@@ -1,0 +1,246 @@
+{
+  "version": "2026-08-08.1",
+  "note": "Roteiros de reel pré-escritos, consumidos 1/dia pela rotina (19h30). Mix homem 25-40 (por sintoma, ban-safe) + mulher 35-44. fraseTela tem 1 palavra entre **asteriscos** (vira dourada no vídeo). Seed idempotente por slug — pode adicionar mais no fim do array sem duplicar os antigos.",
+  "scripts": [
+    {
+      "slug": "h-barriga-treina-01",
+      "audience": "homem",
+      "title": "Treina e a barriga não sai",
+      "fraseTela": "Você treina pesado e a **barriga** insiste em ficar",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Não é falta de treino. Quase nunca é.\n\nEu vejo homem sarado do peito pra cima e com aquela barriguinha teimosa que não vai embora nem no cutting.\n\nNa maioria das vezes o que trava é o que acontece FORA da academia: noite mal dormida, estresse alto o dia todo e comida no automático.\n\nO corpo entende isso como perigo e segura gordura bem no meio da barriga. Você pode fazer 500 abdominais que não muda.\n\nComeça arrumando o sono e o prato antes de aumentar o treino.\n\nCOMENTA SHAPE que eu te mando o caminho que uso com os alunos pra secar a barriga sem viver na esteira.\n\n#saudemasculina #gorduraabdominal #treino #performance #homem30"
+    },
+    {
+      "slug": "m-doce-noite-01",
+      "audience": "mulher",
+      "title": "Vontade de doce à noite",
+      "fraseTela": "A vontade de doce à noite não é **fraqueza**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você segura o dia inteiro certinho e quando dá 21h ataca o armário. Todo santo dia.\n\nCalma que não é falta de força de vontade.\n\nQuando você come pouco de dia (ou pula refeição na correria), o corpo cobra a conta à noite pedindo açúcar rápido pra repor energia.\n\nConserta o café da manhã e o almoço com proteína de verdade e a fome de doce da noite cai sozinha. Já vi acontecer com dezenas de alunas.\n\nCOMENTA DIETA que eu te mando um cardápio que segura a fome sem você passar vontade.\n\n#emagrecimento #vidareal #comidadeverdade #mulher40 #semdieta"
+    },
+    {
+      "slug": "h-cansaco-tarde-01",
+      "audience": "homem",
+      "title": "Apagão da tarde",
+      "fraseTela": "Aquele apagão das 15h tem **explicação**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Bateu 15h e você só quer deitar. Café não resolve mais.\n\nAntes de achar que é preguiça, olha o que você comeu no almoço.\n\nPrato cheio de arroz, pão e pouca proteína faz o açúcar do sangue subir rápido e despencar depois. O tombo é esse sono que te derruba na cadeira.\n\nMonta o almoço com proteína e vegetal primeiro, carboidrato por último, e a tarde inteira muda.\n\nCOMENTA SHAPE que eu te mando o passo a passo do prato que segura tua energia até a noite.\n\n#saudemasculina #performance #energia #disposicao #homem30"
+    },
+    {
+      "slug": "h-sono-shape-01",
+      "audience": "homem",
+      "title": "Dormir mal trava o shape",
+      "fraseTela": "Dormir 5h tá sabotando teu **shape** em silêncio",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você treina, come certo, mas dorme mal. E não entende por que não evolui.\n\nO músculo não cresce na academia. Cresce enquanto você dorme.\n\nNoite curta derruba tua recuperação, aumenta a fome no dia seguinte e ainda mexe com os hormônios que constroem massa. É tiro no pé todo dia.\n\nDormir 7h não é luxo, é parte do treino. Trata o sono com a mesma seriedade que trata o supino.\n\nCOMENTA SHAPE que eu te mando os ajustes que faço com os alunos pra dormir melhor e render mais.\n\n#saudemasculina #sono #recuperacao #performance #homem30"
+    },
+    {
+      "slug": "m-come-pouco-01",
+      "audience": "mulher",
+      "title": "Come pouco e não desce",
+      "fraseTela": "Você come pouco e a balança **não** desce",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Isso te deixa maluca, eu sei. Come que nem um passarinho e nada.\n\nComer pouco demais faz teu corpo economizar energia e travar o emagrecimento pra se proteger.\n\nO que seca de verdade não é comer menos, é comer certo: proteína suficiente, comida de verdade e constância. Aí o corpo solta a gordura sem entrar em pânico.\n\nMenos não é sempre melhor. Melhor é melhor.\n\nCOMENTA DIETA que eu te mando um cardápio que seca sem te deixar com fome.\n\n#emagrecimento #vidareal #semdieta #mulher40 #comidadeverdade"
+    },
+    {
+      "slug": "h-estresse-barriga-01",
+      "audience": "homem",
+      "title": "Estresse vira barriga",
+      "fraseTela": "Teu estresse tá virando **barriga** sem você ver",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Trabalho pesado, cabeça a mil, dormindo mal. E a barriga só crescendo.\n\nNão é coincidência.\n\nEstresse crônico mantém o cortisol lá em cima o dia todo, e o corpo responde estocando gordura bem no abdômen e aumentando tua fome de porcaria.\n\nVocê pode treinar pesado, mas se viver no vermelho o dia inteiro a barriga não vai embora.\n\nControlar estresse e sono às vezes seca mais que uma hora a mais de esteira.\n\nCOMENTA SHAPE que eu te mando o caminho que uso pra baixar isso sem parar tua vida.\n\n#saudemasculina #gorduraabdominal #cortisol #performance #homem30"
+    },
+    {
+      "slug": "m-inchaco-01",
+      "audience": "mulher",
+      "title": "Inchaço x gordura",
+      "fraseTela": "Nem tudo que você vê no espelho é **gordura**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Tem dia que você acorda 2kg mais pesada e mais inchada. Do nada.\n\nBoa parte disso é retenção de líquido, não gordura nova. Ninguém engorda gordura de um dia pro outro.\n\nExcesso de sal, comida industrializada, noite mal dormida e pouca água deixam teu corpo segurando líquido que te faz parecer bem mais pesada do que você é.\n\nAjusta esses pontos e o inchaço desce em poucos dias. Aí você enxerga o resultado real do teu esforço.\n\nCOMENTA DIETA que eu te mando o que como pra desinchar sem sofrer.\n\n#emagrecimento #inchaço #retencao #mulher40 #vidareal"
+    },
+    {
+      "slug": "h-falso-magro-01",
+      "audience": "homem",
+      "title": "Falso magro",
+      "fraseTela": "Magro de roupa, **flácido** sem ela: e aí?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você é magro, mas tira a camisa e não tem definição nenhuma. Barriga mole e zero músculo aparente.\n\nA gente chama isso de falso magro: pouco músculo e gordurinha escondida no lugar errado.\n\nO erro clássico aqui é focar só em cardio e comer de menos. Isso te deixa magro fraco, não seco forte.\n\nO caminho é o contrário do que parece: comer proteína o suficiente e treinar força pra construir músculo enquanto seca a gordura.\n\nCOMENTA SHAPE que eu te mando por onde começar se você se identificou.\n\n#saudemasculina #treino #ganhodemassa #performance #homem30"
+    },
+    {
+      "slug": "h-proteina-homem-01",
+      "audience": "homem",
+      "title": "Proteína de menos",
+      "fraseTela": "Você come **metade** da proteína que imagina",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Pergunta séria: você sabe quanta proteína comeu hoje?\n\nA maioria dos homens que chega pra mim come bem menos do que acha. E depois reclama que não ganha músculo nem seca.\n\nProteína é o que segura tua fome, mantém o músculo e ainda gasta mais energia pra ser digerida. É o alimento mais estratégico que existe pro teu shape.\n\nColoca uma fonte boa de proteína em toda refeição e você já muda o jogo sem contar caloria nenhuma.\n\nCOMENTA SHAPE que eu te mando quanto você precisa por dia e como bater fácil.\n\n#saudemasculina #proteina #treino #performance #homem30"
+    },
+    {
+      "slug": "m-metabolismo-35-01",
+      "audience": "mulher",
+      "title": "Metabolismo depois dos 35",
+      "fraseTela": "O que emagrecia aos 25 **parou** de funcionar",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você faz o que sempre fez e não desce mais. Frustrante, né?\n\nDepois dos 35 o corpo muda de verdade: você perde músculo aos poucos, os hormônios oscilam e o metabolismo fica mais econômico.\n\nA boa notícia é que dá pra virar esse jogo. E o segredo não é comer menos ainda — é preservar músculo com proteína e treino de força.\n\nMúsculo é o que mantém teu metabolismo aceso depois dos 40. Cuidar dele muda tudo.\n\nCOMENTA DIETA que eu te mando o cardápio que uso com as alunas nessa fase.\n\n#emagrecimento #mulher40 #metabolismo #vidareal #semdieta"
+    },
+    {
+      "slug": "h-treina-nao-evolui-01",
+      "audience": "homem",
+      "title": "Treina muito, evolui pouco",
+      "fraseTela": "Treinar todo dia pode estar te **travando**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você acha que mais treino = mais resultado. Nem sempre.\n\nSe você treina pesado todo dia e nunca dá descanso de verdade, o corpo não tem tempo de reconstruir. Você vive quebrado e não evolui.\n\nO músculo cresce na recuperação, não no acúmulo. Treino demais com sono de menos é a receita pra estagnar (e se machucar).\n\nÀs vezes o que falta pra você evoluir é um dia a menos de treino e uma noite melhor de sono.\n\nCOMENTA SHAPE que eu te mando como organizar a semana pra render de verdade.\n\n#saudemasculina #treino #recuperacao #performance #homem30"
+    },
+    {
+      "slug": "m-ansiedade-comida-01",
+      "audience": "mulher",
+      "title": "Come de ansiedade",
+      "fraseTela": "Você não come de fome, come de **ansiedade**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Repara: muitas vezes você abre a geladeira sem fome nenhuma.\n\nÉ a cabeça pedindo, não o estômago. Comida virou um jeito rápido de aliviar o dia pesado.\n\nO problema é que meia hora depois vem a culpa, e aí você desconta de novo. Vira um ciclo que não para.\n\nO primeiro passo é aprender a diferença entre fome de verdade e vontade da cabeça. Só isso já muda muito.\n\nCOMENTA DIETA que eu te mando o que oriento minhas alunas a fazer nesses momentos.\n\n#emagrecimento #comeremocional #mulher40 #vidareal #autocuidado"
+    },
+    {
+      "slug": "h-cerveja-shape-01",
+      "audience": "homem",
+      "title": "Cerveja do fim de semana",
+      "fraseTela": "Tua cerveja de sexta some com a **semana** de treino",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você se mata na semana e solta no fim de semana. Aí não entende por que não seca.\n\nNão é frescura minha, é conta.\n\nÁlcool é caloria vazia, atrapalha teu sono, derruba tua recuperação e ainda te dá aquela fome de porcaria de madrugada. Um fim de semana solto apaga 5 dias de esforço.\n\nNão precisa virar careta. Precisa saber o tamanho do estrago pra escolher com consciência.\n\nCOMENTA SHAPE que eu te mostro como encaixar a vida social sem perder o shape.\n\n#saudemasculina #performance #treino #shape #homem30"
+    },
+    {
+      "slug": "h-cafe-manha-homem-01",
+      "audience": "homem",
+      "title": "Café da manhã do shape",
+      "fraseTela": "Teu café da manhã tá te deixando com **fome** às 10h",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Café com pão e você já tá com fome de novo antes do almoço. Conhece?\n\nCafé da manhã só de carboidrato sobe teu açúcar rápido e derruba logo depois. Resultado: fome, ansiedade e beliscada a manhã toda.\n\nColoca proteína no café da manhã (ovo é o mais fácil e barato) e você segura a fome por horas, com a cabeça mais focada no trabalho.\n\nComeço de dia com proteína é uma das mudanças mais simples e que mais entrega resultado.\n\nCOMENTA SHAPE que eu te mando 3 cafés da manhã que seguram a fome.\n\n#saudemasculina #proteina #cafedamanha #performance #homem30"
+    },
+    {
+      "slug": "m-balanca-engana-01",
+      "audience": "mulher",
+      "title": "A balança engana",
+      "fraseTela": "O número da balança te **engana** todo dia",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você sobe na balança de manhã e o dia inteiro depende daquele número. Para com isso.\n\nO peso oscila 1 a 2kg por dia só de água, sal, ciclo e intestino. Não tem nada a ver com gordura.\n\nSe você olhar só a balança, vai surtar à toa e desistir do que tá dando certo.\n\nOlha as roupas, as fotos, a energia, a medida. Isso conta a história real do teu corpo, não um número que muda toda hora.\n\nCOMENTA DIETA que eu te mostro como medir teu progresso do jeito certo.\n\n#emagrecimento #balança #mulher40 #vidareal #autocuidado"
+    },
+    {
+      "slug": "h-insulina-sintoma-01",
+      "audience": "homem",
+      "title": "Sono depois de comer",
+      "fraseTela": "Sono pesado depois do almoço é um **recado** do corpo",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Almoçou e bateu aquele sono de desmaiar? Presta atenção nisso.\n\nQuando isso acontece todo dia, muitas vezes é sinal de que teu corpo tá lidando mal com o excesso de carboidrato e açúcar das refeições.\n\nCom o tempo, isso trava teu emagrecimento e ajuda a acumular barriga, mesmo você treinando.\n\nO ajuste é simples: mais proteína e vegetal, menos pão e açúcar de bobeira. O sono da tarde some e a barriga começa a responder.\n\nCOMENTA SHAPE que eu te mando o prato que uso pra resolver isso.\n\n#saudemasculina #gorduraabdominal #energia #performance #homem30"
+    },
+    {
+      "slug": "m-correria-01",
+      "audience": "mulher",
+      "title": "Emagrecer na correria",
+      "fraseTela": "Sem tempo pra dieta? O problema quase nunca é **tempo**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Trabalho, filho, casa, marido. Onde entra você nessa lista? No fim, né.\n\nEu escuto muito 'não tenho tempo'. Mas quase sempre o que falta não é tempo, é um plano simples que caiba na tua correria.\n\nDieta complicada de 6 refeições montadas não funciona pra quem vive no corre. O que funciona é comida de verdade, prática, que dá pra repetir sem pensar.\n\nSimplifica e você consegue. Já vi mãe de três emagrecer sem virar a rotina de cabeça pra baixo.\n\nCOMENTA DIETA que eu te mando um cardápio prático pra rotina apertada.\n\n#emagrecimento #maededois #vidareal #mulher40 #semdieta"
+    },
+    {
+      "slug": "h-massa-depois-30-01",
+      "audience": "homem",
+      "title": "Perdendo massa depois dos 30",
+      "fraseTela": "Depois dos 30 o músculo vai embora se você **deixar**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Bateu 30 e você sente o corpo diferente. Menos força, mais barriga, aquela moleza.\n\nParte disso é natural: a partir dos 30 a gente perde músculo aos poucos todo ano, se não fizer nada contra.\n\nMenos músculo é metabolismo mais lento, menos força e mais gordura acumulando. É uma bola de neve que começa quieta.\n\nMas dá pra frear e reverter em qualquer idade com treino de força e proteína. Teu corpo aos 40 pode ser melhor que aos 25.\n\nCOMENTA SHAPE que eu te mando o caminho pra reconstruir sem enrolação.\n\n#saudemasculina #ganhodemassa #treino #homem30 #performance"
+    },
+    {
+      "slug": "m-caneta-flacidez-01",
+      "audience": "mulher",
+      "title": "Caneta e flacidez",
+      "fraseTela": "Emagreceu rápido na caneta e ficou **flácida**?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Perdeu peso rápido e agora a pele e o corpo ficaram molinhos? Você não tá sozinha.\n\nQuando o emagrecimento vem rápido demais e sem estratégia, você perde gordura MAS também perde músculo junto. E é o músculo que dá firmeza ao corpo.\n\nPor isso tanta gente emagrece e não gosta do resultado no espelho.\n\nO caminho é preservar músculo enquanto emagrece: proteína suficiente e treino de força. Aí você seca firme, não seca mole.\n\nCOMENTA DIETA que eu te mando como fazer isso do jeito certo.\n\n#emagrecimento #flacidez #mulher40 #vidareal #musculatura"
+    },
+    {
+      "slug": "h-agua-performance-01",
+      "audience": "homem",
+      "title": "Água e performance",
+      "fraseTela": "Metade do teu cansaço pode ser só **desidratação**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Cansaço, dor de cabeça, treino fraco e você jurando que é falta de dormir.\n\nÀs vezes é coisa mais simples: você bebe pouca água.\n\nDesidratação leve já derruba tua força no treino, tua concentração no trabalho e ainda te faz confundir sede com fome (e comer à toa).\n\nComeça o dia com um copo de água e mantém uma garrafa por perto. É de graça e resolve mais do que parece.\n\nCOMENTA SHAPE que eu te mando quanto beber e como não esquecer.\n\n#saudemasculina #hidratacao #performance #treino #homem30"
+    },
+    {
+      "slug": "m-terceira-semana-01",
+      "audience": "mulher",
+      "title": "Desiste na terceira semana",
+      "fraseTela": "Você desiste sempre na **terceira** semana",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Repara no padrão: você começa animada, aguenta duas semanas e na terceira larga tudo.\n\nNão é falta de disciplina. É que você começou puxado demais.\n\nDieta de sofrimento e treino de matar têm prazo de validade curto. Na terceira semana o corpo e a cabeça pedem socorro e você desiste achando que o problema é você.\n\nO segredo é começar mais leve do que você acha que precisa. Uma coisa que você mantém por meses vale mais que a perfeita que dura 15 dias.\n\nCOMENTA DIETA que eu te mando um plano que dá pra manter de verdade.\n\n#emagrecimento #constancia #mulher40 #vidareal #semdieta"
+    },
+    {
+      "slug": "h-passos-cardio-01",
+      "audience": "homem",
+      "title": "Passos batem cardio",
+      "fraseTela": "Andar todo dia seca mais que a **esteira** de domingo",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você acha que precisa se matar no cardio pra secar. Não precisa.\n\nAquele monte de passos que você dá ao longo do dia (ou deixa de dar) tem impacto enorme no teu gasto de energia. Mais que a corridinha de fim de semana.\n\nHomem que vive sentado no trabalho e no carro gasta pouquíssimo, mesmo treinando 1h. O resto do dia parado apaga o esforço.\n\nMeta simples: caminhar mais todo dia. Escada, uma volta no almoço, descer um ponto antes. Soma muito no fim do mês.\n\nCOMENTA SHAPE que eu te mando a meta de passos que passo pros alunos.\n\n#saudemasculina #gorduraabdominal #performance #treino #homem30"
+    },
+    {
+      "slug": "m-proteina-saciedade-01",
+      "audience": "mulher",
+      "title": "Proteína segura a fome",
+      "fraseTela": "Prato sem proteína é **fome** garantida em 2h",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você almoça e daqui a pouco já tá cavucando o armário. Aposto que teu prato tinha pouca proteína.\n\nProteína é o nutriente que mais segura a fome. Sem ela, você come, o açúcar sobe, despenca e a fome volta rapidinho.\n\nCom uma boa fonte de proteína no prato, você fica satisfeita por horas e para de beliscar entre as refeições sem nem perceber.\n\nÉ o ajuste que mais muda o dia de quem vive com fome o tempo todo.\n\nCOMENTA DIETA que eu te mando fontes práticas pra colocar em toda refeição.\n\n#emagrecimento #proteina #saciedade #mulher40 #comidadeverdade"
+    },
+    {
+      "slug": "h-abdomen-verdade-01",
+      "audience": "homem",
+      "title": "Verdade sobre o abdômen",
+      "fraseTela": "Abdômen se trinca na **cozinha**, não no chão",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você faz abdominal todo dia e o tanquinho não aparece. Faz sentido.\n\nTodo mundo tem abdômen. O que cobre ele é a camada de gordura por cima.\n\nPor mais abdominal que você faça, se tiver gordura na barriga o gomo não vai aparecer. Você fortalece o músculo embaixo, mas ninguém vê.\n\nO que revela o abdômen é secar a gordura, e isso se ganha muito mais no prato do que no chão da academia.\n\nCOMENTA SHAPE que eu te mostro por onde começar pra secar de verdade.\n\n#saudemasculina #abdomen #gorduraabdominal #treino #homem30"
+    },
+    {
+      "slug": "m-montar-prato-01",
+      "audience": "mulher",
+      "title": "Montar o prato certo",
+      "fraseTela": "A **ordem** dos alimentos no prato muda teu resultado",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você não precisa de balança nem de contar caloria pra montar um prato que seca.\n\nUm truque simples: começa pela salada e pelo vegetal, depois a proteína, e o carboidrato por último.\n\nComendo nessa ordem você chega no arroz já mais saciada, come menos sem esforço e ainda segura o açúcar do sangue mais estável.\n\nMesma comida, mesma quantidade na mesa, resultado diferente. Só de mudar a ordem.\n\nCOMENTA DIETA que eu te mando o modelo de prato que passo pras alunas.\n\n#emagrecimento #comidadeverdade #mulher40 #vidareal #semdieta"
+    },
+    {
+      "slug": "h-motivacao-constancia-01",
+      "audience": "homem",
+      "title": "Motivação x constância",
+      "fraseTela": "Esperar a **motivação** é o que te mantém parado",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você tá esperando bater aquela vontade pra começar de novo. Ela não vem, né?\n\nMotivação é traiçoeira: aparece uns dias e some. Quem depende dela vive recomeçando na segunda.\n\nOs caras que têm resultado não são mais motivados que você. Eles criaram rotina: treino no mesmo horário, comida decidida antes, sem depender de estar a fim.\n\nQuando vira hábito, você faz no automático mesmo nos dias ruins. É aí que o shape acontece.\n\nCOMENTA SHAPE que eu te ajudo a montar uma rotina que anda sozinha.\n\n#saudemasculina #disciplina #treino #performance #homem30"
+    },
+    {
+      "slug": "m-dormir-mal-engorda-01",
+      "audience": "mulher",
+      "title": "Dormir mal engorda",
+      "fraseTela": "A noite mal dormida **sabota** tua dieta no dia seguinte",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Dormiu mal e no dia seguinte tava com fome o dia inteiro, atacando doce? Não é falta de foco.\n\nUma noite ruim bagunça os hormônios que controlam tua fome e tua saciedade. Você acorda com mais vontade de porcaria e menos sinal de 'tá satisfeita'.\n\nAí você luta contra a fome o dia todo achando que é fraqueza sua, quando o problema começou na cama na noite anterior.\n\nCuidar do sono é cuidar da dieta. As duas coisas andam juntas.\n\nCOMENTA DIETA que eu te mando os ajustes que faço com as alunas pra dormir melhor.\n\n#emagrecimento #sono #mulher40 #vidareal #autocuidado"
+    },
+    {
+      "slug": "h-libido-disposicao-01",
+      "audience": "homem",
+      "title": "Disposição lá embaixo",
+      "fraseTela": "Disposição no chão aos 35 não é só **idade**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Cansaço constante, pavio curto, vontade de nada. E todo mundo te diz que é 'da idade'.\n\nNem sempre é.\n\nMuita vez essa queda de disposição vem de coisas que você controla: sono ruim, estresse alto, sedentarismo e comida ruim puxando tua energia pra baixo todo dia.\n\nAntes de aceitar viver no modo cansado, arruma o básico. Muita gente recupera a disposição só ajustando sono, treino de força e prato.\n\nCOMENTA SHAPE que eu te mando o caminho que uso pra destravar isso.\n\n#saudemasculina #disposicao #energia #performance #homem30"
+    },
+    {
+      "slug": "h-fome-noite-homem-01",
+      "audience": "homem",
+      "title": "Fome de madrugada",
+      "fraseTela": "Aquela fome de madrugada tem uma **causa**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você janta e uma hora depois tá caçando comida de novo. Ou acorda de madrugada com fome.\n\nQuase sempre é porque você comeu de menos ou errado ao longo do dia.\n\nPulou refeição, comeu pouco no almoço, jantou só carboidrato: o corpo cobra tudo isso à noite, quando sua guarda está baixa. Aí vem a beliscada que apaga o dia certinho.\n\nDistribui melhor a comida no dia, com proteína nas refeições, e a fome da madrugada some.\n\nCOMENTA SHAPE que eu te mando como organizar teu dia pra não atacar de noite.\n\n#saudemasculina #proteina #performance #shape #homem30"
+    },
+    {
+      "slug": "h-refri-zero-01",
+      "audience": "homem",
+      "title": "Refri zero atrapalha?",
+      "fraseTela": "Refri zero é de graça? Nem **sempre**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você troca o refri normal pelo zero achando que resolveu tudo. Melhorou, mas tem um detalhe.\n\nZero caloria não quer dizer inofensivo. Pra muita gente aquele sabor doce o dia todo mantém a vontade de açúcar viva e ainda dá gatilho pra comer mais depois.\n\nSe você toma um copo no almoço, beleza. O problema é o cara que troca a água por refri zero o dia inteiro e não entende por que a vontade de doce não passa.\n\nÁgua continua sendo a base. O zero é exceção, não substituto.\n\nCOMENTA SHAPE que eu te mando como cortar o açúcar sem sofrer no processo.\n\n#saudemasculina #acucar #performance #shape #homem30"
+    }
+  ]
+}

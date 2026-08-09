@@ -272,6 +272,54 @@ const saveReel   = (r) => { const db = readDb('reels'); db.push({ ...r, created_
 const updateReel = (id, data) => { const db = readDb('reels').map((r) => r.id === id ? { ...r, ...data } : r); writeDb('reels', db); };
 const deleteReel = (id) => writeDb('reels', readDb('reels').filter((r) => r.id !== id));
 
+// ── Fila de ROTEIROS de reel (conteúdo pré-escrito, consumido 1/dia pela rotina) ──
+// Cada item: { slug, audience:'homem'|'mulher', title, fraseTela (**palavra dourada**),
+//   ctaTela, legendaPost, order, used, usedByReelId, usedAt, created_at }.
+// O `slug` é a chave estável — o seed é idempotente por slug (re-deploy não duplica
+// nem "revive" item já usado). A fila vive no DATA_DIR (volume), então persiste.
+const getReelQueue = () => readDb('reel_content_queue').slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+const getReelQueueStats = () => {
+  const all = getReelQueue();
+  const remaining = all.filter((it) => !it.used).length;
+  return { total: all.length, used: all.length - remaining, remaining };
+};
+// Próximo roteiro livre (menor `order` ainda não usado).
+const getNextReelQueueItem = () => getReelQueue().find((it) => !it.used) || null;
+const markReelQueueItemUsed = (slug, reelId) => {
+  const db = readDb('reel_content_queue').map((it) =>
+    it.slug === slug ? { ...it, used: true, usedByReelId: reelId || null, usedAt: now() } : it);
+  writeDb('reel_content_queue', db);
+};
+// Semeia a fila a partir de um array de roteiros. Idempotente por slug: só ADICIONA
+// os que ainda não existem (preserva o `used` dos que já rodaram). `version` fica
+// registrado só pra log/telemetria. Retorna quantos foram adicionados.
+const seedReelQueue = (items, version = null) => {
+  if (!Array.isArray(items) || !items.length) return { added: 0 };
+  const existing = readDb('reel_content_queue');
+  const bySlug = new Set(existing.map((it) => it.slug));
+  const maxOrder = existing.reduce((m, it) => Math.max(m, it.order || 0), 0);
+  let n = 0;
+  const additions = [];
+  items.forEach((it, i) => {
+    if (!it || !it.slug || bySlug.has(it.slug)) return;
+    additions.push({
+      slug: it.slug,
+      audience: it.audience || 'homem',
+      title: it.title || '',
+      fraseTela: it.fraseTela || '',
+      ctaTela: it.ctaTela || '👇 LEIA A LEGENDA',
+      legendaPost: it.legendaPost || '',
+      order: typeof it.order === 'number' ? it.order : (maxOrder + i + 1),
+      used: false, usedByReelId: null, usedAt: null, created_at: now(),
+    });
+    bySlug.add(it.slug);
+    n++;
+  });
+  if (n) writeDb('reel_content_queue', existing.concat(additions));
+  if (version) { try { writeObj('reel_queue_seed_meta', { version, seededAt: now(), total: existing.length + n }); } catch {} }
+  return { added: n };
+};
+
 // ── Banco de vídeos crus (clipes de treino sem texto, pra render dos reels) ────
 // Cada item: { id, path, file, originalName, size, used, usedByReelId, created_at }
 const getAllRawVideos = () => readDb('raw_videos').sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -297,9 +345,22 @@ function _shuffle(arr) {
   }
   return a;
 }
-const pickRandomRawVideo = () => {
-  const live = getAllRawVideos().filter((v) => v.path && fs.existsSync(v.path));
-  if (!live.length) return null;
+// Quantos clipes crus estão de fato usáveis (arquivo no disco). NÃO mexe no saco
+// — serve pra rotina diária TESTAR se há vídeo sem "gastar" um giro do saco (o
+// bug antigo: um pick jogado fora só pra checar avançava o saco 2x por reel).
+const countUsableRawVideos = () => getAllRawVideos().filter((v) => v.path && fs.existsSync(v.path)).length;
+
+// Sorteia um clipe cru evitando os `avoidIds` (ex.: os usados nos últimos reels).
+// O anti-repetição por uso recente é ROBUSTO: sobrevive a um reset do saco num
+// deploy (o saco vive no DATA_DIR; se ele zerar, o avoidIds ainda impede repetir
+// o vídeo de ontem). Só ignora o avoid se ele esvaziaria o pool.
+const pickRandomRawVideo = ({ avoidIds = [] } = {}) => {
+  const liveAll = getAllRawVideos().filter((v) => v.path && fs.existsSync(v.path));
+  if (!liveAll.length) return null;
+  const avoid = new Set(avoidIds || []);
+  // Aplica o avoid só enquanto sobrar vídeo — nunca deixa o pool vazio.
+  let live = liveAll.filter((v) => !avoid.has(v.id));
+  if (!live.length) live = liveAll;
   if (live.length === 1) { writeObj('raw_video_bag', { queue: [], last: live[0].id, updated_at: now() }); return live[0]; }
   const liveIds = new Set(live.map((v) => v.id));
   const st = readObj('raw_video_bag');
@@ -439,6 +500,7 @@ const MLABS_DEFAULTS = {
   reelPostsPerDay: 2,
   reelScheduleDays: 30,
   reelScheduleTimes: ['11:00', '18:00'],
+  reelDailyTime: '19:30',        // horário do reel DIÁRIO da fila de roteiros (1/dia)
   reelFontSize: 72,              // tamanho do texto queimado (px, base 1080×1920)
   reelFontFile: null,            // caminho de fonte custom (senão usa a do sistema)
   reelCtaColor: '#F5B301',       // cor do "Leia a legenda" (dourado, como nos reels dele)
@@ -522,7 +584,9 @@ module.exports = {
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
-  getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo, pickRandomRawVideo,
+  getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo, pickRandomRawVideo, countUsableRawVideos,
+  // Fila de roteiros de reel (conteúdo pré-escrito, 1/dia)
+  getReelQueue, getReelQueueStats, getNextReelQueueItem, markReelQueueItemUsed, seedReelQueue,
   getAllReadyVideos, getReadyVideo, saveReadyVideo, deleteReadyVideo,
   getAllMusicTracks, getMusicTrack, saveMusicTrack, deleteMusicTrack, pickRandomMusic,
   getAllDailyBatches, saveDailyBatch, updateDailyBatch,
