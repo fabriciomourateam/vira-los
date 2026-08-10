@@ -49,13 +49,14 @@ import PainelSEO from './PainelSEO';
 import ConteudoDiario from './ConteudoDiario';
 import ReelsEmLote from './ReelsEmLote';
 import AgendaCalendario from './AgendaCalendario';
+import LimpezaPanel from './LimpezaPanel';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
 import UsageBar from './UsageBar';
 import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'lote' | 'agenda' | 'diario' | 'avaliar' | 'analytics' | 'seo';
+type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'lote' | 'agenda' | 'diario' | 'avaliar' | 'analytics' | 'seo' | 'limpeza';
 
 // Lembra a última aba/sub-aba visitada (localStorage) pra não voltar pro
 // início a cada F5. Valida contra a lista de valores aceitos antes de usar
@@ -85,6 +86,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
   { id: 'analytics', label: 'Analytics', icon: Instagram },
   { id: 'seo',       label: 'SEO',       icon: BarChart3 },
+  { id: 'limpeza',   label: 'Limpeza',   icon: Trash2 },
 ];
 
 const easing = [0.25, 0.1, 0.25, 1] as const;
@@ -375,7 +377,7 @@ function SubTabBar<T extends string>({
 }
 
 export default function ViralOS() {
-  const ALLOWED_TABS: readonly TabId[] = ['metodo','publico','descobrir','ideias','criar','lote','agenda','diario','avaliar','analytics','seo'];
+  const ALLOWED_TABS: readonly TabId[] = ['metodo','publico','descobrir','ideias','criar','lote','agenda','diario','avaliar','analytics','seo','limpeza'];
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as TabId | null;
   const activeTab: TabId = tabFromUrl && (ALLOWED_TABS as readonly string[]).includes(tabFromUrl) ? tabFromUrl : 'metodo';
@@ -721,6 +723,8 @@ export default function ViralOS() {
         {activeTab === 'publico' && <PublicoAlvo />}
 
         {activeTab === 'seo' && <PainelSEO />}
+
+        {activeTab === 'limpeza' && <LimpezaPanel />}
 
         {activeTab === 'lote' && <ReelsEmLote />}
         {activeTab === 'agenda' && <AgendaCalendario />}

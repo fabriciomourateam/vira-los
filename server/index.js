@@ -121,6 +121,7 @@ app.use('/api/qa-stickers',     require('./routes/qaStickers'));
 app.use('/api/ai-roteiro',      require('./routes/aiRoteiro'));
 app.use('/api/pexels',          require('./routes/pexels'));
 app.use('/api/mlabs',           require('./routes/mlabs'));
+app.use('/api/maintenance',     require('./routes/maintenance'));
 
 // Health check
 app.get('/api/health', (_req, res) =>
