@@ -1,6 +1,6 @@
 {
   "version": "2026-08-08.1",
-  "note": "Roteiros de reel pré-escritos, consumidos 1/dia pela rotina (19h30). Mix homem 25-40 (por sintoma, ban-safe) + mulher 35-44. fraseTela tem 1 palavra entre **asteriscos** (vira dourada no vídeo). Seed idempotente por slug — pode adicionar mais no fim do array sem duplicar os antigos.",
+  "note": "Roteiros de reel pré-escritos, consumidos pela rotina (2/dia: 14h e 19h30). Mix homem 25-40 (por sintoma, ban-safe) + mulher 35-44. fraseTela tem 1 palavra entre **asteriscos** (vira dourada no vídeo). Seed idempotente por slug — pode adicionar mais no fim do array sem duplicar os antigos.",
   "scripts": [
     {
       "slug": "h-barriga-treina-01",

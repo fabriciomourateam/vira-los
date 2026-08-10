@@ -1,6 +1,6 @@
 /**
- * dailyContent.js — rotina diária de conteúdo (2 carrosséis por IA + 1 reel/dia
- * da FILA de roteiros pré-escritos, postado às 19h30).
+ * dailyContent.js — rotina diária de conteúdo (2 carrosséis por IA + 2 reels/dia
+ * da FILA de roteiros pré-escritos, postados às 14h e 19h30).
  *
  * GET  /api/daily-content            → estado + batches (hidratados)
  * POST /api/daily-content/generate   → dispara geração manual ("Gerar agora")

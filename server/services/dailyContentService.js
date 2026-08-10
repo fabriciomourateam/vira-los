@@ -2,11 +2,12 @@
  * dailyContentService.js — Rotina diária automática do Fabricio Moura.
  *
  * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de temas DISTINTOS
- * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e 1 REEL
- * CURTO tirado da FILA de roteiros pré-escritos (reel_content_queue), renderizado
- * no estilo dourado com um clipe cru DIFERENTE dos últimos dias e agendado às
- * 19h30. Fila vazia → reel por IA (reserva). Salva tudo DENTRO do viralos
- * (carousels.json + reels.json + daily_content.json) — sem Notion.
+ * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e 2 REELS
+ * CURTOS tirados da FILA de roteiros pré-escritos (reel_content_queue), um por
+ * horário (default 14h e 19h30), renderizados no estilo dourado, cada um com um
+ * clipe cru DIFERENTE (do dia e dos dias anteriores). Fila vazia → reel por IA
+ * (reserva). Salva tudo DENTRO do viralos (carousels.json + reels.json +
+ * daily_content.json) — sem Notion.
  *
  * Substitui a rotina do fmteam-gerador. Mira o HOMEM 25-40, evita repetir
  * temas das últimas 2 semanas.
@@ -290,17 +291,34 @@ function recentRawVideoIds(n = 6) {
   return used;
 }
 
-// 1 REEL/DIA a partir da fila de roteiros meus (qualidade). Renderiza no estilo
-// dourado com um clipe cru DIFERENTE dos últimos dias e agenda às 19h30. Se a
-// fila esgotar, cai no gerador por IA a partir de um carrossel do dia (reserva —
-// nunca fica sem reel). Isolado: falha aqui não derruba o batch de carrosséis.
-async function generateQueuedReel({ carousels = [] } = {}) {
+// Horários do reel diário (default 14h + 19h30). Aceita reelDailyTimes (array)
+// ou o antigo reelDailyTime (string) por compatibilidade.
+function reelDailyTimes() {
   const cfg = db.getMlabsSettings();
-  const dailyTime = (cfg.reelDailyTime && /^\d{2}:\d{2}$/.test(cfg.reelDailyTime)) ? cfg.reelDailyTime : '19:30';
+  const arr = Array.isArray(cfg.reelDailyTimes) && cfg.reelDailyTimes.length
+    ? cfg.reelDailyTimes
+    : (cfg.reelDailyTime ? [cfg.reelDailyTime] : ['14:00', '19:30']);
+  return arr.map((t) => String(t).slice(0, 5)).filter((t) => /^\d{2}:\d{2}$/.test(t));
+}
 
-  // 1) Monta o conteúdo do reel: fila primeiro; IA de reserva se a fila acabou.
+// Janela em torno do horário alvo (alvo, +30min, +60min) pra SEMPRE achar slot
+// livre mesmo se o horário exato colidir com outro post (gap de 1h).
+function timeWindow(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const base = h * 60 + m;
+  return [0, 30, 60].map((off) => {
+    const x = (base + off) % (24 * 60);
+    return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+  });
+}
+
+// Monta 1 reel (fila → IA reserva), renderiza no dourado com clipe diferente e
+// agenda no horário alvo. Retorna { reelId, rawVideoId } pra encadear anti-repetição.
+async function buildAndScheduleQueuedReel({ time, carousels = [], avoidRawIds = [] }) {
+  const cfg = db.getMlabsSettings();
   let reelId = null;
   let queueSlug = null;
+
   const item = db.getNextReelQueueItem();
   if (item) {
     reelId = `reel_q_${Date.now()}_${item.slug}`;
@@ -313,16 +331,12 @@ async function generateQueuedReel({ carousels = [] } = {}) {
       ctaTelaTiming: '4-5s',
       legendaPost: item.legendaPost,
       title: item.title || (item.fraseTela || '').replace(/\*\*/g, '').slice(0, 60),
-      niche: NICHE,
-      instagramHandle: `@${HANDLE}`,
-      source: 'queue',
-      queueSlug,
-      audience: item.audience || null,
-      archived: false,
+      niche: NICHE, instagramHandle: `@${HANDLE}`,
+      source: 'queue', queueSlug, audience: item.audience || null, archived: false,
     });
-    console.log(`[DailyContent] reel da FILA: ${item.slug} (${item.audience}).`);
+    console.log(`[DailyContent] reel da FILA (${time}): ${item.slug} (${item.audience}).`);
   } else if (carousels.length) {
-    // Reserva: fila vazia → gera reel por IA a partir do 1º carrossel do dia.
+    // Reserva: fila vazia → gera reel por IA a partir de um carrossel do dia.
     try {
       const c = carousels[0];
       const reel = await generateShortReelFromCarousel({
@@ -334,42 +348,56 @@ async function generateQueuedReel({ carousels = [] } = {}) {
         ...reel, id: reelId, carouselId: c.id, carouselTopic: c.topic,
         niche: NICHE, instagramHandle: `@${HANDLE}`, source: 'daily', archived: false,
       });
-      console.log('[DailyContent] fila vazia — reel gerado por IA (reserva).');
+      console.log(`[DailyContent] fila vazia — reel (${time}) por IA (reserva).`);
     } catch (e) {
       console.warn('[DailyContent] reserva IA do reel falhou:', e.message);
-      return { reelId: null };
+      return { reelId: null, rawVideoId: null };
     }
   } else {
-    console.warn('[DailyContent] sem item na fila e sem carrossel — nenhum reel gerado.');
-    return { reelId: null };
+    console.warn('[DailyContent] sem item na fila e sem carrossel — reel pulado.');
+    return { reelId: null, rawVideoId: null };
   }
 
-  // 2) Render (dourado) + agendamento às 19h30, respeitando os toggles de settings.
+  let rawVideoId = null;
   try {
     if (cfg.autoRenderReel && db.countUsableRawVideos() > 0) {
       const { renderReelVideo, scheduleReelNow } = require('./reelPipelineService');
-      // Evita repetir o clipe dos últimos dias (anti-repetição robusta).
-      await renderReelVideo(reelId, { avoidRawVideoIds: recentRawVideoIds(6) });
+      // Evita os clipes usados nos últimos dias + os já usados HOJE (avoidRawIds).
+      const avoid = recentRawVideoIds(6).concat(avoidRawIds);
+      const rendered = await renderReelVideo(reelId, { avoidRawVideoIds: avoid });
+      rawVideoId = rendered && rendered.rawVideoId;
       console.log(`[DailyContent] reel ${reelId} renderizado (dourado).`);
-      // Só marca o roteiro como usado DEPOIS de renderizar — se falhar, não queima o script.
       if (queueSlug) db.markReelQueueItemUsed(queueSlug, reelId);
       if (cfg.autoScheduleReel) {
-        const dates = require('./mlabsService').computeNextReelSlots(1, { times: [dailyTime] });
+        const dates = require('./mlabsService').computeNextReelSlots(1, { times: timeWindow(time) });
         const sch = await scheduleReelNow(reelId, { dates });
-        console.log(`[DailyContent] reel ${reelId} agendado (${dailyTime}) →`, (sch.dates || []).join(', '));
+        console.log(`[DailyContent] reel ${reelId} agendado (~${time}) →`, (sch.dates || []).join(', '));
       }
     } else if (cfg.autoRenderReel) {
-      console.warn(`[DailyContent] auto-render ligado mas sem vídeo cru — reel ${reelId} ficou sem vídeo (roteiro NÃO consumido).`);
+      console.warn(`[DailyContent] auto-render ligado mas sem vídeo cru — reel ${reelId} sem vídeo (roteiro NÃO consumido).`);
     } else if (queueSlug) {
-      // Auto-render desligado: o reel fica de rascunho pra render manual. Marca usado
-      // pra não repetir o mesmo roteiro amanhã (você renderiza pela UI quando quiser).
-      db.markReelQueueItemUsed(queueSlug, reelId);
+      db.markReelQueueItemUsed(queueSlug, reelId); // rascunho pra render manual
     }
   } catch (e) {
-    console.warn(`[DailyContent] render/agendar reel da fila falhou (${reelId}):`, e.message);
+    console.warn(`[DailyContent] render/agendar reel (${time}) falhou (${reelId}):`, e.message);
   }
 
-  return { reelId };
+  return { reelId, rawVideoId };
+}
+
+// Gera os reels do dia (1 por horário configurado — default 14h e 19h30), da FILA
+// de roteiros meus (qualidade), no dourado, cada um com um clipe DIFERENTE (do dia
+// e dos dias anteriores). Isolado: falha aqui não derruba o batch de carrosséis.
+async function generateQueuedReel({ carousels = [] } = {}) {
+  const times = reelDailyTimes();
+  const reelIds = [];
+  const usedToday = [];   // clipes já usados hoje → não repete entre os reels do dia
+  for (const t of times) {
+    const r = await buildAndScheduleQueuedReel({ time: t, carousels, avoidRawIds: usedToday });
+    if (r.reelId) reelIds.push(r.reelId);
+    if (r.rawVideoId) usedToday.push(r.rawVideoId);
+  }
+  return { reelIds };
 }
 
 // Gera o batch do dia (2 temas). Resiliente: falha de 1 tema não derruba o outro.
@@ -427,8 +455,8 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
       // 1 reel/dia da FILA de roteiros meus (dourado, 19h30). Reserva: IA a partir
       // de um carrossel do dia se a fila esgotou. Isolado do loop de carrosséis.
       try {
-        const rq = await withTimeout(generateQueuedReel({ carousels: dayCarousels }), DAILY_THEME_TIMEOUT_MS, 'reel-fila');
-        if (rq.reelId) reelIds.push(rq.reelId);
+        const rq = await withTimeout(generateQueuedReel({ carousels: dayCarousels }), 2 * DAILY_THEME_TIMEOUT_MS, 'reel-fila');
+        for (const id of (rq.reelIds || [])) reelIds.push(id);
       } catch (e) {
         console.error('[DailyContent] reel da fila falhou:', e.message);
         errors.push(`reel-fila: ${e.message}`);
