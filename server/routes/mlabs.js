@@ -79,7 +79,7 @@ router.get('/settings', (_req, res) => res.json(db.getMlabsSettings()));
 
 router.put('/settings', (req, res) => {
   try {
-    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'autoScheduleReel', 'autoRenderReel', 'defaultTime', 'dateOffsetsMonths', 'reelPostsPerDay', 'reelScheduleDays', 'reelScheduleTimes', 'reelDailyTime', 'reelFontSize', 'reelFontFile', 'reelCtaColor', 'reelCtaAtMiddle', 'reelTextY', 'reelCtaGap', 'reelMusicOn', 'reelMusicVolume', 'reelTextStyle', 'reelBoxColor', 'reelBoxTextColor', 'reelBackground', 'reelMinGapMinutes'];
+    const allowed = ['profileId', 'channelSourceIds', 'channelSourceIdsReel', 'youtubeShortsChannelId', 'ownerId', 'autoScheduleCarousel', 'autoScheduleReel', 'autoRenderReel', 'defaultTime', 'dateOffsetsMonths', 'reelPostsPerDay', 'reelScheduleDays', 'reelScheduleTimes', 'reelDailyTimes', 'reelFontSize', 'reelFontFile', 'reelCtaColor', 'reelCtaAtMiddle', 'reelTextY', 'reelCtaGap', 'reelMusicOn', 'reelMusicVolume', 'reelTextStyle', 'reelBoxColor', 'reelBoxTextColor', 'reelBackground', 'reelMinGapMinutes'];
     const patch = {};
     for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
     res.json(db.setMlabsSettings(patch));
