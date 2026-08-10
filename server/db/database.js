@@ -293,31 +293,53 @@ const markReelQueueItemUsed = (slug, reelId) => {
 // Semeia a fila a partir de um array de roteiros. Idempotente por slug: só ADICIONA
 // os que ainda não existem (preserva o `used` dos que já rodaram). `version` fica
 // registrado só pra log/telemetria. Retorna quantos foram adicionados.
+const _normalizeQueueItem = (it, order) => ({
+  slug: it.slug,
+  audience: it.audience || 'homem',
+  title: it.title || '',
+  fraseTela: it.fraseTela || '',
+  ctaTela: it.ctaTela || '👇 LEIA A LEGENDA',
+  legendaPost: it.legendaPost || '',
+  order,
+  used: false, usedByReelId: null, usedAt: null, created_at: now(),
+});
 const seedReelQueue = (items, version = null) => {
-  if (!Array.isArray(items) || !items.length) return { added: 0 };
+  if (!Array.isArray(items) || !items.length) return { added: 0, replaced: false };
   const existing = readDb('reel_content_queue');
+  const meta = readObj('reel_queue_seed_meta');
+  const firstSeed = !existing.length;
+  const versionChanged = !!version && !!meta.version && meta.version !== version;
+
+  // Versão nova (ou 1º seed): SUBSTITUI a fila pendente. Preserva os já postados
+  // (used) pra não repetir; troca só os não-usados pela nova lista. Assim editar o
+  // JSON + bumpar a `version` limpa os roteiros pendentes e instala os novos —
+  // sem tocar no que já foi ao ar. Slug já usado na nova lista é ignorado.
+  if (firstSeed || versionChanged) {
+    const usedItems = existing.filter((it) => it.used);
+    const usedSlugs = new Set(usedItems.map((it) => it.slug));
+    let order = usedItems.reduce((m, it) => Math.max(m, it.order || 0), 0);
+    const fresh = [];
+    for (const it of items) {
+      if (!it || !it.slug || usedSlugs.has(it.slug)) continue;
+      fresh.push(_normalizeQueueItem(it, ++order));
+    }
+    writeDb('reel_content_queue', usedItems.concat(fresh));
+    if (version) { try { writeObj('reel_queue_seed_meta', { version, seededAt: now(), total: usedItems.length + fresh.length }); } catch {} }
+    return { added: fresh.length, replaced: versionChanged };
+  }
+
+  // Mesma versão: idempotente por slug — só ADICIONA os que ainda não existem.
   const bySlug = new Set(existing.map((it) => it.slug));
-  const maxOrder = existing.reduce((m, it) => Math.max(m, it.order || 0), 0);
-  let n = 0;
+  let order = existing.reduce((m, it) => Math.max(m, it.order || 0), 0);
   const additions = [];
-  items.forEach((it, i) => {
-    if (!it || !it.slug || bySlug.has(it.slug)) return;
-    additions.push({
-      slug: it.slug,
-      audience: it.audience || 'homem',
-      title: it.title || '',
-      fraseTela: it.fraseTela || '',
-      ctaTela: it.ctaTela || '👇 LEIA A LEGENDA',
-      legendaPost: it.legendaPost || '',
-      order: typeof it.order === 'number' ? it.order : (maxOrder + i + 1),
-      used: false, usedByReelId: null, usedAt: null, created_at: now(),
-    });
+  for (const it of items) {
+    if (!it || !it.slug || bySlug.has(it.slug)) continue;
+    additions.push(_normalizeQueueItem(it, ++order));
     bySlug.add(it.slug);
-    n++;
-  });
-  if (n) writeDb('reel_content_queue', existing.concat(additions));
-  if (version) { try { writeObj('reel_queue_seed_meta', { version, seededAt: now(), total: existing.length + n }); } catch {} }
-  return { added: n };
+  }
+  if (additions.length) writeDb('reel_content_queue', existing.concat(additions));
+  if (version) { try { writeObj('reel_queue_seed_meta', { version, seededAt: now(), total: existing.length + additions.length }); } catch {} }
+  return { added: additions.length, replaced: false };
 };
 
 // ── Banco de vídeos crus (clipes de treino sem texto, pra render dos reels) ────
