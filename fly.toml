@@ -29,11 +29,14 @@ primary_region = 'ams'
   initial_size = '3gb'
 
 [[vm]]
-  # Render de vídeo (ffmpeg libx264 + Chromium do overlay) é pesado. Com 1GB a
-  # máquina estourava memória (OOM) e reiniciava no meio do lote. 2GB dá folga
-  # pros dois rodarem juntos e 2 vCPUs deixam o libx264 encodar em 2 threads —
-  # corta o tempo de render quase pela metade. Como a máquina dorme por
-  # inatividade (scale-to-zero), só paga enquanto está renderizando.
-  memory = '2gb'
+  # EMERGÊNCIA (2026-08-10): o host do Fly que segura o volume ficou SEM
+  # CAPACIDADE pra recriar a máquina de 2GB/2CPU — o app ficou com ZERO máquina
+  # e caiu ("insufficient resources to create new machine with existing volume").
+  # Reduzido pra 1GB/1CPU pra CABER no host e voltar ao ar (os dados no volume
+  # estão intactos). Assim que a região liberar capacidade, escalar de volta:
+  #   fly scale vm shared-cpu-2x --memory 2048 -a vira-los
+  # OBS: a 1GB o render pesado (ffmpeg + Chromium juntos) pode dar OOM — o app,
+  # a UI e os dados funcionam; a geração/render pode ficar instável até voltar pra 2GB.
+  memory = '1gb'
   cpu_kind = 'shared'
-  cpus = 2
+  cpus = 1
