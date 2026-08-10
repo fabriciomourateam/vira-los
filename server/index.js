@@ -131,11 +131,12 @@ app.get('/api/health', (_req, res) =>
 // ── Inicia Scheduler ──────────────────────────────────────────────────────────
 require('./services/schedulerService').start();
 
-// ── Seed da fila de roteiros de reel (conteúdo pré-escrito, 1/dia às 19h30) ────
-// Idempotente por slug: re-deploy não duplica nem revive item já postado. Novos
-// roteiros adicionados ao JSON entram no próximo boot. A fila vive no volume.
+// ── Seed da fila de roteiros de reel (conteúdo pré-escrito, 2/dia: 14h e 19h30) ─
+// IMPORTANTE: o arquivo fica em server/seeds/ (NÃO em server/data/) — /app/data é
+// o volume montado em produção, que ESCONDE o que vem na imagem. Se ficasse lá, o
+// require falharia e a fila nunca semearia. Idempotente/versão-aware (ver seedReelQueue).
 try {
-  const seed = require('./data/seeds/reel-scripts.json');
+  const seed = require('./seeds/reel-scripts.json');
   const db = require('./db/database');
   const r = db.seedReelQueue(seed.scripts || [], seed.version);
   const st = db.getReelQueueStats();
