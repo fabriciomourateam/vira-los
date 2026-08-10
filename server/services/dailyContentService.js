@@ -34,20 +34,29 @@ const NICHE = 'Emagrecimento e nutrição prática para mulheres 35-44';
 //   muda (antes o tema = sempre o MESMO título exato → posts iguais).
 const THEMES = [
   // ── COMIDA (comparações/prático — o lane campeão do Fabricio) ──
-  { id: 'comparacao-refeicao', group: 'comida', tone: 'direto', emotion: 'surpresa', keywords: ['calorias', 'refeição', 'café da manhã', 'prato'],
+  // `format:'comparacao'` = carrossel de NÚMERO/COMPARAÇÃO (formato dos posts de
+  // 8-20k views: cru x cozido, X kcal x Y kcal, tabela de cortes, ÓTIMO/BOM/EVITE).
+  // A rotina garante 1 desses por dia (pickThemes) com instrução de comparação.
+  { id: 'comparacao-refeicao', group: 'comida', format: 'comparacao', tone: 'direto', emotion: 'surpresa', keywords: ['calorias', 'refeição', 'café da manhã', 'prato'],
     topics: ['A mesma refeição, o dobro de calorias — e você escolhe errado', 'Café da manhã de 280 x 500 kcal: a diferença que trava seu peso', 'Pão com ovo x tapioca com frango: qual seca de verdade?'] },
-  { id: 'calorias-liquidas', group: 'comida', tone: 'investigativo', emotion: 'surpresa', keywords: ['suco', 'bebida', 'líquido', 'refrigerante', 'café com leite'],
-    topics: ['As calorias que você BEBE sem perceber', 'Suco natural também engorda? A real que ninguém conta', 'O cafezinho com leite e açúcar que soma o dia inteiro'] },
+  { id: 'calorias-liquidas', group: 'comida', format: 'comparacao', tone: 'investigativo', emotion: 'surpresa', keywords: ['suco', 'bebida', 'líquido', 'refrigerante', 'café com leite'],
+    topics: ['As calorias que você BEBE sem perceber (com números)', 'Suco natural x refrigerante: a diferença de kcal que engana', 'O cafezinho com leite e açúcar que soma o dia inteiro'] },
+  { id: 'cru-cozido', group: 'comida', format: 'comparacao', tone: 'direto', emotion: 'surpresa', keywords: ['cru', 'cozido', 'porção', 'arroz', 'macarrão', 'gramas'],
+    topics: ['Cru x cozido: a porção que você pesa errado todo dia', '100g de arroz cru viram quanto no prato? A conta que muda tudo', 'Você mede a comida crua ou cozida? A diferença é enorme'] },
+  { id: 'cortes-carne', group: 'comida', format: 'comparacao', tone: 'investigativo', emotion: 'surpresa', keywords: ['carne', 'corte', 'proteína', 'patinho', 'calorias'],
+    topics: ['Carne na dieta não é só patinho: a tabela de cortes por kcal e proteína', 'O corte de carne mais barato que tem tanta proteína quanto o filé', 'Kcal x proteína dos cortes: qual escolher pra secar'] },
+  { id: 'otimo-bom-evite', group: 'comida', format: 'comparacao', tone: 'direto', emotion: 'curiosidade', keywords: ['ovo', 'batata', 'queijo', 'ótimo', 'evite', 'escolha'],
+    topics: ['Ovo, batata e queijo: ÓTIMO x BOM x EVITE (o mapa do preparo)', 'A forma de preparar que transforma comida boa em vilã', 'Mesmo alimento, 3 preparos: qual seca e qual engorda'] },
   { id: 'proteina-saciedade', group: 'comida', tone: 'direto', emotion: 'curiosidade', keywords: ['proteína', 'saciedade', 'fome', 'ovo', 'frango'],
     topics: ['Você come muito menos proteína do que imagina', 'A proteína que segura a fome até a próxima refeição', 'Prato sem proteína é fome garantida daqui 2 horas'] },
   { id: 'montar-prato', group: 'comida', tone: 'direto', emotion: 'curiosidade', keywords: ['prato', 'montar', 'porção', 'refeição'],
     topics: ['Como montar o prato pra secar sem passar fome', 'A ordem dos alimentos no prato muda o teu resultado', 'O prato que enche o olho e ainda seca'] },
   // ── TROCAS (parece igual mas não é — viraliza no teu perfil) ──
-  { id: 'parece-igual', group: 'trocas', tone: 'provocativo', emotion: 'surpresa', keywords: ['parece igual', 'troca', 'leite em pó', 'composto'],
+  { id: 'parece-igual', group: 'trocas', format: 'comparacao', tone: 'provocativo', emotion: 'surpresa', keywords: ['parece igual', 'troca', 'leite em pó', 'composto'],
     topics: ['Parece igual, mas um seca e o outro engorda', 'Leite em pó x composto lácteo: a pegadinha do mercado', 'Duas comidas idênticas no olho, opostas no corpo'] },
-  { id: 'fit-que-nao-e', group: 'trocas', tone: 'provocativo', emotion: 'indignação', keywords: ['fit', 'zero', 'diet', 'barrinha'],
+  { id: 'fit-que-nao-e', group: 'trocas', format: 'comparacao', tone: 'provocativo', emotion: 'indignação', keywords: ['fit', 'zero', 'diet', 'barrinha'],
     topics: ['A comida "fit" que não é fit', 'O "zero açúcar" que engorda do mesmo jeito', 'Barrinha de proteína x chocolate: surpresa no rótulo'] },
-  { id: 'rotulo', group: 'trocas', tone: 'investigativo', emotion: 'curiosidade', keywords: ['rótulo', 'ingredientes', 'tabela', 'industrializado'],
+  { id: 'rotulo', group: 'trocas', format: 'comparacao', tone: 'investigativo', emotion: 'curiosidade', keywords: ['rótulo', 'ingredientes', 'tabela', 'industrializado'],
     topics: ['O que o rótulo esconde de você', '3 palavras no rótulo que denunciam que engorda', 'Como ler um rótulo em 10 segundos'] },
   // ── HÁBITOS (rotina real da mulher 35-44) ──
   { id: 'correria', group: 'habitos', tone: 'direto', emotion: 'acolhimento', keywords: ['correria', 'tempo', 'rotina', 'trabalho', 'filho'],
@@ -116,8 +125,9 @@ function recentGroups(nBatches = 3) {
   return g;
 }
 
-// Escolhe 2 temas de GRUPOS DIFERENTES, evitando ids recentes (14d) e desincentivando
-// grupos usados nos últimos dias. Fallback progressivo se o pool apertar.
+// Escolhe 2 temas: o 1º SEMPRE de comparação/número (formato campeão, 8-20k views),
+// o 2º de outro grupo (varia o feed). Evita ids recentes (14d) e desincentiva grupos
+// usados nos últimos dias. Fallback progressivo se o pool apertar.
 function pickThemes() {
   const recentIds = recentThemeIds();
   const recentG = recentGroups(3);
@@ -133,10 +143,17 @@ function pickThemes() {
     return w;
   };
 
-  const first = weightedSample(pool, pool.map(weightOf), 1)[0];
+  // 1º tema: SEMPRE comparação/número (o lane que dá 8-20k). Se todos os de
+  // comparação caíram nos recentes, libera todos os de comparação (ignora o 14d).
+  let cmpPool = pool.filter((t) => t.format === 'comparacao');
+  if (!cmpPool.length) cmpPool = THEMES.filter((t) => t.format === 'comparacao');
+  const first = cmpPool.length ? weightedSample(cmpPool, cmpPool.map(weightOf), 1)[0]
+                               : weightedSample(pool, pool.map(weightOf), 1)[0];
   if (!first) return [];
-  // 2º tema: grupo DIFERENTE do 1º (fallback: qualquer outro id).
-  let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
+  // 2º tema: grupo DIFERENTE do 1º (fallback: qualquer outro id). Prefere NÃO
+  // comparação, pra variar o formato do dia.
+  let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group && t.format !== 'comparacao');
+  if (!rest.length) rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
   if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
   const second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
   return [first, second].filter(Boolean);
@@ -189,16 +206,33 @@ function weightedSample(items, weights, k) {
   return chosen;
 }
 
+// Instrução PADRÃO (habitos/mente/corpo — conteúdo de ideia).
+const INSTRUCTION_DEFAULT = 'Fale com quem quer emagrecer sem passar fome, na correria da vida real (trabalho, filhos, casa) — serve pro homem e pra mulher. Gancho na capa que para o scroll. Ponto prático traduzido, sem jargão de academia.';
+
+// Instrução de COMPARAÇÃO/NÚMERO — o formato dos posts de 8-20k views do Fabricio
+// (cru x cozido, X kcal x Y kcal, tabela de cortes, ÓTIMO/BOM/EVITE). Força número
+// concreto e comparação lado a lado em vez de texto genérico.
+const INSTRUCTION_COMPARACAO = [
+  'Este é um carrossel de COMPARAÇÃO COM NÚMERO — o formato que mais viraliza no perfil (salva pra consultar).',
+  'REGRAS OBRIGATÓRIAS:',
+  '• Cada slide de conteúdo compara 2 a 4 opções LADO A LADO com NÚMERO CONCRETO (kcal, gramas de proteína, porção em g). Ex.: "100g arroz = 130 kcal x 6 ovos = 470 kcal".',
+  '• Use números plausíveis e realistas de tabela nutricional. Nunca invente valor absurdo. Arredonda pra número redondo e fácil de ler.',
+  '• Formato visual de comparação: "A x B", tabela, ou ÓTIMO / BOM / EVITE. Um par ou trio por slide, número em destaque.',
+  '• Capa: gancho curto com a promessa da comparação (ex.: "O mesmo prato, o DOBRO de calorias"). Sem parágrafo na capa.',
+  '• Fecha com o aprendizado prático: o que escolher no dia a dia.',
+  '• Fala com homem 25-40 E mulher 35-44 (comida serve pros dois). Português, sem jargão gringo. Anti-ban: nada de substância.',
+].join('\n');
+
 async function buildOne(theme) {
   // Fotos dos carrosséis recentes — pra NÃO repetir foto entre carrosséis seguidos.
   // Lido fresco a cada carrossel (o anterior já salvou as dele), então os 2 do dia
   // também não repetem entre si.
   const avoidPhotoUrls = db.getRecentPhotoUrls ? db.getRecentPhotoUrls() : [];
 
-  // 1) Carrossel fmteam
+  // 1) Carrossel fmteam — instrução muda se o tema é de comparação/número.
   const carouselResult = await generateCarousel({
     topic: theme.topic,
-    instructions: 'Mire a MULHER 35-44 que quer emagrecer sem passar fome, na correria da vida real (trabalho, filhos, casa). Gancho na capa que para o scroll. Prefira comparação visual e ponto prático traduzido, nada de jargão de academia masculina.',
+    instructions: theme.format === 'comparacao' ? INSTRUCTION_COMPARACAO : INSTRUCTION_DEFAULT,
     niche: NICHE,
     instagramHandle: HANDLE,
     creatorName: CREATOR,
