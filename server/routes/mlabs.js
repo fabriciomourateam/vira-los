@@ -108,11 +108,13 @@ router.get('/calendar', (_req, res) => {
     if (s.status === 'erro' || s.status === 'cancelado') continue; // não entrou de fato no mLabs
     let kind = 'carrossel';
     let typeLabel = 'Carrossel';
+    let origin = null; // origem do reel: 'queue' (meu roteiro) | 'ia' | 'ready' (pronto subido)
     if (s.contentType === 'reel') {
       const r = db.getReel(s.contentId);
       const isReady = !!(r && (r.source === 'ready' || r.readyVideoId));
       kind = isReady ? 'reel-pronto' : 'reel-ffmpeg';
       typeLabel = isReady ? 'Reel pronto' : 'Reel editado';
+      origin = isReady ? 'ready' : (r && r.source === 'queue' ? 'queue' : 'ia');
     }
     for (const d of (s.dates || [])) {
       const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
@@ -121,7 +123,7 @@ router.get('/calendar', (_req, res) => {
         scheduleId: s.id,
         date: `${m[1]}-${m[2]}-${m[3]}`,   // já em horário de Brasília
         time: `${m[4]}:${m[5]}`,
-        kind, typeLabel,
+        kind, typeLabel, origin,
         contentType: s.contentType,
         caption: String(s.caption || '').slice(0, 200),
         status: s.status || 'agendado',
