@@ -5,6 +5,7 @@ import {
   Play, Copy, ChevronDown, ChevronUp, AlertTriangle, Check, Archive, Trash2,
 } from 'lucide-react';
 import { TeleprompterOverlay, TeleprompterState, initialTeleprompterState } from './Teleprompter';
+import { OriginBadge } from '@/lib/reelOrigin';
 import { MlabsScheduleButton, MlabsSettingsButton } from './MlabsScheduler';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -17,6 +18,7 @@ interface Reel {
   fraseTela?: string; videoSugerido?: string; promptsVideo?: { heygen?: string; broll?: string }; ctaTela?: string; ctaTelaTiming?: string;
   done?: boolean; archived?: boolean;
   videoFile?: string; // .mp4 editado já enviado pro mLabs
+  source?: string;    // 'queue' (meu roteiro) | 'daily' (IA) | 'ready' (pronto subido)
 }
 interface Carousel {
   id: string; topic: string; folderName: string; numSlides: number;
@@ -266,6 +268,7 @@ export default function ConteudoDiario() {
                 <div key={r.id} className={`border rounded-xl p-3 bg-secondary/30 ${r.done ? 'border-green-500/40' : 'border-border'} ${r.archived ? 'opacity-60' : ''}`}>
                   <div className="flex items-center gap-1.5 text-xs text-pink-400 mb-1">
                     <Film size={13} /> {r.tipo === 'short' ? `Reel curto · ${r.duration || 7}s` : 'Modelo de Reel'}
+                    <OriginBadge source={r.source} />
                     <ItemActions kind="reel" item={r} />
                   </div>
                   <p className="text-sm font-medium text-foreground line-clamp-2">{r.title}</p>

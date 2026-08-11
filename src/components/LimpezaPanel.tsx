@@ -8,6 +8,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Trash2, RefreshCw, Loader2, HardDrive, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { OriginBadge } from '@/lib/reelOrigin';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -102,7 +103,7 @@ export default function LimpezaPanel() {
   const pct = disk && disk.totalBytes ? Math.min(100, Math.round((disk.usedBytes / disk.totalBytes) * 100)) : 0;
   const pctColor = pct >= 85 ? 'bg-red-500' : pct >= 65 ? 'bg-amber-500' : 'bg-emerald-500';
 
-  const Section = ({ title, items, sel, setSel }: { title: string; items: Item[]; sel: Set<string>; setSel: (s: Set<string>) => void }) => (
+  const Section = ({ title, items, sel, setSel, isReel = false }: { title: string; items: Item[]; sel: Set<string>; setSel: (s: Set<string>) => void; isReel?: boolean }) => (
     <div className="rounded-xl border border-border bg-background/40 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-background/60 border-b border-border">
         <span className="text-sm font-bold">{title} <span className="text-muted-foreground font-medium">({items.length})</span></span>
@@ -121,9 +122,10 @@ export default function LimpezaPanel() {
               <input type="checkbox" checked={sel.has(it.id)} onChange={() => toggle(sel, setSel, it.id)} className="w-4 h-4 accent-blue-500" />
               <div className="flex-1 min-w-0">
                 <div className="text-sm truncate">{it.title}</div>
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
                   <span>{fmtDate(it.date)}</span>
                   <span className="tabular-nums">{fmtBytes(it.sizeBytes)}</span>
+                  {isReel && <OriginBadge source={it.source} />}
                   {it.posted && <span className="px-1.5 rounded bg-emerald-600 text-white font-semibold">postado</span>}
                   {it.archived && <span className="px-1.5 rounded bg-foreground/15 font-semibold">arquivado</span>}
                 </div>
@@ -188,7 +190,7 @@ export default function LimpezaPanel() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           <Section title="Carrosséis" items={carousels} sel={selC} setSel={setSelC} />
-          <Section title="Reels" items={reels} sel={selR} setSel={setSelR} />
+          <Section title="Reels" items={reels} sel={selR} setSel={setSelR} isReel />
         </div>
       )}
 

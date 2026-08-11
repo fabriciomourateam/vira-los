@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Loader2, Trash2, CloudDownload, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { originMeta, OriginBadge } from '@/lib/reelOrigin';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -25,6 +26,7 @@ interface Entry {
   status: string;
   platformsCount: number;
   source?: 'local' | 'mlabs';
+  origin?: string | null;   // reel: 'queue' (meu roteiro) | 'ia' | 'ready' (pronto subido)
 }
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -98,8 +100,8 @@ function MonthGrid({ year, month, byDate, todayKey, selected, onSelect }: {
               <div className="flex flex-col gap-1 w-full">
                 {items.map((e, j) => (
                   <span key={j} className={`text-[9px] leading-tight rounded px-1.5 py-0.5 font-semibold ${KIND[e.kind].pill}`}
-                    title={`${e.time} · ${e.typeLabel}`}>
-                    <span className="tabular-nums">{e.time}</span>{e.kind === 'carrossel' ? ` ${e.typeLabel}` : ''}
+                    title={`${e.time} · ${e.typeLabel}${e.contentType === 'reel' ? ` · ${originMeta(e.origin).label}` : ''}`}>
+                    <span className="tabular-nums">{e.time}</span>{e.contentType === 'reel' ? ` ${originMeta(e.origin).emoji}` : ` ${e.typeLabel}`}
                   </span>
                 ))}
               </div>
@@ -258,6 +260,12 @@ export default function AgendaCalendario() {
               <span className="text-foreground/60 tabular-nums">({counts[k]})</span>
             </span>
           ))}
+          <span className="text-muted-foreground/60">·</span>
+          <span className="inline-flex items-center gap-2 text-muted-foreground">
+            <span title="Reel do meu roteiro (fila)">🟡 meu</span>
+            <span title="Reel gerado por IA (reserva)">🤖 IA</span>
+            <span title="Reel pronto que você subiu">📤 pronto</span>
+          </span>
         </div>
         <div className="inline-flex items-center gap-1">
           <button onClick={() => shift(-1)} className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground" title="Meses anteriores"><ChevronLeft size={16} /></button>
@@ -304,6 +312,7 @@ export default function AgendaCalendario() {
                       {conflict && <AlertTriangle size={13} className="text-red-400 shrink-0" title="Menos de 1h de outro post!" />}
                       <span className="tabular-nums font-bold text-foreground">{e.time}</span>
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${KIND[e.kind].pill}`}>{e.typeLabel}</span>
+                      {e.contentType === 'reel' && <OriginBadge source={e.origin} />}
                       {e.platformsCount > 0 && <span className="text-[10px] text-muted-foreground">{e.platformsCount} canal(is)</span>}
                       {e.status !== 'agendado' && <span className="text-[10px] text-amber-400">{e.status}</span>}
                       {e.source === 'mlabs' ? (
