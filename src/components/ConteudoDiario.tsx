@@ -60,7 +60,8 @@ export default function ConteudoDiario() {
   const [loading, setLoading] = useState(true);
   const [openCaption, setOpenCaption] = useState<Record<string, boolean>>({});
   const [showArchived, setShowArchived] = useState(false);
-  const [queue, setQueue] = useState<{ total: number; used: number; remaining: number } | null>(null);
+  const [queue, setQueue] = useState<{ total: number; used: number; remaining: number; seedStatus?: { ok?: boolean; error?: string; added?: number } | null } | null>(null);
+  const [reseeding, setReseeding] = useState(false);
   const [tp, setTp] = useState<TeleprompterState>(initialTeleprompterState);
   const [tpText, setTpText] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -88,10 +89,22 @@ export default function ConteudoDiario() {
   const fetchQueue = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/daily-content/reel-queue`);
-      if (res.ok) { const d = await res.json(); setQueue({ total: d.total || 0, used: d.used || 0, remaining: d.remaining || 0 }); }
+      if (res.ok) { const d = await res.json(); setQueue({ total: d.total || 0, used: d.used || 0, remaining: d.remaining || 0, seedStatus: d.seedStatus || null }); }
     } catch { /* silent */ }
   }, []);
   useEffect(() => { fetchQueue(); }, [fetchQueue, batches.length]);
+
+  async function reseedQueue() {
+    setReseeding(true);
+    try {
+      const res = await fetch(`${API}/api/daily-content/reel-queue/reseed`, { method: 'POST' });
+      const d = await res.json();
+      if (d.ok) toast.success(`Fila recarregada: ${d.remaining} roteiros prontos.`);
+      else toast.error(`Falhou: ${d.error || 'erro desconhecido'}`);
+      fetchQueue();
+    } catch { toast.error('Falha ao recarregar a fila.'); }
+    finally { setReseeding(false); }
+  }
 
   // Enquanto gera, faz polling a cada 6s e para quando terminar
   useEffect(() => {
@@ -220,11 +233,16 @@ export default function ConteudoDiario() {
             ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
             : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300'
         }`}>
-          🟡 <span>
+          🟡 <span className="flex-1">
             {queue.remaining > 0
               ? <>Fila de roteiros meus: <b>{queue.remaining}</b> prontos ({queue.used} já usados) · ~{Math.floor(queue.remaining / 2)} dias a 2/dia.</>
-              : <>A fila de roteiros está <b>vazia</b> — os reels estão saindo pela IA de reserva. Me avisa que eu recarrego.</>}
+              : <>A fila está <b>vazia</b> — os reels estão saindo pela IA de reserva.{queue.seedStatus && queue.seedStatus.ok === false && queue.seedStatus.error ? <> Erro ao carregar: <code className="text-[11px]">{queue.seedStatus.error}</code></> : null}</>}
           </span>
+          {queue.remaining === 0 && (
+            <button onClick={reseedQueue} disabled={reseeding} className="ml-auto shrink-0 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold disabled:opacity-50">
+              {reseeding ? 'Carregando...' : 'Recarregar fila'}
+            </button>
+          )}
         </div>
       )}
 
