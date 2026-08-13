@@ -398,9 +398,10 @@ async function buildAndScheduleQueuedReel({ time, carousels = [], avoidRawIds = 
       const { renderReelVideo, scheduleReelNow } = require('./reelPipelineService');
       // Evita os clipes usados nos últimos dias + os já usados HOJE (avoidRawIds).
       const avoid = recentRawVideoIds(6).concat(avoidRawIds);
-      const rendered = await renderReelVideo(reelId, { avoidRawVideoIds: avoid });
+      // forceStyle 'fmteam' → os meus roteiros SEMPRE saem dourados (nunca branco/contorno).
+      const rendered = await renderReelVideo(reelId, { avoidRawVideoIds: avoid, forceStyle: 'fmteam' });
       rawVideoId = rendered && rendered.rawVideoId;
-      console.log(`[DailyContent] reel ${reelId} renderizado (dourado).`);
+      console.log(`[DailyContent] reel ${reelId} renderizado (dourado/fmteam).`);
       if (queueSlug) db.markReelQueueItemUsed(queueSlug, reelId);
       if (cfg.autoScheduleReel) {
         const dates = require('./mlabsService').computeNextReelSlots(1, { times: timeWindow(time) });
@@ -426,10 +427,19 @@ async function generateQueuedReel({ carousels = [] } = {}) {
   const times = reelDailyTimes();
   const reelIds = [];
   const usedToday = [];   // clipes já usados hoje → não repete entre os reels do dia
+  // CADA reel tem seu PRÓPRIO timeout — se o 1º render demorar/falhar, o 2º ainda
+  // roda (antes um timeout único cobria os dois e derrubava o 2º, saindo só 1/dia).
   for (const t of times) {
-    const r = await buildAndScheduleQueuedReel({ time: t, carousels, avoidRawIds: usedToday });
-    if (r.reelId) reelIds.push(r.reelId);
-    if (r.rawVideoId) usedToday.push(r.rawVideoId);
+    try {
+      const r = await withTimeout(
+        buildAndScheduleQueuedReel({ time: t, carousels, avoidRawIds: usedToday }),
+        DAILY_THEME_TIMEOUT_MS, `reel ${t}`,
+      );
+      if (r.reelId) reelIds.push(r.reelId);
+      if (r.rawVideoId) usedToday.push(r.rawVideoId);
+    } catch (e) {
+      console.warn(`[DailyContent] reel ${t} falhou/timeout — segue pro próximo:`, e.message);
+    }
   }
   return { reelIds };
 }
@@ -489,7 +499,7 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
       // 1 reel/dia da FILA de roteiros meus (dourado, 19h30). Reserva: IA a partir
       // de um carrossel do dia se a fila esgotou. Isolado do loop de carrosséis.
       try {
-        const rq = await withTimeout(generateQueuedReel({ carousels: dayCarousels }), 2 * DAILY_THEME_TIMEOUT_MS, 'reel-fila');
+        const rq = await withTimeout(generateQueuedReel({ carousels: dayCarousels }), 3 * DAILY_THEME_TIMEOUT_MS, 'reel-fila');
         for (const id of (rq.reelIds || [])) reelIds.push(id);
       } catch (e) {
         console.error('[DailyContent] reel da fila falhou:', e.message);

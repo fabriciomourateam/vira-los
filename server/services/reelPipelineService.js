@@ -27,7 +27,7 @@ function mlabs() {
  * a fraseTela/ctaTela e grava o resultado em reel.videoPath.
  * @returns {Promise<{ outPath, rawVideoId }>}
  */
-async function renderReelVideo(reelId, { rawVideoId = null, avoidRawVideoIds = [] } = {}) {
+async function renderReelVideo(reelId, { rawVideoId = null, avoidRawVideoIds = [], forceStyle = null } = {}) {
   const reel = db.getReel(reelId);
   if (!reel) throw new Error('Reel não encontrado.');
   if (!reel.fraseTela || !String(reel.fraseTela).trim()) {
@@ -62,7 +62,9 @@ async function renderReelVideo(reelId, { rawVideoId = null, avoidRawVideoIds = [
     ctaAtMiddle: cfg.reelCtaAtMiddle !== false,
     textY: typeof cfg.reelTextY === 'number' ? cfg.reelTextY : 0.6,
     ctaGap: typeof cfg.reelCtaGap === 'number' ? cfg.reelCtaGap : 60,
-    textStyle: ['caixa', 'fmteam'].includes(cfg.reelTextStyle) ? cfg.reelTextStyle : 'contorno',
+    // forceStyle (ex.: a rotina diária força 'fmteam' pra os reels da fila SEMPRE
+    // saírem dourados, independente da config global reelTextStyle).
+    textStyle: forceStyle || (['caixa', 'fmteam'].includes(cfg.reelTextStyle) ? cfg.reelTextStyle : 'contorno'),
     boxColor: cfg.reelBoxColor || '#F5C518',
     boxTextColor: cfg.reelBoxTextColor || '#111111',
     background: cfg.reelBackground === 'gradiente' ? 'gradiente' : 'nenhum',
