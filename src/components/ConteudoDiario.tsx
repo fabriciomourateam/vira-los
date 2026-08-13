@@ -60,6 +60,7 @@ export default function ConteudoDiario() {
   const [loading, setLoading] = useState(true);
   const [openCaption, setOpenCaption] = useState<Record<string, boolean>>({});
   const [showArchived, setShowArchived] = useState(false);
+  const [queue, setQueue] = useState<{ total: number; used: number; remaining: number } | null>(null);
   const [tp, setTp] = useState<TeleprompterState>(initialTeleprompterState);
   const [tpText, setTpText] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -82,6 +83,15 @@ export default function ConteudoDiario() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Status da FILA de roteiros meus (pra saber se o seed carregou e quantos restam).
+  const fetchQueue = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/daily-content/reel-queue`);
+      if (res.ok) { const d = await res.json(); setQueue({ total: d.total || 0, used: d.used || 0, remaining: d.remaining || 0 }); }
+    } catch { /* silent */ }
+  }, []);
+  useEffect(() => { fetchQueue(); }, [fetchQueue, batches.length]);
 
   // Enquanto gera, faz polling a cada 6s e para quando terminar
   useEffect(() => {
@@ -199,9 +209,24 @@ export default function ConteudoDiario() {
 
       <p className="text-sm text-muted-foreground">
         Todo dia às <b className="text-foreground">09h (Brasília)</b> o viralos gera 2 carrosséis de temas
-        diferentes (template fmteam, mirando o homem 25-40) + 1 modelo de reel por tema, com teleprompter pronto.
-        Sem repetir temas das últimas 2 semanas.
+        diferentes + <b className="text-foreground">2 reels da fila de roteiros</b> (dourado), agendados às
+        14h e 19h30. Sem repetir temas das últimas 2 semanas.
       </p>
+
+      {/* Status da fila de roteiros meus */}
+      {queue && (
+        <div className={`flex items-center gap-2 text-sm rounded-xl border px-3 py-2 ${
+          queue.remaining > 0
+            ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+            : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300'
+        }`}>
+          🟡 <span>
+            {queue.remaining > 0
+              ? <>Fila de roteiros meus: <b>{queue.remaining}</b> prontos ({queue.used} já usados) · ~{Math.floor(queue.remaining / 2)} dias a 2/dia.</>
+              : <>A fila de roteiros está <b>vazia</b> — os reels estão saindo pela IA de reserva. Me avisa que eu recarrego.</>}
+          </span>
+        </div>
+      )}
 
       {batches.length === 0 && !state.generating && (
         <div className="bg-card border border-border rounded-2xl p-6 text-center text-muted-foreground">
