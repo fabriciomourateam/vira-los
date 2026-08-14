@@ -25,7 +25,14 @@ async function getBrowser() {
   _launching = chromium.launch({
     headless: true,
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    // --force-color-profile=srgb: SEM isso, o Chromium headless do servidor às vezes
+    // aplica um perfil de cor que "escorrega" as cores saturadas — o DOURADO (#F7B500)
+    // saía VERMELHO no vídeo final (o branco, neutro, não mudava). Forçando sRGB, o
+    // render sai igual ao preview (dourado). --disable-gpu deixa o render determinístico.
+    args: [
+      '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+      '--force-color-profile=srgb', '--disable-gpu',
+    ],
   }).then((b) => { _browser = b; _launching = null; return b; })
     .catch((e) => { _launching = null; throw e; });
   return _launching;
