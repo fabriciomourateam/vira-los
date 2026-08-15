@@ -373,9 +373,13 @@ function _shuffle(arr) {
 const countUsableRawVideos = () => getAllRawVideos().filter((v) => v.path && fs.existsSync(v.path)).length;
 
 // Sorteia um clipe cru evitando os `avoidIds` (ex.: os usados nos últimos reels).
-// O anti-repetição por uso recente é ROBUSTO: sobrevive a um reset do saco num
-// deploy (o saco vive no DATA_DIR; se ele zerar, o avoidIds ainda impede repetir
-// o vídeo de ontem). Só ignora o avoid se ele esvaziaria o pool.
+// ROTAÇÃO LRU (least-recently-used): pega SEMPRE o clipe parado há mais tempo —
+// `lastUsedAt` é carimbado AQUI, no momento do pick, então TODOS os caminhos que
+// usam vídeo cru (rotina diária, lote, manual) compartilham a MESMA rotação: um
+// clipe só reaparece depois que o banco inteiro rodou. Antes era "saco
+// embaralhado" por caminho, e o diário/lote/manual não enxergavam o uso um do
+// outro — daí a repetição. Nunca-usado (lastUsedAt null) tem prioridade máxima;
+// empate (mesmo instante ou vários nunca-usados) → desempate aleatório.
 const pickRandomRawVideo = ({ avoidIds = [] } = {}) => {
   const liveAll = getAllRawVideos().filter((v) => v.path && fs.existsSync(v.path));
   if (!liveAll.length) return null;
@@ -383,19 +387,16 @@ const pickRandomRawVideo = ({ avoidIds = [] } = {}) => {
   // Aplica o avoid só enquanto sobrar vídeo — nunca deixa o pool vazio.
   let live = liveAll.filter((v) => !avoid.has(v.id));
   if (!live.length) live = liveAll;
-  if (live.length === 1) { writeObj('raw_video_bag', { queue: [], last: live[0].id, updated_at: now() }); return live[0]; }
-  const liveIds = new Set(live.map((v) => v.id));
-  const st = readObj('raw_video_bag');
-  let bag = (Array.isArray(st.queue) ? st.queue : []).filter((id) => liveIds.has(id));
-  if (!bag.length) {
-    bag = _shuffle(live.map((v) => v.id));
-    // Evita repetir no "encaixe" entre um ciclo e o próximo (último do ciclo
-    // anterior sair de novo como primeiro do novo ciclo).
-    if (st.last && bag[0] === st.last && bag.length > 1) { [bag[0], bag[1]] = [bag[1], bag[0]]; }
-  }
-  const id = bag.shift();
-  writeObj('raw_video_bag', { queue: bag, last: id, updated_at: now() });
-  return live.find((v) => v.id === id) || live[0];
+  // Ordena por lastUsedAt crescente: nunca-usado ('' ordena antes de qualquer
+  // ISO) primeiro, depois o mais antigo. Embaralha antes pra o desempate entre
+  // iguais (vários nunca-usados, ou mesmo carimbo) ser aleatório e não sempre a
+  // mesma ordem de inserção.
+  const chosen = _shuffle(live)
+    .sort((a, b) => String(a.lastUsedAt || '').localeCompare(String(b.lastUsedAt || '')))[0];
+  // Carimba no PICK (não no render): assim o próximo pick — de qualquer caminho —
+  // já enxerga este como recém-usado e não o repete.
+  try { updateRawVideo(chosen.id, { lastUsedAt: now() }); } catch { /* segue mesmo se falhar */ }
+  return chosen;
 };
 
 // ── Banco de vídeos PRONTOS (já editados — sobem só com legenda, sem render) ──
