@@ -226,7 +226,11 @@ async function generateShortReelFromCarousel({ carousel, niche = 'fitness', inst
   // (db.getReelsCta) e pode ser sobrescrito por chamada. Só afeta os reels.
   const ctaCfg = { ...(db.getReelsCta ? db.getReelsCta() : {}), ...(cta || {}) };
   const ctaKeyword = String(ctaCfg.keyword || 'DIETA').toUpperCase().trim();
-  const ctaBenefit = String(ctaCfg.benefit || 'te mando um cardápio que seca sem passar fome').trim();
+  const ctaBenefit = String(ctaCfg.benefit || 'te mando um cardápio pra você secar sem passar fome').trim();
+  // CTA principal montado (uma frase só) + alvo do "marca" (share). O comprador é
+  // HOMEM (ver cérebro editorial), então o "marca" mira o parceiro de treino.
+  const ctaSentence = `Comenta ${ctaKeyword} que eu ${ctaBenefit}.`;
+  const audienceTag = ctaCfg.marca || 'aquele parceiro que treina firme e ainda não vê resultado';
 
   const prompt = `Você é especialista em Reels do Instagram de TEXTO-NA-TELA (silenciosos) que viralizam organicamente no nicho de ${niche}.
 
@@ -259,11 +263,13 @@ ${handleAt} · Nicho: ${niche}
    • Molde de gancho (inspiração dos tops do nicho — use a estrutura, NÃO copie): ${HOOK_FORMULAS.join(' · ')}.
    • DESTAQUE DOURADO: coloque EXATAMENTE 1 palavra-chave entre **duplo asterisco** — ela aparecerá em dourado na tela. Ex.: "Eu parei de fazer **ISSO** e a barriga secou" / "Tem 1 **erro** que trava o teu emagrecimento".
 
-2. LEGENDA (legendaPost) — é onde mora o conteúdo, capricha:
-   • PRIMEIRA LINHA tem que RE-FISGAR sozinha (o Instagram corta em "... mais"). Não começa com "Bom," nem repete a frase da tela igual.
-   • Corpo: entrega o conteúdo de verdade, técnico traduzido, FECHA a lacuna que a frase de tela abriu. 1 ideia central do carrossel (a mais forte), não cobre tudo.
-   • Quebra em linhas curtas / parágrafos de 1-2 frases (legibilidade no app).
-   • Fecha com o CTA FIXO: peça pra pessoa comentar a palavra "${ctaKeyword}" que você ${ctaBenefit}. Escreva com a sua voz, ex.: "COMENTA: ${ctaKeyword} que eu ${ctaBenefit}." NÃO invente outra palavra-chave nem troque o benefício.
+2. LEGENDA (legendaPost) — é onde mora o conteúdo, capricha. Ela é MATERIAL DE REFERÊNCIA: a pessoa tem que querer SALVAR pra aplicar depois e ENCAMINHAR pra alguém. Siga os 5 blocos nesta ordem:
+   • BLOCO 1 — GANCHO (1ª linha): RE-FISGA sozinha (o Instagram corta em "... mais"). Dor ou promessa, NUNCA um pedido/CTA. Não começa com "Bom," nem repete a frase da tela igual.
+   • BLOCO 2 — O ERRO + O PORQUÊ: mostra o erro comum e explica o MECANISMO que ninguém explica (é o que gera AUTORIDADE). Técnico traduzido, fecha a lacuna que a frase de tela abriu.
+   • BLOCO 3 — PASSO A PASSO NUMERADO (é o que faz SALVAR): 3 passos práticos e executáveis, numerados "1) ... 2) ... 3) ...", cada um numa linha. Concreto (o QUE fazer), com número/quantidade quando couber. 1 ideia central do carrossel, não cobre tudo.
+   • BLOCO 4 — O QUE ESPERAR: 1 linha de expectativa realista (prazo/resultado) pra dar prova e esperança.
+   • BLOCO 5 — FECHO (2 linhas): primeiro a linha passiva de save+share "📌 Salva esse pra aplicar quando precisar — e marca ${audienceTag}."; depois, em linha separada, o CTA PRINCIPAL FIXO: "${ctaSentence}". NÃO invente outra palavra-chave nem troque o benefício. O "comenta" é o CTA principal e fica SOZINHO na última linha antes das hashtags.
+   • Quebra em linhas curtas / parágrafos de 1-2 frases (legibilidade no app). Use \\n.
    • 4-6 hashtags relevantes ao nicho. ANTI-BAN: SEM hashtag de substância (testosterona/TRT/ozempic/etc), SEM nome comercial de droga.
    • Respeita a VOZ e o ANTI-BAN do cérebro editorial acima (você/não tu, sem "não é X é Y", português não gringo, por sintoma).
 
@@ -296,7 +302,7 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
   "fraseTelaTiming": "0-4s",
   "ctaTela": "👇 LEIA A LEGENDA",
   "ctaTelaTiming": "4-5s",
-  "legendaPost": "Legenda COMPLETA: 1ª linha re-fisga + corpo que entrega o conteúdo e fecha a lacuna + CTA FIXO (comenta ${ctaKeyword} → ${ctaBenefit}) + 4-6 hashtags ban-safe. Use \\n para quebrar linhas.",
+  "legendaPost": "Legenda COMPLETA em 5 blocos: (1) gancho que re-fisga, (2) erro+porquê/mecanismo, (3) passo a passo NUMERADO '1) 2) 3)' (faz salvar), (4) o que esperar, (5) fecho: linha '📌 Salva esse pra aplicar quando precisar — e marca ${audienceTag}.' e, na última linha antes das hashtags, o CTA principal SOZINHO '${ctaSentence}'. + 4-6 hashtags ban-safe. Use \\n para quebrar linhas.",
   "imagensSugeridas": ["alternativa de B-roll 1", "alternativa de B-roll 2"]
 }`;
 
