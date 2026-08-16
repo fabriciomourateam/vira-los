@@ -236,8 +236,15 @@ router.post('/schedule', async (req, res) => {
       youtubeTitle: media.youtubeTitle,
     });
 
-    db.updateMlabsSchedule(recordId, { status: 'agendado', mlabsResponse: result.scheduleResponse || null });
-    res.json({ ok: true, id: recordId, dates: result.dates, mlabsStatus: result.mlabsStatus });
+    // Registra só as datas que REALMENTE entraram no mLabs (as vencidas são
+    // descartadas lá dentro) — assim o calendário não mostra um post-fantasma no passado.
+    const patch = { status: 'agendado', mlabsResponse: result.scheduleResponse || null };
+    if (result.keptDates && result.keptDates.length) patch.dates = result.keptDates;
+    db.updateMlabsSchedule(recordId, patch);
+    res.json({
+      ok: true, id: recordId, dates: result.dates, mlabsStatus: result.mlabsStatus,
+      skippedPastDates: result.skippedPastDates || [],
+    });
   } catch (e) {
     db.updateMlabsSchedule(recordId, { status: 'erro', error: e.message });
     res.status(500).json({ error: e.message, id: recordId });
