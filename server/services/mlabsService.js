@@ -619,6 +619,25 @@ async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, cha
   if (!mediaPaths || !mediaPaths.length) throw new Error('Nenhuma mídia para subir.');
   if (!dates || !dates.length) throw new Error('Nenhuma data informada.');
 
+  // Filtra datas no PASSADO: o mLabs só publica posts com data futura. Uma data já
+  // vencida (ex.: agendar "ontem 18h") NÃO posta — e pior, o mLabs pode recusar o
+  // POST /schedules inteiro por causa dela, derrubando também as datas futuras do
+  // mesmo lote. Então dropamos as vencidas (2 min de folga) e seguimos só com as
+  // futuras. Se não sobrar nenhuma, erro claro em vez de falha silenciosa.
+  const nowMs = Date.now();
+  const GRACE_MS = 2 * 60 * 1000;
+  const pastDates = [];
+  const futureDates = [];
+  for (const d of dates) {
+    let t; try { t = new Date(spToUtcIso(d)).getTime(); } catch { t = NaN; }
+    if (!isNaN(t) && t <= nowMs - GRACE_MS) pastDates.push(d); else futureDates.push(d);
+  }
+  if (pastDates.length) console.log(`[mLabs] datas no passado ignoradas (não dá pra postar retroativo): ${pastDates.join(', ')}`);
+  if (!futureDates.length) {
+    throw new Error(`Todas as datas já passaram (${dates.join(', ')}). O mLabs não posta no passado — escolha uma data/hora futura.`);
+  }
+  dates = futureDates;
+
   const cfg = (db.getMlabsSettings && db.getMlabsSettings()) || {};
   const isVideo = type === 'VIDEO';
   // Reel usa o conjunto de canais de reels/shorts; carrossel usa o de feed.
@@ -690,7 +709,7 @@ async function scheduleContent({ type = 'IMAGE', mediaPaths, caption, dates, cha
       throw new Error(`POST /schedules falhou (${res.status}): ${JSON.stringify(res.body).slice(0, 400)}`);
     }
     saveSession(await ctx.storageState());
-    return { ok: true, mlabsStatus: res.status, dates: dates.map(spToUtcIso), scheduleResponse: res.body };
+    return { ok: true, mlabsStatus: res.status, dates: dates.map(spToUtcIso), keptDates: futureDates, skippedPastDates: pastDates, scheduleResponse: res.body };
   } finally {
     await browser.close().catch(() => {});
   }

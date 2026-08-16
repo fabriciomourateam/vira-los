@@ -184,7 +184,14 @@ function MlabsScheduleModal({
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao agendar.');
-      toast.success(`Agendado no mLabs em ${clean.length} data(s)!`);
+      const skipped: string[] = d.skippedPastDates || [];
+      const okCount = clean.length - skipped.length;
+      if (skipped.length) {
+        toast.success(`Agendado em ${okCount} data(s).`);
+        toast.error(`${skipped.length} data(s) no passado foram ignoradas — o mLabs não posta retroativo. Reagende no futuro.`);
+      } else {
+        toast.success(`Agendado no mLabs em ${okCount} data(s)!`);
+      }
       onClose();
     } catch (e: any) {
       toast.error(e?.message || 'Erro ao agendar no mLabs.');
