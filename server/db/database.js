@@ -583,7 +583,7 @@ const addRecentTopics = (topics, cap = 20) => {
 
 // CTA dos REELS (configurável, separado do CTA dos carrosséis). Default: comenta TESTO
 // → passo a passo natural. Trocável sem código (setReelsCta).
-const REELS_CTA_DEFAULT = { keyword: 'DIETA', benefit: 'te mando um cardápio que seca sem passar fome' };
+const REELS_CTA_DEFAULT = { keyword: 'DIETA', benefit: 'te mando um cardápio pra você secar sem passar fome' };
 const getReelsCta = () => ({ ...REELS_CTA_DEFAULT, ...readObj('reels_cta') });
 const setReelsCta = (c) => writeObj('reels_cta', { ...getReelsCta(), ...c, updated_at: now() });
 
