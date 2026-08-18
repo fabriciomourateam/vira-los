@@ -289,7 +289,15 @@ async function renderReel({
   // Encode leve pra CPU fraca do Fly: 30fps (o clipe pode vir a 60 → metade do
   // trabalho), preset ultrafast e crf 23. Reel não precisa de 60fps nem H.264
   // pesado — o Instagram recomprime de qualquer jeito.
-  const VENC = ['-r', '30', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
+  // COR BT.709 (conserta o DOURADO saindo VERMELHO no Instagram): sem tag de cor,
+  // o MP4 sai "unspecified"; o IG decodifica assumindo 709 (é HD) enquanto o ffmpeg
+  // converteu RGB→YUV em 601 → a matriz não bate e o dourado saturado escorrega pro
+  // vermelho/laranja. COLOR_BT709 força a conversão final pra 709 no filtro e o VENC
+  // MARCA 709 no arquivo — aí o IG decodifica igual ao que foi codificado (validado
+  // medindo o pixel: 254/174 avermelhado → 245/177 dourado). Vale pros 3 caminhos.
+  const COLOR_BT709 = 'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p';
+  const VENC = ['-r', '30', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+    '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv'];
   const AENC = ['-c:a', 'aac', '-b:a', '128k'];
   // CAP de duração: no máx 20s (reel de "leia a legenda" não precisa mais), o que
   // também evita encode longo demais. Usa a duração do clipe se for menor.
@@ -311,10 +319,11 @@ async function renderReel({
       const ci = idx++;
       chain.push(`[${ci}:v]scale=1080:1920:flags=lanczos[ct]`);
       const mid = (capSecs / 2).toFixed(2), end = capSecs.toFixed(2);
-      chain.push(`[a][ct]overlay=0:0:enable='between(t,${mid},${end})'[out]`);
+      chain.push(`[a][ct]overlay=0:0:enable='between(t,${mid},${end})'[vfin]`);
     } else {
-      chain.push('[v][hk]overlay=0:0[out]');
+      chain.push('[v][hk]overlay=0:0[vfin]');
     }
+    chain.push(`[vfin]${COLOR_BT709}[out]`);
     const audio = [];
     if (hasMusic) {
       inputs.push('-i', musicPath);
@@ -332,7 +341,8 @@ async function renderReel({
     const chain = [
       '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v]',
       '[v][1:v]overlay=0:0[bg]',
-      `[bg]${textChain(layers, font)}[out]`,
+      `[bg]${textChain(layers, font)}[vfin]`,
+      `[vfin]${COLOR_BT709}[out]`,
     ];
     const audio = [];
     if (hasMusic) {
@@ -346,7 +356,7 @@ async function renderReel({
   } else {
     // Sem gradiente: caminho simples com -vf. Com trilha, loopa a música, mapeia
     // o áudio dela (corta o do treino) e corta no tamanho do vídeo (-t + -shortest).
-    const filter = buildDrawtextFilter({ layers, fontFile: font });
+    const filter = `${buildDrawtextFilter({ layers, fontFile: font })},${COLOR_BT709}`;
     args = hasMusic
       ? ['-y', '-i', rawVideoPath, '-i', musicPath, '-vf', filter, '-af', `volume=${vol.toFixed(2)}`, '-map', '0:v:0', '-map', '1:a:0', '-shortest', ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath]
       : ['-y', '-i', rawVideoPath, '-vf', filter, '-map', '0:v:0', '-map', '0:a:0?', ...capT, ...VENC, ...AENC, '-movflags', '+faststart', outPath];
