@@ -392,14 +392,15 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic, onGene
   const [savedOpen, setSavedOpen] = useState(() => localStorage.getItem('carouselsSavedOpen') !== '0');
   const [carouselSearch, setCarouselSearch] = useState('');
   useEffect(() => { localStorage.setItem('carouselsSavedOpen', savedOpen ? '1' : '0'); }, [savedOpen]);
-  // Cada carrossel salvo aparece minimizado (só o título); clicar expande o card
-  // completo (preview + ações + legenda). Guarda os ids abertos.
-  const [expandedCarousels, setExpandedCarousels] = useState<Set<string>>(new Set());
-  const toggleCarousel = (id: string) => setExpandedCarousels(prev => {
-    const n = new Set(prev);
-    if (n.has(id)) n.delete(id); else n.add(id);
-    return n;
-  });
+  // Carrosséis salvos como miniaturas: mostra os N primeiros (Carregar mais/Colapsar
+  // de 5 em 5), clicar numa miniatura abre o detalhe completo (preview + ações +
+  // legenda), e o título é editável inline.
+  const CAROUSEL_PAGE = 10;         // mostra 10 (2 linhas de 5) por padrão
+  const CAROUSEL_STEP = 5;          // Carregar mais / Colapsar de 5 em 5
+  const [visibleCount, setVisibleCount] = useState(CAROUSEL_PAGE);
+  const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
   const [regeneratingCoverId, setRegeneratingCoverId] = useState<string | null>(null);
   const [viewingSlides, setViewingSlides] = useState<SavedCarousel | null>(null);
   const [viewingSlideIndex, setViewingSlideIndex] = useState(0);
@@ -848,6 +849,92 @@ ${stats ? `- Stats: ${stats}` : ''}
     } finally {
       setDuplicatingId(null);
     }
+  }
+
+  // Salva o título editado inline (PATCH topic). Otimista: já atualiza a lista.
+  async function saveTitle(saved: SavedCarousel) {
+    const t = titleDraft.trim();
+    setEditingTitleId(null);
+    if (!t || t === saved.topic) return;
+    setSavedCarousels(prev => prev.map(c => c.id === saved.id ? { ...c, topic: t } : c));
+    try {
+      const res = await fetch(`${API}/api/carousel/saved/${saved.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: t }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Título atualizado');
+    } catch {
+      toast.error('Falha ao salvar o título');
+    }
+  }
+
+  // Painel de detalhe do carrossel ativo (capa maior + todas as ações + legenda).
+  function renderSavedDetail(saved: SavedCarousel) {
+    const thumb = saved.screenshots?.[0] ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}` : null;
+    const date = new Date(saved.created_at).toLocaleDateString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+    return (
+      <div className="rounded-xl border border-violet-500/40 bg-card overflow-hidden">
+        <div className="flex flex-col sm:flex-row">
+          <div className="relative sm:w-44 shrink-0 aspect-[4/5] bg-secondary">
+            {thumb ? (
+              <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-3">
+                <FolderOpen className="w-8 h-8 opacity-30" />
+                <button
+                  onClick={() => handleRegenerateCover(saved)}
+                  disabled={regeneratingCoverId === saved.id}
+                  className="flex items-center gap-1.5 text-[11px] bg-foreground text-background font-bold px-2.5 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50"
+                >
+                  {regeneratingCoverId === saved.id
+                    ? <><Loader2 className="w-3 h-3 animate-spin" /> Gerando…</>
+                    : <><RefreshCw className="w-3 h-3" /> Regenerar capa</>}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0 p-3 space-y-2">
+            <p className="text-sm font-semibold text-foreground">{saved.topic}</p>
+            <p className="text-[10px] text-muted-foreground">{saved.numSlides} slides · {date}</p>
+            <div className="flex flex-wrap items-center gap-1">
+              {saved.isTemplate ? (
+                <button onClick={() => handleUseAsBase(saved)} className="px-2 py-1 rounded bg-emerald-500 text-white text-[11px] font-bold hover:bg-emerald-400 transition-colors">Usar como base</button>
+              ) : (
+                <button onClick={() => handleLoadConfig(saved)} className="px-2 py-1 rounded bg-secondary text-foreground text-[11px] font-bold hover:bg-secondary/70 transition-colors">Carregar config</button>
+              )}
+              <button onClick={() => handleDuplicate(saved)} disabled={duplicatingId === saved.id} className="p-1.5 rounded text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50" title="Duplicar (cópia editável)">
+                {duplicatingId === saved.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CopyPlus className="w-4 h-4" />}
+              </button>
+              {!saved.archived && (
+                <button onClick={() => handleEditSaved(saved)} className={`p-1.5 rounded transition-colors ${editingSaved?.id === saved.id ? 'text-purple-400 bg-purple-500/10' : 'text-muted-foreground hover:text-purple-400'}`} title="Editar"><Edit3 className="w-4 h-4" /></button>
+              )}
+              {saved.legenda && (
+                <button onClick={() => { navigator.clipboard.writeText(saved.legenda); toast.success('Legenda copiada!'); }} className="p-1.5 rounded text-muted-foreground hover:text-blue-400 transition-colors" title="Copiar legenda"><Copy className="w-4 h-4" /></button>
+              )}
+              {(saved.screenshots?.length ?? 0) > 0 && (
+                <button onClick={() => openSavedSlidesViewer(saved)} className="p-1.5 rounded text-muted-foreground hover:text-emerald-400 transition-colors" title="Baixar slides"><Download className="w-4 h-4" /></button>
+              )}
+              <a href={`${API}/output/${saved.folderName}/carrossel.html`} target="_blank" rel="noreferrer" className="p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Abrir HTML"><FileText className="w-4 h-4" /></a>
+              {onGenerateReels && (
+                <button onClick={() => onGenerateReels(saved.id)} className="p-1.5 rounded text-muted-foreground hover:text-rose-500 transition-colors" title="Gerar Reels"><Video className="w-4 h-4" /></button>
+              )}
+              {(saved.screenshots?.length ?? 0) > 0 && !saved.isTemplate && (
+                <MlabsScheduleButton kind="carousel" contentId={saved.id} caption={saved.legenda} />
+              )}
+              <button onClick={() => toggleArchive(saved)} className={`p-1.5 rounded transition-colors ${saved.archived ? 'text-amber-400 hover:text-foreground' : 'text-muted-foreground hover:text-amber-400'}`} title={saved.archived ? 'Restaurar' : 'Arquivar (já postei)'}>
+                {saved.archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+              </button>
+              <button onClick={() => handleDeleteSaved(saved.id)} className="p-1.5 rounded text-muted-foreground hover:text-red-500 transition-colors" title="Excluir"><Trash2 className="w-4 h-4" /></button>
+            </div>
+            {saved.legenda && <LegendaPreview legenda={saved.legenda} />}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   async function toggleArchive(saved: SavedCarousel) {
@@ -2553,236 +2640,114 @@ document.addEventListener('DOMContentLoaded', function() {
               </button>
             )}
           </div>
-          {savedOpen && (
-          <>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <input
-              value={carouselSearch}
-              onChange={e => setCarouselSearch(e.target.value)}
-              placeholder="Buscar carrossel por tema..."
-              className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-            />
-          </div>
-          <div className="space-y-2" id="saved-carousels-grid">
-            {(() => {
-              const q = carouselSearch.trim().toLowerCase();
-              const list = savedCarousels
-                .filter(c => showArchived ? c.archived : !c.archived)
-                .filter(c => !q || (c.topic || '').toLowerCase().includes(q));
-              if (list.length === 0) return (
-                <p className="text-xs text-muted-foreground py-2 col-span-full text-center">Nenhum carrossel encontrado{q ? ` pra "${carouselSearch}"` : ''}.</p>
-              );
-              return list.map(saved => {
-              const thumb = saved.screenshots?.[0]
-                ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}`
-                : null;
-              const date = new Date(saved.created_at).toLocaleDateString('pt-BR', {
-                day: '2-digit', month: '2-digit', year: '2-digit',
-                hour: '2-digit', minute: '2-digit',
-              });
-              const isExpanded = expandedCarousels.has(saved.id);
-              return (
-                <div
-                  key={saved.id}
-                  className={`rounded-xl border bg-card overflow-hidden group ${
-                    saved.isTemplate ? 'border-emerald-500/40' : 'border-border'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleCarousel(saved.id)}
-                    className="w-full flex items-center gap-2 p-3 text-left hover:bg-secondary/30 transition-colors"
-                    title={isExpanded ? 'Minimizar' : 'Abrir'}
-                  >
-                    {isExpanded
-                      ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
-                      : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
-                    <span className="flex-1 min-w-0 text-xs font-semibold text-foreground line-clamp-1">{saved.topic}</span>
-                    {saved.isTemplate && <LayoutTemplate className="w-3 h-3 text-emerald-400 shrink-0" />}
-                    {(saved as any).source === 'daily' && <CalendarClock className="w-3 h-3 text-purple-400 shrink-0" />}
-                    <span className="text-[10px] text-muted-foreground shrink-0 whitespace-nowrap">{saved.numSlides} slides</span>
-                  </button>
-                  {isExpanded && (
-                  <>
-                  <div className="relative aspect-[4/5] bg-secondary overflow-hidden">
-                    {thumb ? (
-                      <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-3">
-                        <FolderOpen className="w-8 h-8 opacity-30" />
-                        <button
-                          onClick={() => handleRegenerateCover(saved)}
-                          disabled={regeneratingCoverId === saved.id}
-                          className="flex items-center gap-1.5 text-[11px] bg-foreground text-background font-bold px-2.5 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
-                          title="Gerar screenshots a partir do HTML salvo"
-                        >
-                          {regeneratingCoverId === saved.id
-                            ? <><Loader2 className="w-3 h-3 animate-spin" /> Gerando…</>
-                            : <><RefreshCw className="w-3 h-3" /> Regenerar capa</>
-                          }
-                        </button>
-                      </div>
-                    )}
-                    {/* Badge de modelo */}
-                    {saved.isTemplate && (
-                      <div className="absolute top-2 left-2 flex items-center gap-1 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
-                        <LayoutTemplate className="w-2.5 h-2.5" /> Modelo
-                      </div>
-                    )}
-                    {/* Badge da rotina diária */}
-                    {(saved as any).source === 'daily' && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
-                        <CalendarClock className="w-2.5 h-2.5" /> Diário
-                      </div>
-                    )}
-                    {/* Desktop: overlay on hover — só renderiza quando há thumb,
-                        senão sobrepõe o botão "Regenerar capa" */}
-                    {thumb && (
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all items-center justify-center gap-2 opacity-0 group-hover:opacity-100 hidden sm:flex">
-                      {saved.isTemplate ? (
-                        <button
-                          onClick={() => handleUseAsBase(saved)}
-                          className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold hover:bg-emerald-400 transition-colors"
-                        >
-                          Usar como base
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleLoadConfig(saved)}
-                          className="px-3 py-1.5 bg-white text-black rounded-lg text-xs font-bold hover:bg-gray-100 transition-colors"
-                        >
-                          Carregar config
-                        </button>
-                      )}
-                    </div>
-                    )}
-                    {/* Mobile: always-visible bottom gradient + button — idem */}
-                    {thumb && (
-                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent pt-6 pb-2 px-2 flex justify-center sm:hidden">
-                      {saved.isTemplate ? (
-                        <button
-                          onClick={() => handleUseAsBase(saved)}
-                          className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold active:bg-emerald-400 transition-colors"
-                        >
-                          Usar como base
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleLoadConfig(saved)}
-                          className="px-3 py-1.5 bg-white text-black rounded-lg text-xs font-bold active:bg-gray-200 transition-colors"
-                        >
-                          Carregar config
-                        </button>
-                      )}
-                    </div>
-                    )}
-                  </div>
-                  <div className="p-3 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">{saved.numSlides} slides · {date}</span>
-                      <div className="flex items-center gap-1">
-                        {saved.isTemplate && (
-                          <button
-                            onClick={() => handleUseAsBase(saved)}
-                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                            title="Usar como base para novo carrossel"
-                          >
-                            <LayoutTemplate className="w-3 h-3" /> Usar
-                          </button>
-                        )}
-                        {saved.legenda && (
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(saved.legenda); toast.success('Legenda copiada!'); }}
-                            className="p-1 rounded text-muted-foreground hover:text-blue-400 transition-colors"
-                            title={`Copiar legenda:\n${saved.legenda.substring(0, 120)}…`}
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDuplicate(saved)}
-                          disabled={duplicatingId === saved.id}
-                          className="p-1 rounded text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
-                          title="Duplicar (cria uma cópia editável)"
-                        >
-                          {duplicatingId === saved.id
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <CopyPlus className="w-3.5 h-3.5" />}
-                        </button>
-                        {!saved.archived && (
-                          <button
-                            onClick={() => handleEditSaved(saved)}
-                            className={`p-1 rounded transition-colors ${
-                              editingSaved?.id === saved.id
-                                ? 'text-purple-400 bg-purple-500/10'
-                                : 'text-muted-foreground hover:text-purple-400'
-                            }`}
-                            title="Editar"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {(saved.screenshots?.length ?? 0) > 0 && (
-                          <button
-                            onClick={() => openSavedSlidesViewer(saved)}
-                            className="p-1 rounded text-muted-foreground hover:text-emerald-400 transition-colors"
-                            title="Baixar slides (um por um)"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <a
-                          href={`${API}/output/${saved.folderName}/carrossel.html`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                          title="Abrir HTML"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                        </a>
-                        {onGenerateReels && (
-                          <button
-                            onClick={() => onGenerateReels(saved.id)}
-                            className="p-1 rounded text-muted-foreground hover:text-rose-500 transition-colors"
-                            title="Gerar Reels a partir deste carrossel"
-                          >
-                            <Video className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {(saved.screenshots?.length ?? 0) > 0 && !saved.isTemplate && (
-                          <MlabsScheduleButton kind="carousel" contentId={saved.id} caption={saved.legenda} />
-                        )}
-                        <button
-                          onClick={() => toggleArchive(saved)}
-                          className={`p-1 rounded transition-colors ${saved.archived ? 'text-amber-400 hover:text-foreground' : 'text-muted-foreground hover:text-amber-400'}`}
-                          title={saved.archived ? 'Restaurar' : 'Arquivar (já postei)'}
-                        >
-                          {saved.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSaved(saved.id)}
-                          className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    {/* Legenda expandida — mostra preview + botão copiar */}
-                    {saved.legenda && (
-                      <LegendaPreview legenda={saved.legenda} />
-                    )}
-                  </div>
-                  </>
-                  )}
+          {savedOpen && (() => {
+            const q = carouselSearch.trim().toLowerCase();
+            const list = savedCarousels
+              .filter(c => showArchived ? c.archived : !c.archived)
+              .filter(c => !q || (c.topic || '').toLowerCase().includes(q));
+            const shown = list.slice(0, visibleCount);
+            const active = list.find(c => c.id === activeSavedId) || null;
+            return (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input
+                    value={carouselSearch}
+                    onChange={e => setCarouselSearch(e.target.value)}
+                    placeholder="Buscar carrossel por tema..."
+                    className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
                 </div>
-              );
-            });
-            })()}
-          </div>
-          </>
-          )}
+
+                {list.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-2 text-center">Nenhum carrossel encontrado{q ? ` pra "${carouselSearch}"` : ''}.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+                      {shown.map(saved => {
+                        const thumb = saved.screenshots?.[0]
+                          ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}`
+                          : null;
+                        const isActive = activeSavedId === saved.id;
+                        return (
+                          <div
+                            key={saved.id}
+                            className={`rounded-lg border overflow-hidden bg-card ${isActive ? 'border-violet-500 ring-1 ring-violet-500/40' : saved.isTemplate ? 'border-emerald-500/40' : 'border-border'}`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setActiveSavedId(id => (id === saved.id ? null : saved.id))}
+                              className="relative block w-full aspect-[4/5] bg-secondary"
+                              title={isActive ? 'Fechar' : 'Abrir'}
+                            >
+                              {thumb ? (
+                                <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                  <FolderOpen className="w-6 h-6 opacity-30" />
+                                </div>
+                              )}
+                              {saved.isTemplate && (
+                                <span className="absolute top-1 left-1 bg-emerald-600 text-white rounded-full p-0.5" title="Modelo"><LayoutTemplate className="w-2.5 h-2.5" /></span>
+                              )}
+                              {(saved as any).source === 'daily' && (
+                                <span className="absolute top-1 right-1 bg-purple-600 text-white rounded-full p-0.5" title="Diário"><CalendarClock className="w-2.5 h-2.5" /></span>
+                              )}
+                            </button>
+                            <div className="p-1.5">
+                              {editingTitleId === saved.id ? (
+                                <input
+                                  autoFocus
+                                  value={titleDraft}
+                                  onChange={e => setTitleDraft(e.target.value)}
+                                  onBlur={() => saveTitle(saved)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+                                    if (e.key === 'Escape') { setEditingTitleId(null); }
+                                  }}
+                                  className="w-full text-[10px] leading-tight rounded border border-violet-500/60 bg-background px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                                />
+                              ) : (
+                                <p
+                                  onClick={() => { setEditingTitleId(saved.id); setTitleDraft(saved.topic); }}
+                                  className="text-[10px] leading-tight line-clamp-2 cursor-text hover:text-violet-400 transition-colors"
+                                  title="Clique pra editar o título"
+                                >
+                                  {saved.topic}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      {visibleCount < list.length && (
+                        <button
+                          onClick={() => setVisibleCount(n => Math.min(list.length, n + CAROUSEL_STEP))}
+                          className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/70 transition-colors"
+                        >
+                          Carregar mais {CAROUSEL_STEP}
+                        </button>
+                      )}
+                      {visibleCount > CAROUSEL_PAGE && (
+                        <button
+                          onClick={() => setVisibleCount(n => Math.max(CAROUSEL_PAGE, n - CAROUSEL_STEP))}
+                          className="px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors"
+                        >
+                          Colapsar {CAROUSEL_STEP}
+                        </button>
+                      )}
+                      <span className="text-[10px] text-muted-foreground">mostrando {shown.length} de {list.length}</span>
+                    </div>
+
+                    {active && renderSavedDetail(active)}
+                  </>
+                )}
+              </>
+            );
+          })()}
 
           {/* ── Editor de carrossel salvo ── */}
           <AnimatePresence>
