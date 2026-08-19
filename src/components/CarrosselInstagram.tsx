@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image, Search,
+  Palette, Type, Hash, Layers, Mic2, Copy, CopyPlus, Check, FileText, Image, Search,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
   Archive, ArchiveRestore, Save, X, Code2, Video, CalendarClock,
 } from 'lucide-react';
@@ -828,6 +828,25 @@ ${stats ? `- Stats: ${stats}` : ''}
     if (editingSaved?.id === id) {
       setEditingSaved(null);
       setEditingSavedHtml(null);
+    }
+  }
+
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  async function handleDuplicate(saved: SavedCarousel) {
+    setDuplicatingId(saved.id);
+    try {
+      const res = await fetch(`${API}/api/carousel/saved/${saved.id}/duplicate`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao duplicar');
+      const dup: SavedCarousel = data.carousel;
+      setSavedCarousels(prev => [dup, ...prev]);
+      setExpandedCarousels(prev => new Set(prev).add(dup.id));
+      toast.success('Cópia criada! Abrindo o editor da cópia…');
+      handleEditSaved(dup); // abre o editor já na cópia
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao duplicar');
+    } finally {
+      setDuplicatingId(null);
     }
   }
 
@@ -2681,6 +2700,16 @@ document.addEventListener('DOMContentLoaded', function() {
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                         )}
+                        <button
+                          onClick={() => handleDuplicate(saved)}
+                          disabled={duplicatingId === saved.id}
+                          className="p-1 rounded text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50"
+                          title="Duplicar (cria uma cópia editável)"
+                        >
+                          {duplicatingId === saved.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <CopyPlus className="w-3.5 h-3.5" />}
+                        </button>
                         {!saved.archived && (
                           <button
                             onClick={() => handleEditSaved(saved)}
