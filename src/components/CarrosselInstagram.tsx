@@ -389,9 +389,17 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic, onGene
   const [showArchived, setShowArchived] = useState(false);
   // "Carrosseis Salvos": com 100+ itens a lista vira rolagem sem fim. Colapsável
   // (estado lembrado) + busca por tema pra localizar sem rolar.
-  const [savedOpen, setSavedOpen] = useState(() => localStorage.getItem('carouselsSavedOpen') === '1');
+  const [savedOpen, setSavedOpen] = useState(() => localStorage.getItem('carouselsSavedOpen') !== '0');
   const [carouselSearch, setCarouselSearch] = useState('');
   useEffect(() => { localStorage.setItem('carouselsSavedOpen', savedOpen ? '1' : '0'); }, [savedOpen]);
+  // Cada carrossel salvo aparece minimizado (só o título); clicar expande o card
+  // completo (preview + ações + legenda). Guarda os ids abertos.
+  const [expandedCarousels, setExpandedCarousels] = useState<Set<string>>(new Set());
+  const toggleCarousel = (id: string) => setExpandedCarousels(prev => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
   const [regeneratingCoverId, setRegeneratingCoverId] = useState<string | null>(null);
   const [viewingSlides, setViewingSlides] = useState<SavedCarousel | null>(null);
   const [viewingSlideIndex, setViewingSlideIndex] = useState(0);
@@ -2537,7 +2545,7 @@ document.addEventListener('DOMContentLoaded', function() {
               className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="saved-carousels-grid">
+          <div className="space-y-2" id="saved-carousels-grid">
             {(() => {
               const q = carouselSearch.trim().toLowerCase();
               const list = savedCarousels
@@ -2554,6 +2562,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 day: '2-digit', month: '2-digit', year: '2-digit',
                 hour: '2-digit', minute: '2-digit',
               });
+              const isExpanded = expandedCarousels.has(saved.id);
               return (
                 <div
                   key={saved.id}
@@ -2561,6 +2570,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     saved.isTemplate ? 'border-emerald-500/40' : 'border-border'
                   }`}
                 >
+                  <button
+                    type="button"
+                    onClick={() => toggleCarousel(saved.id)}
+                    className="w-full flex items-center gap-2 p-3 text-left hover:bg-secondary/30 transition-colors"
+                    title={isExpanded ? 'Minimizar' : 'Abrir'}
+                  >
+                    {isExpanded
+                      ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                      : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+                    <span className="flex-1 min-w-0 text-xs font-semibold text-foreground line-clamp-1">{saved.topic}</span>
+                    {saved.isTemplate && <LayoutTemplate className="w-3 h-3 text-emerald-400 shrink-0" />}
+                    {(saved as any).source === 'daily' && <CalendarClock className="w-3 h-3 text-purple-400 shrink-0" />}
+                    <span className="text-[10px] text-muted-foreground shrink-0 whitespace-nowrap">{saved.numSlides} slides</span>
+                  </button>
+                  {isExpanded && (
+                  <>
                   <div className="relative aspect-[4/5] bg-secondary overflow-hidden">
                     {thumb ? (
                       <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
@@ -2635,7 +2660,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     )}
                   </div>
                   <div className="p-3 space-y-1.5">
-                    <p className="text-xs font-semibold text-foreground line-clamp-2">{saved.topic}</p>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-muted-foreground">{saved.numSlides} slides · {date}</span>
                       <div className="flex items-center gap-1">
@@ -2721,6 +2745,8 @@ document.addEventListener('DOMContentLoaded', function() {
                       <LegendaPreview legenda={saved.legenda} />
                     )}
                   </div>
+                  </>
+                  )}
                 </div>
               );
             });
