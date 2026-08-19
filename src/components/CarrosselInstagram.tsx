@@ -3,8 +3,8 @@ import { HexColorPicker } from 'react-colorful';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
-  Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
-  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image,
+  Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
+  Palette, Type, Hash, Layers, Mic2, Copy, Check, FileText, Image, Search,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
   Archive, ArchiveRestore, Save, X, Code2, Video, CalendarClock,
 } from 'lucide-react';
@@ -387,6 +387,11 @@ export default function CarrosselInstagram({ prefillScript, prefillTopic, onGene
   const [copied, setCopied] = useState(false);
   const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  // "Carrosseis Salvos": com 100+ itens a lista vira rolagem sem fim. Colapsável
+  // (estado lembrado) + busca por tema pra localizar sem rolar.
+  const [savedOpen, setSavedOpen] = useState(() => localStorage.getItem('carouselsSavedOpen') === '1');
+  const [carouselSearch, setCarouselSearch] = useState('');
+  useEffect(() => { localStorage.setItem('carouselsSavedOpen', savedOpen ? '1' : '0'); }, [savedOpen]);
   const [regeneratingCoverId, setRegeneratingCoverId] = useState<string | null>(null);
   const [viewingSlides, setViewingSlides] = useState<SavedCarousel | null>(null);
   const [viewingSlideIndex, setViewingSlideIndex] = useState(0);
@@ -2483,9 +2488,17 @@ document.addEventListener('DOMContentLoaded', function() {
       {savedCarousels.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-semibold text-foreground">Carrosseis Salvos</span>
-            <span className="text-xs text-muted-foreground">({savedCarousels.filter(c => !c.archived).length} ativos)</span>
+            <button
+              type="button"
+              onClick={() => setSavedOpen(o => !o)}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              title={savedOpen ? 'Recolher lista' : 'Expandir lista'}
+            >
+              {savedOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Carrosseis Salvos</span>
+              <span className="text-xs text-muted-foreground">({savedCarousels.filter(c => !c.archived).length} ativos)</span>
+            </button>
             {savedCarousels.some(c => c.isTemplate) && (
               <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
                 <LayoutTemplate className="w-3 h-3" /> inclui modelos
@@ -2513,8 +2526,27 @@ document.addEventListener('DOMContentLoaded', function() {
               </button>
             )}
           </div>
+          {savedOpen && (
+          <>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              value={carouselSearch}
+              onChange={e => setCarouselSearch(e.target.value)}
+              placeholder="Buscar carrossel por tema..."
+              className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+            />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="saved-carousels-grid">
-            {savedCarousels.filter(c => showArchived ? c.archived : !c.archived).map(saved => {
+            {(() => {
+              const q = carouselSearch.trim().toLowerCase();
+              const list = savedCarousels
+                .filter(c => showArchived ? c.archived : !c.archived)
+                .filter(c => !q || (c.topic || '').toLowerCase().includes(q));
+              if (list.length === 0) return (
+                <p className="text-xs text-muted-foreground py-2 col-span-full text-center">Nenhum carrossel encontrado{q ? ` pra "${carouselSearch}"` : ''}.</p>
+              );
+              return list.map(saved => {
               const thumb = saved.screenshots?.[0]
                 ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}`
                 : null;
@@ -2691,8 +2723,11 @@ document.addEventListener('DOMContentLoaded', function() {
                   </div>
                 </div>
               );
-            })}
+            });
+            })()}
           </div>
+          </>
+          )}
 
           {/* ── Editor de carrossel salvo ── */}
           <AnimatePresence>
