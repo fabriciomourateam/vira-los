@@ -961,10 +961,6 @@ ${stats ? `- Stats: ${stats}` : ''}
       const html = await res.text();
       setEditingSaved(saved);
       setEditingSavedHtml(html);
-      // Scroll to editor
-      setTimeout(() => {
-        document.getElementById('saved-carousel-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
     } catch {
       toast.error('Não foi possível carregar o HTML deste carrossel');
     }
@@ -1009,9 +1005,6 @@ ${stats ? `- Stats: ${stats}` : ''}
       setEditingSaved(newEntry);
       setEditingSavedHtml(html);
       toast.success(`Modelo "${template.topic}" copiado — edite e gere os screenshots`);
-      setTimeout(() => {
-        document.getElementById('saved-carousel-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
     } catch {
       toast.error('Não foi possível carregar o modelo');
     }
@@ -2756,46 +2749,54 @@ document.addEventListener('DOMContentLoaded', function() {
           <AnimatePresence>
             {editingSaved && editingSavedHtml && (
               <motion.div
-                id="saved-carousel-editor"
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 16 }}
-                transition={{ duration: 0.2 }}
-                className="mt-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-2 sm:p-4"
+                onClick={() => { setEditingSaved(null); setEditingSavedHtml(null); }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-purple-400 flex items-center gap-1.5">
-                    <Edit3 className="w-3.5 h-3.5" />
-                    Editando: <span className="text-foreground">{editingSaved.topic}</span>
-                  </span>
-                  <button
-                    onClick={() => { setEditingSaved(null); setEditingSavedHtml(null); }}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Fechar editor
-                  </button>
+                <div
+                  id="saved-carousel-editor"
+                  onClick={e => e.stopPropagation()}
+                  className="bg-card rounded-2xl w-full max-w-4xl my-2 sm:my-4 border border-border shadow-xl"
+                >
+                  <div className="flex items-center justify-between gap-2 p-3 border-b border-border sticky top-0 bg-card rounded-t-2xl z-10">
+                    <span className="text-xs font-semibold text-purple-400 flex items-center gap-1.5 min-w-0">
+                      <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Editando: <span className="text-foreground">{editingSaved.topic}</span></span>
+                    </span>
+                    <button
+                      onClick={() => { setEditingSaved(null); setEditingSavedHtml(null); }}
+                      className="shrink-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-secondary"
+                    >
+                      <X className="w-4 h-4" /> Fechar
+                    </button>
+                  </div>
+                  <div className="p-3">
+                    <CarouselEditor
+                      html={editingSavedHtml}
+                      folderName={editingSaved.folderName}
+                      topic={editingSaved.topic}
+                      numSlides={editingSaved.numSlides}
+                      legenda={editingSaved.legenda}
+                      config={editingSaved.config as Record<string, unknown>}
+                      onScreenshotsUpdated={(screenshots) => {
+                        setSavedCarousels(prev =>
+                          prev.map(c => c.id === editingSaved.id ? { ...c, screenshots } : c)
+                        );
+                        // Persiste no banco de dados
+                        fetch(`${API}/api/carousel/saved/${editingSaved.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ screenshots }),
+                        }).catch(() => {});
+                      }}
+                      onHtmlUpdated={(html) => setEditingSavedHtml(html)}
+                      onTemplateSaved={refreshSavedCarousels}
+                    />
+                  </div>
                 </div>
-                <CarouselEditor
-                  html={editingSavedHtml}
-                  folderName={editingSaved.folderName}
-                  topic={editingSaved.topic}
-                  numSlides={editingSaved.numSlides}
-                  legenda={editingSaved.legenda}
-                  config={editingSaved.config as Record<string, unknown>}
-                  onScreenshotsUpdated={(screenshots) => {
-                    setSavedCarousels(prev =>
-                      prev.map(c => c.id === editingSaved.id ? { ...c, screenshots } : c)
-                    );
-                    // Persiste no banco de dados
-                    fetch(`${API}/api/carousel/saved/${editingSaved.id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ screenshots }),
-                    }).catch(() => {});
-                  }}
-                  onHtmlUpdated={(html) => setEditingSavedHtml(html)}
-                  onTemplateSaved={refreshSavedCarousels}
-                />
               </motion.div>
             )}
           </AnimatePresence>
