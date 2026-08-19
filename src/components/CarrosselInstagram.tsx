@@ -2646,7 +2646,6 @@ document.addEventListener('DOMContentLoaded', function() {
               .filter(c => showArchived ? c.archived : !c.archived)
               .filter(c => !q || (c.topic || '').toLowerCase().includes(q));
             const shown = list.slice(0, visibleCount);
-            const active = list.find(c => c.id === activeSavedId) || null;
             return (
               <>
                 <div className="relative">
@@ -2670,8 +2669,8 @@ document.addEventListener('DOMContentLoaded', function() {
                           : null;
                         const isActive = activeSavedId === saved.id;
                         return (
+                          <React.Fragment key={saved.id}>
                           <div
-                            key={saved.id}
                             className={`rounded-lg border overflow-hidden bg-card ${isActive ? 'border-violet-500 ring-1 ring-violet-500/40' : saved.isTemplate ? 'border-emerald-500/40' : 'border-border'}`}
                           >
                             <button
@@ -2718,6 +2717,12 @@ document.addEventListener('DOMContentLoaded', function() {
                               )}
                             </div>
                           </div>
+                          {isActive && (
+                            <div className="col-span-full">
+                              {renderSavedDetail(saved)}
+                            </div>
+                          )}
+                          </React.Fragment>
                         );
                       })}
                     </div>
@@ -2741,8 +2746,6 @@ document.addEventListener('DOMContentLoaded', function() {
                       )}
                       <span className="text-[10px] text-muted-foreground">mostrando {shown.length} de {list.length}</span>
                     </div>
-
-                    {active && renderSavedDetail(active)}
                   </>
                 )}
               </>
