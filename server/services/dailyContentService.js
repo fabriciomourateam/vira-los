@@ -208,8 +208,10 @@ function scoreThemes() {
       return (t.keywords || []).some((k) => cap.includes(k));
     });
     if (!matched.length) { scores[t.id] = 0; continue; }
+    // Comentário pesa MAIS (×6): a CTA é "comenta DIETA" → cada comentário é um
+    // LEAD no funil. Depois seguidor (×5), salvamento (×4, alcance), share (×3).
     const sum = matched.reduce((s, p) =>
-      s + (p.saves || 0) * 4 + (p.shares || 0) * 3 + (p.follows || 0) * 5 + (p.comments || 0) * 2 + (p.likes || 0), 0);
+      s + (p.comments || 0) * 6 + (p.follows || 0) * 5 + (p.saves || 0) * 4 + (p.shares || 0) * 3 + (p.likes || 0), 0);
     scores[t.id] = sum / matched.length;
   }
   return scores;
