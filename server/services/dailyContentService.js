@@ -142,10 +142,12 @@ function recentGroups(nBatches = 3) {
   return g;
 }
 
-// Escolhe 2 temas/dia: o 1º SEMPRE comparação/número (8-20k views), o 2º SEMPRE
-// história de cliente (o post nº1 — 38k views/280 shares), alternando público
-// homem/mulher. Evita ids recentes (14d) e desincentiva grupos usados nos últimos
-// dias. Fallback progressivo se o pool apertar.
+// Escolhe 2 temas/dia com equilíbrio entre PERFORMANCE e VARIEDADE (feed não pode
+// ficar previsível): o 1º é um dos formatos VENCEDORES — comparação/número OU
+// história de cliente, sorteado (~50/50), então nem sempre o mesmo formato; o 2º é
+// um tema VARIADO, de grupo E formato DIFERENTES do 1º (hábito, mente, trocas,
+// corpo, caneta...). Assim todo dia tem 1 formato campeão, mas o feed alterna e
+// respira. Evita ids recentes (14d) e desincentiva grupos usados nos últimos dias.
 function pickThemes() {
   const recentIds = recentThemeIds();
   const recentG = recentGroups(3);
@@ -161,26 +163,24 @@ function pickThemes() {
     return w;
   };
 
-  // 1º tema: SEMPRE comparação/número (o lane que dá 8-20k). Se todos os de
-  // comparação caíram nos recentes, libera todos os de comparação (ignora o 14d).
-  let cmpPool = pool.filter((t) => t.format === 'comparacao');
-  if (!cmpPool.length) cmpPool = THEMES.filter((t) => t.format === 'comparacao');
-  const first = cmpPool.length ? weightedSample(cmpPool, cmpPool.map(weightOf), 1)[0]
-                               : weightedSample(pool, pool.map(weightOf), 1)[0];
-  if (!first) return [];
-  // 2º tema: HISTÓRIA DE CLIENTE (o formato do post nº1 — 38k views/280 shares).
-  // Alterna público (homem/mulher) via amostragem no pool de história. Fallback:
-  // se não sobrar história fresca, libera geral; por último, qualquer outro grupo.
-  let histPool = pool.filter((t) => t.format === 'historia' && t.id !== first.id);
-  if (!histPool.length) histPool = THEMES.filter((t) => t.format === 'historia' && t.id !== first.id);
-  let second = histPool.length ? weightedSample(histPool, histPool.map(weightOf), 1)[0] : null;
-  if (!second) {
-    // Sem história disponível: cai no comportamento antigo (grupo diferente, não comparação).
-    let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group && t.format !== 'comparacao');
-    if (!rest.length) rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
-    if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
-    second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
+  // 1º tema: um formato VENCEDOR, sorteando o LANE (~50/50) pra não repetir o mesmo
+  // formato todo dia. Se o lane sorteado não tiver tema fresco, tenta o outro.
+  const lanes = Math.random() < 0.5 ? ['comparacao', 'historia'] : ['historia', 'comparacao'];
+  let first = null;
+  for (const lane of lanes) {
+    let lanePool = pool.filter((t) => t.format === lane);
+    if (!lanePool.length) lanePool = THEMES.filter((t) => t.format === lane);
+    if (lanePool.length) { first = weightedSample(lanePool, lanePool.map(weightOf), 1)[0]; break; }
   }
+  if (!first) first = weightedSample(pool, pool.map(weightOf), 1)[0];
+  if (!first) return [];
+
+  // 2º tema: VARIADO — grupo E formato diferentes do 1º (feed fresco). Fallbacks
+  // progressivos: relaxa formato, depois grupo, por último qualquer outro id.
+  let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group && t.format !== first.format);
+  if (!rest.length) rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
+  if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
+  const second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
   return [first, second].filter(Boolean);
 }
 
