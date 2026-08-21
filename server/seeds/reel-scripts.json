@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-21.1",
+  "version": "2026-08-21.2",
   "note": "65 roteiros de reel pré-escritos, consumidos pela rotina (2/dia: 14h e 19h30). Mix homem 25-40 (por sintoma, ban-safe) + mulher 35-44. Ganchos calibrados nos padrões que MAIS deram views no feed do Fabricio: empilhar sintomas, 'o motivo ninguém te conta' / 'os 3 sinais', revelação ('é isso aqui'), mito quebrado, número. fraseTela tem 1 palavra entre **asteriscos** (vira dourada no vídeo). Seed VERSÃO-aware: bumpar a version SUBSTITUI os pendentes (mantém os já postados por slug). v3: ganchos reforçados + leva 2 (temas frescos, sem repetir o feed).",
   "scripts": [
     {
@@ -545,6 +545,70 @@
       "fraseTela": "3 hábitos derrubando sua **testosterona** sem você ver",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você culpa a idade, mas na maioria das vezes o problema é a rotina.\n\n1) Sono ruim — dormir menos de 6h derruba testosterona já na semana seguinte.\n2) Gordura na barriga — a gordura visceral converte testosterona em estrogênio.\n3) Estresse crônico — cortisol alto o dia todo trava a produção.\n\nNão é suplemento mágico. É arrumar o básico que quase todo homem ignora: sono, composição corporal e controle de estresse.\n\nCorrige isso 30 dias e você sente energia, libido e disposição voltarem.\n\n📌 Salva esse pra aplicar — e marca aquele parceiro cansado o tempo todo.\n\nComenta TESTO que eu te mando o passo a passo pra subir a testosterona de forma natural.\n\n#saudehormonal #performancemasculina #saudedohomem #homem30 #shapedefinido"
+    },
+    {
+      "slug": "h-creatina-erro-01",
+      "audience": "homem",
+      "title": "Voce toma creatina errado",
+      "fraseTela": "Você toma **creatina** errado a vida toda?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Creatina não é bomba nem anabolizante. É o suplemento mais estudado do mundo — e a maioria usa errado.\n\nEla repõe a energia rápida do músculo (ATP), então você faz mais repetição com carga e recupera melhor. Mais estímulo hoje = mais músculo lá na frente.\n\nOs erros clássicos: tomar só em dia de treino, esperar \"sentir\" na hora e desistir. Creatina funciona por saturação — é dose fixa TODO dia, treinando ou não.\n\nA água que ela puxa pro músculo não é inchaço ruim: é o músculo mais cheio e forte.\n\n📌 Salva esse — e marca aquele parceiro que ainda tem medo de creatina.\n\nComenta TESTO que eu te mando o passo a passo pra treinar e evoluir de forma natural.\n\n#creatina #treino #performancemasculina #ganhodemassa #saudedohomem"
+    },
+    {
+      "slug": "h-ozempic-face-01",
+      "audience": "homem",
+      "title": "Emagreceu na caneta e o rosto envelheceu",
+      "fraseTela": "Emagreceu na **caneta** e o rosto envelheceu 10 anos?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você vê gente secando rápido na caneta e o rosto afundando junto. Isso tem nome.\n\nQuando você perde peso muito rápido e sem proteína e treino, não perde só gordura: perde músculo e o colágeno que sustenta a pele. O rosto é o primeiro a entregar — fica flácido, cavado, envelhecido.\n\nA velocidade cobra caro. Emagrecer no ritmo certo, com proteína alta e treino de força, preserva músculo e firmeza. Você seca sem murchar.\n\nNão existe atalho sem conta pra pagar.\n\n📌 Salva pra não cometer esse erro — e marca alguém que tá pensando em começar.\n\nComenta DIETA que eu te mando um cardápio pra secar sem perder músculo.\n\n#emagrecimento #saudemasculina #composicaocorporal #proteina #homem30"
+    },
+    {
+      "slug": "h-insulina-barriga-01",
+      "audience": "homem",
+      "title": "A barriga nao sai por causa da insulina",
+      "fraseTela": "A barriga não sai e o problema é a **insulina**",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você treina, corta doce, e a barriga do meio insiste. Muitas vezes o problema é a insulina desregulada.\n\nQuando você vive de carboidrato refinado e refeição na correria, a insulina fica sempre alta. Insulina alta = corpo em modo estocar. E ele estoca bem no meio da barriga.\n\nEnquanto ela não baixa, você pode fazer cardio a semana inteira que a gordura não solta.\n\nA virada é comer de um jeito que estabiliza a insulina: proteína, fibra e gordura boa antes do carbo. O corpo volta a queimar.\n\n📌 Salva esse pra aplicar — e marca aquele parceiro que treina e a barriga não sai.\n\nComenta DIETA que eu te mando o cardápio que desinflama e seca.\n\n#gorduraabdominal #saudemasculina #metabolismo #emagrecimento #homem30"
+    },
+    {
+      "slug": "h-libido-dopamina-01",
+      "audience": "homem",
+      "title": "Perdeu o tesao e acha que e a idade",
+      "fraseTela": "Perdeu o **tesão** e acha que é normal da idade?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Libido caindo não é frescura nem \"coisa da idade\". É um dos primeiros sinais de que algo hormonal está fora do lugar.\n\nTestosterona baixa, dopamina esgotada por excesso de tela e estímulo fácil, sono ruim e estresse crônico — tudo isso derruba o desejo ao mesmo tempo.\n\nO corpo não separa: quando a libido cai, quase sempre vêm junto cansaço, menos força e mais gordura.\n\nA boa notícia é que, na maioria dos casos, dá pra reverter com sono, treino, controle de estresse e menos estímulo artificial.\n\n📌 Salva esse — e marca aquele parceiro que anda desanimado.\n\nComenta TESTO que eu te mando o passo a passo pra recuperar energia e libido de forma natural.\n\n#saudehormonal #performancemasculina #saudedohomem #vitalidade #homem30"
+    },
+    {
+      "slug": "h-cortisol-sono-01",
+      "audience": "homem",
+      "title": "Dorme mal e a barriga nao vai embora",
+      "fraseTela": "Dorme mal e a **barriga** não vai embora?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você treina pesado e come certo, mas dorme mal — e a barriga não sai. Não é coincidência.\n\nNoite ruim mantém o cortisol alto no dia seguinte. Cortisol alto manda o corpo estocar gordura no abdômen e aumenta a fome de porcaria à tarde e à noite.\n\nE tem mais: é dormindo que você produz testosterona e recupera o músculo. Sono ruim = menos hormônio, menos recuperação, mais gordura.\n\nÀs vezes arrumar o sono seca mais que uma hora a mais de esteira.\n\n📌 Salva esse pra aplicar hoje — e marca quem vive dormindo mal.\n\nComenta TESTO que eu te mando os ajustes que mais destravam sono, energia e composição.\n\n#saudehormonal #cortisol #sono #performancemasculina #homem30"
+    },
+    {
+      "slug": "h-xenoestrogenio-01",
+      "audience": "homem",
+      "title": "O plastico do seu dia derruba testosterona",
+      "fraseTela": "O **plástico** do seu dia derruba sua testosterona?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Marmita esquentada no plástico, garrafinha no carro quente, cerveja no fim de semana. Parece inofensivo, mas mexe com seu hormônio.\n\nAlguns compostos do plástico e do álcool agem como estrogênio dentro do corpo (os xenoestrogênios). Quanto mais estrogênio circulando, mais o corpo derruba a testosterona pra compensar.\n\nResultado: menos energia, mais gordura no peito e na barriga, libido em queda.\n\nNão dá pra fugir de tudo, mas dá pra reduzir muito: esquentar comida no vidro, evitar plástico quente e segurar o álcool. O corpo agradece.\n\n📌 Salva esse — e marca aquele parceiro que vive de marmita no plástico.\n\nComenta TESTO que eu te mando o passo a passo pra proteger sua testosterona no dia a dia.\n\n#saudehormonal #performancemasculina #saudedohomem #vitalidade #homem30"
+    },
+    {
+      "slug": "h-trt-precisa-01",
+      "audience": "homem",
+      "title": "Voce precisa de reposicao ou e marketing",
+      "fraseTela": "Você **precisa** de reposição ou é marketing?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Virou moda todo homem cansado achar que a solução é reposição hormonal. Calma.\n\nCansaço, libido baixa e barriga podem ser sintoma de testosterona baixa — mas na maioria dos homens abaixo dos 40 a causa é sono ruim, gordura visceral, estresse e sedentarismo. Corrige isso e o hormônio sobe sozinho.\n\nReposição é ferramenta médica séria, pra quem tem indicação real e exame na mão. Não é atalho de academia nem suplemento da moda.\n\nAntes de pensar em repor, esgota o que é de graça: sono, treino e composição corporal.\n\n📌 Salva esse antes de cair em promessa fácil — e marca aquele parceiro que anda pensando nisso.\n\nComenta TESTO que eu te mando o passo a passo pra subir sua testosterona de forma natural.\n\n#saudehormonal #performancemasculina #saudedohomem #homem30 #vitalidade"
+    },
+    {
+      "slug": "h-cafeina-tolerancia-01",
+      "audience": "homem",
+      "title": "Seu pre-treino parou de fazer efeito",
+      "fraseTela": "Seu **pré-treino** parou de fazer efeito?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Começou tomando meia dose e sentia o mundo. Hoje toma o dobro e mal levanta da cama. Isso é tolerância.\n\nA cafeína bloqueia a adenosina, a molécula do cansaço. Usando todo dia em dose alta, o corpo cria mais receptores — aí a mesma dose não segura mais e você precisa de cada vez mais só pra ficar normal.\n\nPior: cafeína demais e tarde demais destrói seu sono. E sono ruim derruba testosterona e recuperação. Você troca energia emprestada por dívida.\n\nCicla a cafeína: corta uns dias, volta com dose baixa. O efeito volta e o sono agradece.\n\n📌 Salva esse — e marca aquele parceiro viciado em pré-treino.\n\nComenta TESTO que eu te mando os ajustes que mais destravam energia de verdade.\n\n#treino #performancemasculina #saudedohomem #energia #homem30"
     }
   ]
 }

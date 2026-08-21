@@ -523,7 +523,7 @@ const MLABS_DEFAULTS = {
   reelPostsPerDay: 2,
   reelScheduleDays: 30,
   reelScheduleTimes: ['11:00', '18:00'],
-  reelDailyTimes: ['14:00', '19:30'],  // horários dos reels DIÁRIOS da fila (1 reel por horário)
+  reelDailyTimes: ['11:00', '19:30'],  // horários dos reels DIÁRIOS da fila (1 reel por horário) — 11h é o pico de alcance (dados Metricool); 19h30 mantém o slot da noite
   reelFontSize: 72,              // tamanho do texto queimado (px, base 1080×1920)
   reelFontFile: null,            // caminho de fonte custom (senão usa a do sistema)
   reelCtaColor: '#F5B301',       // cor do "Leia a legenda" (dourado, como nos reels dele)
