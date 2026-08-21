@@ -86,6 +86,23 @@ const THEMES = [
     topics: ['Vive inchada e retendo líquido?', 'Não é tudo gordura: parte é inchaço (e tem solução)', 'A retenção que te faz parecer 3kg a mais'] },
   { id: 'sono-emagrecer', group: 'corpo35', tone: 'investigativo', emotion: 'surpresa', keywords: ['sono', 'dormir', 'noite', 'fome'],
     topics: ['Dormir mal engorda — e ninguém te conta', 'A noite mal dormida que sabota tua dieta no dia seguinte', 'Sono ruim vira mais fome de doce no dia seguinte'] },
+
+  // ── HISTÓRIA DE CLIENTE (format:'historia') — o DNA do post nº1 do Fabricio
+  // (38k views, 280 shares, 36 seguidores): "[Ele/Ela] usava X há Y e [problema
+  // oculto] — o que mudamos". Mix de público: homem (comprador) e mulher (alcance).
+  // A rotina garante 1 desses por dia (pickThemes) com INSTRUCTION_HISTORIA.
+  { id: 'hist-caneta-musculo-h', group: 'historia', format: 'historia', audience: 'homem', tone: 'história', emotion: 'curiosidade', keywords: ['caneta', 'músculo', 'tirzepatida', 'mounjaro', 'ozempic', 'flácido'],
+    topics: ['Ele usava a caneta há 6 meses e perdia músculo sem saber. O que mudamos', 'Ele secou na caneta mas ficou fraco e flácido. O que mudamos', 'Ele emagreceu rápido e o shape sumiu junto. O que mudamos'] },
+  { id: 'hist-testo-cansaco-h', group: 'historia', format: 'historia', audience: 'homem', tone: 'história', emotion: 'curiosidade', keywords: ['cansaço', 'testosterona', 'energia', 'libido', 'reposição'],
+    topics: ['Ele repunha testosterona há 8 meses e ainda vivia cansado. O que mudamos', 'Ele tinha tudo pra render e vivia sem energia. O que mudamos', 'Ele achava que o cansaço era da idade — era a rotina. O que mudamos'] },
+  { id: 'hist-barriga-treino-h', group: 'historia', format: 'historia', audience: 'homem', tone: 'história', emotion: 'surpresa', keywords: ['barriga', 'treino', 'shape', 'gordura', 'cardio'],
+    topics: ['Ele treinava pesado e a barriga não saía. O que mudamos', 'Ele cortava tudo e não secava. O que mudamos', 'Ele fazia cardio todo dia e travou. O que mudamos'] },
+  { id: 'hist-caneta-flacida-m', group: 'historia', format: 'historia', audience: 'mulher', tone: 'história', emotion: 'curiosidade', keywords: ['caneta', 'flácida', 'músculo', 'tirzepatida', 'emagrecer'],
+    topics: ['Ela usava tirzepatida há 6 meses e perdia músculo sem saber. O que mudamos', 'Ela emagreceu na caneta e ficou magra flácida. O que mudamos', 'Ela secou rápido e a pele não acompanhou. O que mudamos'] },
+  { id: 'hist-dieta-travou-m', group: 'historia', format: 'historia', audience: 'mulher', tone: 'história', emotion: 'acolhimento', keywords: ['dieta', 'travou', 'platô', 'emagrecer', 'tentou de tudo'],
+    topics: ['Ela tentou de tudo e não descia. O que mudamos', 'Ela vivia de dieta e não secava. O que mudamos', 'Ela comia quase nada e a balança parada. O que mudamos'] },
+  { id: 'hist-doce-noite-m', group: 'historia', format: 'historia', audience: 'mulher', tone: 'história', emotion: 'curiosidade', keywords: ['doce', 'noite', 'ansiedade', 'compulsão'],
+    topics: ['Ela segurava o dia todo e atacava a geladeira à noite. O que mudamos', 'Ela achava que era falta de força de vontade. O que mudamos', 'Ela vivia refém do doce à noite. O que mudamos'] },
 ];
 
 // Estado em memória (só 1 geração por vez)
@@ -125,9 +142,10 @@ function recentGroups(nBatches = 3) {
   return g;
 }
 
-// Escolhe 2 temas: o 1º SEMPRE de comparação/número (formato campeão, 8-20k views),
-// o 2º de outro grupo (varia o feed). Evita ids recentes (14d) e desincentiva grupos
-// usados nos últimos dias. Fallback progressivo se o pool apertar.
+// Escolhe 2 temas/dia: o 1º SEMPRE comparação/número (8-20k views), o 2º SEMPRE
+// história de cliente (o post nº1 — 38k views/280 shares), alternando público
+// homem/mulher. Evita ids recentes (14d) e desincentiva grupos usados nos últimos
+// dias. Fallback progressivo se o pool apertar.
 function pickThemes() {
   const recentIds = recentThemeIds();
   const recentG = recentGroups(3);
@@ -150,12 +168,19 @@ function pickThemes() {
   const first = cmpPool.length ? weightedSample(cmpPool, cmpPool.map(weightOf), 1)[0]
                                : weightedSample(pool, pool.map(weightOf), 1)[0];
   if (!first) return [];
-  // 2º tema: grupo DIFERENTE do 1º (fallback: qualquer outro id). Prefere NÃO
-  // comparação, pra variar o formato do dia.
-  let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group && t.format !== 'comparacao');
-  if (!rest.length) rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
-  if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
-  const second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
+  // 2º tema: HISTÓRIA DE CLIENTE (o formato do post nº1 — 38k views/280 shares).
+  // Alterna público (homem/mulher) via amostragem no pool de história. Fallback:
+  // se não sobrar história fresca, libera geral; por último, qualquer outro grupo.
+  let histPool = pool.filter((t) => t.format === 'historia' && t.id !== first.id);
+  if (!histPool.length) histPool = THEMES.filter((t) => t.format === 'historia' && t.id !== first.id);
+  let second = histPool.length ? weightedSample(histPool, histPool.map(weightOf), 1)[0] : null;
+  if (!second) {
+    // Sem história disponível: cai no comportamento antigo (grupo diferente, não comparação).
+    let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group && t.format !== 'comparacao');
+    if (!rest.length) rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
+    if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
+    second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
+  }
   return [first, second].filter(Boolean);
 }
 
@@ -223,6 +248,32 @@ const INSTRUCTION_COMPARACAO = [
   '• Fala com homem 25-40 E mulher 35-44 (comida serve pros dois). Português, sem jargão gringo. Anti-ban: nada de substância.',
 ].join('\n');
 
+// Instrução de HISTÓRIA DE CLIENTE — o formato do post nº1 do Fabricio (38k views,
+// 280 compartilhamentos). Capa em 3ª pessoa (compartilha), miolo em "você"
+// (identifica), arco problema→mecanismo→o que mudamos→resultado. Anti-ban rígido.
+function instructionHistoria(audience) {
+  const publico = audience === 'homem'
+    ? 'Fala com HOMEM 25-40: saúde hormonal, performance, energia, shape e composição corporal.'
+    : 'Fala com MULHER 35-44: emagrecimento na vida real (correria, trabalho, filhos, casa).';
+  return [
+    'Este é um carrossel de HISTÓRIA DE CLIENTE — o formato que MAIS compartilha e traz seguidor no perfil (foi o post nº1 do Fabricio).',
+    'REGRAS OBRIGATÓRIAS:',
+    '• CAPA em 3ª pessoa, formato história: "[Ele/Ela] + [situação com um tema quente] + há [tempo] + [problema que ninguém percebe] + O que mudamos." Lacuna ABERTA — NÃO entrega a resposta na capa. Sem parágrafo na capa.',
+    '• Os slides contam a virada num arco: (1) como a pessoa estava / o problema real, (2) POR QUE acontecia (mecanismo simples, traduzido, sem jargão), (3 a 5) "O QUE MUDAMOS" em 2-3 passos concretos e aplicáveis, (6) o resultado — firme, com energia, sustentável.',
+    '• DENTRO dos slides, vire pra 2ª pessoa ("se você tá assim...", "o teu corpo faz isso") pra a pessoa se identificar. Capa em 3ª pessoa (faz compartilhar), miolo em "você" (faz se reconhecer).',
+    '• É PROVA + EDUCAÇÃO: mostra que o treinador resolveu, com autoridade e sem se gabar. Sem números de venda, sem "antes e depois" agressivo.',
+    '• ANTI-BAN RÍGIDO: educativo, por sintoma/mecanismo. NUNCA cite dose, protocolo, "como usar", nome comercial de remédio, nem recomende substância. O tema quente (ex.: a caneta) entra como CONTEXTO da história, jamais como recomendação.',
+    '• Fecha com o aprendizado + um convite leve (comentar/DM).',
+    '• ' + publico + ' Português, sem jargão gringo.',
+  ].join('\n');
+}
+
+// Niche por público do tema (história de homem usa o nicho masculino).
+const NICHE_HOMEM = 'Saúde hormonal, performance masculina e composição corporal para homens 25-40';
+function nicheFor(theme) {
+  return theme.audience === 'homem' ? NICHE_HOMEM : NICHE;
+}
+
 async function buildOne(theme) {
   // Fotos dos carrosséis recentes — pra NÃO repetir foto entre carrosséis seguidos.
   // Lido fresco a cada carrossel (o anterior já salvou as dele), então os 2 do dia
@@ -232,8 +283,10 @@ async function buildOne(theme) {
   // 1) Carrossel fmteam — instrução muda se o tema é de comparação/número.
   const carouselResult = await generateCarousel({
     topic: theme.topic,
-    instructions: theme.format === 'comparacao' ? INSTRUCTION_COMPARACAO : INSTRUCTION_DEFAULT,
-    niche: NICHE,
+    instructions: theme.format === 'comparacao' ? INSTRUCTION_COMPARACAO
+                : theme.format === 'historia'   ? instructionHistoria(theme.audience)
+                : INSTRUCTION_DEFAULT,
+    niche: nicheFor(theme),
     instagramHandle: HANDLE,
     creatorName: CREATOR,
     numSlides: 7,
