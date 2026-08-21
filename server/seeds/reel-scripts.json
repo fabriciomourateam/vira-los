@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-16.1",
+  "version": "2026-08-21.1",
   "note": "65 roteiros de reel pré-escritos, consumidos pela rotina (2/dia: 14h e 19h30). Mix homem 25-40 (por sintoma, ban-safe) + mulher 35-44. Ganchos calibrados nos padrões que MAIS deram views no feed do Fabricio: empilhar sintomas, 'o motivo ninguém te conta' / 'os 3 sinais', revelação ('é isso aqui'), mito quebrado, número. fraseTela tem 1 palavra entre **asteriscos** (vira dourada no vídeo). Seed VERSÃO-aware: bumpar a version SUBSTITUI os pendentes (mantém os já postados por slug). v3: ganchos reforçados + leva 2 (temas frescos, sem repetir o feed).",
   "scripts": [
     {
@@ -521,6 +521,30 @@
       "fraseTela": "Não funciona sem 4 cafés? Isso é um **sintoma**",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você não engata o dia sem café, e à tarde ainda apela pro energético pra não apagar. Vira dependência.\n\nCafé em quantidade normal não é vilão. O problema é usar cafeína pra tapar um buraco: sono ruim e comida que não te sustenta.\n\nVocê tá empurrando o corpo cansado com estimulante, e à noite a cafeína ainda estraga teu sono, o que te faz precisar de mais café no dia seguinte.\n\nArruma sono e comida e você para de depender da dose.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA que eu te mando um cardápio pra você secar sem passar fome.\n\n#saudemasculina #energia #sono #performance #homem30"
+    },
+    {
+      "slug": "h-glp1-rebote-01",
+      "audience": "homem",
+      "title": "Parou a caneta e engordou de novo",
+      "fraseTela": "Parou a **caneta** e engordou tudo de novo?",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Emagrecer com a caneta é fácil. O difícil é o que vem depois.\n\nEla reduz seu apetite e deixa o estômago mais lento — você come menos sem sentir. O problema é que quase ninguém usa esse tempo pra construir a base.\n\nSem treino de força e proteína suficiente, você perde músculo junto com a gordura. Menos músculo = metabolismo mais baixo. Aí quando para, a fome volta e o corpo recupera gordura mais fácil que antes.\n\nA caneta é ferramenta, não estratégia. Quem usa a janela pra ajustar dieta, treino e hábito, mantém. Quem só depende dela, volta pior.\n\n📌 Salva esse pra não cair nessa — e marca aquele parceiro que tá pensando em começar.\n\nComenta DIETA que eu te mando um cardápio pra você secar sem passar fome.\n\n#emagrecimento #saudemasculina #composicaocorporal #performance #homem30"
+    },
+    {
+      "slug": "h-shape-seco-01",
+      "audience": "homem",
+      "title": "O shape seco do Insta nao e so treino",
+      "fraseTela": "O shape **seco** do Insta não é só treino e dieta",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você se cobra por não ter aquele shape seco, com veia saltando e pele fina. Só que boa parte do que você vê é assistido — não é só academia.\n\nExistem compostos que seguram menos água e deixam o músculo mais \"duro\". O que ninguém mostra é o outro lado: pressão, colesterol, coração e o próprio eixo hormonal pagando a conta lá na frente.\n\nComparar seu corpo natural com um corpo assistido é injusto e só te sabota.\n\nO que VOCÊ controla e entrega resultado real: percentual de gordura baixo, treino consistente, sono e o ajuste de sódio e água na reta final.\n\n📌 Salva pra lembrar disso no próximo dia de comparação — e marca quem vive se cobrando.\n\nComenta TESTO que eu te mando o passo a passo pra evoluir de forma natural.\n\n#saudemasculina #performancemasculina #shapenatural #saudedohomem #treino"
+    },
+    {
+      "slug": "h-testo-3habitos-01",
+      "audience": "homem",
+      "title": "3 habitos derrubando sua testosterona",
+      "fraseTela": "3 hábitos derrubando sua **testosterona** sem você ver",
+      "ctaTela": "👇 LEIA A LEGENDA",
+      "legendaPost": "Você culpa a idade, mas na maioria das vezes o problema é a rotina.\n\n1) Sono ruim — dormir menos de 6h derruba testosterona já na semana seguinte.\n2) Gordura na barriga — a gordura visceral converte testosterona em estrogênio.\n3) Estresse crônico — cortisol alto o dia todo trava a produção.\n\nNão é suplemento mágico. É arrumar o básico que quase todo homem ignora: sono, composição corporal e controle de estresse.\n\nCorrige isso 30 dias e você sente energia, libido e disposição voltarem.\n\n📌 Salva esse pra aplicar — e marca aquele parceiro cansado o tempo todo.\n\nComenta TESTO que eu te mando o passo a passo pra subir a testosterona de forma natural.\n\n#saudehormonal #performancemasculina #saudedohomem #homem30 #shapedefinido"
     }
   ]
 }
