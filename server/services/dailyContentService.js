@@ -498,6 +498,26 @@ async function generateQueuedReel({ carousels = [] } = {}) {
 }
 
 // Gera o batch do dia (2 temas). Resiliente: falha de 1 tema não derruba o outro.
+// Sincroniza os números REAIS dos posts do Instagram (saves/shares/seguidores/etc.)
+// pro auto-ajuste por performance (scoreThemes/weightOf) sempre pesar os temas pelo
+// dado MAIS RECENTE. Best-effort: nunca derruba a geração do dia.
+async function refreshInstagramPerformance() {
+  try {
+    const tok = db.getInstagramToken && db.getInstagramToken();
+    const plat = db.getPlatformToken && db.getPlatformToken('instagram');
+    const accessToken = (tok && tok.accessToken) || (plat && plat.access_token);
+    if (!accessToken) { console.log('[DailyContent] IG não conectado — auto-ajuste usa o último dado salvo.'); return; }
+    const { syncPosts } = require('./instagramService');
+    const posts = await withTimeout(syncPosts(accessToken), 90 * 1000, 'sync IG');
+    if (Array.isArray(posts) && posts.length) {
+      db.saveInstagramPosts(posts);
+      console.log(`[DailyContent] performance IG sincronizada (${posts.length} posts) pro auto-ajuste.`);
+    }
+  } catch (e) {
+    console.warn('[DailyContent] sync IG falhou (segue com o dado anterior):', e.message);
+  }
+}
+
 async function generateDailyBatch({ trigger = 'manual' } = {}) {
   if (state.generating) throw new Error('Já existe uma geração em andamento.');
 
@@ -531,6 +551,10 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
     // pickThemes/pickAngle ficam DENTRO do try: se estourarem, o erro é registrado
     // no batch (visível em /api/daily-content) em vez de sumir no log do Fly.
     try {
+      // Auto-ajuste por performance: puxa os números REAIS do Instagram ANTES de
+      // escolher os temas, pra o scoreThemes/weightOf pesar pelos saves/shares/
+      // seguidores mais recentes (não por dado velho). Best-effort.
+      await refreshInstagramPerformance();
       const themes = pickThemes();
       resolved = themes.map((t) => ({ ...t, topic: pickAngle(t) }));
 
