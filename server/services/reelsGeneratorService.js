@@ -226,10 +226,11 @@ async function generateShortReelFromCarousel({ carousel, niche = 'fitness', inst
   // (db.getReelsCta) e pode ser sobrescrito por chamada. Só afeta os reels.
   const ctaCfg = { ...(db.getReelsCta ? db.getReelsCta() : {}), ...(cta || {}) };
   const ctaKeyword = String(ctaCfg.keyword || 'DIETA').toUpperCase().trim();
-  const ctaBenefit = String(ctaCfg.benefit || 'te mando um cardápio pra você secar sem passar fome').trim();
+  const ctaBenefit = String(ctaCfg.benefit || 'um cardápio que vai te fazer secar sem passar fome').trim();
   // CTA principal montado (uma frase só) + alvo do "marca" (share). O comprador é
   // HOMEM (ver cérebro editorial), então o "marca" mira o parceiro de treino.
-  const ctaSentence = `Comenta ${ctaKeyword} que eu ${ctaBenefit}.`;
+  // "para receber" (não "que eu"): o comentário cai no funil (auto-DM do cardápio).
+  const ctaSentence = `Comenta ${ctaKeyword} para receber ${ctaBenefit}.`;
   const audienceTag = ctaCfg.marca || 'aquele parceiro que treina firme e ainda não vê resultado';
 
   const prompt = `Você é especialista em Reels do Instagram de TEXTO-NA-TELA (silenciosos) que viralizam organicamente no nicho de ${niche}.
