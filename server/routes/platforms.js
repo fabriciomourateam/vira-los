@@ -159,7 +159,9 @@ router.get('/gsc/data', async (req, res) => {
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 480);
     res.json(await gsc.getDashboard({ days }));
   } catch (e) {
-    res.status(e.message.includes('não conectado') ? 409 : 500).json({ error: e.message });
+    const reconnect = e.message.includes('não conectado');
+    if (!reconnect) console.error('[GSC data] erro:', e.message);
+    res.status(reconnect ? 409 : 500).json({ error: e.message });
   }
 });
 

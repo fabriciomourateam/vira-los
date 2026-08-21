@@ -55,7 +55,12 @@ function GscPanel() {
     setState('loading');
     try {
       const res = await fetch(`${API}/api/platforms/gsc/data?days=28`);
-      if (res.status === 409) { setState('disconnected'); return; }
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({} as any));
+        setErrMsg(body.error || '');
+        setState('disconnected');
+        return;
+      }
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
       setData(await res.json());
       setState('connected');
@@ -96,8 +101,10 @@ function GscPanel() {
 
       {state === 'disconnected' && (
         <div className="text-sm text-muted-foreground">
-          <p className="mb-3">Conecte o Search Console pra ver cliques, impressões, posição e os termos que mais sobem — dados reais do seu site, atualizados a cada visita.</p>
-          <button onClick={connect} className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 inline-flex items-center gap-2"><Search size={15} /> Conectar Google Search Console</button>
+          {errMsg
+            ? <p className="mb-3 text-amber-400">{errMsg}</p>
+            : <p className="mb-3">Conecte o Search Console pra ver cliques, impressões, posição e os termos que mais sobem — dados reais do seu site, atualizados a cada visita.</p>}
+          <button onClick={connect} className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 inline-flex items-center gap-2"><Search size={15} /> {errMsg ? 'Reconectar Google Search Console' : 'Conectar Google Search Console'}</button>
         </div>
       )}
 
@@ -105,6 +112,7 @@ function GscPanel() {
         <div className="text-sm text-red-400">
           Erro ao buscar dados: {errMsg}
           <button onClick={load} className="ml-2 underline">tentar de novo</button>
+          <button onClick={connect} className="ml-2 underline">reconectar</button>
         </div>
       )}
 
