@@ -19,6 +19,7 @@ const {
   generateCarousel, takeScreenshotsPixelPerfect, OUTPUT_DIR,
 } = require('./carouselService');
 const { generateShortReelFromCarousel } = require('./reelsGeneratorService');
+const { SUBSTANCE_INTEL } = require('./substanceIntel');
 
 const HANDLE = 'fabriciomourateam';
 const CREATOR = 'Fabricio Moura';
@@ -97,6 +98,24 @@ const THEMES = [
     topics: ['Pensa em repor hormônio? O jeito certo (e o perigoso) de fazer', 'Repor hormônio sem exame e acompanhamento é roleta-russa', 'O que investigar ANTES de pensar em repor qualquer hormônio'] },
   { id: 'exames-hormonais', group: 'hormonio', tone: 'direto', emotion: 'curiosidade', keywords: ['exame', 'sangue', 'testosterona', 'investigar', 'hormônio'],
     topics: ['Os exames que mostram se teu problema é hormonal', 'Antes de culpar a preguiça, faz esses exames', 'O que teu sangue diz sobre por que você não seca'] },
+  // ── SUBSTÂNCIA (nomeia a substância pra ALERTAR do erro/risco — nunca dose/protocolo;
+  //    a INSTRUCTION_HORMONIO + SUBSTANCE_INTEL cuidam do anti-ban e do enquadramento). ──
+  { id: 'sub-testosterona', group: 'hormonio', tone: 'direto', emotion: 'alerta', keywords: ['testosterona', 'repor', 'trt', 'reposição', 'exame', 'hormônio'],
+    topics: ['Repor testosterona sem exame é apostar no escuro', 'Reposição de verdade começa no sangue, não no "todo mundo toma"', 'O erro de quem trata dose de ciclo como se fosse reposição'] },
+  { id: 'sub-deca', group: 'hormonio', tone: 'investigativo', emotion: 'alerta', keywords: ['deca', 'nandrolona', 'libido', 'anabolizante', 'hormônio'],
+    topics: ['A "tranquila" que mais derruba a libido', 'Por que a Deca sozinha cobra caro na cama', 'O anabólico que demora meses pra sair do teu corpo'] },
+  { id: 'sub-primobolan', group: 'hormonio', tone: 'provocativo', emotion: 'indignação', keywords: ['primobolan', 'metenolona', 'falsificado', 'fake', 'hormônio'],
+    topics: ['O "hormônio de elite" é o mais falsificado do mercado', 'Você paga caro no Primobolan e nem sabe o que veio na ampola', 'O maior risco não é o hormônio, é não saber o que você aplica'] },
+  { id: 'sub-stano', group: 'hormonio', tone: 'provocativo', emotion: 'alerta', keywords: ['stanozolol', 'winstrol', 'articulação', 'colesterol', 'hormônio'],
+    topics: ['O "secador" que arrebenta tua articulação e teu colesterol', 'Stanozolol seca? Seca teu HDL e teu tendão também', 'A definição que te ilude no espelho e cobra no coração'] },
+  { id: 'sub-oxandrolona', group: 'hormonio', tone: 'investigativo', emotion: 'surpresa', keywords: ['oxandrolona', 'anavar', 'leve', 'falsificado', 'hormônio'],
+    topics: ['A "leve" que não é leve — o maior mito dos anabólicos', 'Oxandrolona: das mais faladas e das mais falsificadas', 'Por que "seguro" é a palavra mais perigosa aqui'] },
+  { id: 'sub-retatrutida', group: 'hormonio', tone: 'investigativo', emotion: 'curiosidade', keywords: ['retatrutida', 'emagrecedor', 'experimental', 'glp', 'hormônio'],
+    topics: ['A promessa mais nova é a que menos tem resposta de longo prazo', 'Retatrutida: forte pra emagrecer, curta em segurança comprovada', 'O emagrecedor experimental que virou moda antes da resposta'] },
+  { id: 'sub-tren', group: 'hormonio', tone: 'direto', emotion: 'alerta', keywords: ['trembolona', 'tren', 'humor', 'sono', 'hormônio'],
+    topics: ['A mais potente é a que mais rouba teu sono e teu humor', 'O anabólico que te dá shape e te tira a paz', 'Potência não é sinônimo de resultado — é de estrago'] },
+  { id: 'sub-gh-insulina', group: 'hormonio', tone: 'direto', emotion: 'medo', keywords: ['insulina', 'gh', 'hormônio do crescimento', 'perigo', 'hormônio'],
+    topics: ['Insulina por conta é o erro que mais mata na academia', 'GH não é mágica: é caro, falsificado e cobra o resto', 'Os hormônios que menos perdoam erro'] },
   // ── MENTE (relação com a comida — emocional, conecta) ──
   { id: 'odiar-espelho', group: 'mente', tone: 'provocativo', emotion: 'conexão', keywords: ['espelho', 'autoestima', 'se odiar', 'aceitar'],
     topics: ['Você quer emagrecer ou parar de se odiar no espelho?', 'A dieta muda quando o motivo muda', 'Emagrecer por raiva x por autocuidado dá resultado diferente'] },
@@ -272,7 +291,7 @@ const INSTRUCTION_HORMONIO = [
   '• Capa: gancho curto que NOMEIA o sintoma e levanta a suspeita (ex.: "Cansaço, libido baixa e barriga que não sai: e se for hormonal?"). Sem parágrafo na capa.',
   '• Slides: liga SINTOMA → MECANISMO → o que INVESTIGAR. Prático, direto, primeira pessoa de treinador, "você", sem jargão gringo, sem clichê ("não é X é Y", "jornada").',
   '• Fecha convidando pra avaliar o caso com exame e acompanhamento (a consultoria), sem prometer resultado.',
-].join('\n');
+].join('\n') + '\n' + SUBSTANCE_INTEL;
 
 async function buildOne(theme) {
   // Fotos dos carrosséis recentes — pra NÃO repetir foto entre carrosséis seguidos.
