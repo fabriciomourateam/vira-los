@@ -22,7 +22,10 @@ const { generateShortReelFromCarousel } = require('./reelsGeneratorService');
 
 const HANDLE = 'fabriciomourateam';
 const CREATOR = 'Fabricio Moura';
-const NICHE = 'Emagrecimento e nutrição prática para mulheres 35-44';
+// MIRA = comprador HOMEM 25-40 que desconfia de algo hormonal (testo baixa, cortisol,
+// insulina) ou quer repor/usar GLP-1 com segurança. O cérebro editorial (fmteam)
+// reforça a voz; aqui o `niche` é só um hint secundário passado pro carrossel.
+const NICHE = 'Saúde hormonal, performance e emagrecimento para o homem 25-40';
 
 // ── Banco de temas (ângulos comprovados do PERFORMANCE-LOG, por SINTOMA = ban-safe) ──
 // O cérebro editorial (fmteamEditorial.js) cuida da voz/anti-ban; aqui é só O QUE falar.
@@ -67,11 +70,33 @@ const THEMES = [
     topics: ['Você não come de fome, come de ansiedade', 'O gatilho que te faz comer sem nem perceber', 'Comer no automático: o vilão silencioso da dieta'] },
   { id: 'balanca', group: 'habitos', tone: 'direto', emotion: 'acolhimento', keywords: ['balança', 'peso', 'pesar'],
     topics: ['Para de surtar com a balança todo dia', 'O número da balança te engana — olha o que importa', 'Peso subiu 2kg da noite pro dia? Calma, é isso'] },
-  // ── CANETA (droga popular, curiosidade da mulher — frame emagrecimento) ──
-  { id: 'caneta-musculo', group: 'caneta', tone: 'investigativo', emotion: 'alerta', keywords: ['caneta', 'mounjaro', 'ozempic', 'emagrecedor'],
-    topics: ['Emagreceu na caneta e virou magra flácida?', 'O que a caneta faz sumir junto com a gordura', 'Perder peso rápido demais cobra a conta depois'] },
-  { id: 'caneta-parou', group: 'caneta', tone: 'direto', emotion: 'alerta', keywords: ['parou', 'efeito rebote', 'voltou', 'caneta'],
+  // ── CANETA / GLP-1 (o lane DISRUPTIVO campeão do Fabricio — Mounjaro fez 42k views).
+  //    Fala com o HOMEM que usa/pensa em usar. ANTI-BAN DURO: por sintoma/mecanismo,
+  //    nunca dose/protocolo/nome de venda, sempre direciona pra acompanhamento. ──
+  { id: 'caneta-musculo', group: 'caneta', tone: 'investigativo', emotion: 'alerta', keywords: ['caneta', 'mounjaro', 'ozempic', 'emagrecedor', 'glp', 'músculo'],
+    topics: ['Emagreceu na caneta e perdeu músculo junto?', 'O que a caneta faz sumir junto com a gordura (e você não quer perder)', 'Perder peso rápido demais na caneta cobra a conta depois'] },
+  { id: 'caneta-parou', group: 'caneta', tone: 'direto', emotion: 'alerta', keywords: ['parou', 'efeito rebote', 'voltou', 'caneta', 'glp'],
     topics: ['Parou a caneta e o peso voltou com tudo?', 'A fome que volta em dobro quando você para', 'Caneta sem estratégia é resultado alugado'] },
+  { id: 'caneta-sozinho', group: 'caneta', tone: 'provocativo', emotion: 'alerta', keywords: ['caneta', 'sozinho', 'sem acompanhamento', 'errado', 'glp'],
+    topics: ['Usar a caneta por conta é o erro que custa teu músculo', 'Caneta funciona — mas sem acompanhamento vira magro flácido', 'O que ninguém te fala antes de começar a caneta'] },
+  // ── HORMÔNIO (o assunto que mais te viraliza e diferencia — o teu público responde).
+  //    Fala com o HOMEM 25-40 que desconfia que algo hormonal trava o resultado.
+  //    ANTI-BAN DURO: sempre por SINTOMA/mecanismo, nunca dose/nome de droga/protocolo,
+  //    destino é SEMPRE investigar com exame e acompanhamento (a consultoria). ──
+  { id: 'testo-baixa', group: 'hormonio', tone: 'investigativo', emotion: 'preocupação', keywords: ['testosterona', 'libido', 'cansaço', 'disposição', 'barriga', 'hormônio'],
+    topics: ['Cansaço, libido baixa e barriga que não sai: e se for hormonal?', '3 sinais de que teus hormônios podem estar te travando', 'Faz tudo certo e não seca? Pode não ser preguiça, pode ser hormônio'] },
+  { id: 'cortisol', group: 'hormonio', tone: 'investigativo', emotion: 'preocupação', keywords: ['cortisol', 'estresse', 'gordura abdominal', 'sono', 'hormônio'],
+    topics: ['O hormônio do estresse que segura tua gordura abdominal', 'Estresse alto travando teu emagrecimento (o cortisol)', 'Por que a barriga não sai mesmo com dieta e treino'] },
+  { id: 'falso-magro', group: 'hormonio', tone: 'provocativo', emotion: 'surpresa', keywords: ['falso magro', 'magro', 'gordura', 'flácido', 'skinny fat', 'hormônio'],
+    topics: ['Magro na roupa, mole sem ela: o falso magro', 'Peso normal mas corpo flácido? O problema pode ser hormonal', 'Você não precisa emagrecer, precisa recompor (e talvez investigar o hormônio)'] },
+  { id: 'sono-hormonio', group: 'hormonio', tone: 'investigativo', emotion: 'alerta', keywords: ['sono', 'dormir', 'testosterona', 'recuperação', 'hormônio'],
+    topics: ['Dormindo mal você sabota teus próprios hormônios', 'Sono ruim derruba testosterona e trava teu shape', 'A noite mal dormida que rouba tua disposição e teu músculo'] },
+  { id: 'treino-sem-evolucao', group: 'hormonio', tone: 'direto', emotion: 'preocupação', keywords: ['treino', 'não evolui', 'platô', 'recuperação', 'hormônio'],
+    topics: ['Treina forte e não evolui? Pode ser hormonal, não falta de esforço', 'Sem recuperação e sem ganho: o sinal que o corpo dá', 'Quando o treino para de responder, olha além da academia'] },
+  { id: 'reposicao-segura', group: 'hormonio', tone: 'investigativo', emotion: 'curiosidade', keywords: ['repor', 'reposição', 'trt', 'hormônio', 'seguro'],
+    topics: ['Pensa em repor hormônio? O jeito certo (e o perigoso) de fazer', 'Repor hormônio sem exame e acompanhamento é roleta-russa', 'O que investigar ANTES de pensar em repor qualquer hormônio'] },
+  { id: 'exames-hormonais', group: 'hormonio', tone: 'direto', emotion: 'curiosidade', keywords: ['exame', 'sangue', 'testosterona', 'investigar', 'hormônio'],
+    topics: ['Os exames que mostram se teu problema é hormonal', 'Antes de culpar a preguiça, faz esses exames', 'O que teu sangue diz sobre por que você não seca'] },
   // ── MENTE (relação com a comida — emocional, conecta) ──
   { id: 'odiar-espelho', group: 'mente', tone: 'provocativo', emotion: 'conexão', keywords: ['espelho', 'autoestima', 'se odiar', 'aceitar'],
     topics: ['Você quer emagrecer ou parar de se odiar no espelho?', 'A dieta muda quando o motivo muda', 'Emagrecer por raiva x por autocuidado dá resultado diferente'] },
@@ -125,9 +150,14 @@ function recentGroups(nBatches = 3) {
   return g;
 }
 
-// Escolhe 2 temas: o 1º SEMPRE de comparação/número (formato campeão, 8-20k views),
-// o 2º de outro grupo (varia o feed). Evita ids recentes (14d) e desincentiva grupos
-// usados nos últimos dias. Fallback progressivo se o pool apertar.
+// Escolhe 2 temas por dia, na ordem de prioridade do Fabricio:
+//   1º = SEMPRE hormônio/GLP-1 (o lane DISRUPTIVO campeão — os posts que mais
+//        viralizam e mais o diferenciam; pedido dele: pelo menos 1 dos 2 é hormônio).
+//   2º = comparação/número (o formato salva-pra-consultar de 8-20k views), de OUTRO grupo.
+// Evita ids recentes (14d) pra variar o ângulo; desincentiva grupos usados nos últimos
+// dias no 2º tema. Fallback progressivo se o pool apertar.
+const isHormoneTheme = (t) => t.group === 'hormonio' || t.group === 'caneta';
+
 function pickThemes() {
   const recentIds = recentThemeIds();
   const recentG = recentGroups(3);
@@ -136,26 +166,30 @@ function pickThemes() {
 
   const scores = scoreThemes();
   const maxScore = Math.max(0, ...pool.map((t) => scores[t.id] || 0));
+  const perf = (t) => 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4;
   const weightOf = (t) => {
     // base 1 + até +4 por performance real; grupo usado recentemente pesa 1/4.
-    let w = 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4;
+    let w = perf(t);
     if (recentG.has(t.group)) w *= 0.25;
     return w;
   };
 
-  // 1º tema: SEMPRE comparação/número (o lane que dá 8-20k). Se todos os de
-  // comparação caíram nos recentes, libera todos os de comparação (ignora o 14d).
-  let cmpPool = pool.filter((t) => t.format === 'comparacao');
-  if (!cmpPool.length) cmpPool = THEMES.filter((t) => t.format === 'comparacao');
-  const first = cmpPool.length ? weightedSample(cmpPool, cmpPool.map(weightOf), 1)[0]
-                               : weightedSample(pool, pool.map(weightOf), 1)[0];
+  // 1º tema: SEMPRE hormônio/GLP-1. Como o lane é fixo todo dia, NÃO penaliza por
+  // "grupo recente" (só varia o tema/ângulo dentro do lane) — peso = performance real.
+  // Se todos os de hormônio caíram nos recentes (14d), libera todos (fallback).
+  let hormPool = pool.filter(isHormoneTheme);
+  if (!hormPool.length) hormPool = THEMES.filter(isHormoneTheme);
+  const first = hormPool.length ? weightedSample(hormPool, hormPool.map(perf), 1)[0]
+                                : weightedSample(pool, pool.map(weightOf), 1)[0];
   if (!first) return [];
-  // 2º tema: grupo DIFERENTE do 1º (fallback: qualquer outro id). Prefere NÃO
-  // comparação, pra variar o formato do dia.
-  let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group && t.format !== 'comparacao');
-  if (!rest.length) rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
-  if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
-  const second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
+
+  // 2º tema: comparação/número (o formato campeão de 8-20k), de grupo DIFERENTE do 1º.
+  // Fallback progressivo: sem comparação livre → qualquer outro grupo → qualquer outro id.
+  let cmpPool = pool.filter((t) => t.format === 'comparacao' && t.id !== first.id && t.group !== first.group);
+  if (!cmpPool.length) cmpPool = THEMES.filter((t) => t.format === 'comparacao' && t.id !== first.id && t.group !== first.group);
+  if (!cmpPool.length) cmpPool = pool.filter((t) => t.id !== first.id && t.group !== first.group);
+  if (!cmpPool.length) cmpPool = pool.filter((t) => t.id !== first.id);
+  const second = cmpPool.length ? weightedSample(cmpPool, cmpPool.map(weightOf), 1)[0] : null;
   return [first, second].filter(Boolean);
 }
 
@@ -223,16 +257,37 @@ const INSTRUCTION_COMPARACAO = [
   '• Fala com homem 25-40 E mulher 35-44 (comida serve pros dois). Português, sem jargão gringo. Anti-ban: nada de substância.',
 ].join('\n');
 
+// Instrução de HORMÔNIO / GLP-1 — o lane disruptivo campeão do Fabricio (os posts que
+// mais viralizam e mais o diferenciam). ANTI-BAN é REGRA DURA: hormônio é zona de ban
+// da Meta, então SEMPRE por sintoma/mecanismo, nunca ensinando/vendendo/dosando, e o
+// destino é sempre investigar com exame + acompanhamento (a consultoria).
+const INSTRUCTION_HORMONIO = [
+  'Este é um carrossel sobre SAÚDE HORMONAL MASCULINA (ou GLP-1/caneta) — o assunto que mais engaja e mais diferencia o Fabricio. Posicionamento disruptivo: o público dele responde a isso.',
+  'ANTI-BAN — REGRA DURA E INEGOCIÁVEL (hormônio é zona de ban da Meta):',
+  '• NUNCA ensine, indique, venda, dose ou cite nome comercial de substância/medicamento. Fale sempre por SINTOMA e por MECANISMO (o que o corpo sente e por quê).',
+  '• Proibido: "compre", "use", "tome", "aplique", miligrama, protocolo, nome de droga/marca, promessa de cura ou de resultado garantido.',
+  '• O destino é SEMPRE a avaliação/consultoria pra investigar com EXAME e ACOMPANHAMENTO — nunca fazer por conta própria.',
+  'CONTEÚDO:',
+  '• Fala com o HOMEM 25-40 que desconfia que algo hormonal trava o resultado dele (cansaço, libido baixa, gordura abdominal teimosa, treino sem evolução, sono ruim).',
+  '• Capa: gancho curto que NOMEIA o sintoma e levanta a suspeita (ex.: "Cansaço, libido baixa e barriga que não sai: e se for hormonal?"). Sem parágrafo na capa.',
+  '• Slides: liga SINTOMA → MECANISMO → o que INVESTIGAR. Prático, direto, primeira pessoa de treinador, "você", sem jargão gringo, sem clichê ("não é X é Y", "jornada").',
+  '• Fecha convidando pra avaliar o caso com exame e acompanhamento (a consultoria), sem prometer resultado.',
+].join('\n');
+
 async function buildOne(theme) {
   // Fotos dos carrosséis recentes — pra NÃO repetir foto entre carrosséis seguidos.
   // Lido fresco a cada carrossel (o anterior já salvou as dele), então os 2 do dia
   // também não repetem entre si.
   const avoidPhotoUrls = db.getRecentPhotoUrls ? db.getRecentPhotoUrls() : [];
 
-  // 1) Carrossel fmteam — instrução muda se o tema é de comparação/número.
+  // 1) Carrossel fmteam — instrução muda pelo tipo do tema. Hormônio/GLP-1 usa a
+  //    instrução com ANTI-BAN duro; comparação usa a de número; o resto, a padrão.
+  const isHormoneGroup = theme.group === 'hormonio' || theme.group === 'caneta';
   const carouselResult = await generateCarousel({
     topic: theme.topic,
-    instructions: theme.format === 'comparacao' ? INSTRUCTION_COMPARACAO : INSTRUCTION_DEFAULT,
+    instructions: isHormoneGroup ? INSTRUCTION_HORMONIO
+      : theme.format === 'comparacao' ? INSTRUCTION_COMPARACAO
+      : INSTRUCTION_DEFAULT,
     niche: NICHE,
     instagramHandle: HANDLE,
     creatorName: CREATOR,
