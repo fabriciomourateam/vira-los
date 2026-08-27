@@ -314,14 +314,60 @@ router.delete('/saved/:id', (req, res) => {
 });
 
 router.patch('/saved/:id', (req, res) => {
-  const { screenshots, archived, done } = req.body;
+  const { screenshots, archived, done, topic } = req.body;
   const update = {};
   if (screenshots !== undefined) update.screenshots = screenshots;
   if (archived  !== undefined) update.archived  = archived;
   if (done      !== undefined) update.done      = done;
+  if (topic     !== undefined) update.topic     = String(topic).slice(0, 300);
   if (Object.keys(update).length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
   db.updateCarousel(req.params.id, update);
   res.json({ ok: true });
+});
+
+// ─── Duplicar carrossel salvo (cópia editável) ────────────────────────────────
+// Copia os arquivos da pasta (carrossel.html + slides + legenda) pra uma pasta
+// NOVA e cria um registro novo. Assim editar a cópia não mexe no original.
+router.post('/saved/:id/duplicate', (req, res) => {
+  try {
+    const src = db.getAllCarousels().find((c) => c.id === req.params.id);
+    if (!src) return res.status(404).json({ error: 'Carrossel não encontrado.' });
+
+    const slug = String(src.topic || 'carrossel').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').substring(0, 40).replace(/(^-|-$)/g, '') || 'carrossel';
+    const newFolder = `copy-${slug}-${Date.now()}`;
+    const newPath = path.join(OUTPUT_DIR, newFolder);
+    fs.mkdirSync(newPath, { recursive: true });
+
+    // Copia todos os arquivos da pasta de origem (html, slides, legenda) — só se a
+    // pasta existir e o nome for seguro. Os PNGs mantêm o mesmo nome (slide_NN.png).
+    let screenshots = [];
+    if (src.folderName && isSafeFolderName(src.folderName)) {
+      const srcPath = path.join(OUTPUT_DIR, src.folderName);
+      if (fs.existsSync(srcPath)) {
+        for (const file of fs.readdirSync(srcPath)) {
+          try { fs.copyFileSync(path.join(srcPath, file), path.join(newPath, file)); } catch { /* pula arquivo inacessível */ }
+        }
+        screenshots = fs.readdirSync(newPath).filter((f) => /^slide_\d+\.png$/.test(f)).sort();
+      }
+    }
+
+    const dup = {
+      id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      topic: `${src.topic || 'Carrossel'} (cópia)`,
+      folderName: newFolder,
+      numSlides: src.numSlides || screenshots.length || 0,
+      screenshots,
+      legenda: src.legenda || '',
+      config: src.config || {},
+      isTemplate: false, // a cópia nasce como carrossel editável normal, não modelo
+    };
+    db.saveCarousel(dup);
+    res.json({ ok: true, carousel: { ...dup, created_at: new Date().toISOString() } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Diagnóstico de variáveis e conectividade ────────────────────────────────

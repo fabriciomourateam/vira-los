@@ -2144,19 +2144,25 @@ Gere o HTML completo agora (apenas HTML, nada mais):`;
 
 // ─── Passo 4: Legenda via Claude ──────────────────────────────────────────────
 
-function buildLegendaPrompt({ topic, instagramHandle, niche }) {
+function buildLegendaPrompt({ topic, instagramHandle, niche, cta }) {
   const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const keyword = String((cta && cta.keyword) || 'DIETA').toUpperCase().trim();
+  // A legenda TEM que terminar no CTA de comentário (cai no funil: auto-DM do
+  // cardápio) + uma linha passiva de SALVAR (salvamento = mais alcance a
+  // não-seguidor = mais gente comentando).
   return `Crie uma legenda profissional para um post do Instagram sobre: "${topic}" (nicho: ${niche}).
 
 Retorne EXATAMENTE neste formato, sem explicações:
 
 [LEGENDA]
-Texto da legenda aqui — 3 a 5 linhas, tom ${niche === 'Inteligência Artificial' ? 'investigativo/provocativo' : 'direto e impactante'}, sem hashtags.
+Texto da legenda aqui — 3 a 5 linhas, tom direto e impactante, em português (sem jargão gringo), sem hashtags. A PRIMEIRA linha tem que fisgar sozinha.
 
-Siga @${handle} para mais conteúdo sobre ${niche}.
+📌 Salva esse post pra aplicar depois.
+
+Comenta ${keyword} para receber um cardápio que vai te fazer secar sem passar fome.
 
 [HASHTAGS]
-#ia #inteligenciaartificial #chatgpt #openai #tecnologia #futuro #inovacao #machinelearning #artificialintelligence #conteudodigital`;
+#emagrecimento #dieta #nutricao #vidasaudavel #saudedohomem #saudehormonal #reeducacaoalimentar #comidadeverdade #habitos #homem30`;
 }
 
 // ─── Passo 5: Screenshots com Playwright (lógica DPR do gist) ────────────────
@@ -2592,7 +2598,7 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6
     anthropicWithRetry({
       model: 'claude-haiku-4-5-20251001', // legenda = tarefa simples (caption + hashtags)
       max_tokens: 500,
-      messages: [{ role: 'user', content: buildLegendaPrompt({ topic: topic.trim(), instagramHandle, niche }) }],
+      messages: [{ role: 'user', content: buildLegendaPrompt({ topic: topic.trim(), instagramHandle, niche, cta: (db.getCarouselCta && db.getCarouselCta()) }) }],
     }),
   ]);
   console.log(`[GenerateCarousel] Anthropic respondeu em ${((Date.now() - t0) / 1000).toFixed(1)}s`);

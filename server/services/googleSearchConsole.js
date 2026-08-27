@@ -74,7 +74,13 @@ async function runQuery(auth, siteUrl, body) {
 // Painel: totais + série diária (tendência) + top queries + top páginas
 async function getDashboard({ days = 28 } = {}) {
   const token = db.getPlatformToken('gsc');
-  if (!token) throw new Error('Search Console não conectado.');
+  // Sem token OU sem refresh_token (conexão pela metade) → tratar como desconectado
+  // (a rota devolve 409 quando a mensagem tem "não conectado" → o front mostra o
+  // botão Conectar em vez de um erro morto).
+  if (!token || !token.refresh_token) throw new Error('Search Console não conectado. Conecte na aba SEO.');
+  // Token existe mas o callback não achou nenhuma propriedade verificada na conta.
+  if (!token.site_url) throw new Error('Search Console não conectado direito: nenhum site verificado foi encontrado na sua conta Google. Reconecte com a conta que tem o site no Search Console.');
+
   const auth = await getAuthenticatedClient();
   const siteUrl = token.site_url;
 
@@ -84,11 +90,21 @@ async function getDashboard({ days = 28 } = {}) {
   start.setDate(start.getDate() - (days - 1));
   const range = { startDate: ymd(start), endDate: ymd(end) };
 
-  const [byDate, byQuery, byPage] = await Promise.all([
-    runQuery(auth, siteUrl, { ...range, dimensions: ['date'], rowLimit: 1000 }),
-    runQuery(auth, siteUrl, { ...range, dimensions: ['query'], rowLimit: 25 }),
-    runQuery(auth, siteUrl, { ...range, dimensions: ['page'], rowLimit: 25 }),
-  ]);
+  let byDate, byQuery, byPage;
+  try {
+    [byDate, byQuery, byPage] = await Promise.all([
+      runQuery(auth, siteUrl, { ...range, dimensions: ['date'], rowLimit: 1000 }),
+      runQuery(auth, siteUrl, { ...range, dimensions: ['query'], rowLimit: 25 }),
+      runQuery(auth, siteUrl, { ...range, dimensions: ['page'], rowLimit: 25 }),
+    ]);
+  } catch (e) {
+    const msg = String((e && (e.message || e.toString())) || '');
+    // Auth expirada/revogada ou sem permissão na propriedade → pedir reconexão.
+    if (/invalid_grant|invalid_token|unauthorized|insufficient|permission|401|403/i.test(msg)) {
+      throw new Error('Search Console não conectado: a autorização do Google expirou, foi revogada, ou a conta não tem acesso a essa propriedade. Reconecte na aba SEO.');
+    }
+    throw new Error(`Search Console falhou ao buscar dados: ${msg}`);
+  }
 
   const sum = byDate.reduce(
     (a, r) => ({ clicks: a.clicks + r.clicks, impressions: a.impressions + r.impressions }),

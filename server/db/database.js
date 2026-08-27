@@ -523,7 +523,7 @@ const MLABS_DEFAULTS = {
   reelPostsPerDay: 2,
   reelScheduleDays: 30,
   reelScheduleTimes: ['11:00', '18:00'],
-  reelDailyTimes: ['14:00', '19:30'],  // horários dos reels DIÁRIOS da fila (1 reel por horário)
+  reelDailyTimes: ['11:00', '19:30'],  // horários dos reels DIÁRIOS da fila (1 reel por horário) — 11h é o pico de alcance (dados Metricool); 19h30 mantém o slot da noite
   reelFontSize: 72,              // tamanho do texto queimado (px, base 1080×1920)
   reelFontFile: null,            // caminho de fonte custom (senão usa a do sistema)
   reelCtaColor: '#F5B301',       // cor do "Leia a legenda" (dourado, como nos reels dele)
@@ -583,13 +583,13 @@ const addRecentTopics = (topics, cap = 20) => {
 
 // CTA dos REELS (configurável, separado do CTA dos carrosséis). Default: comenta TESTO
 // → passo a passo natural. Trocável sem código (setReelsCta).
-const REELS_CTA_DEFAULT = { keyword: 'DIETA', benefit: 'te mando um cardápio pra você secar sem passar fome' };
+const REELS_CTA_DEFAULT = { keyword: 'DIETA', benefit: 'um cardápio que vai te fazer secar sem passar fome' };
 const getReelsCta = () => ({ ...REELS_CTA_DEFAULT, ...readObj('reels_cta') });
 const setReelsCta = (c) => writeObj('reels_cta', { ...getReelsCta(), ...c, updated_at: now() });
 
 // CTA do CARROSSEL (último slide). Configurável — antes era chumbado em SHAPE/Acompanhamento.
 // Default: comenta palavra pra receber valor (mecânica de comentário), coerente com os reels.
-const CAROUSEL_CTA_DEFAULT = { label: 'COMENTA:', keyword: 'DIETA', benefit: 'Pra receber um cardápio que seca sem passar fome' };
+const CAROUSEL_CTA_DEFAULT = { label: 'COMENTA:', keyword: 'DIETA', benefit: 'Pra receber um cardápio que vai te fazer secar sem passar fome' };
 const getCarouselCta = () => ({ ...CAROUSEL_CTA_DEFAULT, ...readObj('carousel_cta') });
 const setCarouselCta = (c) => writeObj('carousel_cta', { ...getCarouselCta(), ...c, updated_at: now() });
 

@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Video, Sparkles, Loader2, Play, Pause, X, Trash2, Copy, Clock,
-  ChevronDown, ChevronUp, Image as ImageIcon, FileText, Mic, Save, Download,
+  ChevronDown, ChevronUp, Image as ImageIcon, FileText, Mic, Save, Download, Search,
 } from 'lucide-react';
 import { SessionList } from './ReelsRecordingSession';
 
@@ -80,6 +80,16 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
   const [generateStep, setGenerateStep] = useState('');
   const [activeReel, setActiveReel] = useState<SavedReel | null>(null);
   const [teleprompterOpen, setTeleprompterOpen] = useState(false);
+  // Lista "Reels salvos": colapsada por padrão (fica muito longa) + busca pra localizar.
+  // O estado é lembrado no localStorage pra respeitar a preferência do Fabricio.
+  const [savedOpen, setSavedOpen] = useState(() => localStorage.getItem('reelsSavedOpen') === '1');
+  const [reelSearch, setReelSearch] = useState('');
+  useEffect(() => { localStorage.setItem('reelsSavedOpen', savedOpen ? '1' : '0'); }, [savedOpen]);
+
+  const q = reelSearch.trim().toLowerCase();
+  const filteredReels = q
+    ? reels.filter(r => (r.title || '').toLowerCase().includes(q) || (r.carouselTopic || '').toLowerCase().includes(q))
+    : reels;
 
   // ── Carrega listas ──────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
@@ -288,14 +298,39 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
       {/* Sessões de gravação */}
       <SessionList savedReels={reels} onRefresh={fetchAll} />
 
-      {/* Histórico */}
+      {/* Histórico (colapsável — fica muito longo com muitos reels) */}
       {reels.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wide mb-2">
-            Reels salvos ({reels.length})
-          </h3>
+          <button
+            onClick={() => setSavedOpen(o => !o)}
+            className="w-full flex items-center justify-between mb-2 hover:opacity-80 transition-opacity"
+          >
+            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wide">
+              Reels salvos ({reels.length})
+            </h3>
+            {savedOpen
+              ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          </button>
+
+          {savedOpen && (
+          <>
+          {reels.length > 6 && (
+            <div className="relative mb-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                value={reelSearch}
+                onChange={e => setReelSearch(e.target.value)}
+                placeholder="Buscar por título ou tema..."
+                className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/50"
+              />
+            </div>
+          )}
           <div className="space-y-2">
-            {reels.map(r => (
+            {filteredReels.length === 0 && (
+              <p className="text-xs text-muted-foreground py-2 text-center">Nenhum reel encontrado pra "{reelSearch}".</p>
+            )}
+            {filteredReels.map(r => (
               <button
                 key={r.id}
                 onClick={() => { setActiveReel(r); setTeleprompterOpen(false); }}
@@ -325,6 +360,8 @@ export default function ReelsGerador({ initialCarouselId, onConsumeInitialCarous
               </button>
             ))}
           </div>
+          </>
+          )}
         </div>
       )}
 
