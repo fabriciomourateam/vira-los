@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import {
   Instagram, RefreshCw, Loader2, Zap, TrendingUp, BarChart3,
   Video, Image, Layers, AlertCircle, CheckCircle2, ExternalLink,
-  Sparkles, ArrowRight, Users, MapPin, LineChart as LineChartIcon, ArrowUp, ArrowDown,
+  Sparkles, ArrowRight, Users, MapPin, LineChart as LineChartIcon, ArrowUp, ArrowDown, Star,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -403,6 +403,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
   const [posts, setPosts] = useState<IGPost[]>([]);
   const [audience, setAudience] = useState<Audience | null>(null);
   const [history, setHistory] = useState<IGHistoryPoint[]>([]);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   const [checkedActions, setCheckedActions] = useState<Record<number, boolean>>({});
 
@@ -470,13 +471,57 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
     }
   }, []);
 
+  const fetchFavorites = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/instagram/favorites`);
+      if (res.ok) {
+        const data = await res.json();
+        setFavorites(new Set((data.ids || []).map(String)));
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  // Marca/desmarca um post como favorito. Atualiza a UI na hora (otimista) e
+  // persiste no servidor; se falhar, reverte e avisa.
+  const toggleFavorite = useCallback(async (id: string) => {
+    const key = String(id);
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    try {
+      const res = await fetch(`${API}/api/instagram/favorites/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: key }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setFavorites(new Set((data.ids || []).map(String)));
+    } catch {
+      // reverte em caso de erro
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      toast.error('Não consegui salvar o favorito. Tente de novo.');
+    }
+  }, []);
+
   useEffect(() => {
     fetchStatus();
     fetchAnalysis();
     fetchPosts();
     fetchAudience();
     fetchHistory();
-  }, [fetchStatus, fetchAnalysis, fetchPosts, fetchAudience, fetchHistory]);
+    fetchFavorites();
+  }, [fetchStatus, fetchAnalysis, fetchPosts, fetchAudience, fetchHistory, fetchFavorites]);
 
   // Trata retorno do OAuth (?ig_connected / ?ig_error) e re-checa status ao voltar
   // pra aba — o OAuth abre em nova aba, então a aba original precisa reconferir.
@@ -583,17 +628,21 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
   };
 
   // Filtro por tipo de mídia — "Reels" agrupa VIDEO+REELS (o backend já converte
-  // VIDEO→REELS, mas mantemos os dois por segurança).
-  type TypeFilter = 'all' | 'REELS' | 'CAROUSEL_ALBUM' | 'IMAGE';
+  // VIDEO→REELS, mas mantemos os dois por segurança). "FAVORITES" mostra só os
+  // posts marcados como sucesso.
+  type TypeFilter = 'all' | 'FAVORITES' | 'REELS' | 'CAROUSEL_ALBUM' | 'IMAGE';
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
 
-  const filteredPosts = typeFilter === 'all'
-    ? posts
-    : posts.filter((p) =>
-        typeFilter === 'REELS'
-          ? p.mediaType === 'REELS' || p.mediaType === 'VIDEO'
-          : p.mediaType === typeFilter
-      );
+  const filteredPosts =
+    typeFilter === 'all'
+      ? posts
+      : typeFilter === 'FAVORITES'
+      ? posts.filter((p) => favorites.has(String(p.id)))
+      : posts.filter((p) =>
+          typeFilter === 'REELS'
+            ? p.mediaType === 'REELS' || p.mediaType === 'VIDEO'
+            : p.mediaType === typeFilter
+        );
 
   const sortedPosts = [...filteredPosts].sort(sortFns[postSort]);
   const maxEng = sortedPosts[0]?.engagementRate || 1;
@@ -1197,6 +1246,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
           <div className="flex gap-1 flex-wrap">
             {([
               ['all', 'Todos'],
+              ['FAVORITES', `★ Favoritos${favorites.size ? ` (${favorites.size})` : ''}`],
               ['REELS', 'Reels'],
               ['CAROUSEL_ALBUM', 'Carrosséis'],
               ['IMAGE', 'Imagens'],
@@ -1206,7 +1256,9 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
                 onClick={() => setTypeFilter(key)}
                 className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
                   typeFilter === key
-                    ? 'bg-emerald-600 text-white'
+                    ? key === 'FAVORITES'
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-emerald-600 text-white'
                     : 'bg-secondary text-muted-foreground hover:bg-border active:bg-border'
                 }`}
               >
@@ -1242,16 +1294,21 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
           </div>
           {sortedPosts.length === 0 && (
             <p className="text-sm text-muted-foreground py-6 text-center">
-              Nenhum post desse tipo entre os sincronizados.
+              {typeFilter === 'FAVORITES'
+                ? 'Nenhum favorito ainda. Toque na ★ de um post pra guardá-lo aqui.'
+                : 'Nenhum post desse tipo entre os sincronizados.'}
             </p>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {sortedPosts.map((post) => {
               const barWidth = Math.max(2, (post.engagementRate / maxEng) * 100);
+              const isFav = favorites.has(String(post.id));
               return (
                 <div
                   key={post.id}
-                  className="bg-card border border-border rounded-xl overflow-hidden flex gap-3 p-3"
+                  className={`bg-card border rounded-xl overflow-hidden flex gap-3 p-3 transition-colors ${
+                    isFav ? 'border-amber-400 ring-1 ring-amber-400/40' : 'border-border'
+                  }`}
                 >
                   <div className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-secondary">
                     {post.thumbnailUrl ? (
@@ -1304,14 +1361,29 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
                       {post.shares > 0 && <span>↗ {post.shares}</span>}
                     </div>
                   </div>
-                  <a
-                    href={post.permalink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="self-start text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-                  >
-                    <ExternalLink size={13} />
-                  </a>
+                  <div className="self-start flex flex-col items-center gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(String(post.id))}
+                      aria-label={isFav ? 'Remover dos favoritos' : 'Marcar como favorito'}
+                      title={isFav ? 'Remover dos favoritos' : 'Marcar como favorito'}
+                      className={`transition-colors ${
+                        isFav
+                          ? 'text-amber-500 hover:text-amber-600'
+                          : 'text-muted-foreground hover:text-amber-500'
+                      }`}
+                    >
+                      <Star size={15} fill={isFav ? 'currentColor' : 'none'} />
+                    </button>
+                    <a
+                      href={post.permalink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ExternalLink size={13} />
+                    </a>
+                  </div>
                 </div>
               );
             })}
