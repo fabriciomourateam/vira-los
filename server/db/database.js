@@ -239,6 +239,24 @@ const saveInstagramAnalysis = (data) => writeObj('instagram_analysis', { ...data
 const getInstagramAudience  = () => readObj('instagram_audience');
 const setInstagramAudience  = (data) => writeObj('instagram_audience', { ...data, savedAt: now() });
 
+// ── Instagram Favorites (IDs de posts marcados como "sucesso") ────────────────
+// Persistido no servidor → o mesmo criador vê os favoritos em qualquer dispositivo.
+const getInstagramFavorites = () => readDb('instagram_favorites'); // array de IDs
+const setInstagramFavorites = (ids) => {
+  const clean = Array.from(new Set((ids || []).map(String)));
+  writeDb('instagram_favorites', clean);
+  return clean;
+};
+const toggleInstagramFavorite = (id) => {
+  const key = String(id);
+  const cur = readDb('instagram_favorites');
+  const idx = cur.indexOf(key);
+  if (idx >= 0) cur.splice(idx, 1);
+  else cur.push(key);
+  writeDb('instagram_favorites', cur);
+  return cur;
+};
+
 // ── Instagram History (snapshots de métricas — 1 por dia, append-only) ────────
 const getInstagramHistory   = () => readDb('instagram_history');
 const appendInstagramHistory = (snapshot) => {
@@ -633,6 +651,7 @@ module.exports = {
   getInstagramAnalysis, saveInstagramAnalysis,
   getInstagramAudience, setInstagramAudience,
   getInstagramHistory, appendInstagramHistory,
+  getInstagramFavorites, setInstagramFavorites, toggleInstagramFavorite,
   // Ideas Generator
   getIdeasConfig, setIdeasConfig,
   getDiscoveredIdeas, saveDiscoveredIdeas, deleteDiscoveredIdea,

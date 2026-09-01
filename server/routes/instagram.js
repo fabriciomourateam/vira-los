@@ -232,6 +232,22 @@ router.get('/posts', (req, res) => {
   res.json(db.getInstagramPosts());
 });
 
+// ─── Favoritos (posts marcados como "sucesso") ────────────────────────────────
+// Persistidos no servidor → mesmos favoritos em qualquer dispositivo.
+
+router.get('/favorites', (req, res) => {
+  res.json({ ids: db.getInstagramFavorites() });
+});
+
+router.post('/favorites/toggle', (req, res) => {
+  const id = req.body?.id;
+  if (id == null || id === '') {
+    return res.status(400).json({ error: 'id do post é obrigatório.' });
+  }
+  const ids = db.toggleInstagramFavorite(id);
+  res.json({ ids, favorited: ids.includes(String(id)) });
+});
+
 // ─── Proxy de imagens do Instagram ────────────────────────────────────────────
 // As URLs do CDN do Meta (cdninstagram/fbcdn) bloqueiam/expiram quando carregadas
 // direto pelo navegador de outro domínio (403). O servidor busca e re-serve.
