@@ -568,20 +568,34 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
     }
   }
 
-  type SortKey = 'engagement' | 'likes' | 'follows' | 'saves' | 'views' | 'comments' | 'recent';
+  type SortKey = 'engagement' | 'shares' | 'views' | 'saves' | 'likes' | 'follows' | 'comments' | 'recent';
   const [postSort, setPostSort] = useState<SortKey>('engagement');
 
   const sortFns: Record<SortKey, (a: IGPost, b: IGPost) => number> = {
     engagement: (a, b) => b.engagementRate - a.engagementRate,
+    shares:     (a, b) => (b.shares || 0) - (a.shares || 0),
+    views:      (a, b) => b.views - a.views,
+    saves:      (a, b) => b.saves - a.saves,
     likes:      (a, b) => b.likes - a.likes,
     follows:    (a, b) => (b.follows || 0) - (a.follows || 0),
-    saves:      (a, b) => b.saves - a.saves,
-    views:      (a, b) => b.views - a.views,
     comments:   (a, b) => b.comments - a.comments,
     recent:     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   };
 
-  const sortedPosts = [...posts].sort(sortFns[postSort]);
+  // Filtro por tipo de mídia — "Reels" agrupa VIDEO+REELS (o backend já converte
+  // VIDEO→REELS, mas mantemos os dois por segurança).
+  type TypeFilter = 'all' | 'REELS' | 'CAROUSEL_ALBUM' | 'IMAGE';
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+
+  const filteredPosts = typeFilter === 'all'
+    ? posts
+    : posts.filter((p) =>
+        typeFilter === 'REELS'
+          ? p.mediaType === 'REELS' || p.mediaType === 'VIDEO'
+          : p.mediaType === typeFilter
+      );
+
+  const sortedPosts = [...filteredPosts].sort(sortFns[postSort]);
   const maxEng = sortedPosts[0]?.engagementRate || 1;
 
   if (loadingStatus) {
@@ -1169,7 +1183,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
         </div>
       )}
 
-      {sortedPosts.length > 0 && (
+      {posts.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <BarChart3 size={16} className="text-muted-foreground" />
@@ -1178,13 +1192,38 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
               {sortedPosts.length}
             </span>
           </div>
+
+          {/* Filtro por tipo de mídia */}
+          <div className="flex gap-1 flex-wrap">
+            {([
+              ['all', 'Todos'],
+              ['REELS', 'Reels'],
+              ['CAROUSEL_ALBUM', 'Carrosséis'],
+              ['IMAGE', 'Imagens'],
+            ] as [TypeFilter, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTypeFilter(key)}
+                className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  typeFilter === key
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-secondary text-muted-foreground hover:bg-border active:bg-border'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Ordenação */}
           <div className="flex gap-1 flex-wrap">
             {([
               ['engagement', 'Engajamento'],
+              ['shares', 'Compartilhamentos'],
+              ['views', 'Views'],
+              ['saves', 'Salvos'],
               ['likes', 'Curtidas'],
               ['follows', 'Seguidores'],
-              ['saves', 'Salvos'],
-              ['views', 'Views'],
               ['comments', 'Comentários'],
               ['recent', 'Recentes'],
             ] as [SortKey, string][]).map(([key, label]) => (
@@ -1201,6 +1240,11 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
               </button>
             ))}
           </div>
+          {sortedPosts.length === 0 && (
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              Nenhum post desse tipo entre os sincronizados.
+            </p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {sortedPosts.map((post) => {
               const barWidth = Math.max(2, (post.engagementRate / maxEng) * 100);
