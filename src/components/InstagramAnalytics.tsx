@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import {
   Instagram, RefreshCw, Loader2, Zap, TrendingUp, BarChart3,
   Video, Image, Layers, AlertCircle, CheckCircle2, ExternalLink,
-  Sparkles, ArrowRight, Users, MapPin, LineChart as LineChartIcon, ArrowUp, ArrowDown, Star,
+  Sparkles, ArrowRight, Users, MapPin, LineChart as LineChartIcon, ArrowUp, ArrowDown, Star, ChevronDown,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -397,6 +397,49 @@ const PostCard = ({
   </div>
 );
 
+// Booleano persistido em localStorage — usado só pra lembrar se um card está
+// aberto/fechado (preferência de UI por dispositivo, tolerante a falha).
+function usePersistedBool(key: string, def: boolean) {
+  const [val, setVal] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? def : v === '1';
+    } catch {
+      return def;
+    }
+  });
+  const set = useCallback((next: boolean) => {
+    setVal(next);
+    try { localStorage.setItem(key, next ? '1' : '0'); } catch { /* ignore */ }
+  }, [key]);
+  return [val, set] as const;
+}
+
+// Botão-cabeçalho que dispara o colapso — mostra um chevron que gira.
+function CollapseHeader({
+  open, onToggle, children, className = '',
+}: {
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className={`flex items-center gap-2 font-semibold transition-colors ${className}`}
+    >
+      {children}
+      <ChevronDown
+        size={16}
+        className={`transition-transform ${open ? '' : '-rotate-90'}`}
+      />
+    </button>
+  );
+}
+
 export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, onCreateScript }: Props) {
   const [status, setStatus] = useState<IGStatus | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -406,6 +449,10 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   const [checkedActions, setCheckedActions] = useState<Record<number, boolean>>({});
+
+  // Colapso dos cards de texto longo (lembra a escolha por dispositivo)
+  const [insightsOpen, setInsightsOpen] = usePersistedBool('ig:card:insights', true);
+  const [audienceOpen, setAudienceOpen] = usePersistedBool('ig:card:audience', true);
 
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [loadingConnect, setLoadingConnect] = useState(false);
@@ -930,10 +977,15 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
 
       {audience && (audience.age || audience.gender || audience.country) && (
         <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <div className="flex items-center gap-2 text-purple-400 font-semibold">
+          <CollapseHeader
+            open={audienceOpen}
+            onToggle={() => setAudienceOpen(!audienceOpen)}
+            className="text-purple-400"
+          >
             <Users size={16} />
             Seu público
-          </div>
+          </CollapseHeader>
+          {audienceOpen && (<>
           <div className="grid sm:grid-cols-3 gap-5">
             {audience.gender && (
               <div className="space-y-2">
@@ -959,16 +1011,21 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
           <p className="text-[11px] text-muted-foreground">
             As caixinhas de perguntas usam esses dados pra calibrar linguagem e exemplos.
           </p>
+          </>)}
         </div>
       )}
 
       {analysis?.aiInsights && (
         <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2 text-purple-400 font-semibold">
+            <CollapseHeader
+              open={insightsOpen}
+              onToggle={() => setInsightsOpen(!insightsOpen)}
+              className="text-purple-400"
+            >
               <Sparkles size={16} />
               Insights da IA
-            </div>
+            </CollapseHeader>
             <div className="flex gap-1.5 flex-wrap">
               {onCreateCarousel && (
                 <button
@@ -995,6 +1052,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
             </div>
           </div>
 
+          {insightsOpen && (<>
           <p className="text-sm text-foreground leading-relaxed">{analysis.aiInsights.summary}</p>
 
           <div className="grid md:grid-cols-2 gap-4">
@@ -1135,6 +1193,7 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
               </div>
             </div>
           )}
+          </>)}
         </div>
       )}
 
