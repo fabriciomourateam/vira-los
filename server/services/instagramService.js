@@ -118,9 +118,12 @@ async function getPostInsights(mediaId, mediaType, token) {
 // ─── Sync de posts (paginado — pega reels E carrosséis) ──────────────────────
 
 async function syncPosts(token) {
-  const MAX_POSTS = 90;   // teto — equilíbrio entre cobertura de carrosséis e tempo
-  const MAX_PAGES = 4;
-  const CONCURRENCY = 8;  // insights em paralelo (sequencial estourava o timeout do Fly)
+  const MAX_POSTS = 500;  // teto de cobertura (carrosséis + reels + imagens, mais recentes)
+  const MAX_PAGES = 12;   // 50/página → capacidade p/ ~600, cortado em MAX_POSTS
+  const CONCURRENCY = 12; // insights em paralelo (pool contínuo, não lotes fixos)
+  // Teto de tempo da fase de insights. Se estourar, os posts restantes entram
+  // SEM insights (degradação suave) em vez de derrubar o sync inteiro por timeout.
+  const INSIGHTS_DEADLINE_MS = 100000; // 100s
 
   // Fase 1 — coleta a lista de mídias (rápido, só metadados)
   const rawPosts = [];
@@ -140,15 +143,29 @@ async function syncPosts(token) {
   }
   const slice = rawPosts.slice(0, MAX_POSTS);
 
-  // Fase 2 — busca insights em PARALELO (lotes de CONCURRENCY)
+  // Fase 2 — busca insights com POOL de concorrência contínuo.
+  // Diferente de lotes fixos com Promise.all (onde o lote inteiro trava no post
+  // mais lento), aqui cada "worker" pega o próximo post assim que termina o seu,
+  // mantendo CONCURRENCY chamadas ativas o tempo todo. Ao ultrapassar o deadline,
+  // os índices restantes são drenados como {} sem chamada de rede.
   const insightsById = {};
-  for (let i = 0; i < slice.length; i += CONCURRENCY) {
-    const batch = slice.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(
-      batch.map((p) => getPostInsights(p.id, p.media_type, token).catch(() => ({})))
-    );
-    batch.forEach((p, j) => { insightsById[p.id] = results[j] || {}; });
+  let nextIdx = 0;
+  const startedAt = Date.now();
+  async function worker() {
+    while (true) {
+      const i = nextIdx++;
+      if (i >= slice.length) return;
+      if (Date.now() - startedAt > INSIGHTS_DEADLINE_MS) {
+        insightsById[slice[i].id] = {}; // sem insights: degrada, não quebra
+        continue;
+      }
+      const p = slice[i];
+      insightsById[p.id] = await getPostInsights(p.id, p.media_type, token).catch(() => ({}));
+    }
   }
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, slice.length) }, () => worker())
+  );
 
   // Fase 3 — monta o shape final
   return slice.map((post) => {
