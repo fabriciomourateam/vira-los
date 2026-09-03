@@ -223,7 +223,9 @@ async function extractFrames(videoUrl, tempDir) {
 async function transcribeAudio(videoPath) {
   if (!process.env.OPENAI_API_KEY) return null;
 
-  const audioPath = videoPath.replace('.mp4', '.mp3');
+  // Deriva o caminho do .mp3 de forma segura para qualquer extensão de vídeo
+  // (upload pode vir .mov/.webm/.m4v). Para .mp4 continua equivalente ao antigo.
+  const audioPath = videoPath.replace(/\.[^.\/\\]+$/, '') + '.mp3';
   try {
     execFileSync(
       'ffmpeg',
@@ -607,4 +609,138 @@ async function analyzeReel(url) {
   }
 }
 
-module.exports = { analyzeReel, getState, sseClients };
+// ─── Análise de vídeo LOCAL (upload do usuário) ──────────────────────────────
+// Mesmo pipeline do analyzeReel (transcrição + visão + carrossel + roteiro), mas
+// o vídeo já está em disco — PULA Apify e yt-dlp. Usado para vídeos/anúncios que
+// NÃO estão publicados no Instagram/TikTok (ex.: criativos de concorrente salvos
+// localmente). Compartilha o mesmo analyzerState/SSE, então a UI de progresso e o
+// guard de concorrência funcionam igual ao fluxo por URL.
+async function analyzeLocalVideo(filePath, caption = '') {
+  if (analyzerState.running) {
+    throw new Error('Análise já em andamento. Aguarde o processo terminar.');
+  }
+  if (!filePath || !fs.existsSync(filePath)) {
+    throw new Error('Arquivo de vídeo não encontrado.');
+  }
+
+  const tempDir = path.join(os.tmpdir(), `viralostmp-${Date.now()}`);
+  fs.mkdirSync(tempDir, { recursive: true });
+
+  analyzerState = {
+    running: true,
+    steps: [
+      { id: 'download',   label: 'Extraindo frames do vídeo enviado',      status: 'pending', detail: '' },
+      { id: 'transcribe', label: 'Transcrevendo áudio (Whisper)',           status: 'pending', detail: '' },
+      { id: 'vision',     label: 'Analisando conteúdo visual (Claude AI)',  status: 'pending', detail: '' },
+      { id: 'carousel',   label: 'Gerando script de carrossel',             status: 'pending', detail: '' },
+      { id: 'reels',      label: 'Gerando roteiro de Reels',                status: 'pending', detail: '' },
+    ],
+    result: null,
+    error: null,
+  };
+
+  broadcast({ type: 'state', state: analyzerState });
+
+  try {
+    if (!ffmpegAvailable()) {
+      throw new Error('ffmpeg não disponível no servidor — necessário para processar o vídeo enviado.');
+    }
+
+    // ── Passo 1: Extração de frames do arquivo enviado ────────────────────────
+    stepUpdate('download', 'running', 'Extraindo frames com ffmpeg...');
+    const frames = [];
+    const framesPattern = path.join(tempDir, 'frame%03d.jpg');
+    try {
+      execFileSync(
+        'ffmpeg',
+        ['-i', filePath, '-vf', 'select=eq(n\\,0)+eq(n\\,25)+eq(n\\,55)', '-vsync', 'vfr', framesPattern, '-y'],
+        { timeout: 45000, stdio: ['ignore', 'ignore', 'ignore'] }
+      );
+    } catch {
+      try {
+        execFileSync(
+          'ffmpeg',
+          ['-i', filePath, '-r', '0.3', '-frames:v', '3', framesPattern, '-y'],
+          { timeout: 45000, stdio: ['ignore', 'ignore', 'ignore'] }
+        );
+      } catch { /* segue sem frames */ }
+    }
+    for (let i = 1; i <= 5; i++) {
+      const fp = path.join(tempDir, `frame${String(i).padStart(3, '0')}.jpg`);
+      if (fs.existsSync(fp)) frames.push(fs.readFileSync(fp).toString('base64'));
+    }
+    const thumbnailBase64 = frames[0] || null;
+    stepUpdate('download', 'done', frames.length ? `${frames.length} frame(s) extraído(s)` : 'Não foi possível extrair frames');
+
+    // ── Passo 2: Transcrição ──────────────────────────────────────────────────
+    let transcription = null;
+    if (process.env.OPENAI_API_KEY) {
+      stepUpdate('transcribe', 'running', 'Enviando áudio para OpenAI Whisper...');
+      try {
+        transcription = await transcribeAudio(filePath);
+        stepUpdate('transcribe', 'done', transcription ? 'Áudio transcrito com sucesso' : 'Sem fala detectada no áudio');
+      } catch (e) {
+        console.warn('[ReelsAnalyzer] Transcrição falhou (upload):', e.message);
+        stepUpdate('transcribe', 'done', 'Falha na transcrição — análise visual usada');
+      }
+    } else {
+      stepUpdate('transcribe', 'done', 'Pulado — OPENAI_API_KEY não configurada (análise visual continua)');
+    }
+
+    // ── Passo 3: Análise visual ───────────────────────────────────────────────
+    if (frames.length === 0 && !caption) {
+      throw new Error('Não foi possível extrair imagens do vídeo. Verifique se o arquivo é um vídeo válido.');
+    }
+    stepUpdate('vision', 'running');
+    const visualAnalysis = await analyzeVisuals(frames, thumbnailBase64, caption);
+    stepUpdate('vision', 'done', 'Análise concluída');
+
+    // ── Passo 4: Script de carrossel ──────────────────────────────────────────
+    const reelInfo = { likes: 0, views: 0, owner: '', shortCode: '' };
+    stepUpdate('carousel', 'running');
+    const carouselScript = await generateCarouselScript(transcription, visualAnalysis, caption, reelInfo);
+    stepUpdate('carousel', 'done', 'Script gerado com sucesso');
+
+    // ── Passo 5: Roteiro de Reels ─────────────────────────────────────────────
+    stepUpdate('reels', 'running');
+    const reelsScript = await generateReelsScript(transcription, visualAnalysis, caption, reelInfo);
+    stepUpdate('reels', 'done', 'Roteiro gerado com sucesso');
+
+    analyzerState.result = {
+      reelInfo: {
+        caption: (caption || '').substring(0, 400),
+        owner: '',
+        likes: 0,
+        views: 0,
+        thumbnailUrl: null,
+        platform: 'upload',
+        url: null,
+      },
+      transcription,
+      visualAnalysis,
+      carouselScript,
+      reelsScript,
+      hasAudio: Boolean(transcription),
+      hasFrames: frames.length > 0,
+    };
+    analyzerState.running = false;
+
+    broadcast({ type: 'done', result: analyzerState.result });
+
+  } catch (error) {
+    console.error('[ReelsAnalyzer] Erro (upload):', error.message);
+    analyzerState.error = error.message;
+    analyzerState.running = false;
+
+    const runningStep = analyzerState.steps.find(s => s.status === 'running');
+    if (runningStep) stepUpdate(runningStep.id, 'error', error.message);
+
+    broadcast({ type: 'error', message: error.message });
+  } finally {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+    // O arquivo enviado é temporário: remove após processar (não precisa persistir).
+    try { fs.rmSync(filePath, { force: true }); } catch {}
+  }
+}
+
+module.exports = { analyzeReel, analyzeLocalVideo, getState, sseClients };

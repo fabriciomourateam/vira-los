@@ -46,7 +46,8 @@ interface ReelInfo {
   likes: number;
   views: number;
   thumbnailUrl: string | null;
-  url: string;
+  url: string | null;
+  platform?: string;
 }
 
 interface AnalyzerResult {
@@ -205,6 +206,7 @@ interface AnalisadorReelsProps {
 export default function AnalisadorReels({ onUseInCarrossel, onEvaluate, prefillUrl }: AnalisadorReelsProps = {}) {
   const [url, setUrl]         = useState('');
   const [running, setRunning] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [steps, setSteps]     = useState<AnalyzerStep[]>([]);
   const [result, setResult]   = useState<AnalyzerResult | null>(null);
   const [error, setError]     = useState<string | null>(null);
@@ -227,6 +229,7 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate, prefillU
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const stepsEndRef    = useRef<HTMLDivElement | null>(null);
+  const fileInputRef   = useRef<HTMLInputElement | null>(null);
 
   // Prefill da URL quando vem da aba Descobrir (botão "Analisar")
   useEffect(() => {
@@ -455,6 +458,42 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate, prefillU
     }
   }
 
+  async function handleUpload(file: File) {
+    setError(null);
+    setResult(null);
+    setSteps([]);
+    setStoryResult(null);
+    setStoryError(null);
+    setUploading(true);
+
+    try {
+      const fd = new FormData();
+      fd.append('video', file);
+
+      const response = await fetch(`${API}/api/reels-analyzer/upload`, {
+        method: 'POST',
+        body: fd,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Erro ao enviar vídeo.');
+        toast.error(data.error || 'Erro ao enviar vídeo.');
+        return;
+      }
+
+      setRunning(true);
+      connectSSE();
+    } catch (e: any) {
+      const msg = e.message || 'Erro de conexão com o servidor.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   function handleReset() {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -506,7 +545,7 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate, prefillU
           Analisador de Vídeos
         </h1>
         <p className="text-muted-foreground text-xs sm:text-sm">
-          Cole o link de um Reel do Instagram ou vídeo do TikTok → transcrição + análise visual + script de carrossel + roteiro pronto para gravar
+          Cole o link de um Reel do Instagram / TikTok — ou envie um vídeo do seu computador (anúncios não publicados) → transcrição + análise visual + script de carrossel + roteiro pronto para gravar
         </p>
       </section>
 
@@ -539,12 +578,42 @@ export default function AnalisadorReels({ onUseInCarrossel, onEvaluate, prefillU
           </button>
         </div>
 
+        {/* Separador */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">ou</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
+        {/* Upload de vídeo local */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*,.mp4,.mov,.m4v,.webm"
+          className="hidden"
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) handleUpload(f);
+            e.target.value = '';
+          }}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={running || uploading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-secondary text-sm font-bold disabled:opacity-40 hover:bg-secondary/70 transition-colors"
+        >
+          {uploading
+            ? <><Loader2 size={15} className="animate-spin" /> Enviando vídeo...</>
+            : <><Video size={15} /> Enviar vídeo do computador (MP4/MOV)</>
+          }
+        </button>
+
         {/* Nota sobre recursos */}
         <div className="text-xs text-muted-foreground flex items-start gap-1.5">
           <AlertTriangle size={12} className="mt-0.5 shrink-0 text-orange-400" />
           <span>
-            Requer <code className="bg-secondary px-1 rounded">APIFY_API_KEY</code> no servidor.
-            Transcrição de áudio requer <code className="bg-secondary px-1 rounded">OPENAI_API_KEY</code> + ffmpeg.
+            Link do Instagram/TikTok requer <code className="bg-secondary px-1 rounded">APIFY_API_KEY</code> no servidor.
+            O vídeo enviado precisa de <code className="bg-secondary px-1 rounded">ffmpeg</code> (frames) e a transcrição de áudio requer <code className="bg-secondary px-1 rounded">OPENAI_API_KEY</code>.
           </span>
         </div>
       </div>

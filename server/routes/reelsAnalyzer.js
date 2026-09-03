@@ -8,8 +8,32 @@
 
 const express = require('express');
 const router = express.Router();
-const { analyzeReel, getState, sseClients } = require('../services/reelsAnalyzerService');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
+const { analyzeReel, analyzeLocalVideo, getState, sseClients } = require('../services/reelsAnalyzerService');
 const db = require('../db/database');
+
+// ─── Upload de vídeo local (mesmo volume persistente dos outros uploads) ──────
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+const ANALYZER_UPLOAD_DIR = path.join(UPLOADS_DIR, 'reels', 'analyzer');
+
+const analyzerStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    fs.mkdirSync(ANALYZER_UPLOAD_DIR, { recursive: true });
+    cb(null, ANALYZER_UPLOAD_DIR);
+  },
+  filename: (_req, file, cb) => {
+    const ext = (path.extname(file.originalname || '') || '.mp4').toLowerCase();
+    cb(null, `upload_${Date.now()}${ext}`);
+  },
+});
+const uploadVideo = multer({
+  storage: analyzerStorage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+  fileFilter: (_req, file, cb) =>
+    cb(null, /video\//.test(file.mimetype) || /\.(mp4|mov|m4v|webm)$/i.test(file.originalname)),
+});
 
 // ─── SSE: stream de eventos em tempo real ─────────────────────────────────────
 
@@ -73,6 +97,35 @@ router.post('/start', async (req, res) => {
   });
 
   res.json({ ok: true, message: 'Análise iniciada. Monitore via /stream.' });
+});
+
+// ─── Inicia análise a partir de vídeo ENVIADO (upload) ────────────────────────
+// Para vídeos que NÃO estão no Instagram/TikTok (ex.: criativos de anúncio).
+// Reutiliza o mesmo pipeline/SSE do fluxo por URL, pulando Apify/yt-dlp.
+router.post('/upload', (req, res) => {
+  uploadVideo.single('video')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Falha no upload do vídeo.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'Envie um arquivo de vídeo (campo "video").' });
+    }
+
+    const state = getState();
+    if (state.running) {
+      try { fs.rmSync(req.file.path, { force: true }); } catch {}
+      return res.status(409).json({ error: 'Análise já em andamento. Aguarde terminar.' });
+    }
+
+    const caption = typeof req.body?.caption === 'string' ? req.body.caption.trim() : '';
+
+    // Roda em background — o cliente monitora via /stream (SSE).
+    analyzeLocalVideo(req.file.path, caption).catch(e => {
+      console.error('[ReelsAnalyzer Route] Erro upload não capturado:', e.message);
+    });
+
+    res.json({ ok: true, message: 'Análise iniciada. Monitore via /stream.' });
+  });
 });
 
 // ─── Banco de Roteiros Salvos ────────────────────────────────────────────────
