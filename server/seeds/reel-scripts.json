@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-21.3",
+  "version": "2026-09-05.1",
   "note": "65 roteiros de reel pré-escritos, consumidos pela rotina (2/dia: 14h e 19h30). Mix homem 25-40 (por sintoma, ban-safe) + mulher 35-44. Ganchos calibrados nos padrões que MAIS deram views no feed do Fabricio: empilhar sintomas, 'o motivo ninguém te conta' / 'os 3 sinais', revelação ('é isso aqui'), mito quebrado, número. fraseTela tem 1 palavra entre **asteriscos** (vira dourada no vídeo). Seed VERSÃO-aware: bumpar a version SUBSTITUI os pendentes (mantém os já postados por slug). v3: ganchos reforçados + leva 2 (temas frescos, sem repetir o feed).",
   "scripts": [
     {
@@ -22,7 +22,7 @@
       "slug": "h-creatina-01",
       "audience": "homem",
       "title": "Creatina vale a pena?",
-      "fraseTela": "O suplemento mais estudado do mundo você **ignora**",
+      "fraseTela": "Tem medo de **creatina** achando que é bomba?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você gasta rios de dinheiro em pote colorido e deixa de lado o único suplemento com montanha de estudo em cima.\n\nCreatina não é bomba, não é anabolizante, não faz mal pro rim de quem é saudável. É dos mais seguros e testados que existe.\n\nEla te dá mais força no treino, melhora a recuperação e ajuda a sustentar músculo com a idade. Barata e simples.\n\nAntes de gastar no resto, acerta o básico.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #creatina #treino #suplementacao #homem30"
     },
@@ -46,7 +46,7 @@
       "slug": "h-treina-nao-evolui-01",
       "audience": "homem",
       "title": "Treina muito, evolui pouco",
-      "fraseTela": "Treinar todo dia pode estar **travando** teu resultado",
+      "fraseTela": "Treina sem descanso e o corpo não **evolui**?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você acha que mais treino é igual mais resultado. Nem sempre.\n\nSe treina pesado todo dia e nunca descansa de verdade, o corpo não tem tempo de reconstruir. Você vive quebrado e não evolui.\n\nO músculo cresce na recuperação, não no acúmulo. Treino demais com sono de menos é receita pra estagnar e se machucar.\n\nÀs vezes o que falta é um dia a menos de treino e uma noite melhor de sono.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #treino #recuperacao #performance #homem30"
     },
@@ -62,7 +62,7 @@
       "slug": "h-lanche-tarde-01",
       "audience": "homem",
       "title": "A beliscada do escritório",
-      "fraseTela": "O cafezinho com bolacha do trabalho **soma** o dia todo",
+      "fraseTela": "Aquele café com bolacha no trabalho te **engorda**?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Um café com açúcar de manhã, a bolacha da tarde, o docinho que o colega trouxe. 'É só um', né?\n\nSó que isso o dia inteiro, todo dia, soma um monte de caloria que você nem lembra que comeu.\n\nAí você treina certinho, almoça direito, e não entende por que a barriga não sai. O vilão é o beliscar invisível entre as refeições.\n\nNão precisa cortar tudo. Precisa enxergar primeiro.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #rotina #gorduraabdominal #performance #homem30"
     },
@@ -86,7 +86,7 @@
       "slug": "h-frequencia-treino-01",
       "audience": "homem",
       "title": "Quantas vezes treinar",
-      "fraseTela": "Treinar 6x na semana não te faz crescer mais **rápido**",
+      "fraseTela": "Treina 6x na semana e o corpo não **muda**?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você acha que quanto mais dias na academia, mais rápido cresce. Não é assim.\n\nO músculo cresce enquanto você descansa e come direito, não enquanto treina. Treinar todo dia sem parar só acumula desgaste.\n\nPra maioria dos caras, 3 a 5 treinos bem feitos entregam mais que 6 ou 7 arrastados e sem recuperação.\n\nMelhor 4 treinos com energia total do que 6 pela metade, cansado e sem evoluir.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #treino #hipertrofia #performance #homem30"
     },
@@ -110,7 +110,7 @@
       "slug": "h-postura-sentado-01",
       "audience": "homem",
       "title": "Dia todo sentado trava o corpo",
-      "fraseTela": "8h sentado te deixa **travado** e sem energia",
+      "fraseTela": "8h sentado e sem **energia** no fim do dia?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Passa o dia sentado no trabalho, no carro, no sofá. E sente o corpo travado, a lombar reclamando, a energia lá embaixo.\n\nNão é só a idade. É o corpo parado o dia inteiro.\n\nFicar horas sentado encurta músculo, piora a postura e derruba tua disposição, mesmo que você treine 1h no fim do dia. Aquela hora não paga as outras 8 paradas.\n\nO ajuste é de graça: levanta a cada 1h, dá uma volta, sobe escada, se alonga.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #postura #disposicao #performance #homem30"
     },
@@ -126,7 +126,7 @@
       "slug": "h-sono-shape-01",
       "audience": "homem",
       "title": "Dormir mal trava o shape",
-      "fraseTela": "Dormir 5h sabota teu **shape** em silêncio",
+      "fraseTela": "Treina pesado, dorme mal e o músculo não **vem**?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você treina, come certo, mas dorme mal. E não entende por que não evolui.\n\nO músculo não cresce na academia. Cresce enquanto você dorme.\n\nNoite curta derruba tua recuperação, aumenta a fome no dia seguinte e mexe com os hormônios que constroem massa. É tiro no pé todo dia.\n\nDormir 7h não é luxo, é parte do treino. Trata o sono com a seriedade que trata o supino.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #sono #recuperacao #performance #homem30"
     },
@@ -134,7 +134,7 @@
       "slug": "m-montar-prato-01",
       "audience": "mulher",
       "title": "Montar o prato certo",
-      "fraseTela": "A **ordem** dos alimentos no prato muda teu resultado",
+      "fraseTela": "Monta o prato na ordem errada e **sabota** a dieta?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você não precisa de balança nem contar caloria pra montar um prato que seca.\n\nUm truque simples: começa pela salada e pelo vegetal, depois a proteína, e o carboidrato por último.\n\nComendo nessa ordem você chega no arroz já mais saciada, come menos sem esforço e segura o açúcar do sangue mais estável.\n\nMesma comida, mesma quantidade, resultado diferente. Só de mudar a ordem.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquela amiga que vive de dieta e não desincha.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#emagrecimento #comidadeverdade #mulher40 #vidareal #semdieta"
     },
@@ -142,7 +142,7 @@
       "slug": "h-suplemento-basico-01",
       "audience": "homem",
       "title": "Gasta em suplemento, erra o básico",
-      "fraseTela": "Gasta fortuna em suplemento e erra o **básico**",
+      "fraseTela": "Gasta fortuna em suplemento e o **básico** tá furado?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Tua prateleira tem pré-treino, termogênico, três potes coloridos. Mas você dorme mal, come de qualquer jeito e vive estressado.\n\nSuplemento é a cereja do bolo. Sem o bolo, ele não faz nada.\n\nNenhum pote resolve noite mal dormida, prato sem proteína e sedentarismo. Você tenta consertar com o caro o que o de graça resolvia.\n\nArruma sono, comida e treino primeiro. Aí um ou dois suplementos certos fazem diferença.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #suplementacao #treino #performance #homem30"
     },
@@ -166,7 +166,7 @@
       "slug": "h-recuperacao-dor-01",
       "audience": "homem",
       "title": "Vive dolorido do treino",
-      "fraseTela": "Viver dolorido não é sinal de treino **bom**",
+      "fraseTela": "Acha que dor no outro dia é sinal de treino **bom**?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você acha que se não sair quebrado da academia o treino não valeu. Esse pensamento te trava.\n\nDor leve depois de um treino puxado é normal. Mas viver dolorido, cansado e sem energia todo dia é sinal de que você não tá recuperando.\n\nSem recuperação o músculo não cresce, o desempenho cai e o risco de lesão sobe. Você treina cada vez mais e evolui cada vez menos.\n\nQuem cresce não é quem sofre mais, é quem come, dorme e descansa direito.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #recuperacao #treino #performance #homem30"
     },
@@ -182,7 +182,7 @@
       "slug": "h-massa-depois-30-01",
       "audience": "homem",
       "title": "Perdendo massa depois dos 30",
-      "fraseTela": "Depois dos 30 o músculo vai embora se você **deixar**",
+      "fraseTela": "Passou dos 30 e o músculo começou a **sumir**?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Bateu 30 e você sente o corpo diferente. Menos força, mais barriga, aquela moleza.\n\nParte é natural: a partir dos 30 a gente perde músculo aos poucos todo ano, se não fizer nada contra.\n\nMenos músculo é metabolismo mais lento, menos força e mais gordura acumulando. Uma bola de neve que começa quieta.\n\nMas dá pra frear e reverter em qualquer idade com treino de força e proteína.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #ganhodemassa #treino #homem30 #performance"
     },
@@ -206,7 +206,7 @@
       "slug": "m-correria-01",
       "audience": "mulher",
       "title": "Emagrecer na correria",
-      "fraseTela": "Sem tempo pra dieta? O problema quase nunca é **tempo**",
+      "fraseTela": "Vive na correria e por isso **larga** a dieta?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Trabalho, filho, casa, marido. Onde entra você nessa lista? No fim, né.\n\nEscuto muito 'não tenho tempo'. Mas quase sempre o que falta não é tempo, é um plano simples que caiba na correria.\n\nDieta complicada de 6 refeições montadas não funciona pra quem vive no corre. O que funciona é comida de verdade, prática, que dá pra repetir sem pensar.\n\nSimplifica e você consegue.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquela amiga que vive de dieta e não desincha.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#emagrecimento #maededois #vidareal #mulher40 #semdieta"
     },
@@ -238,7 +238,7 @@
       "slug": "h-motivacao-constancia-01",
       "audience": "homem",
       "title": "Motivação x constância",
-      "fraseTela": "Esperar a **motivação** é o que te mantém parado",
+      "fraseTela": "Espera a **vontade** bater pra treinar? Ela não vem",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você tá esperando bater aquela vontade pra começar de novo. Ela não vem, né?\n\nMotivação é traiçoeira: aparece uns dias e some. Quem depende dela vive recomeçando na segunda.\n\nOs caras que têm resultado não são mais motivados que você. Eles criaram rotina: treino no mesmo horário, comida decidida antes, sem depender de estar a fim.\n\nQuando vira hábito, você faz no automático até nos dias ruins.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #disciplina #treino #performance #homem30"
     },
@@ -246,7 +246,7 @@
       "slug": "m-dormir-mal-engorda-01",
       "audience": "mulher",
       "title": "Dormir mal engorda",
-      "fraseTela": "A noite mal dormida **sabota** tua dieta no dia seguinte",
+      "fraseTela": "Dorme mal e no dia seguinte **ataca** tudo?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Dormiu mal e no dia seguinte tava com fome o dia inteiro, atacando doce? Não é falta de foco.\n\nUma noite ruim bagunça os hormônios que controlam tua fome e tua saciedade. Você acorda com mais vontade de porcaria e menos sinal de 'tá satisfeita'.\n\nAí luta contra a fome o dia todo achando que é fraqueza, quando o problema começou na cama.\n\nCuidar do sono é cuidar da dieta.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquela amiga que vive de dieta e não desincha.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#emagrecimento #sono #mulher40 #vidareal #autocuidado"
     },
@@ -294,7 +294,7 @@
       "slug": "h-comer-noite-engorda-01",
       "audience": "homem",
       "title": "Comer à noite engorda?",
-      "fraseTela": "Comer à noite engorda mais? A resposta te **surpreende**",
+      "fraseTela": "Comer de noite engorda mais que de **dia**?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você evita comer à noite com medo de engordar e passa fome à toa. Vamos por partes.\n\nO que engorda é o total que você come no dia, não o horário do relógio. Comer às 22h não vira mais gordura que comer às 15h, se o total bate.\n\nO problema da noite é outro: é quando a maioria ataca porcaria por fome acumulada e ansiedade do dia.\n\nSe você jantar comida de verdade, sem exagero, tá tudo certo.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquele parceiro que treina firme e ainda não vê resultado.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#saudemasculina #dieta #mito #performance #homem30"
     },
@@ -382,7 +382,7 @@
       "slug": "m-se-cobra-demais-01",
       "audience": "mulher",
       "title": "Se cobra demais e desiste",
-      "fraseTela": "A dieta perfeita não existe e é ela que te faz **desistir**",
+      "fraseTela": "Busca a dieta **perfeita** e por isso nunca começa?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você espera a semana perfeita pra começar, quer fazer tudo 100% certo, e ao primeiro deslize joga tudo pro alto.\n\nEssa cobrança é o que mais te faz desistir.\n\nNinguém emagrece sendo perfeito. Emagrece sendo consistente: acerta na maioria das vezes, erra às vezes, e segue.\n\n80% certo por meses ganha de 100% certo por 10 dias. Tira o peso da perfeição das costas.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquela amiga que vive de dieta e não desincha.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#emagrecimento #mentalidade #mulher40 #vidareal #semculpa"
     },
@@ -462,7 +462,7 @@
       "slug": "m-comparar-outras-01",
       "audience": "mulher",
       "title": "Se comparar trava o resultado",
-      "fraseTela": "Se comparar com o corpo da internet **trava** o teu",
+      "fraseTela": "Se compara com o corpo do Insta e **desanima**?",
       "ctaTela": "👇 LEIA A LEGENDA",
       "legendaPost": "Você olha o corpo perfeito da influencer, se sente péssima, e acha que nunca vai chegar lá. Aí desanima antes de tentar.\n\nO que você vê na tela é ângulo, luz, edição e muitas vezes uma vida inteira dedicada só àquilo (ou coisa pior por trás).\n\nComparar teu bastidor real com o palco montado dos outros só te paralisa.\n\nTeu ponto de comparação é você de ontem, não a foto de alguém. Melhorou um pouco? Tá no caminho.\n\n📌 Salva esse pra aplicar quando precisar — e marca aquela amiga que vive de dieta e não desincha.\n\nComenta DIETA para receber um cardápio que vai te fazer secar sem passar fome.\n\n#emagrecimento #mentalidade #mulher40 #vidareal #autoestima"
     },
