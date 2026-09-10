@@ -98,7 +98,9 @@ async function post(_schedule, postData) {
 function getAuthUrl() {
   const appId = process.env.INSTAGRAM_APP_ID;
   const redirectUri = encodeURIComponent(process.env.INSTAGRAM_REDIRECT_URI || '');
-  const scopes = 'instagram_basic,instagram_content_publish,pages_read_engagement';
+  // instagram_manage_insights + pages_show_list liberam LER métricas dos posts
+  // (views/alcance/engajamento) — usado pelo painel de orgânico no controle-de-pacientes.
+  const scopes = 'instagram_basic,instagram_content_publish,instagram_manage_insights,pages_read_engagement,pages_show_list';
   return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code`;
 }
 
