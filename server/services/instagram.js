@@ -101,7 +101,9 @@ function getAuthUrl() {
   // instagram_manage_insights + pages_show_list liberam LER métricas dos posts
   // (views/alcance/engajamento) — usado pelo painel de orgânico no controle-de-pacientes.
   const scopes = 'instagram_basic,instagram_content_publish,instagram_manage_insights,pages_read_engagement,pages_show_list';
-  return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code`;
+  // auth_type=rerequest força a Meta a mostrar a tela de consentimento de novo — sem isso,
+  // quem já autorizou o app pode ser redirecionado sem conceder o escopo NOVO (insights).
+  return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&auth_type=rerequest`;
 }
 
 async function exchangeCode(code) {
