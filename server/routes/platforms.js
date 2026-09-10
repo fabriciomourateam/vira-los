@@ -58,6 +58,17 @@ router.delete('/instagram', (_req, res) => {
   res.json({ ok: true });
 });
 
+// Diagnóstico: quais permissões o token do Instagram tem (confirma instagram_manage_insights).
+router.get('/instagram/permissions', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const ig = require('../services/instagram');
+    res.json(await ig.getGrantedPermissions());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── TikTok ────────────────────────────────────────────────────────────────────
 
 router.get('/tiktok/auth-url', (_req, res) => {

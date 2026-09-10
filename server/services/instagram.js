@@ -155,4 +155,15 @@ async function exchangeCode(code) {
   return { username: profileRes.data.username };
 }
 
-module.exports = { post, getAuthUrl, exchangeCode };
+// Diagnóstico: lista as permissões concedidas ao token do Instagram (pra confirmar
+// se instagram_manage_insights foi de fato concedido depois da reconexão).
+async function getGrantedPermissions() {
+  const token = db.getPlatformToken('instagram');
+  if (!token) throw new Error('Instagram não conectado');
+  const res = await axios.get(`${GRAPH_API}/me/permissions`, {
+    params: { access_token: token.access_token },
+  });
+  return { username: token.username || null, permissions: res.data.data || [] };
+}
+
+module.exports = { post, getAuthUrl, exchangeCode, getGrantedPermissions };
