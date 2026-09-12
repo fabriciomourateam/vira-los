@@ -1,10 +1,10 @@
 /**
  * dailyContentService.js — Rotina diária automática do Fabricio Moura.
  *
- * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de USO HORMONAL (temas
- * distintos DENTRO do lane hormônio/GLP-1 — pedido do Fabricio: os dois são
- * hormonais), template fmteam, com o cérebro editorial: voz + anti-ban + ângulos,
- * e 2 REELS
+ * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de USO HORMONAL — pedido
+ * do Fabricio: os dois são hormonais e UM deles é SEMPRE de GLP-1/caneta (Mounjaro,
+ * tirzepatida, retatrutida) — template fmteam, com o cérebro editorial: voz +
+ * anti-ban + ângulos, e 2 REELS
  * CURTOS tirados da FILA de roteiros pré-escritos (reel_content_queue), um por
  * horário (default 14h e 19h30), renderizados no estilo dourado, cada um com um
  * clipe cru DIFERENTE (do dia e dos dias anteriores). Fila vazia → reel por IA
@@ -177,12 +177,19 @@ function recentThemeIds(days = 14) {
   return used;
 }
 
-// Escolhe 2 temas/dia — pedido do Fabricio: os DOIS carrosséis do dia são de USO
-// HORMONAL (o lane disruptivo campeão). Lane fixo (hormônio/GLP-1) nos dois → só
-// varia o tema/ângulo dentro dele, mantendo os dois DISTINTOS entre si (e, quando
-// dá, de grupo diferente) pra não saírem parecidos. Evita ids recentes (14d);
-// fallback progressivo se o pool de hormônio apertar.
+// Escolhe 2 temas/dia — pedidos do Fabricio: (1) os DOIS carrosséis do dia são de
+// USO HORMONAL (o lane disruptivo campeão) e (2) UM deles é SEMPRE de GLP-1/caneta
+// (Mounjaro, tirzepatida, retatrutida). Então: 1º = GLP-1 garantido; 2º = o outro
+// tema hormonal, de preferência NÃO-GLP-1 pra variar (um GLP-1 + um hormônio).
+// Mantém os dois distintos (id diferente); evita ids recentes (14d) com fallback
+// progressivo se o pool apertar.
 const isHormoneTheme = (t) => t.group === 'hormonio' || t.group === 'caneta';
+
+// GLP-1 / caneta: casa o grupo 'caneta' OU qualquer tema com keyword de GLP-1 —
+// pega também o sub-retatrutida (grupo hormonio) e as histórias de caneta
+// (tirzepatida/mounjaro), que são GLP-1 mesmo estando em outros grupos.
+const GLP1_KEYWORDS = ['glp', 'caneta', 'emagrecedor', 'mounjaro', 'ozempic', 'tirzepatida', 'tizerpatida', 'retatrutida'];
+const isGlp1Theme = (t) => t.group === 'caneta' || (t.keywords || []).some((k) => GLP1_KEYWORDS.includes(k));
 
 function pickThemes() {
   const recentIds = recentThemeIds();
@@ -193,22 +200,19 @@ function pickThemes() {
   const maxScore = Math.max(0, ...pool.map((t) => scores[t.id] || 0));
   const perf = (t) => 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4;
 
-  // Lane fixo de hormônio nos DOIS temas → peso = perf (não penaliza por "grupo
-  // recente", já que hormônio sai todo dia). Se todos os de hormônio caíram nos
-  // recentes (14d), libera o banco inteiro de hormônio (fallback).
-  let hormPool = pool.filter(isHormoneTheme);
-  if (!hormPool.length) hormPool = THEMES.filter(isHormoneTheme);
-
-  // 1º tema: hormônio.
-  const first = hormPool.length ? weightedSample(hormPool, hormPool.map(perf), 1)[0]
-                                : weightedSample(pool, pool.map(perf), 1)[0];
+  // 1º tema: SEMPRE GLP-1/caneta (garantido todo dia). Peso = perf (lane fixo → não
+  // penaliza por grupo recente). Se os frescos (14d) acabarem, libera todos os GLP-1.
+  let glpPool = pool.filter(isGlp1Theme);
+  if (!glpPool.length) glpPool = THEMES.filter(isGlp1Theme);
+  const first = glpPool.length ? weightedSample(glpPool, glpPool.map(perf), 1)[0]
+                               : weightedSample(pool, pool.map(perf), 1)[0];
   if (!first) return [];
 
-  // 2º tema: TAMBÉM hormônio, só distinto do 1º (id diferente). Fica no lane hormônio
-  // de propósito (não força grupo diferente, que puxaria a caneta/GLP-1 pra dentro):
-  // o grupo 'hormonio' já dá variedade de sobra (sintomas + substâncias). Fallbacks:
-  // banco inteiro de hormônio → qualquer tema (última linha) se o pool esgotar.
-  let secondPool = hormPool.filter((t) => t.id !== first.id);
+  // 2º tema: o OUTRO carrossel hormonal (uso hormonal), distinto do 1º e de
+  // preferência NÃO-GLP-1 pra dar variedade (um GLP-1 + um hormônio). Fallbacks:
+  // qualquer hormônio != 1º → banco inteiro de hormônio → qualquer tema (última linha).
+  let secondPool = pool.filter((t) => isHormoneTheme(t) && !isGlp1Theme(t) && t.id !== first.id);
+  if (!secondPool.length) secondPool = pool.filter((t) => isHormoneTheme(t) && t.id !== first.id);
   if (!secondPool.length) secondPool = THEMES.filter((t) => isHormoneTheme(t) && t.id !== first.id);
   if (!secondPool.length) secondPool = pool.filter((t) => t.id !== first.id);
   const second = secondPool.length ? weightedSample(secondPool, secondPool.map(perf), 1)[0] : null;
