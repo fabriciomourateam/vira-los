@@ -1,8 +1,10 @@
 /**
  * dailyContentService.js — Rotina diária automática do Fabricio Moura.
  *
- * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de temas DISTINTOS
- * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e 2 REELS
+ * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de USO HORMONAL (temas
+ * distintos DENTRO do lane hormônio/GLP-1 — pedido do Fabricio: os dois são
+ * hormonais), template fmteam, com o cérebro editorial: voz + anti-ban + ângulos,
+ * e 2 REELS
  * CURTOS tirados da FILA de roteiros pré-escritos (reel_content_queue), um por
  * horário (default 14h e 19h30), renderizados no estilo dourado, cada um com um
  * clipe cru DIFERENTE (do dia e dos dias anteriores). Fila vazia → reel por IA
@@ -175,66 +177,42 @@ function recentThemeIds(days = 14) {
   return used;
 }
 
-// Grupos (assuntos macro) usados nos últimos N batches — pra não cair no mesmo
-// assunto em dias seguidos (ex.: 3 dias falando de hormônio).
-function recentGroups(nBatches = 3) {
-  const batches = db.getAllDailyBatches()
-    .slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
-    .slice(0, nBatches);
-  const g = new Set();
-  batches.forEach((b) => (b.themes || []).forEach((t) => { if (t.group) g.add(t.group); }));
-  return g;
-}
-
-// Escolhe 2 temas/dia combinando a PRIORIDADE do Fabricio com a VARIEDADE do feed:
-//   1º = SEMPRE hormônio/GLP-1 (o lane disruptivo campeão — pedido dele: pelo menos 1
-//        dos 2 posts é hormônio). Lane fixo → só varia o tema/ângulo dentro dele.
-//   2º = um formato VENCEDOR (comparação/número OU história de cliente, ~50/50 pra o
-//        feed não ficar previsível), de grupo E formato DIFERENTES do 1º.
-// Evita ids recentes (14d) e desincentiva grupos usados nos últimos dias. Fallback
-// progressivo se o pool apertar.
+// Escolhe 2 temas/dia — pedido do Fabricio: os DOIS carrosséis do dia são de USO
+// HORMONAL (o lane disruptivo campeão). Lane fixo (hormônio/GLP-1) nos dois → só
+// varia o tema/ângulo dentro dele, mantendo os dois DISTINTOS entre si (e, quando
+// dá, de grupo diferente) pra não saírem parecidos. Evita ids recentes (14d);
+// fallback progressivo se o pool de hormônio apertar.
 const isHormoneTheme = (t) => t.group === 'hormonio' || t.group === 'caneta';
 
 function pickThemes() {
   const recentIds = recentThemeIds();
-  const recentG = recentGroups(3);
   let pool = THEMES.filter((t) => !recentIds.has(t.id));
   if (pool.length < 2) pool = THEMES.slice(); // todos recentes → libera geral
 
   const scores = scoreThemes();
   const maxScore = Math.max(0, ...pool.map((t) => scores[t.id] || 0));
   const perf = (t) => 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4;
-  const weightOf = (t) => {
-    // base 1 + até +4 por performance real; grupo usado recentemente pesa 1/4.
-    let w = perf(t);
-    if (recentG.has(t.group)) w *= 0.25;
-    return w;
-  };
 
-  // 1º tema: SEMPRE hormônio/GLP-1 (pedido do Fabricio: 1 dos 2 é hormônio). Lane fixo
-  // todo dia → NÃO penaliza por "grupo recente" (só varia o tema/ângulo); peso = perf.
-  // Se todos os de hormônio caíram nos recentes (14d), libera todos (fallback).
+  // Lane fixo de hormônio nos DOIS temas → peso = perf (não penaliza por "grupo
+  // recente", já que hormônio sai todo dia). Se todos os de hormônio caíram nos
+  // recentes (14d), libera o banco inteiro de hormônio (fallback).
   let hormPool = pool.filter(isHormoneTheme);
   if (!hormPool.length) hormPool = THEMES.filter(isHormoneTheme);
+
+  // 1º tema: hormônio.
   const first = hormPool.length ? weightedSample(hormPool, hormPool.map(perf), 1)[0]
-                                : weightedSample(pool, pool.map(weightOf), 1)[0];
+                                : weightedSample(pool, pool.map(perf), 1)[0];
   if (!first) return [];
 
-  // 2º tema: um formato VENCEDOR — comparação/número OU história de cliente, sorteando
-  // o LANE (~50/50) pra o feed não ficar previsível — de grupo E formato DIFERENTES do
-  // 1º. Se o lane sorteado não tiver tema fresco, tenta o outro; depois fallbacks.
-  const lanes = Math.random() < 0.5 ? ['comparacao', 'historia'] : ['historia', 'comparacao'];
-  let second = null;
-  for (const lane of lanes) {
-    let lanePool = pool.filter((t) => t.format === lane && t.id !== first.id && t.group !== first.group);
-    if (!lanePool.length) lanePool = THEMES.filter((t) => t.format === lane && t.id !== first.id && t.group !== first.group);
-    if (lanePool.length) { second = weightedSample(lanePool, lanePool.map(weightOf), 1)[0]; break; }
-  }
-  if (!second) {
-    let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
-    if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
-    second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
-  }
+  // 2º tema: TAMBÉM hormônio, só distinto do 1º (id diferente). Fica no lane hormônio
+  // de propósito (não força grupo diferente, que puxaria a caneta/GLP-1 pra dentro):
+  // o grupo 'hormonio' já dá variedade de sobra (sintomas + substâncias). Fallbacks:
+  // banco inteiro de hormônio → qualquer tema (última linha) se o pool esgotar.
+  let secondPool = hormPool.filter((t) => t.id !== first.id);
+  if (!secondPool.length) secondPool = THEMES.filter((t) => isHormoneTheme(t) && t.id !== first.id);
+  if (!secondPool.length) secondPool = pool.filter((t) => t.id !== first.id);
+  const second = secondPool.length ? weightedSample(secondPool, secondPool.map(perf), 1)[0] : null;
+
   return [first, second].filter(Boolean);
 }
 
@@ -575,7 +553,7 @@ async function generateQueuedReel({ carousels = [] } = {}) {
 
 // Gera o batch do dia (2 temas). Resiliente: falha de 1 tema não derruba o outro.
 // Sincroniza os números REAIS dos posts do Instagram (saves/shares/seguidores/etc.)
-// pro auto-ajuste por performance (scoreThemes/weightOf) sempre pesar os temas pelo
+// pro auto-ajuste por performance (scoreThemes/perf) sempre pesar os temas pelo
 // dado MAIS RECENTE. Best-effort: nunca derruba a geração do dia.
 async function refreshInstagramPerformance() {
   try {
@@ -628,7 +606,7 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
     // no batch (visível em /api/daily-content) em vez de sumir no log do Fly.
     try {
       // Auto-ajuste por performance: puxa os números REAIS do Instagram ANTES de
-      // escolher os temas, pra o scoreThemes/weightOf pesar pelos saves/shares/
+      // escolher os temas, pra o scoreThemes/perf pesar pelos saves/shares/
       // seguidores mais recentes (não por dado velho). Best-effort.
       await refreshInstagramPerformance();
       const themes = pickThemes();

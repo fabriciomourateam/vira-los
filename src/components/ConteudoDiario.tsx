@@ -221,8 +221,9 @@ export default function ConteudoDiario() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Todo dia às <b className="text-foreground">09h (Brasília)</b> o viralos gera 2 carrosséis de temas
-        diferentes + <b className="text-foreground">2 reels da fila de roteiros</b> (dourado), agendados às
+        Todo dia às <b className="text-foreground">09h (Brasília)</b> o viralos gera 2 carrosséis de
+        <b className="text-foreground"> uso hormonal</b> (temas diferentes dentro do assunto) +
+        <b className="text-foreground"> 2 reels da fila de roteiros</b> (dourado), agendados às
         14h e 19h30. Sem repetir temas das últimas 2 semanas.
       </p>
 
