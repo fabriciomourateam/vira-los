@@ -2,10 +2,11 @@ name: John Hulk — biblioteca (refresh + smoke)
 
 # Ferramenta MANUAL (ops + teste): atualiza a biblioteca de reels do John Hulk
 # (Apify) e imprime um resumo. Opcionalmente modela o 1º reel 'novo' pra validar
-# o pipeline de modelagem ponta a ponta. Não faz parte da rotina diária.
+# o pipeline de modelagem ponta a ponta (inclusive o MODO ANÚNCIO). Fora da rotina diária.
 #
 #   input model=false (default) → só refresh + lista (barato)
 #   input model=true            → refresh + lista + modela 1 reel (usa API/créditos)
+#   input mode=anuncio + cta=…  → modela em MODO ANÚNCIO (CTA direto por destino)
 
 on:
   workflow_dispatch:
@@ -14,6 +15,14 @@ on:
         description: "Modelar o 1º reel 'novo' após o refresh? (true/false)"
         required: false
         default: "false"
+      mode:
+        description: "organico (default) ou anuncio"
+        required: false
+        default: "organico"
+      cta:
+        description: "destino do clique no modo anuncio: whatsapp | link | dm"
+        required: false
+        default: "whatsapp"
 
 jobs:
   biblioteca:
@@ -22,6 +31,8 @@ jobs:
       - name: Refresh da biblioteca + smoke
         env:
           BASE: https://vira-los.fly.dev
+          MODE: ${{ github.event.inputs.mode }}
+          CTA: ${{ github.event.inputs.cta }}
         run: |
           set -e
           echo "=== disparando refresh da biblioteca ==="
@@ -49,13 +60,20 @@ jobs:
             echo "model=false — encerrando (só refresh)."; exit 0
           fi
 
-          echo "=== modelando o 1º reel 'novo' ==="
+          echo "=== modelando o 1º reel 'novo' (mode=$MODE) ==="
           resp=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?status=novo&sort=views&order=desc" || echo '{}')
           sc=$(echo "$resp" | jq -r '.reels[0].shortCode // empty')
           if [ -z "$sc" ]; then echo "nenhum reel 'novo' pra modelar."; exit 0; fi
           echo "reel escolhido: $sc"
+
+          if [ "$MODE" = "anuncio" ]; then
+            body=$(jq -n --arg cta "$CTA" '{mode:"anuncio", ctaDestination:$cta, offer:"avaliacao gratuita", numSlides:6}')
+          else
+            body='{}'
+          fi
+          echo "body: $body"
           curl -sS -m 60 -X POST "$BASE/api/john-hulk/reels/$sc/model" \
-            -H "Content-Type: application/json" -d '{}' || true
+            -H "Content-Type: application/json" -d "$body" || true
           echo ""
 
           echo "=== aguardando a modelagem ==="
@@ -65,9 +83,17 @@ jobs:
             st=$(echo "$r" | jq -r --arg sc "$sc" '.reels[] | select(.shortCode==$sc) | .status')
             cid=$(echo "$r" | jq -r --arg sc "$sc" '.reels[] | select(.shortCode==$sc) | .carouselId // "-"')
             echo "  tentativa $i — status=$st carouselId=$cid"
+            if [ "$st" = "erro" ]; then
+              echo "❌ Modelagem falhou (status=erro):"
+              echo "$r" | jq -r --arg sc "$sc" '.reels[] | select(.shortCode==$sc) | .errorMessage'
+              exit 1
+            fi
             if [ "$st" != "novo" ] && [ "$cid" != "-" ]; then
               echo "✅ Reel $sc modelado — carrossel $cid"
               echo "$r" | jq -r --arg sc "$sc" '.reels[] | select(.shortCode==$sc) | "tema=\(.topic) status=\(.status)"'
+              echo "----- carrossel gerado (mode/cta/offer) -----"
+              curl -sS -m 30 "$BASE/api/carousel/saved" \
+                | jq -r --arg id "$cid" '.[] | select(.id==$id) | "mode=\(.mode // "-") ctaDestination=\(.ctaDestination // "-") offer=\(.offer // "-") numSlides=\(.numSlides)"'
               exit 0
             fi
           done
