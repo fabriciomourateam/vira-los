@@ -1,0 +1,74 @@
+name: John Hulk — biblioteca (refresh + smoke)
+
+# Ferramenta MANUAL (ops + teste): atualiza a biblioteca de reels do John Hulk
+# (Apify) e imprime um resumo. Opcionalmente modela o 1º reel 'novo' pra validar
+# o pipeline de modelagem ponta a ponta. Não faz parte da rotina diária.
+#
+#   input model=false (default) → só refresh + lista (barato)
+#   input model=true            → refresh + lista + modela 1 reel (usa API/créditos)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Modelar o 1º reel 'novo' após o refresh? (true/false)"
+        required: false
+        default: "false"
+
+jobs:
+  biblioteca:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh da biblioteca + smoke
+        env:
+          BASE: https://vira-los.fly.dev
+        run: |
+          set -e
+          echo "=== disparando refresh da biblioteca ==="
+          curl -sS -m 60 -X POST "$BASE/api/john-hulk/reels/refresh" \
+            -H "Content-Type: application/json" -d '{}' || true
+          echo ""
+
+          echo "=== aguardando o refresh terminar ==="
+          for i in $(seq 1 20); do
+            sleep 15
+            resp=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?sort=views&order=desc" || echo '{}')
+            refreshing=$(echo "$resp" | jq -r '.libraryState.refreshing // false')
+            total=$(echo "$resp" | jq -r '.reels | length')
+            echo "  tentativa $i — refreshing=$refreshing · reels na biblioteca=$total"
+            if [ "$refreshing" = "false" ] && [ "$total" -gt 0 ]; then
+              echo "✅ Biblioteca populada com $total reels."
+              echo "----- top 5 por views -----"
+              echo "$resp" | jq -r '.reels[:5][] | "views=\(.views) likes=\(.likes) comments=\(.comments) status=\(.status) \(.url)  \((.caption // "")[:60])"'
+              break
+            fi
+            if [ "$i" = "20" ]; then echo "⚠️ refresh não concluiu no tempo esperado"; fi
+          done
+
+          if [ "${{ github.event.inputs.model }}" != "true" ]; then
+            echo "model=false — encerrando (só refresh)."; exit 0
+          fi
+
+          echo "=== modelando o 1º reel 'novo' ==="
+          resp=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?status=novo&sort=views&order=desc" || echo '{}')
+          sc=$(echo "$resp" | jq -r '.reels[0].shortCode // empty')
+          if [ -z "$sc" ]; then echo "nenhum reel 'novo' pra modelar."; exit 0; fi
+          echo "reel escolhido: $sc"
+          curl -sS -m 60 -X POST "$BASE/api/john-hulk/reels/$sc/model" \
+            -H "Content-Type: application/json" -d '{}' || true
+          echo ""
+
+          echo "=== aguardando a modelagem ==="
+          for i in $(seq 1 30); do
+            sleep 20
+            r=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?q=" || echo '{}')
+            st=$(echo "$r" | jq -r --arg sc "$sc" '.reels[] | select(.shortCode==$sc) | .status')
+            cid=$(echo "$r" | jq -r --arg sc "$sc" '.reels[] | select(.shortCode==$sc) | .carouselId // "-"')
+            echo "  tentativa $i — status=$st carouselId=$cid"
+            if [ "$st" != "novo" ] && [ "$cid" != "-" ]; then
+              echo "✅ Reel $sc modelado — carrossel $cid"
+              echo "$r" | jq -r --arg sc "$sc" '.reels[] | select(.shortCode==$sc) | "tema=\(.topic) status=\(.status)"'
+              exit 0
+            fi
+          done
+          echo "⚠️ modelagem não concluiu no tempo esperado (pode ainda estar rodando)."
