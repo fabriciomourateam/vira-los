@@ -256,6 +256,109 @@ const ANGLE_PRESETS = [
   { tone: 'acolhedor', emotion: 'orgulho', slideDelta: +1, note: 'Ângulo 3/N — tom mais acolhedor, foco em conquista/progresso, menos confronto.' },
 ];
 
+// ── Modo anúncio (tráfego pago) ─────────────────────────────────────────────
+// OPCIONAL, escolhido na hora da geração — default continua 'organico' (sem
+// nenhuma mudança de comportamento). Em 'anuncio': (1) o CTA final do carrossel
+// troca o "COMENTA: <keyword>" orgânico por uma CTA de resposta direta pro
+// destino escolhido (via ctaOverride no generateCarousel) e (2) a legenda vira
+// copy de anúncio (deriveAdCaption), em vez da legenda orgânica padrão.
+const AD_CTA_DESTINATIONS = ['whatsapp', 'link', 'dm'];
+
+// Monta o ctaOverride (label/keyword/benefit) do slide de CTA pro modo anúncio,
+// a partir do destino escolhido + a oferta livre (opcional) do dono. Mantém o
+// mesmo formato visual do CTA orgânico (kbox: label curto + keyword em
+// destaque + benefit em 1 linha) — só troca o conteúdo pra resposta direta.
+function buildAdCtaOverride({ ctaDestination, offer } = {}) {
+  const offerTrim = offer ? String(offer).trim().slice(0, 60) : '';
+  if (ctaDestination === 'link') {
+    return {
+      label: 'CLIQUE EM SAIBA MAIS',
+      keyword: offerTrim || 'GARANTA AGORA',
+      benefit: 'Toque no botão abaixo do anúncio e garanta sua vaga',
+    };
+  }
+  if (ctaDestination === 'dm') {
+    return {
+      label: 'CHAME NA DM',
+      keyword: offerTrim || 'ME CHAMA',
+      benefit: 'Manda uma mensagem agora e eu te respondo pessoalmente',
+    };
+  }
+  // default: 'whatsapp'
+  return {
+    label: 'CHAME NO WHATSAPP',
+    keyword: offerTrim || 'FALE COMIGO',
+    benefit: 'Clique no botão do anúncio e fala comigo agora mesmo',
+  };
+}
+
+// Diretriz extra (somada ao `extraDirective` de buildInstructions) SÓ pro modo
+// anúncio — deixa explícito pro modelo que isso é peça de TRÁFEGO PAGO (CTA de
+// resposta direta, não "comenta/salva/link na bio") e injeta a segurança de
+// política de anúncio da Meta (diferente do anti-ban orgânico, que este fluxo
+// não usa — ver comentário no topo do arquivo). Isso reduz o risco de rejeição
+// do anúncio na revisão da Meta.
+function buildAdDirective({ ctaDestination, offer } = {}) {
+  const destinoTexto = ctaDestination === 'link'
+    ? 'um LINK (saiba mais / página de vendas)'
+    : ctaDestination === 'dm'
+      ? 'a DM do Instagram'
+      : 'o WhatsApp';
+  return [
+    'ESTE CARROSSEL É UMA PEÇA DE ANÚNCIO PAGO (tráfego pago via Meta Ads), não um post orgânico.',
+    `O CTA final deve ser uma chamada de RESPOSTA DIRETA pro leitor entrar em contato AGORA por ${destinoTexto} — NÃO use "comenta a palavra", "salva esse post" ou "link na bio" (isso é mecânica de post orgânico, não de anúncio).`,
+    offer ? `Oferta/gancho da campanha (use como contexto, sem inventar promessa além disso): ${String(offer).slice(0, 200)}` : '',
+    'SEGURANÇA — POLÍTICA DE ANÚNCIO DA META (obrigatório em TODOS os slides, pra reduzir risco de reprovação do anúncio):',
+    '- NÃO se dirija nem faça suposição sobre o corpo/aparência de quem está lendo (nada de "você está acima do peso", "seu corpo", "olha pro seu shape" etc.) — fale do problema/tema de forma GERAL, nunca apontando pra pessoa.',
+    '- NÃO prometa resultado garantido nem use antes/depois agressivo ou alegação de saúde sensacionalista — enquadre como problema → solução, de forma realista e sem promessa de resultado específico.',
+  ].filter(Boolean).join('\n');
+}
+
+// Legenda de ANÚNCIO (primary text) — separada da legenda orgânica (que já é
+// gerada dentro de generateCarousel). 1 call Haiku, PT-BR, curta e defensiva:
+// gancho → agitação leve → solução → CTA pro destino escolhido. Segue a mesma
+// segurança de política de anúncio da Meta do buildAdDirective (sem apontar
+// corpo/aparência, sem promessa de resultado garantido), sem hashtag-spam nem
+// "comenta/link na bio". Devolve null em caso de falha (fallback fica a cargo
+// de quem chama — não derruba a modelagem por causa disso).
+async function deriveAdCaption({
+  topic, offer, ctaDestination, content,
+} = {}) {
+  const destinoTexto = ctaDestination === 'link'
+    ? 'clicar no link do anúncio (saiba mais)'
+    : ctaDestination === 'dm'
+      ? 'chamar na DM do Instagram'
+      : 'chamar no WhatsApp';
+  const context = [
+    content && content.transcription ? `TRANSCRIÇÃO DO REEL DE INSPIRAÇÃO:\n${content.transcription.slice(0, 1200)}` : '',
+    content && content.caption ? `LEGENDA ORIGINAL:\n${content.caption.slice(0, 400)}` : '',
+  ].filter(Boolean).join('\n\n');
+
+  try {
+    const res = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 350,
+      messages: [{
+        role: 'user',
+        content: `Escreva o texto principal (primary text) de um ANÚNCIO pago (Meta Ads) em PT-BR, na voz da FMTeam (Fabricio Moura, bodybuilding/composição corporal), pra acompanhar um carrossel de imagens.
+
+Tema do carrossel: "${topic}"
+${offer ? `Oferta/gancho da campanha: ${String(offer).slice(0, 200)}` : ''}
+CTA final: chamar o leitor pra ${destinoTexto} agora.
+${context ? `\nMaterial de inspiração (NÃO copie, só use como contexto de tema):\n${context}` : ''}
+
+Estrutura: gancho forte na 1ª linha → agitação leve do problema (SEM apontar corpo/aparência de quem lê, sem "você está...") → solução/promessa realista (SEM garantir resultado específico nem antes/depois agressivo) → CTA claro pra ${destinoTexto}.
+Regras: direto, sem clichê ("não é X é Y", "jornada"), SEM hashtag, SEM "comenta a palavra" nem "link na bio" (isso não se aplica aqui). Responda APENAS com o texto do anúncio, sem aspas, sem markdown, sem título.`,
+      }],
+    });
+    const text = (res.content[0]?.text || '').trim();
+    return text ? text.slice(0, 900) : null;
+  } catch (e) {
+    console.warn('[JohnHulk] deriveAdCaption falhou (ignorado, mantém legenda original):', e.message);
+    return null;
+  }
+}
+
 // ── Notificação de rascunho pronto (item 2 do plano) — best-effort, nunca falha o batch ──
 async function notifyDraftReady({ topic, reelUrl, carouselId } = {}) {
   const webhook = process.env.JOHN_HULK_NOTIFY_WEBHOOK;
@@ -358,11 +461,20 @@ const REEL_LOCKED_STATUSES = new Set(['modelado', 'editado', 'agendado', 'postad
 // `variants` (1-3, item B): gera N carrosséis do MESMO reel com ângulo/tom/nº de
 // slides diferentes. `angle` (opcional): direcionamento extra livre do dono,
 // somado ao(s) preset(s) de ângulo em TODAS as variações geradas.
+// `numSlides` (opcional, 4-10, default 7): nº base de slides do carrossel — cada
+// variação ainda aplica o slideDelta do ANGLE_PRESETS em cima desse valor, sempre
+// clampado em 4-10.
+// `mode` (opcional): 'organico' (default, comportamento 100% igual ao de antes) ou
+// 'anuncio' (peça de tráfego pago — troca o CTA final e a legenda pra resposta
+// direta, com segurança de política de anúncio da Meta — ver buildAdDirective).
+// `ctaDestination` ('whatsapp'|'link'|'dm') e `offer` (texto livre da oferta) só
+// fazem sentido em mode:'anuncio'.
 // Resiliência (item A): a tentativa inteira roda com 1 auto-retry (delay curto);
 // se as duas falharem, o reel vai pra status:'erro' com errorMessage/errorAt e a
 // exceção é relançada pro chamador (rota/batch/rotina diária) tratar.
 async function modelReel({
   shortCode, url, regenerate = false, variants = 1, angle,
+  mode = 'organico', ctaDestination, offer, numSlides,
 } = {}) {
   let resolvedShortCode = shortCode || null;
   let resolvedUrl = url || null;
@@ -385,11 +497,21 @@ async function modelReel({
   }
 
   const numVariants = Math.min(3, Math.max(1, Number(variants) || 1));
+  const isAdMode = mode === 'anuncio';
+  const baseSlides = Math.min(10, Math.max(4, Number(numSlides) || 7));
 
   modelingLocks.add(resolvedShortCode);
   try {
     const attempt = () => modelReelAttempt({
-      resolvedShortCode, resolvedUrl, regenerate, numVariants, angle,
+      resolvedShortCode,
+      resolvedUrl,
+      regenerate,
+      numVariants,
+      angle,
+      mode: isAdMode ? 'anuncio' : 'organico',
+      ctaDestination: isAdMode ? ctaDestination : undefined,
+      offer: isAdMode ? offer : undefined,
+      numSlides: baseSlides,
     });
 
     try {
@@ -423,7 +545,9 @@ async function modelReel({
 // pelo chamador).
 async function modelReelAttempt({
   resolvedShortCode, resolvedUrl, regenerate, numVariants, angle,
+  mode = 'organico', ctaDestination, offer, numSlides = 7,
 } = {}) {
+  const isAdMode = mode === 'anuncio';
   const steps = [];
   let reel = db.getJohnHulkReel(resolvedShortCode);
 
@@ -500,21 +624,29 @@ async function modelReelAttempt({
     const preset = ANGLE_PRESETS[i] || ANGLE_PRESETS[0];
     const tone = preset.tone || derived.tone;
     const emotion = preset.emotion || derived.emotion;
-    const numSlides = Math.min(8, Math.max(6, 7 + preset.slideDelta));
+    // Base = numSlides escolhido na chamada (default 7, clampado 4-10 em modelReel);
+    // cada variação ainda aplica o slideDelta do preset em cima dessa base, sempre
+    // clampado em 4-10.
+    const slideCountForVariant = Math.min(10, Math.max(4, numSlides + preset.slideDelta));
     const angleNote = [
       numVariants > 1 ? preset.note.replace('/N', `/${numVariants}`) : '',
       angle ? `Direcionamento extra pedido pelo dono: ${String(angle).slice(0, 200)}` : '',
-    ].filter(Boolean).join('\n');
+      isAdMode ? buildAdDirective({ ctaDestination, offer }) : '',
+    ].filter(Boolean).join('\n\n');
     const instructions = buildInstructions(content, angleNote);
+    // Modo anúncio: troca o CTA final (kbox) pra resposta direta ao destino
+    // escolhido — ausente/undefined em modo orgânico, mantendo o CTA configurado
+    // (db.getCarouselCta()) 100% igual ao de antes.
+    const ctaOverride = isAdMode ? buildAdCtaOverride({ ctaDestination, offer }) : undefined;
 
     const carouselResult = await withTimeout(
-      runStep(steps, `generate-carousel-${i + 1}`, `Gerando carrossel FMTeam${numVariants > 1 ? ` (variação ${i + 1}/${numVariants})` : ''}`, () => generateCarousel({
+      runStep(steps, `generate-carousel-${i + 1}`, `Gerando carrossel FMTeam${numVariants > 1 ? ` (variação ${i + 1}/${numVariants})` : ''}${isAdMode ? ' [ANÚNCIO]' : ''}`, () => generateCarousel({
         topic,
         instructions,
         niche: NICHE,
         instagramHandle: HANDLE,
         creatorName: CREATOR,
-        numSlides,
+        numSlides: slideCountForVariant,
         contentTone: tone,
         dominantEmotion: emotion,
         layoutStyle: 'fmteam',
@@ -522,11 +654,30 @@ async function modelReelAttempt({
         fmteamCover: { showContext: false },
         imageSubject: IMAGE_SUBJECT,
         avoidPhotoUrls: db.getRecentPhotoUrls ? db.getRecentPhotoUrls() : [],
+        ctaOverride,
       })),
       JOHN_HULK_STEP_TIMEOUT_MS, 'generateCarousel'
     );
 
     try { if (db.addRecentPhotoUrls) db.addRecentPhotoUrls(carouselResult.photoUrlsUsed || []); } catch (_) { /* ignora */ }
+
+    // Modo anúncio: substitui a legenda orgânica (gerada dentro de generateCarousel)
+    // por uma copy de anúncio (gancho → agitação leve → solução → CTA). Defensivo —
+    // se a call falhar, mantém a legenda original em vez de derrubar a geração.
+    let legenda = carouselResult.legenda;
+    if (isAdMode) {
+      try {
+        const adCaption = await withTimeout(
+          runStep(steps, `ad-caption-${i + 1}`, `Gerando legenda de anúncio (Claude Haiku)${numVariants > 1 ? ` (variação ${i + 1}/${numVariants})` : ''}`, () => deriveAdCaption({
+            topic, offer, ctaDestination, content,
+          })),
+          60 * 1000, 'deriveAdCaption'
+        );
+        if (adCaption) legenda = adCaption;
+      } catch (e) {
+        console.warn('[JohnHulk] deriveAdCaption (timeout/erro, mantém legenda original):', e.message);
+      }
+    }
 
     let screenshots = [];
     try {
@@ -544,7 +695,7 @@ async function modelReelAttempt({
       folderName: carouselResult.folderName,
       numSlides: carouselResult.numSlides,
       screenshots,
-      legenda: carouselResult.legenda,
+      legenda,
       layoutStyle: 'fmteam',
       source: 'john-hulk',
       archived: false,
@@ -553,6 +704,9 @@ async function modelReelAttempt({
       derivedTopic: topic,
       viralInsight: viralInsight || null,
       variantIndex: numVariants > 1 ? i + 1 : undefined,
+      mode: isAdMode ? 'anuncio' : 'organico',
+      ctaDestination: isAdMode ? ctaDestination : undefined,
+      offer: isAdMode && offer ? String(offer).slice(0, 200) : undefined,
     });
     carouselIds.push(carouselId);
   }
@@ -571,12 +725,14 @@ async function modelReelAttempt({
 }
 
 // Modela vários reels em sequência — resiliente: 1 falha não para o lote.
-async function modelBatch({ shortCodes } = {}) {
+// Fica sempre em modo orgânico (sem opções de anúncio) — só `numSlides` (opcional)
+// passa direto pro modelReel de cada reel do lote, pra manter o batch simples.
+async function modelBatch({ shortCodes, numSlides } = {}) {
   const list = Array.isArray(shortCodes) ? shortCodes.filter(Boolean) : [];
   const results = [];
   for (const shortCode of list) {
     try {
-      const r = await modelReel({ shortCode });
+      const r = await modelReel({ shortCode, numSlides });
       results.push({ shortCode, ok: true, ...r });
     } catch (e) {
       console.warn(`[JohnHulk] modelBatch: falha em ${shortCode}:`, e.message);
@@ -796,4 +952,6 @@ module.exports = {
   // Biblioteca de Reels + Modeling Studio
   refreshLibrary, getLibraryState,
   modelReel, modelBatch, isReelModeling,
+  // Modo anúncio (item novo) — exportados pra teste/reuso
+  buildAdCtaOverride, buildAdDirective, deriveAdCaption, AD_CTA_DESTINATIONS,
 };

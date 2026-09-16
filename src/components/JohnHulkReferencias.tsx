@@ -16,12 +16,16 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface Step { id: string; label: string; status: 'running' | 'done' | 'error'; ms: number; error?: string; }
 
+type JHMode = 'organico' | 'anuncio';
+type CtaDestination = 'whatsapp' | 'link' | 'dm';
+
 interface JHCarousel {
   id: string; topic: string; folderName: string; numSlides: number;
   screenshots?: string[]; legenda?: string; layoutStyle?: string; source?: string; archived?: boolean;
   sourceReel?: { shortCode?: string; url?: string; handle?: string };
   derivedTopic?: string; config?: Record<string, unknown>; created_at?: string;
   viralInsight?: string | null; variantIndex?: number;
+  mode?: JHMode; ctaDestination?: CtaDestination; offer?: string;
 }
 
 interface Batch {
@@ -105,6 +109,22 @@ const REEL_STATUS_BADGE: Record<string, string> = {
 };
 // Ordem do pipeline pro Kanban (erro fica fora — é um estado de falha, não um passo).
 const PIPELINE_ORDER: ReelStatus[] = ['novo', 'modelado', 'editado', 'agendado', 'postado'];
+
+// Modo anúncio (tráfego pago) — item novo do contrato /model e /model-url.
+const NUM_SLIDES_OPTIONS = [4, 5, 6, 7, 8, 9, 10] as const;
+const CTA_DESTINATION_OPTIONS: { value: CtaDestination; label: string }[] = [
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'link', label: 'Link (site)' },
+  { value: 'dm', label: 'DM' },
+];
+const CTA_DESTINATION_LABELS: Record<string, string> = Object.fromEntries(
+  CTA_DESTINATION_OPTIONS.map((o) => [o.value, o.label])
+);
+const CTA_COPY_PREVIEW: Record<CtaDestination, string> = {
+  whatsapp: 'CHAME NO WHATSAPP',
+  link: 'CLIQUE EM SAIBA MAIS',
+  dm: 'CHAME NA DM',
+};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -248,12 +268,17 @@ function ApproveScheduleControl({
 
 // ─── Card de reel da Biblioteca ────────────────────────────────────────────────
 
+interface ModelRequestOpts {
+  variants: number; angle: string; numSlides: number; mode: JHMode;
+  ctaDestination?: CtaDestination; offer?: string;
+}
+
 function ReelCard({
   reel, selected, onToggleSelect, onToggleFavorite, favoriting, onRequestModel, onRetryError, modeling,
 }: {
   reel: Reel; selected: boolean; onToggleSelect: () => void; onToggleFavorite: () => void;
   favoriting: boolean;
-  onRequestModel: (variants: number, angle: string) => void;
+  onRequestModel: (opts: ModelRequestOpts) => void;
   onRetryError: () => void;
   modeling: boolean;
 }) {
@@ -261,6 +286,10 @@ function ReelCard({
   const [panelOpen, setPanelOpen] = useState(false);
   const [variants, setVariants] = useState(1);
   const [angle, setAngle] = useState('');
+  const [numSlides, setNumSlides] = useState(7);
+  const [mode, setMode] = useState<JHMode>('organico');
+  const [ctaDestination, setCtaDestination] = useState<CtaDestination>('whatsapp');
+  const [offer, setOffer] = useState('');
   const isErro = reel.status === 'erro';
   const used = reel.status !== 'novo' && !isErro;
 
@@ -356,7 +385,7 @@ function ReelCard({
             </button>
 
             {panelOpen && !modeling && (
-              <div className="absolute z-20 bottom-full left-0 mb-1.5 w-56 bg-card border border-border rounded-xl p-3 space-y-2 shadow-xl">
+              <div className="absolute z-20 bottom-full left-0 mb-1.5 w-64 bg-card border border-border rounded-xl p-3 space-y-2 shadow-xl">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] text-muted-foreground">Variações</span>
                   <select
@@ -369,15 +398,80 @@ function ReelCard({
                     <option value={3}>3</option>
                   </select>
                 </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">Nº de slides</span>
+                  <select
+                    value={numSlides}
+                    onChange={(e) => setNumSlides(Number(e.target.value))}
+                    className="rounded-lg border border-border bg-background px-1.5 py-1 text-[11px]"
+                  >
+                    {NUM_SLIDES_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
                 <input
                   value={angle}
                   onChange={(e) => setAngle(e.target.value)}
                   placeholder="Ângulo (opcional)…"
                   className="w-full rounded-lg border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                 />
+
+                <div className="pt-1 border-t border-border space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-muted-foreground">Tipo</span>
+                    <div className="flex gap-1 bg-secondary rounded-lg p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setMode('organico')}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors ${mode === 'organico' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        Orgânico
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMode('anuncio')}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors ${mode === 'anuncio' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        Anúncio
+                      </button>
+                    </div>
+                  </div>
+
+                  {mode === 'anuncio' && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-muted-foreground">Destino do clique</span>
+                        <select
+                          value={ctaDestination}
+                          onChange={(e) => setCtaDestination(e.target.value as CtaDestination)}
+                          className="rounded-lg border border-border bg-background px-1.5 py-1 text-[11px]"
+                        >
+                          {CTA_DESTINATION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <input
+                        value={offer}
+                        onChange={(e) => setOffer(e.target.value)}
+                        placeholder="Oferta (opcional): avaliação grátis…"
+                        className="w-full rounded-lg border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      />
+                      <p className="text-[10px] text-muted-foreground leading-snug">
+                        CTA direto no carrossel (ex.: “{CTA_COPY_PREVIEW[ctaDestination]}”). Segue as políticas de
+                        anúncio da Meta — sem prometer resultado, sem apontar o corpo do espectador.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => { setPanelOpen(false); onRequestModel(variants, angle.trim()); }}
+                    onClick={() => {
+                      setPanelOpen(false);
+                      onRequestModel({
+                        variants, angle: angle.trim(), numSlides, mode,
+                        ctaDestination: mode === 'anuncio' ? ctaDestination : undefined,
+                        offer: mode === 'anuncio' && offer.trim() ? offer.trim() : undefined,
+                      });
+                    }}
                     className="flex-1 text-[11px] font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-lg py-1.5"
                   >
                     Gerar
@@ -425,7 +519,20 @@ function DraftCard({
             {REEL_STATUS_LABELS[status] || status}
           </span>
         )}
+        {draft.mode === 'anuncio' && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-amber-500/15 text-amber-400 border-amber-500/30 font-semibold">
+            Anúncio
+          </span>
+        )}
       </div>
+
+      {draft.mode === 'anuncio' && (draft.ctaDestination || draft.offer) && (
+        <p className="text-xs text-amber-400/90">
+          {draft.ctaDestination && <>CTA: {CTA_DESTINATION_LABELS[draft.ctaDestination] || draft.ctaDestination}</>}
+          {draft.ctaDestination && draft.offer && <> · </>}
+          {draft.offer && <>oferta: {draft.offer}</>}
+        </p>
+      )}
 
       <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
         {dateStr && <span>{dateStr}</span>}
@@ -623,10 +730,16 @@ export default function JohnHulkReferencias() {
   const [modelingMap, setModelingMap] = useState<Record<string, number>>({});
   const [modelUrl, setModelUrl] = useState('');
   const [urlModeling, setUrlModeling] = useState(false);
+  const [urlOptionsOpen, setUrlOptionsOpen] = useState(false);
+  const [urlNumSlides, setUrlNumSlides] = useState(7);
+  const [urlMode, setUrlMode] = useState<JHMode>('organico');
+  const [urlCtaDestination, setUrlCtaDestination] = useState<CtaDestination>('whatsapp');
+  const [urlOffer, setUrlOffer] = useState('');
   const [refreshingLib, setRefreshingLib] = useState(false);
   const [refreshingLibFast, setRefreshingLibFast] = useState(false);
   const [pendingDupe, setPendingDupe] = useState<{
-    shortCode: string; topic?: string; variants: number; angle: string; similar: DupeCheckItem[];
+    shortCode: string; topic?: string; variants: number; angle: string; numSlides: number; mode: JHMode;
+    ctaDestination?: CtaDestination; offer?: string; similar: DupeCheckItem[];
   } | null>(null);
   const [dupeChecking, setDupeChecking] = useState<Record<string, boolean>>({});
   const [movingStatusMap, setMovingStatusMap] = useState<Record<string, boolean>>({});
@@ -729,7 +842,10 @@ export default function JohnHulkReferencias() {
 
   // POST real de modelagem — chamado direto (retry de erro) ou depois da
   // confirmação de duplicidade (fluxo normal do botão "Modelar").
-  async function handleModelReel(shortCode: string, opts: { regenerate?: boolean; variants?: number; angle?: string } = {}) {
+  async function handleModelReel(shortCode: string, opts: {
+    regenerate?: boolean; variants?: number; angle?: string; numSlides?: number; mode?: JHMode;
+    ctaDestination?: CtaDestination; offer?: string;
+  } = {}) {
     setModelingMap((m) => ({ ...m, [shortCode]: Date.now() }));
     try {
       const res = await fetch(`${API}/api/john-hulk/reels/${shortCode}/model`, {
@@ -738,6 +854,10 @@ export default function JohnHulkReferencias() {
           regenerate: !!opts.regenerate,
           variants: opts.variants && opts.variants > 1 ? opts.variants : undefined,
           angle: opts.angle || undefined,
+          numSlides: opts.numSlides || undefined,
+          mode: opts.mode || undefined,
+          ctaDestination: opts.mode === 'anuncio' ? opts.ctaDestination : undefined,
+          offer: opts.mode === 'anuncio' && opts.offer ? opts.offer : undefined,
         }),
       });
       const data = await res.json();
@@ -751,14 +871,15 @@ export default function JohnHulkReferencias() {
 
   // Item 1: antes de modelar, checa duplicidade de tema nos últimos 21 dias.
   // Se achar tema parecido, abre confirmação; senão modela direto.
-  async function handleRequestModel(reel: Reel, variants: number, angle: string) {
+  async function handleRequestModel(reel: Reel, opts: ModelRequestOpts) {
     const shortCode = reel.shortCode;
+    const { variants, angle, numSlides, mode, ctaDestination, offer } = opts;
     setDupeChecking((s) => ({ ...s, [shortCode]: true }));
     try {
       const res = await fetch(`${API}/api/john-hulk/reels/${shortCode}/dupe-check?days=21`);
       const data: DupeCheckResponse = await res.json();
       if (data.count > 0) {
-        setPendingDupe({ shortCode, topic: reel.topic || reel.caption, variants, angle, similar: data.similar });
+        setPendingDupe({ shortCode, topic: reel.topic || reel.caption, variants, angle, numSlides, mode, ctaDestination, offer, similar: data.similar });
         return;
       }
     } catch {
@@ -766,15 +887,15 @@ export default function JohnHulkReferencias() {
     } finally {
       setDupeChecking((s) => { const n = { ...s }; delete n[shortCode]; return n; });
     }
-    handleModelReel(shortCode, { regenerate: reel.status !== 'novo', variants, angle });
+    handleModelReel(shortCode, { regenerate: reel.status !== 'novo', variants, angle, numSlides, mode, ctaDestination, offer });
   }
 
   function confirmPendingDupeModel() {
     if (!pendingDupe) return;
-    const { shortCode, variants, angle } = pendingDupe;
+    const { shortCode, variants, angle, numSlides, mode, ctaDestination, offer } = pendingDupe;
     const reel = reels.find((r) => r.shortCode === shortCode);
     setPendingDupe(null);
-    handleModelReel(shortCode, { regenerate: reel ? reel.status !== 'novo' : false, variants, angle });
+    handleModelReel(shortCode, { regenerate: reel ? reel.status !== 'novo' : false, variants, angle, numSlides, mode, ctaDestination, offer });
   }
 
   // Item 2: retry rápido de um reel com status 'erro' — sem passar pelo painel
@@ -790,12 +911,19 @@ export default function JohnHulkReferencias() {
     try {
       const res = await fetch(`${API}/api/john-hulk/reels/model-url`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({
+          url,
+          numSlides: urlNumSlides || undefined,
+          mode: urlMode || undefined,
+          ctaDestination: urlMode === 'anuncio' ? urlCtaDestination : undefined,
+          offer: urlMode === 'anuncio' && urlOffer.trim() ? urlOffer.trim() : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao modelar por URL.');
       toast.info('Modelando reel em carrossel… leva alguns minutos. A biblioteca atualiza sozinha.');
       setModelUrl('');
+      setUrlOffer('');
       // Modelagem por URL avulsa não tem shortCode conhecido de antemão pra rastrear
       // por polling reativo — faz alguns refreshes best-effort da lista.
       setTimeout(fetchReels, 10000);
@@ -1023,6 +1151,20 @@ export default function JohnHulkReferencias() {
               placeholder="Colar URL de um reel/post do Instagram para modelar…"
               className="flex-1 min-w-[220px] rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             />
+            <select
+              value={urlNumSlides}
+              onChange={(e) => setUrlNumSlides(Number(e.target.value))}
+              title="Nº de slides"
+              className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+            >
+              {NUM_SLIDES_OPTIONS.map((n) => <option key={n} value={n}>{n} slides</option>)}
+            </select>
+            <button
+              onClick={() => setUrlOptionsOpen((o) => !o)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${urlOptionsOpen || urlMode === 'anuncio' ? 'bg-purple-500/20 text-purple-300' : 'bg-secondary hover:bg-secondary/70 text-foreground'}`}
+            >
+              Opções {urlOptionsOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
             <button
               onClick={handleModelUrl}
               disabled={urlModeling || !modelUrl.trim()}
@@ -1032,6 +1174,54 @@ export default function JohnHulkReferencias() {
               Modelar por URL
             </button>
           </div>
+
+          {urlOptionsOpen && (
+            <div className="rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted-foreground">Tipo</span>
+                <div className="flex gap-1 bg-secondary rounded-lg p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setUrlMode('organico')}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors ${urlMode === 'organico' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Orgânico
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUrlMode('anuncio')}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors ${urlMode === 'anuncio' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Anúncio
+                  </button>
+                </div>
+              </div>
+              {urlMode === 'anuncio' && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-muted-foreground">Destino do clique</span>
+                    <select
+                      value={urlCtaDestination}
+                      onChange={(e) => setUrlCtaDestination(e.target.value as CtaDestination)}
+                      className="rounded-lg border border-border bg-background px-1.5 py-1 text-[11px]"
+                    >
+                      {CTA_DESTINATION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <input
+                    value={urlOffer}
+                    onChange={(e) => setUrlOffer(e.target.value)}
+                    placeholder="Oferta (opcional): avaliação grátis…"
+                    className="w-full rounded-lg border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  />
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    CTA direto no carrossel (ex.: “{CTA_COPY_PREVIEW[urlCtaDestination]}”). Segue as políticas de
+                    anúncio da Meta — sem prometer resultado, sem apontar o corpo do espectador.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-2 flex-wrap">
             {handleOptions.length > 1 && (
@@ -1098,7 +1288,7 @@ export default function JohnHulkReferencias() {
                 onToggleSelect={() => toggleSelect(r.shortCode)}
                 onToggleFavorite={() => handleToggleFavorite(r.shortCode)}
                 favoriting={!!favoritingMap[r.shortCode]}
-                onRequestModel={(variants, angle) => handleRequestModel(r, variants, angle)}
+                onRequestModel={(opts) => handleRequestModel(r, opts)}
                 onRetryError={() => handleRetryError(r.shortCode)}
                 modeling={!!modelingMap[r.shortCode] || !!dupeChecking[r.shortCode]}
               />

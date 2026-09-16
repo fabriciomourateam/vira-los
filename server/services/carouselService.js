@@ -1695,14 +1695,19 @@ function buildFmteamCapaClassesNote({ showCoverSub = true, showCoverContext = tr
   return note;
 }
 
-function buildFmteamCtaTemplate({ ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor }) {
+function buildFmteamCtaTemplate({ ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor, ctaOverride }) {
   // CTA configurável (db.getCarouselCta) — não mais chumbado em SHAPE/Acompanhamento.
   // Default: comenta uma palavra pra receber valor (mecânica de comentário que reativa o
   // alcance), coerente com o CTA dos reels — em vez de um pitch de venda em todo carrossel.
+  // `ctaOverride` (opcional — modo anúncio): { label?, keyword?, benefit? } — quando um
+  // campo vem preenchido, substitui o valor de db.getCarouselCta() SÓ nesse campo (os
+  // demais continuam vindo do CTA orgânico configurado). Ausente/vazio = comportamento
+  // 100% igual ao de antes.
   const cfgCta = (db.getCarouselCta && db.getCarouselCta()) || {};
-  const ctaLabel   = cfgCta.label || 'COMENTA:';
-  const ctaKeyword = String(cfgCta.keyword || 'TESTO').toUpperCase().trim();
-  const ctaBenefit = cfgCta.benefit || 'Pra receber meu passo a passo pra subir a testosterona de forma natural';
+  const override = ctaOverride || {};
+  const ctaLabel   = (override.label && String(override.label).trim()) || cfgCta.label || 'COMENTA:';
+  const ctaKeyword = String((override.keyword && String(override.keyword).trim()) || cfgCta.keyword || 'TESTO').toUpperCase().trim();
+  const ctaBenefit = (override.benefit && String(override.benefit).trim()) || cfgCta.benefit || 'Pra receber meu passo a passo pra subir a testosterona de forma natural';
 
   const dark = `SLIDE ${numSlides} — CTA (slide-dark, slide-with-bg, on-dark — foto full-bleed do criador):
 ATENÇÃO — O conteúdo deste slide tem PARTES FIXAS que NÃO podem ser alteradas:
@@ -1782,7 +1787,7 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro,
   titleFontSize = 0, bodyFontSize = 0,
   titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '',
-  ctaStyle = 'dark-fullbleed', showCoverSub = true, showCoverContext = true }) {
+  ctaStyle = 'dark-fullbleed', showCoverSub = true, showCoverContext = true, ctaOverride = null }) {
 
   const handle = (instagramHandle || 'fabriciomourateam').replace('@', '');
   const handleAt = `@${handle}`;
@@ -1847,7 +1852,7 @@ function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontF
   // CTA: helper retorna o template HTML + descrição curta da estrutura,
   // selecionando entre 'dark-fullbleed' (default) e 'light-card' via ctaStyle.
   const { ctaSlideTemplate, ctaDescription } = buildFmteamCtaTemplate({
-    ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor,
+    ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor, ctaOverride,
   });
 
   const capaSubContext = buildFmteamCapaSubContext({ showCoverSub, showCoverContext });
@@ -2033,9 +2038,9 @@ Gere o HTML completo agora (apenas HTML, nada mais):`;
  * É sempre adicionada pelo servidor ao final do preamble (template ou padrão),
  * garantindo que o usuário não possa quebrar a estrutura técnica dos slides.
  */
-function buildFmteamHTMLStructureBlock({ topic, numSlides, handleAt, displayName, badgeAvatarInner, ctaPhotoSrc, header, verifiedSvg, progFor, ctaStyle = 'dark-fullbleed', showCoverSub = true, showCoverContext = true }) {
+function buildFmteamHTMLStructureBlock({ topic, numSlides, handleAt, displayName, badgeAvatarInner, ctaPhotoSrc, header, verifiedSvg, progFor, ctaStyle = 'dark-fullbleed', showCoverSub = true, showCoverContext = true, ctaOverride = null }) {
   const { ctaSlideTemplate } = buildFmteamCtaTemplate({
-    ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor,
+    ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor, ctaOverride,
   });
   const capaSubContext = buildFmteamCapaSubContext({ showCoverSub, showCoverContext });
   const capaClassesNote = buildFmteamCapaClassesNote({ showCoverSub, showCoverContext });
@@ -2348,6 +2353,7 @@ async function generateCarousel(config, setStep = () => {}) {
     fmteamCover = {},             // personalização da capa fmteam (cores + toggles + imagem do CTA)
     avoidPhotoUrls = [],          // URLs de fotos a evitar (carrosséis recentes) — dedup
     imageSubject = '',            // opcional: enviesa TODAS as imagens (queries + reserva IA) pro sujeito (ex.: "muscular bodybuilder physique")
+    ctaOverride = null,            // opcional (modo anúncio): { label?, keyword?, benefit? } — substitui o CTA orgânico (db.getCarouselCta()) campo a campo no slide de CTA fmteam
   } = config;
 
   // Opções de personalização da capa fmteam (com defaults seguros)
@@ -2480,7 +2486,7 @@ async function generateCarousel(config, setStep = () => {}) {
       const { ctaDescription: fmCtaDescription } = buildFmteamCtaTemplate({
         ctaStyle, numSlides: slidesCount, header: fmHeader, ctaPhotoSrc: fmCtaPhotoSrc,
         displayName: fmDisplayName, badgeAvatarInner: fmBadgeAvatarInner,
-        verifiedSvg: fmVerifiedSvg, handleAt: fmHandleAt, progFor: fmProgFor,
+        verifiedSvg: fmVerifiedSvg, handleAt: fmHandleAt, progFor: fmProgFor, ctaOverride,
       });
       const fmSlideDistText = slidesCount === 9
         ? `DISTRIBUIÇÃO FIXA DOS 9 SLIDES (estrutura fmteam v2 — siga exatamente):
@@ -2568,6 +2574,7 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6
         ctaStyle,
         showCoverSub: fmCoverShowSub,
         showCoverContext: fmCoverShowContext,
+        ctaOverride,
       });
 
       htmlPrompt = fmPreamble + '\n\n' + fmStructure;
@@ -2583,6 +2590,7 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6
         ctaStyle,
         showCoverSub: fmCoverShowSub,
         showCoverContext: fmCoverShowContext,
+        ctaOverride,
       });
     }
   } else {
