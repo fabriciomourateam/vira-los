@@ -9,13 +9,15 @@
  *                                            x-cron-key/DAILY_CRON_SECRET do daily-content
  * POST /api/john-hulk/settings            → liga/desliga kill-switch e auto-agendamento
  * GET  /api/john-hulk/reels               → lista a biblioteca (filtros/sort)
- * POST /api/john-hulk/reels/refresh       → atualiza a biblioteca (Apify, background)
- * POST /api/john-hulk/reels/:sc/model     → modela 1 reel da biblioteca (background)
+ * POST /api/john-hulk/reels/refresh       → atualiza a biblioteca (Apify, background; body {mode:'full'|'incremental'})
+ * POST /api/john-hulk/reels/:sc/model     → modela 1 reel da biblioteca (background; body {regenerate,variants,angle})
  * POST /api/john-hulk/reels/model-url     → modela 1 reel por URL avulsa (background)
  * POST /api/john-hulk/reels/model-batch   → modela vários reels em sequência (background)
- * POST /api/john-hulk/reels/:sc/status    → seta status manual do reel
+ * POST /api/john-hulk/reels/:sc/status    → seta status manual do reel (inclui 'erro')
  * POST /api/john-hulk/reels/:sc/favorite  → toggle favorito
+ * GET  /api/john-hulk/reels/:sc/dupe-check → aviso de reel com tema parecido já modelado (não bloqueia)
  * GET  /api/john-hulk/insights            → aprendizado leve (tema modelado × posts que performaram)
+ * GET  /api/john-hulk/cost                → custo Anthropic (melhor esforço, via usageTracker)
  * POST /api/john-hulk/:id/approve         → agenda o rascunho aprovado no mLabs
  */
 
@@ -64,7 +66,18 @@ router.post('/settings', (req, res) => {
 });
 
 // ── Biblioteca de Reels (Reel Library) ─────────────────────────────────────────
-const REEL_STATUS_VALUES = ['novo', 'modelado', 'editado', 'agendado', 'postado'];
+// 'erro' (item A do plano de melhorias) — reel cuja modelagem falhou (1ª tentativa
+// + retry) 2x seguidas. Se comporta como 'novo' pro guard de "já modelado".
+const REEL_STATUS_VALUES = ['novo', 'modelado', 'editado', 'agendado', 'postado', 'erro'];
+
+// Extração simples de palavras-chave (PT-BR) — compartilhada entre /insights e
+// /reels/:shortCode/dupe-check (item D do plano de melhorias).
+const KEYWORD_STOPWORDS = new Set(['para', 'como', 'sobre', 'esse', 'essa', 'isso', 'você', 'mais', 'nunca', 'sempre', 'tudo', 'pelo', 'pela']);
+const keywordsOf = (text) => String(text || '')
+  .toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .split(/[^a-z0-9]+/)
+  .filter((w) => w.length >= 4 && !KEYWORD_STOPWORDS.has(w));
 
 // Lista a biblioteca com filtros/ordenação server-side.
 router.get('/reels', (req, res) => {
@@ -89,6 +102,8 @@ router.get('/reels', (req, res) => {
 });
 
 // Atualiza a biblioteca via Apify (pode levar minutos — roda em background).
+// Body opcional: { handle?, limit?, mode?:'full'|'incremental' } — item F do plano
+// (incremental = limit 30, mais rápido/barato pra refresh frequente).
 router.post('/reels/refresh', (req, res) => {
   if (!db.getJohnHulkSettings().johnHulkEnabled) {
     return res.json({ skipped: 'disabled' });
@@ -99,17 +114,28 @@ router.post('/reels/refresh', (req, res) => {
 
   const handle = req.body && req.body.handle ? String(req.body.handle) : undefined;
   const limit = req.body && req.body.limit ? Number(req.body.limit) : undefined;
+  const mode = req.body && req.body.mode === 'incremental' ? 'incremental' : undefined;
 
   res.json({ started: true });
-  johnHulk.refreshLibrary({ handle, limit })
-    .then((r) => console.log(`[JohnHulk] refreshLibrary: +${r.added} novos, ${r.updated} atualizados (total ${r.total}).`))
+  johnHulk.refreshLibrary({ handle, limit, mode })
+    .then((r) => console.log(`[JohnHulk] refreshLibrary(${mode || 'full'}): +${r.added} novos, ${r.updated} atualizados (total ${r.total}).`))
     .catch((e) => console.error('[JohnHulk] refreshLibrary falhou:', e.message));
 });
 
 // Modela 1 reel específico da biblioteca (Modeling Studio).
+// Body opcional: { regenerate?:boolean, variants?:1-3, angle?:string }.
 router.post('/reels/:shortCode/model', (req, res) => {
   const { shortCode } = req.params;
   const regenerate = !!(req.body && req.body.regenerate);
+  const angle = req.body && req.body.angle ? String(req.body.angle).slice(0, 300) : undefined;
+
+  let variants = 1;
+  if (req.body && req.body.variants != null) {
+    variants = Number(req.body.variants);
+    if (!Number.isInteger(variants) || variants < 1 || variants > 3) {
+      return res.status(400).json({ error: 'variants deve ser um inteiro entre 1 e 3.' });
+    }
+  }
 
   const reel = db.getJohnHulkReel(shortCode);
   if (!reel) return res.status(404).json({ error: `Reel ${shortCode} não encontrado na biblioteca.` });
@@ -118,8 +144,8 @@ router.post('/reels/:shortCode/model', (req, res) => {
   }
 
   res.json({ started: true });
-  johnHulk.modelReel({ shortCode, regenerate })
-    .then((r) => console.log(`[JohnHulk] modelReel ${shortCode}: carrossel ${r.carouselId}`))
+  johnHulk.modelReel({ shortCode, regenerate, variants, angle })
+    .then((r) => console.log(`[JohnHulk] modelReel ${shortCode}: carrossel(s) ${(r.carouselIds || [r.carouselId]).join(', ')}`))
     .catch((e) => console.error(`[JohnHulk] modelReel ${shortCode} falhou:`, e.message));
 });
 
@@ -169,6 +195,46 @@ router.post('/reels/:shortCode/favorite', (req, res) => {
   res.json(updated);
 });
 
+// Dedupe por tema (item D do plano de melhorias) — AVISO, não bloqueia: compara
+// caption/topic deste reel com reels JÁ MODELADOS nos últimos `days` (default 21)
+// por overlap simples de palavras-chave. Best-effort/defensivo.
+router.get('/reels/:shortCode/dupe-check', (req, res) => {
+  try {
+    const { shortCode } = req.params;
+    const reel = db.getJohnHulkReel(shortCode);
+    if (!reel) return res.status(404).json({ error: `Reel ${shortCode} não encontrado.` });
+
+    const days = Number(req.query.days) > 0 ? Number(req.query.days) : 21;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    const myKws = new Set(keywordsOf(reel.topic || reel.caption));
+    if (!myKws.size) return res.json({ similar: [], count: 0 });
+
+    const others = db.getJohnHulkReels().filter((r) => (
+      r.shortCode !== shortCode
+      && r.carouselId
+      && r.usedAt
+      && new Date(r.usedAt).getTime() >= cutoff
+    ));
+
+    const similar = others
+      .map((r) => {
+        const otherKws = keywordsOf(r.topic || r.caption);
+        const overlap = otherKws.filter((w) => myKws.has(w)).length;
+        return {
+          shortCode: r.shortCode, topic: r.topic, carouselId: r.carouselId, overlap,
+        };
+      })
+      .filter((r) => r.overlap >= 2)
+      .sort((a, b) => b.overlap - a.overlap);
+
+    res.json({ similar, count: similar.length });
+  } catch (e) {
+    console.error('[JohnHulk] dupe-check falhou:', e.message);
+    res.json({ similar: [], count: 0, error: e.message });
+  }
+});
+
 // Aprendizado leve (item de loop): tema/legenda dos reels JÁ MODELADOS × posts
 // próprios que performaram bem — best-effort, defensivo (sem posts do IG, não
 // tem base de comparação e devolve available:false).
@@ -182,13 +248,6 @@ router.get('/insights', (req, res) => {
     if (!modeled.length) {
       return res.json({ available: false });
     }
-
-    const stopwords = new Set(['para', 'como', 'sobre', 'esse', 'essa', 'isso', 'você', 'mais', 'nunca', 'sempre', 'tudo', 'pelo', 'pela']);
-    const keywordsOf = (text) => String(text || '')
-      .toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w.length >= 4 && !stopwords.has(w));
 
     const summary = modeled.map((reel) => {
       const kws = new Set(keywordsOf(reel.topic || reel.caption));
@@ -264,6 +323,34 @@ router.post('/:id/approve', async (req, res) => {
   } catch (e) {
     console.error('[JohnHulk] approve falhou:', e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Custo Anthropic (item G do plano de melhorias) — melhor esforço: reaproveita o
+// que /api/usage já calcula (usageTracker), resumido pro feature 'john-hulk'.
+// A atribuição por feature depende do middleware de FEATURE_PATTERNS (server/index.js)
+// marcar a requisição como 'john-hulk' — hoje isso cobre TODO o prefixo /api/john-hulk,
+// então deriveTopic/deriveViralInsight/generateCarousel chamados a partir daqui contam
+// aqui. Chamadas Claude fora desse prefixo (ex.: reels-analyzer usado por outras
+// telas) não entram nesse recorte.
+router.get('/cost', (req, res) => {
+  try {
+    const usageTracker = require('../services/usageTracker');
+    const summary = usageTracker.getSummary();
+    const jh = summary.byFeature && summary.byFeature['john-hulk'];
+    if (!jh) {
+      return res.json({ available: true, today: 0, total: 0, byFeature: { 'john-hulk': { brl: 0, count: 0 } } });
+    }
+    res.json({
+      available: true,
+      today: summary.today.brl, // total do dia inteiro (todas as features) — referência
+      total: summary.total.brl, // total geral (todas as features) — referência
+      johnHulk: { brl: jh.brl, count: jh.count, savedBrl: jh.savedBrl },
+      byFeature: summary.byFeature,
+    });
+  } catch (e) {
+    console.error('[JohnHulk] /cost falhou:', e.message);
+    res.json({ available: false, error: e.message });
   }
 });
 
