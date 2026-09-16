@@ -49,6 +49,11 @@ jobs:
             echo "  tentativa $i — status de hoje: $status"
             if [ "$status" = "done" ] || [ "$status" = "partial" ]; then
               echo "✅ Batch John Hulk de $today concluído (status: $status)."
+              echo "----- resumo do batch de hoje -----"
+              echo "$resp" | jq -r --arg d "$today" '
+                .batches[] | select(.date==$d)
+                | "status=\(.status) handle=\(.handle // "-") reel=\(.reelUrl // "-") tema=\(.topic // "-") carouselId=\(.carouselId // "-") slides=\((.carousel.screenshots | length) // 0) note=\(.note // "-") errors=\((.errors // []) | join("; "))"
+              ' || true
               exit 0
             fi
             if [ "$status" = "error" ]; then
