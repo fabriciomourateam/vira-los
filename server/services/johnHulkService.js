@@ -88,11 +88,13 @@ function pickHandleForToday() {
 
 // ── Passo 1: lista os reels (vídeos) do perfil via Apify, com retry/backoff ────
 // (o instagram-scraper é flaky — item 12 do plano: 2s/4s/8s, até 3 tentativas)
-async function listProfileReels(handle) {
+// `limit` é opcional (default 30, comportamento igual ao de sempre) — a biblioteca
+// (refreshLibrary) chama com um limite maior (ex.: 100) pra varrer mais histórico.
+async function listProfileReels(handle, limit = 30) {
   const input = {
     directUrls: [`https://www.instagram.com/${handle}/`],
     resultsType: 'posts',
-    resultsLimit: 30,
+    resultsLimit: limit,
     addParentData: false,
   };
   const delays = [2000, 4000, 8000];
@@ -108,8 +110,11 @@ async function listProfileReels(handle) {
           timestampMs: it.timestamp ? new Date(it.timestamp).getTime() : 0,
           caption: it.caption || it.text || '',
           videoUrl: it.videoUrl || it.videoVersions?.[0]?.url || null,
+          thumbnailUrl: it.displayUrl || it.images?.[0] || null,
           views: it.videoViewCount || it.videoPlayCount || 0,
           likes: it.likesCount || 0,
+          comments: it.commentsCount || 0,
+          durationSec: it.videoDuration || it.videoDurationSeconds || null,
         }))
         .filter((r) => r.shortCode && r.url);
       normalized.sort((a, b) => b.timestampMs - a.timestampMs);
@@ -224,7 +229,214 @@ async function notifyDraftReady({ topic, reelUrl, carouselId } = {}) {
   }
 }
 
-// ── Fluxo principal ─────────────────────────────────────────────────────────────
+// ── Biblioteca de Reels (Reel Library) ────────────────────────────────────────
+// Estado em memória do refresh — só 1 por vez, mesmo padrão de `state` acima.
+const libraryState = {
+  refreshing: false, startedAt: null, lastHandle: null, lastError: null, lastFinishedAt: null,
+};
+function getLibraryState() { return { ...libraryState }; }
+
+// Varre o(s) perfil(is) (via listProfileReels com limite maior) e faz upsert na
+// biblioteca (`john_hulk_reels`). Sem `handle`, roda por TODOS os HANDLES
+// configurados (rotação completa, não só o do dia). Best-effort por handle — um
+// perfil que falhe não derruba o refresh dos outros.
+async function refreshLibrary({ handle, limit = 100 } = {}) {
+  if (libraryState.refreshing) throw new Error('Já existe um refresh da biblioteca em andamento.');
+  libraryState.refreshing = true;
+  libraryState.startedAt = new Date().toISOString();
+  libraryState.lastError = null;
+
+  const handles = handle ? [handle] : HANDLES;
+  let totalAdded = 0;
+  let totalUpdated = 0;
+  const errs = [];
+  try {
+    for (const h of handles) {
+      libraryState.lastHandle = h;
+      try {
+        const reels = await withTimeout(listProfileReels(h, limit), JOHN_HULK_STEP_TIMEOUT_MS, `listProfileReels(${h})`);
+        const normalized = reels.map((r) => ({
+          shortCode: r.shortCode,
+          handle: h,
+          url: r.url,
+          thumbnailUrl: r.thumbnailUrl || null,
+          caption: r.caption || '',
+          timestampMs: r.timestampMs || 0,
+          views: r.views || 0,
+          likes: r.likes || 0,
+          comments: r.comments || 0,
+          durationSec: r.durationSec != null ? r.durationSec : null,
+        }));
+        const { added, updated } = db.upsertJohnHulkReels(normalized);
+        totalAdded += added;
+        totalUpdated += updated;
+      } catch (e) {
+        console.warn(`[JohnHulk] refreshLibrary(@${h}) falhou:`, e.message);
+        errs.push(`${h}: ${e.message}`);
+      }
+    }
+    libraryState.lastError = errs.length ? errs.join(' | ') : null;
+    libraryState.lastFinishedAt = new Date().toISOString();
+    return { added: totalAdded, updated: totalUpdated, total: db.getJohnHulkReels().length };
+  } finally {
+    libraryState.refreshing = false;
+  }
+}
+
+// ── Modelagem (Modeling Studio) — núcleo usado tanto pelo fluxo manual (rotas
+// /reels/:shortCode/model, /reels/model-url, /reels/model-batch) quanto pela
+// rotina diária automática (generateDailyCarousel, abaixo). ──────────────────
+// Lock em memória POR REEL — evita duas modelagens simultâneas do mesmo shortCode
+// (ex.: clique duplo, cron + manual ao mesmo tempo).
+const modelingLocks = new Set();
+function isReelModeling(shortCode) { return modelingLocks.has(shortCode); }
+
+// Extrai o shortCode de uma URL avulsa do Instagram (/reel/, /p/ ou /tv/).
+function extractShortCodeFromUrl(url) {
+  const m = String(url || '').match(/\/(?:reel|p|tv)\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+// Modela UM reel (da biblioteca, via shortCode, ou de uma URL avulsa) em carrossel
+// FMTeam — mesmo pipeline reel→transcrição→tema→carrossel→screenshots→rascunho que
+// a rotina diária sempre usou, agora reutilizável pra qualquer reel da biblioteca.
+async function modelReel({ shortCode, url, regenerate = false } = {}) {
+  let resolvedShortCode = shortCode || null;
+  let resolvedUrl = url || null;
+  let reel = resolvedShortCode ? db.getJohnHulkReel(resolvedShortCode) : null;
+  if (reel && !resolvedUrl) resolvedUrl = reel.url;
+
+  // Fluxo "URL avulsa" (sem shortCode conhecido) — deriva o shortCode da URL e
+  // tenta achar o reel já existente na biblioteca (pode já ter sido descoberto
+  // pelo refresh, mesmo sem o dono ter clicado nele ainda).
+  if (!resolvedShortCode && resolvedUrl) {
+    resolvedShortCode = extractShortCodeFromUrl(resolvedUrl) || `url_${Date.now()}`;
+    reel = db.getJohnHulkReel(resolvedShortCode);
+  }
+
+  if (!resolvedShortCode) throw new Error('modelReel requer shortCode ou url.');
+  if (!resolvedUrl) throw new Error(`Reel ${resolvedShortCode} não tem URL resolvida (nem no parâmetro, nem na biblioteca).`);
+  if (modelingLocks.has(resolvedShortCode)) throw new Error(`Reel ${resolvedShortCode} já está sendo modelado.`);
+  if (reel && reel.status !== 'novo' && !regenerate) {
+    throw new Error(`Reel ${resolvedShortCode} já foi modelado (status=${reel.status}). Use regenerate:true pra refazer.`);
+  }
+
+  modelingLocks.add(resolvedShortCode);
+  const steps = [];
+  try {
+    let content = regenerate ? null : db.getJohnHulkTranscript(resolvedShortCode);
+    if (content) {
+      console.log(`[JohnHulk] transcript em cache pra ${resolvedShortCode} — sem re-scrape/re-transcrever.`);
+    } else {
+      content = await withTimeout(
+        runStep(steps, 'extract', `Transcrevendo/analisando reel ${resolvedShortCode}`, () => extractReelContent(resolvedUrl)),
+        JOHN_HULK_STEP_TIMEOUT_MS, `extractReelContent(${resolvedShortCode})`
+      );
+      db.saveJohnHulkTranscript(resolvedShortCode, content);
+    }
+
+    // Reel ainda não está na biblioteca (fluxo de URL avulsa totalmente nova) —
+    // cria uma entrada mínima pra ele aparecer na biblioteca depois de modelado.
+    if (!reel) {
+      db.upsertJohnHulkReels([{
+        shortCode: resolvedShortCode,
+        handle: null,
+        url: resolvedUrl,
+        thumbnailUrl: content.thumbnailUrl || null,
+        caption: content.caption || '',
+        timestampMs: 0,
+        views: content.views || 0,
+        likes: content.likes || 0,
+        comments: 0,
+        durationSec: null,
+      }]);
+      reel = db.getJohnHulkReel(resolvedShortCode);
+    }
+
+    const derived = await withTimeout(
+      runStep(steps, 'derive-topic', 'Derivando tema/tom/emoção (Claude Haiku)', () => deriveTopic(content)),
+      90 * 1000, 'deriveTopic'
+    );
+    const topic = derived.topic;
+    const instructions = buildInstructions(content);
+
+    const carouselResult = await withTimeout(
+      runStep(steps, 'generate-carousel', 'Gerando carrossel FMTeam', () => generateCarousel({
+        topic,
+        instructions,
+        niche: NICHE,
+        instagramHandle: HANDLE,
+        creatorName: CREATOR,
+        numSlides: 7,
+        contentTone: derived.tone,
+        dominantEmotion: derived.emotion,
+        layoutStyle: 'fmteam',
+        ctaStyle: 'dark-fullbleed',
+        fmteamCover: { showContext: false },
+        imageSubject: IMAGE_SUBJECT,
+        avoidPhotoUrls: db.getRecentPhotoUrls ? db.getRecentPhotoUrls() : [],
+      })),
+      JOHN_HULK_STEP_TIMEOUT_MS, 'generateCarousel'
+    );
+
+    try { if (db.addRecentPhotoUrls) db.addRecentPhotoUrls(carouselResult.photoUrlsUsed || []); } catch (_) { /* ignora */ }
+
+    let screenshots = [];
+    let screenshotError = null;
+    try {
+      const outputDir = path.join(OUTPUT_DIR, carouselResult.folderName);
+      screenshots = await runStep(steps, 'screenshots', 'Gerando screenshots (Playwright)', () => takeScreenshotsPixelPerfect(carouselResult.html, outputDir));
+    } catch (e) {
+      console.warn('[JohnHulk] screenshots indisponíveis:', e.message);
+      screenshotError = e.message;
+    }
+
+    const carouselId = `carousel_${Date.now()}_johnhulk`;
+    db.saveCarousel({
+      id: carouselId,
+      topic: carouselResult.topic,
+      folderName: carouselResult.folderName,
+      numSlides: carouselResult.numSlides,
+      screenshots,
+      legenda: carouselResult.legenda,
+      layoutStyle: 'fmteam',
+      source: 'john-hulk',
+      archived: false,
+      sourceReel: { shortCode: resolvedShortCode, url: resolvedUrl, handle: (reel && reel.handle) || null },
+      sourceTranscript: content.transcription || null,
+      derivedTopic: topic,
+    });
+
+    db.updateJohnHulkReel(resolvedShortCode, {
+      status: 'modelado', usedAt: new Date().toISOString(), carouselId, topic,
+    });
+    db.addJohnHulkSeen(resolvedShortCode);
+
+    try { await notifyDraftReady({ topic, reelUrl: resolvedUrl, carouselId }); } catch (_) { /* best-effort */ }
+
+    return { carouselId, topic, reelShortCode: resolvedShortCode, screenshotError };
+  } finally {
+    modelingLocks.delete(resolvedShortCode);
+  }
+}
+
+// Modela vários reels em sequência — resiliente: 1 falha não para o lote.
+async function modelBatch({ shortCodes } = {}) {
+  const list = Array.isArray(shortCodes) ? shortCodes.filter(Boolean) : [];
+  const results = [];
+  for (const shortCode of list) {
+    try {
+      const r = await modelReel({ shortCode });
+      results.push({ shortCode, ok: true, ...r });
+    } catch (e) {
+      console.warn(`[JohnHulk] modelBatch: falha em ${shortCode}:`, e.message);
+      results.push({ shortCode, ok: false, error: e.message });
+    }
+  }
+  return results;
+}
+
+// ── Fluxo principal (rotina diária automática) — agora PUXA da BIBLIOTECA ─────
 async function generateDailyCarousel({ trigger = 'manual' } = {}) {
   if (state.generating) throw new Error('Já existe uma geração John Hulk em andamento.');
 
@@ -270,17 +482,29 @@ async function generateDailyCarousel({ trigger = 'manual' } = {}) {
 
   try {
     try {
+      // Biblioteca vazia ou sem refresh nas últimas ~24h → atualiza antes de
+      // escolher (rotina diária agora PUXA da biblioteca, não faz mais o próprio
+      // listProfileReels toda vez — a biblioteca é a fonte de candidatos).
+      const libraryBefore = db.getJohnHulkReels();
+      const staleCutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const freshestFetch = libraryBefore.reduce(
+        (max, r) => Math.max(max, r.fetchedAt ? new Date(r.fetchedAt).getTime() : 0), 0
+      );
+      if (!libraryBefore.length || freshestFetch < staleCutoff) {
+        await runStep(steps, 'refresh-library', 'Atualizando biblioteca de reels', () => refreshLibrary({}));
+      }
+
       handle = pickHandleForToday();
 
-      const reels = await withTimeout(
-        runStep(steps, 'list-reels', `Listando reels de @${handle}`, () => listProfileReels(handle)),
-        JOHN_HULK_STEP_TIMEOUT_MS, 'listProfileReels'
-      );
-
-      const seen = db.getJohnHulkSeen();
-      // Tenta até 3 candidatos (do ranking híbrido) até achar um com texto usável —
-      // guard de qualidade (item 1 do plano): pula reel sem fala/legenda suficiente.
-      const candidates = rankReelCandidates(reels, seen).slice(0, 3);
+      // Só reels com status:'novo' entram no pool de candidatos, e o legado
+      // `getJohnHulkSeen()` (marcações de qualidade ruim/já usados de antes da
+      // biblioteca existir) continua excluindo — fallback conforme item 4/plano.
+      const seen = new Set(db.getJohnHulkSeen());
+      const novos = db.getJohnHulkReels().filter((r) => r.status === 'novo' && !seen.has(r.shortCode));
+      // Tenta até 3 candidatos (do ranking híbrido — mesma regra: corte de dias +
+      // performance) até achar um com texto usável — guard de qualidade (item 1
+      // do plano): pula reel sem fala/legenda suficiente.
+      const candidates = rankReelCandidates(novos, []).slice(0, 3);
 
       let picked = null;
       let extracted = null;
@@ -306,7 +530,11 @@ async function generateDailyCarousel({ trigger = 'manual' } = {}) {
         const hasUsableText = (content.transcription && content.transcription.trim().length >= 30)
           || (content.caption && content.caption.trim().length >= 40);
         if (!hasUsableText) {
-          console.warn(`[JohnHulk] reel ${candidate.shortCode} sem transcrição/legenda usável — marcando visto e tentando o próximo.`);
+          // Guard de qualidade: o reel PERMANECE 'novo' na biblioteca (dono pode
+          // querer modelar manualmente com outro material), mas some do pool
+          // automático via `seen` — assim a rotina diária não fica tentando o
+          // mesmo reel sem texto usável todo dia.
+          console.warn(`[JohnHulk] reel ${candidate.shortCode} sem transcrição/legenda usável — marcando visto (fallback) e tentando o próximo.`);
           db.addJohnHulkSeen(candidate.shortCode);
           continue;
         }
@@ -319,88 +547,46 @@ async function generateDailyCarousel({ trigger = 'manual' } = {}) {
       if (!picked) {
         note = candidates.length
           ? 'nenhum reel candidato tinha transcrição/legenda usável'
-          : 'sem reel novo (todos já usados ou nenhum encontrado no perfil)';
+          : 'sem reel novo na biblioteca (todos já modelados/usados ou biblioteca vazia)';
         console.log(`[JohnHulk] ${note}.`);
       } else {
         reelShortCode = picked.shortCode;
         reelUrl = picked.url;
+        handle = picked.handle || handle;
 
-        const derived = await withTimeout(
-          runStep(steps, 'derive-topic', 'Derivando tema/tom/emoção (Claude Haiku)', () => deriveTopic(extracted)),
-          90 * 1000, 'deriveTopic'
+        // Transcrição do candidato escolhido já está em cache (foi salva no loop
+        // do guard de qualidade acima) — modelReel só reaproveita, sem re-bater
+        // Apify/Whisper.
+        const result = await runStep(
+          steps, 'model-reel', `Modelando reel ${picked.shortCode} em carrossel FMTeam`,
+          () => modelReel({ shortCode: picked.shortCode, url: picked.url })
         );
-        topic = derived.topic;
-
-        const instructions = buildInstructions(extracted);
-
-        const carouselResult = await withTimeout(
-          runStep(steps, 'generate-carousel', 'Gerando carrossel FMTeam', () => generateCarousel({
-            topic,
-            instructions,
-            niche: NICHE,
-            instagramHandle: HANDLE,
-            creatorName: CREATOR,
-            numSlides: 7,
-            contentTone: derived.tone,
-            dominantEmotion: derived.emotion,
-            layoutStyle: 'fmteam',
-            ctaStyle: 'dark-fullbleed',
-            fmteamCover: { showContext: false },
-            imageSubject: IMAGE_SUBJECT,
-            avoidPhotoUrls: db.getRecentPhotoUrls ? db.getRecentPhotoUrls() : [],
-          })),
-          JOHN_HULK_STEP_TIMEOUT_MS, 'generateCarousel'
-        );
-
-        try { if (db.addRecentPhotoUrls) db.addRecentPhotoUrls(carouselResult.photoUrlsUsed || []); } catch (_) { /* ignora */ }
-
-        let screenshots = [];
-        try {
-          const outputDir = path.join(OUTPUT_DIR, carouselResult.folderName);
-          screenshots = await runStep(steps, 'screenshots', 'Gerando screenshots (Playwright)', () => takeScreenshotsPixelPerfect(carouselResult.html, outputDir));
-        } catch (e) {
-          console.warn('[JohnHulk] screenshots indisponíveis:', e.message);
-          errors.push(`screenshots: ${e.message}`);
-        }
-
-        carouselId = `carousel_${Date.now()}_johnhulk`;
-        db.saveCarousel({
-          id: carouselId,
-          topic: carouselResult.topic,
-          folderName: carouselResult.folderName,
-          numSlides: carouselResult.numSlides,
-          screenshots,
-          legenda: carouselResult.legenda,
-          layoutStyle: 'fmteam',
-          source: 'john-hulk',
-          archived: false,
-          sourceReel: { shortCode: reelShortCode, url: reelUrl, handle },
-          sourceTranscript: extracted.transcription || null,
-          derivedTopic: topic,
-        });
-
-        db.addJohnHulkSeen(reelShortCode);
+        topic = result.topic;
+        carouselId = result.carouselId;
+        if (result.screenshotError) errors.push(`screenshots: ${result.screenshotError}`);
 
         // Auto-agendamento OPCIONAL (item 9 — default OFF, fica rascunho pra revisão).
         try {
           const cfg = db.getJohnHulkSettings();
-          if (cfg.autoScheduleJohnHulk && screenshots.length) {
+          const carousel = db.getAllCarousels().find((c) => c.id === carouselId);
+          if (cfg.autoScheduleJohnHulk && carousel && carousel.screenshots && carousel.screenshots.length) {
             const mlabs = require('./mlabsService');
             const { v4: uuidv4 } = require('uuid');
             const dates = mlabs.computeDefaultDates();
             const recId = uuidv4();
             db.createMlabsSchedule({
               id: recId, contentType: 'carousel', contentId: carouselId,
-              caption: carouselResult.legenda || '', dates, platforms: null, status: 'enviando',
+              caption: carousel.legenda || '', dates, platforms: null, status: 'enviando',
             });
             try {
               const r = await mlabs.scheduleContent({
                 type: 'IMAGE',
-                mediaPaths: screenshots.map((name) => path.join(OUTPUT_DIR, carouselResult.folderName, name)),
-                caption: carouselResult.legenda || '',
+                mediaPaths: carousel.screenshots.map((name) => path.join(OUTPUT_DIR, carousel.folderName, name)),
+                caption: carousel.legenda || '',
                 dates,
               });
               db.updateMlabsSchedule(recId, { status: 'agendado', mlabsResponse: r.scheduleResponse || null });
+              try { db.updateJohnHulkReel(reelShortCode, { status: 'agendado' }); } catch (_) { /* best-effort */ }
               console.log(`[JohnHulk] carrossel ${carouselId} agendado automaticamente no mLabs (${dates.length} datas).`);
             } catch (e) {
               db.updateMlabsSchedule(recId, { status: 'erro', error: e.message });
@@ -410,8 +596,6 @@ async function generateDailyCarousel({ trigger = 'manual' } = {}) {
         } catch (e) {
           console.warn('[JohnHulk] auto-agendamento mLabs indisponível:', e.message);
         }
-
-        try { await notifyDraftReady({ topic, reelUrl, carouselId }); } catch (_) { /* best-effort */ }
       }
     } catch (e) {
       console.error('[JohnHulk] geração falhou:', e.message);
@@ -459,4 +643,7 @@ module.exports = {
   generateDailyCarousel, hydrateBatch, getState,
   // exportados pra teste unitário do seletor (pickReel/rankReelCandidates)
   pickReel, rankReelCandidates, listProfileReels, deriveTopic, buildInstructions,
+  // Biblioteca de Reels + Modeling Studio
+  refreshLibrary, getLibraryState,
+  modelReel, modelBatch, isReelModeling,
 };
