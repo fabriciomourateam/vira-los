@@ -641,6 +641,90 @@ const JOHN_HULK_SETTINGS_DEFAULTS = { johnHulkEnabled: true, autoScheduleJohnHul
 const getJohnHulkSettings = () => ({ ...JOHN_HULK_SETTINGS_DEFAULTS, ...readObj('john_hulk_settings') });
 const setJohnHulkSettings = (patch) => writeObj('john_hulk_settings', { ...getJohnHulkSettings(), ...patch, updated_at: now() });
 
+// ── John Hulk — Biblioteca de Reels (Reel Library / Modeling Studio) ──────────
+// Cada reel: { shortCode, handle, url, thumbnailUrl, caption, timestampMs,
+//   views, likes, comments, durationSec, fetchedAt, metricsHistory:[{at,views,likes,comments}],
+//   status:'novo'|'modelado'|'editado'|'agendado'|'postado', usedAt, carouselId,
+//   topic, favorite, themeTag }
+const getJohnHulkReels = () => readDb('john_hulk_reels').sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0));
+const getJohnHulkReel = (shortCode) => readDb('john_hulk_reels').find((r) => r.shortCode === shortCode) || null;
+
+// Upsert em lote (vindo do refreshLibrary). Reel NOVO entra com status:'novo' e
+// metricsHistory semeado com as métricas atuais. Reel EXISTENTE tem métricas/legenda/
+// thumbnail atualizadas (só grava nova entrada em metricsHistory se views/likes/comments
+// mudou — evita inchar o histórico em refreshes sem mudança real), mas PRESERVA
+// status/usedAt/carouselId/favorite/topic/themeTag (o que o dono já decidiu não se mexe).
+function upsertJohnHulkReels(reelsArray) {
+  if (!Array.isArray(reelsArray) || !reelsArray.length) return { added: 0, updated: 0 };
+  const dbArr = readDb('john_hulk_reels');
+  const byShortCode = new Map(dbArr.map((r) => [r.shortCode, r]));
+  let added = 0;
+  let updated = 0;
+  const fetchedAt = now();
+  for (const incoming of reelsArray) {
+    if (!incoming || !incoming.shortCode) continue;
+    const existing = byShortCode.get(incoming.shortCode);
+    if (existing) {
+      const views = incoming.views || 0;
+      const likes = incoming.likes || 0;
+      const comments = incoming.comments || 0;
+      const metricsChanged = existing.views !== views || existing.likes !== likes || existing.comments !== comments;
+      const metricsHistory = Array.isArray(existing.metricsHistory) ? existing.metricsHistory.slice() : [];
+      if (metricsChanged) metricsHistory.push({ at: fetchedAt, views, likes, comments });
+      byShortCode.set(incoming.shortCode, {
+        ...existing,
+        handle: incoming.handle || existing.handle,
+        url: incoming.url || existing.url,
+        thumbnailUrl: incoming.thumbnailUrl || existing.thumbnailUrl,
+        caption: incoming.caption || existing.caption,
+        timestampMs: incoming.timestampMs || existing.timestampMs,
+        views, likes, comments,
+        durationSec: incoming.durationSec != null ? incoming.durationSec : existing.durationSec,
+        fetchedAt,
+        metricsHistory,
+        // status/usedAt/carouselId/favorite/topic/themeTag preservados de propósito.
+      });
+      updated++;
+    } else {
+      const views = incoming.views || 0;
+      const likes = incoming.likes || 0;
+      const comments = incoming.comments || 0;
+      byShortCode.set(incoming.shortCode, {
+        shortCode: incoming.shortCode,
+        handle: incoming.handle || null,
+        url: incoming.url || '',
+        thumbnailUrl: incoming.thumbnailUrl || null,
+        caption: incoming.caption || '',
+        timestampMs: incoming.timestampMs || 0,
+        views, likes, comments,
+        durationSec: incoming.durationSec != null ? incoming.durationSec : null,
+        fetchedAt,
+        metricsHistory: [{ at: fetchedAt, views, likes, comments }],
+        status: 'novo',
+        usedAt: null,
+        carouselId: null,
+        topic: null,
+        favorite: false,
+        themeTag: null,
+      });
+      added++;
+    }
+  }
+  writeDb('john_hulk_reels', Array.from(byShortCode.values()));
+  return { added, updated };
+}
+
+function updateJohnHulkReel(shortCode, patch) {
+  let updatedReel = null;
+  const next = readDb('john_hulk_reels').map((r) => {
+    if (r.shortCode !== shortCode) return r;
+    updatedReel = { ...r, ...patch };
+    return updatedReel;
+  });
+  writeDb('john_hulk_reels', next);
+  return updatedReel;
+}
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -700,4 +784,6 @@ module.exports = {
   getAllJohnHulkBatches, saveJohnHulkBatch, updateJohnHulkBatch,
   getJohnHulkTranscript, saveJohnHulkTranscript,
   getJohnHulkSettings, setJohnHulkSettings,
+  // John Hulk — Biblioteca de Reels
+  getJohnHulkReels, getJohnHulkReel, upsertJohnHulkReels, updateJohnHulkReel,
 };
