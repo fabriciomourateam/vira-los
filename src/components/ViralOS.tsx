@@ -29,6 +29,7 @@ import {
   Sparkles,
   Loader2,
   Instagram,
+  Dumbbell,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
@@ -47,6 +48,7 @@ import InstagramAnalytics from './InstagramAnalytics';
 import PublicoAlvo from './PublicoAlvo';
 import PainelSEO from './PainelSEO';
 import ConteudoDiario from './ConteudoDiario';
+import JohnHulkReferencias from './JohnHulkReferencias';
 import ReelsEmLote from './ReelsEmLote';
 import AgendaCalendario from './AgendaCalendario';
 import LimpezaPanel from './LimpezaPanel';
@@ -56,7 +58,7 @@ import { useCreatorProfile } from '@/hooks/useCreatorProfile';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'lote' | 'agenda' | 'diario' | 'avaliar' | 'analytics' | 'seo' | 'limpeza';
+type TabId = 'metodo' | 'publico' | 'descobrir' | 'ideias' | 'criar' | 'lote' | 'agenda' | 'diario' | 'referencias' | 'avaliar' | 'analytics' | 'seo' | 'limpeza';
 
 // Lembra a última aba/sub-aba visitada (localStorage) pra não voltar pro
 // início a cada F5. Valida contra a lista de valores aceitos antes de usar
@@ -83,6 +85,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'lote',      label: 'Em Lote',   icon: ListChecks },
   { id: 'agenda',    label: 'Agenda',    icon: CalendarDays },
   { id: 'diario',    label: 'Diário',    icon: Repeat },
+  { id: 'referencias', label: 'Referências', icon: Dumbbell },
   { id: 'avaliar',   label: 'Avaliar',   icon: Gauge },
   { id: 'analytics', label: 'Analytics', icon: Instagram },
   { id: 'seo',       label: 'SEO',       icon: BarChart3 },
@@ -377,7 +380,7 @@ function SubTabBar<T extends string>({
 }
 
 export default function ViralOS() {
-  const ALLOWED_TABS: readonly TabId[] = ['metodo','publico','descobrir','ideias','criar','lote','agenda','diario','avaliar','analytics','seo','limpeza'];
+  const ALLOWED_TABS: readonly TabId[] = ['metodo','publico','descobrir','ideias','criar','lote','agenda','diario','referencias','avaliar','analytics','seo','limpeza'];
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as TabId | null;
   const activeTab: TabId = tabFromUrl && (ALLOWED_TABS as readonly string[]).includes(tabFromUrl) ? tabFromUrl : 'metodo';
@@ -730,6 +733,8 @@ export default function ViralOS() {
         {activeTab === 'agenda' && <AgendaCalendario />}
 
         {activeTab === 'diario' && <ConteudoDiario />}
+
+        {activeTab === 'referencias' && <JohnHulkReferencias />}
 
         {activeTab === 'ideias' && (
           <IdeasGenerator
