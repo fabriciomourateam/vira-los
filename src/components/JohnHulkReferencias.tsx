@@ -4,7 +4,8 @@ import {
   Dumbbell, Sparkles, Loader2, Image as ImageIcon, ExternalLink,
   Copy, ChevronDown, ChevronUp, AlertTriangle, CalendarClock, Check, Clock,
   RefreshCw, Search, Star, Eye, Heart, MessageCircle, Link2, Edit3, X,
-  Library, FileStack, TrendingUp, Film, CheckSquare,
+  Library, FileStack, TrendingUp, Film, CheckSquare, Kanban, Zap, Wallet,
+  Lightbulb, Plus, Trash2, ArrowRight, Repeat,
 } from 'lucide-react';
 import CarouselEditor from './CarouselEditor';
 import { MlabsScheduleButton } from './MlabsScheduler';
@@ -20,6 +21,7 @@ interface JHCarousel {
   screenshots?: string[]; legenda?: string; layoutStyle?: string; source?: string; archived?: boolean;
   sourceReel?: { shortCode?: string; url?: string; handle?: string };
   derivedTopic?: string; config?: Record<string, unknown>; created_at?: string;
+  viralInsight?: string | null; variantIndex?: number;
 }
 
 interface Batch {
@@ -36,13 +38,16 @@ interface Settings { johnHulkEnabled: boolean; autoScheduleJohnHulk: boolean; }
 // ─── Tipos: Biblioteca de reels ───────────────────────────────────────────────
 
 type ReelStatus = 'novo' | 'modelado' | 'editado' | 'agendado' | 'postado';
+type ReelRuntimeStatus = ReelStatus | 'erro';
 
 interface Reel {
   shortCode: string; handle: string; url: string; thumbnailUrl?: string; caption?: string;
   timestampMs?: number; views?: number; likes?: number; comments?: number; durationSec?: number;
   fetchedAt?: string;
-  status: ReelStatus; usedAt?: string; carouselId?: string; topic?: string;
+  status: ReelRuntimeStatus; usedAt?: string; carouselId?: string; topic?: string;
   favorite?: boolean; themeTag?: string;
+  errorMessage?: string | null; errorAt?: string | null; carouselIds?: string[];
+  viralInsight?: string | null;
 }
 
 interface LibraryState { refreshing: boolean; startedAt?: string; lastHandle?: string; lastError?: string; lastFinishedAt?: string; }
@@ -53,7 +58,16 @@ interface InsightSummaryItem {
 }
 interface InsightsResponse { available: boolean; summary?: InsightSummaryItem[]; error?: string; }
 
-type SubView = 'biblioteca' | 'rascunhos' | 'insights' | 'auto';
+interface CostFeature { brl: number; count: number; savedBrl?: number; }
+interface CostResponse {
+  available: boolean; today?: number; total?: number; error?: string;
+  johnHulk?: CostFeature; byFeature?: Record<string, CostFeature>;
+}
+
+interface DupeCheckItem { shortCode: string; topic?: string; carouselId?: string; overlap: number; }
+interface DupeCheckResponse { similar: DupeCheckItem[]; count: number; error?: string; }
+
+type SubView = 'biblioteca' | 'rascunhos' | 'insights' | 'auto' | 'pipeline';
 
 // ─── Constantes visuais ────────────────────────────────────────────────────────
 
@@ -77,14 +91,20 @@ const REEL_STATUS_OPTIONS: { value: ReelStatus; label: string }[] = [
   { value: 'agendado', label: 'Agendado' },
   { value: 'postado', label: 'Postado' },
 ];
-const REEL_STATUS_LABELS: Record<string, string> = Object.fromEntries(REEL_STATUS_OPTIONS.map(o => [o.value, o.label]));
+const REEL_STATUS_LABELS: Record<string, string> = {
+  ...Object.fromEntries(REEL_STATUS_OPTIONS.map(o => [o.value, o.label])),
+  erro: 'Falhou',
+};
 const REEL_STATUS_BADGE: Record<string, string> = {
   novo: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
   modelado: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
   editado: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
   agendado: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
   postado: 'bg-green-500/15 text-green-400 border-green-500/30',
+  erro: 'bg-red-500/15 text-red-400 border-red-500/30',
 };
+// Ordem do pipeline pro Kanban (erro fica fora — é um estado de falha, não um passo).
+const PIPELINE_ORDER: ReelStatus[] = ['novo', 'modelado', 'editado', 'agendado', 'postado'];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -112,6 +132,11 @@ function formatDate(ms?: number | null): string {
   return new Date(ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
+function formatBRL(n?: number | null): string {
+  if (n == null || Number.isNaN(n)) return '—';
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 // Toggle no mesmo padrão visual usado no MlabsSettingsModal (checkbox estilizado, sem shadcn).
 function ToggleRow({ label, hint, checked, onChange, disabled }: {
   label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean;
@@ -131,19 +156,116 @@ function ToggleRow({ label, hint, checked, onChange, disabled }: {
   );
 }
 
+// ─── Botão "Aprovar → agendar" com escolha de data/hora (item 6) ──────────────
+// Datas usam <input type="datetime-local"> — valor "AAAA-MM-DDTHH:MM" em horário
+// de Brasília, mesmo padrão do MlabsScheduler.tsx. Se nenhuma data for escolhida,
+// manda dates:[] e o backend cai no comportamento padrão (computeDefaultDates()).
+function ApproveScheduleControl({
+  approving, approved, disabled, onApprove,
+}: {
+  approving: boolean; approved: boolean; disabled?: boolean; onApprove: (dates: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [dates, setDates] = useState<string[]>(['']);
+
+  function setDateAt(i: number, v: string) {
+    setDates((p) => p.map((d, j) => (j === i ? v : d)));
+  }
+  function addDate() {
+    setDates((p) => [...p, '']);
+  }
+  function removeDate(i: number) {
+    setDates((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : ['']));
+  }
+  function confirm() {
+    setOpen(false);
+    onApprove(dates.filter(Boolean));
+    setDates(['']);
+  }
+
+  if (approved) {
+    return (
+      <span className="text-xs font-medium text-green-400 inline-flex items-center gap-1">
+        <Check size={12} /> Aprovado
+      </span>
+    );
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        disabled={approving || disabled}
+        className="text-xs font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors disabled:opacity-60"
+      >
+        {approving ? <Loader2 size={12} className="animate-spin" /> : <CalendarClock size={12} />}
+        Aprovar → agendar no mLabs
+      </button>
+
+      {open && (
+        <div
+          className="absolute z-20 top-full left-0 mt-1.5 w-64 bg-card border border-border rounded-xl p-3 space-y-2 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-[11px] text-muted-foreground">
+            Escolha data/hora (Brasília) ou deixe em branco para o agendamento automático.
+          </p>
+          <div className="space-y-1.5">
+            {dates.map((d, i) => (
+              <div key={i} className="flex items-center gap-1">
+                <input
+                  type="datetime-local"
+                  value={d}
+                  onChange={(e) => setDateAt(i, e.target.value)}
+                  className="flex-1 min-w-0 rounded-lg border border-border bg-background px-1.5 py-1 text-[11px]"
+                />
+                <button
+                  onClick={() => removeDate(i)}
+                  title="Remover"
+                  className="shrink-0 text-muted-foreground hover:text-red-400 p-0.5"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button onClick={addDate} className="text-[11px] text-purple-400 hover:text-purple-300 inline-flex items-center gap-1">
+            <Plus size={11} /> Adicionar horário
+          </button>
+          <div className="flex items-center gap-2 pt-1">
+            <button onClick={confirm} className="flex-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg py-1.5">
+              Confirmar e agendar
+            </button>
+            <button onClick={() => setOpen(false)} className="text-xs text-muted-foreground hover:text-foreground px-2">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Card de reel da Biblioteca ────────────────────────────────────────────────
 
 function ReelCard({
-  reel, selected, onToggleSelect, onToggleFavorite, favoriting, onModel, modeling,
+  reel, selected, onToggleSelect, onToggleFavorite, favoriting, onRequestModel, onRetryError, modeling,
 }: {
   reel: Reel; selected: boolean; onToggleSelect: () => void; onToggleFavorite: () => void;
-  favoriting: boolean; onModel: (regenerate: boolean) => void; modeling: boolean;
+  favoriting: boolean;
+  onRequestModel: (variants: number, angle: string) => void;
+  onRetryError: () => void;
+  modeling: boolean;
 }) {
   const [imgError, setImgError] = useState(false);
-  const used = reel.status !== 'novo';
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [variants, setVariants] = useState(1);
+  const [angle, setAngle] = useState('');
+  const isErro = reel.status === 'erro';
+  const used = reel.status !== 'novo' && !isErro;
 
   return (
-    <div className={`rounded-xl border border-border bg-card overflow-hidden flex flex-col transition-opacity ${used ? 'opacity-60' : ''}`}>
+    <div className={`rounded-xl border bg-card overflow-hidden flex flex-col transition-opacity ${isErro ? 'border-red-500/40' : 'border-border'} ${used ? 'opacity-60' : ''}`}>
       <div className="relative aspect-[4/5] bg-secondary">
         {reel.thumbnailUrl && !imgError ? (
           <img
@@ -191,20 +313,83 @@ function ReelCard({
           <span className="inline-flex items-center gap-0.5" title="Comentários"><MessageCircle size={11} /> {formatCompact(reel.comments)}</span>
         </div>
         <p className="text-[11px] text-muted-foreground line-clamp-2 flex-1">{reel.caption || 'Sem legenda'}</p>
+
+        {reel.viralInsight && (
+          <p className="text-[10px] italic text-purple-300/90 line-clamp-2" title={reel.viralInsight}>
+            <Lightbulb size={10} className="inline mr-1 -mt-0.5" />
+            Por que viralizou: “{reel.viralInsight}”
+          </p>
+        )}
+
+        {isErro && (
+          <div className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-2 py-1 flex items-start gap-1" title={reel.errorMessage || ''}>
+            <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+            <span className="line-clamp-2">{reel.errorMessage || 'Falha ao modelar este reel.'}</span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
           <span>{formatDate(reel.timestampMs)}</span>
           <a href={reel.url} target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 inline-flex items-center gap-0.5">
             <ExternalLink size={10} /> Instagram
           </a>
         </div>
-        <button
-          onClick={() => onModel(reel.status !== 'novo')}
-          disabled={modeling}
-          className="mt-1 w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-2 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:opacity-60"
-        >
-          {modeling ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-          {modeling ? 'Modelando…' : reel.status === 'novo' ? 'Modelar' : 'Remodelar'}
-        </button>
+
+        {isErro ? (
+          <button
+            onClick={onRetryError}
+            disabled={modeling}
+            className="mt-1 w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-2 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-60"
+          >
+            {modeling ? <Loader2 size={12} className="animate-spin" /> : <Repeat size={12} />}
+            {modeling ? 'Tentando de novo…' : 'Tentar de novo'}
+          </button>
+        ) : (
+          <div className="relative">
+            <button
+              onClick={() => setPanelOpen((o) => !o)}
+              disabled={modeling}
+              className="mt-1 w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-2 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:opacity-60"
+            >
+              {modeling ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {modeling ? 'Modelando…' : reel.status === 'novo' ? 'Modelar' : 'Remodelar'}
+            </button>
+
+            {panelOpen && !modeling && (
+              <div className="absolute z-20 bottom-full left-0 mb-1.5 w-56 bg-card border border-border rounded-xl p-3 space-y-2 shadow-xl">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">Variações</span>
+                  <select
+                    value={variants}
+                    onChange={(e) => setVariants(Number(e.target.value))}
+                    className="rounded-lg border border-border bg-background px-1.5 py-1 text-[11px]"
+                  >
+                    <option value={1}>1</option>
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                  </select>
+                </div>
+                <input
+                  value={angle}
+                  onChange={(e) => setAngle(e.target.value)}
+                  placeholder="Ângulo (opcional)…"
+                  className="w-full rounded-lg border border-border bg-background px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setPanelOpen(false); onRequestModel(variants, angle.trim()); }}
+                    className="flex-1 text-[11px] font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-lg py-1.5"
+                  >
+                    Gerar
+                  </button>
+                  <button onClick={() => setPanelOpen(false)} className="text-[11px] text-muted-foreground hover:text-foreground px-1.5">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -213,13 +398,13 @@ function ReelCard({
 // ─── Card de rascunho (carrossel gerado pelo John Hulk) ───────────────────────
 
 function DraftCard({
-  draft, reel, batchId, editingOpen, onToggleEdit, captionOpen, onToggleCaption,
+  draft, reel, batchId, variantLabel, editingOpen, onToggleEdit, captionOpen, onToggleCaption,
   approving, approved, onApprove,
 }: {
-  draft: JHCarousel; reel?: Reel; batchId?: string;
+  draft: JHCarousel; reel?: Reel; batchId?: string; variantLabel?: string;
   editingOpen: boolean; onToggleEdit: () => void;
   captionOpen: boolean; onToggleCaption: () => void;
-  approving: boolean; approved: boolean; onApprove: () => void;
+  approving: boolean; approved: boolean; onApprove: (dates: string[]) => void;
 }) {
   const status = reel?.status;
   const dateStr = draft.created_at
@@ -230,6 +415,11 @@ function DraftCard({
     <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <p className="text-sm font-semibold text-foreground flex-1 min-w-[160px]">{draft.topic || draft.derivedTopic}</p>
+        {variantLabel && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-purple-500/15 text-purple-300 border-purple-500/30">
+            {variantLabel}
+          </span>
+        )}
         {status && (
           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${REEL_STATUS_BADGE[status] || ''}`}>
             {REEL_STATUS_LABELS[status] || status}
@@ -246,6 +436,13 @@ function DraftCard({
           </a>
         )}
       </div>
+
+      {draft.viralInsight && (
+        <p className="text-xs italic text-purple-300/90">
+          <Lightbulb size={11} className="inline mr-1 -mt-0.5" />
+          Por que viralizou: “{draft.viralInsight}”
+        </p>
+      )}
 
       {draft.screenshots && draft.screenshots.length > 0 ? (
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -280,14 +477,12 @@ function DraftCard({
           <Edit3 size={12} /> Editar
         </button>
         {batchId ? (
-          <button
-            onClick={onApprove}
-            disabled={approving || approved || !draft.screenshots?.length}
-            className="text-xs font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors disabled:opacity-60"
-          >
-            {approving ? <Loader2 size={12} className="animate-spin" /> : approved ? <Check size={12} /> : <CalendarClock size={12} />}
-            {approved ? 'Aprovado' : 'Aprovar → agendar no mLabs'}
-          </button>
+          <ApproveScheduleControl
+            approving={approving}
+            approved={approved}
+            disabled={!draft.screenshots?.length}
+            onApprove={onApprove}
+          />
         ) : (
           draft.screenshots?.length ? <MlabsScheduleButton kind="carousel" contentId={draft.id} caption={draft.legenda} /> : null
         )}
@@ -385,10 +580,12 @@ export default function JohnHulkReferencias() {
     }
   }
 
-  async function handleApprove(batch: Batch) {
+  async function handleApprove(batch: Batch, dates: string[] = []) {
     setApproving((s) => ({ ...s, [batch.id]: true }));
     try {
-      const res = await fetch(`${API}/api/john-hulk/${batch.id}/approve`, { method: 'POST' });
+      const res = await fetch(`${API}/api/john-hulk/${batch.id}/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dates }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao aprovar/agendar.');
       setApproved((s) => ({ ...s, [batch.id]: true }));
@@ -427,6 +624,12 @@ export default function JohnHulkReferencias() {
   const [modelUrl, setModelUrl] = useState('');
   const [urlModeling, setUrlModeling] = useState(false);
   const [refreshingLib, setRefreshingLib] = useState(false);
+  const [refreshingLibFast, setRefreshingLibFast] = useState(false);
+  const [pendingDupe, setPendingDupe] = useState<{
+    shortCode: string; topic?: string; variants: number; angle: string; similar: DupeCheckItem[];
+  } | null>(null);
+  const [dupeChecking, setDupeChecking] = useState<Record<string, boolean>>({});
+  const [movingStatusMap, setMovingStatusMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const t = setTimeout(() => setQDebounced(q.trim()), 400);
@@ -490,23 +693,24 @@ export default function JohnHulkReferencias() {
     }
   }, [handleFilter, statusFilter, favoriteFilter, qDebounced, sort, order]);
 
-  useEffect(() => { if (subView === 'biblioteca') fetchReels(); }, [subView, fetchReels]);
+  useEffect(() => { if (subView === 'biblioteca' || subView === 'pipeline') fetchReels(); }, [subView, fetchReels]);
 
   // Poll enquanto o refresh da biblioteca ou a modelagem de algum reel estiver rodando.
   useEffect(() => {
-    if (subView !== 'biblioteca') return;
+    if (subView !== 'biblioteca' && subView !== 'pipeline') return;
     const active = libraryState.refreshing || Object.keys(modelingMap).length > 0;
     if (!active) return;
     const id = setInterval(fetchReels, 5000);
     return () => clearInterval(id);
   }, [subView, libraryState.refreshing, modelingMap, fetchReels]);
 
-  async function handleRefreshLibrary() {
-    setRefreshingLib(true);
+  async function handleRefreshLibrary(mode?: 'incremental') {
+    const setBusy = mode === 'incremental' ? setRefreshingLibFast : setRefreshingLib;
+    setBusy(true);
     try {
       const res = await fetch(`${API}/api/john-hulk/reels/refresh`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ handle: handleFilter || undefined }),
+        body: JSON.stringify({ handle: handleFilter || undefined, ...(mode === 'incremental' ? { mode: 'incremental' } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao atualizar biblioteca.');
@@ -514,21 +718,27 @@ export default function JohnHulkReferencias() {
         toast.error('John Hulk está desativado (kill-switch) — ative na aba "Diário automático".');
         return;
       }
-      toast.info('Atualizando biblioteca de reels… pode levar alguns minutos.');
+      toast.info(mode === 'incremental' ? 'Atualizando biblioteca (rápido)…' : 'Atualizando biblioteca de reels… pode levar alguns minutos.');
       fetchReels();
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao atualizar biblioteca.');
     } finally {
-      setRefreshingLib(false);
+      setBusy(false);
     }
   }
 
-  async function handleModelReel(shortCode: string, regenerate: boolean) {
+  // POST real de modelagem — chamado direto (retry de erro) ou depois da
+  // confirmação de duplicidade (fluxo normal do botão "Modelar").
+  async function handleModelReel(shortCode: string, opts: { regenerate?: boolean; variants?: number; angle?: string } = {}) {
     setModelingMap((m) => ({ ...m, [shortCode]: Date.now() }));
     try {
       const res = await fetch(`${API}/api/john-hulk/reels/${shortCode}/model`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ regenerate }),
+        body: JSON.stringify({
+          regenerate: !!opts.regenerate,
+          variants: opts.variants && opts.variants > 1 ? opts.variants : undefined,
+          angle: opts.angle || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao modelar.');
@@ -537,6 +747,40 @@ export default function JohnHulkReferencias() {
       setModelingMap((m) => { const n = { ...m }; delete n[shortCode]; return n; });
       toast.error(err?.message || 'Erro ao modelar.');
     }
+  }
+
+  // Item 1: antes de modelar, checa duplicidade de tema nos últimos 21 dias.
+  // Se achar tema parecido, abre confirmação; senão modela direto.
+  async function handleRequestModel(reel: Reel, variants: number, angle: string) {
+    const shortCode = reel.shortCode;
+    setDupeChecking((s) => ({ ...s, [shortCode]: true }));
+    try {
+      const res = await fetch(`${API}/api/john-hulk/reels/${shortCode}/dupe-check?days=21`);
+      const data: DupeCheckResponse = await res.json();
+      if (data.count > 0) {
+        setPendingDupe({ shortCode, topic: reel.topic || reel.caption, variants, angle, similar: data.similar });
+        return;
+      }
+    } catch {
+      // dupe-check é best-effort — se falhar, segue com a modelagem normalmente.
+    } finally {
+      setDupeChecking((s) => { const n = { ...s }; delete n[shortCode]; return n; });
+    }
+    handleModelReel(shortCode, { regenerate: reel.status !== 'novo', variants, angle });
+  }
+
+  function confirmPendingDupeModel() {
+    if (!pendingDupe) return;
+    const { shortCode, variants, angle } = pendingDupe;
+    const reel = reels.find((r) => r.shortCode === shortCode);
+    setPendingDupe(null);
+    handleModelReel(shortCode, { regenerate: reel ? reel.status !== 'novo' : false, variants, angle });
+  }
+
+  // Item 2: retry rápido de um reel com status 'erro' — sem passar pelo painel
+  // de variações/dupe-check, pra desbloquear o card o quanto antes.
+  function handleRetryError(shortCode: string) {
+    handleModelReel(shortCode, { regenerate: true, variants: 1 });
   }
 
   async function handleModelUrl() {
@@ -604,6 +848,23 @@ export default function JohnHulkReferencias() {
     });
   }
 
+  // Item 5: move um reel pra outro status a partir do Kanban.
+  async function handleMoveStatus(shortCode: string, status: ReelRuntimeStatus) {
+    setMovingStatusMap((m) => ({ ...m, [shortCode]: true }));
+    try {
+      const res = await fetch(`${API}/api/john-hulk/reels/${shortCode}/status`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
+      });
+      const updated = await res.json();
+      if (!res.ok) throw new Error(updated.error || 'Falha ao mover status.');
+      setReels((prev) => prev.map((r) => (r.shortCode === shortCode ? updated : r)));
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao mover o card.');
+    } finally {
+      setMovingStatusMap((m) => { const n = { ...m }; delete n[shortCode]; return n; });
+    }
+  }
+
   // ── Rascunhos (carrosséis gerados) ──────────────────────────────────────────
   const [drafts, setDrafts] = useState<JHCarousel[]>([]);
   const [draftsLoading, setDraftsLoading] = useState(true);
@@ -637,6 +898,24 @@ export default function JohnHulkReferencias() {
     return map;
   }, [reels]);
 
+  // Item 4: agrupa rascunhos por reel de origem (sourceReel.shortCode) — quando um
+  // reel gerou várias variações elas aparecem juntas, rotuladas "Variação N", pra
+  // dono comparar/editar/aprovar a escolhida. Rascunhos sem reel de origem (ex.:
+  // modelados por URL avulsa antiga) ficam cada um no seu próprio grupo de 1.
+  const draftGroups = useMemo(() => {
+    const groups = new Map<string, JHCarousel[]>();
+    for (const d of drafts) {
+      const key = d.sourceReel?.shortCode || `single:${d.id}`;
+      const arr = groups.get(key) || [];
+      arr.push(d);
+      groups.set(key, arr);
+    }
+    return Array.from(groups.entries()).map(([key, items]) => ({
+      key,
+      items: [...items].sort((a, b) => (a.variantIndex ?? 0) - (b.variantIndex ?? 0)),
+    }));
+  }, [drafts]);
+
   async function handleToggleDraftEdit(d: JHCarousel) {
     if (draftEditing?.id === d.id) { setDraftEditing(null); setDraftEditingHtml(null); return; }
     try {
@@ -650,12 +929,14 @@ export default function JohnHulkReferencias() {
     }
   }
 
-  async function handleApproveDraft(d: JHCarousel) {
+  async function handleApproveDraft(d: JHCarousel, dates: string[] = []) {
     const batchId = carouselIdToBatchId[d.id];
     if (!batchId) return;
     setApprovingDraft((s) => ({ ...s, [d.id]: true }));
     try {
-      const res = await fetch(`${API}/api/john-hulk/${batchId}/approve`, { method: 'POST' });
+      const res = await fetch(`${API}/api/john-hulk/${batchId}/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dates }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao aprovar/agendar.');
       setApprovedDraft((s) => ({ ...s, [d.id]: true }));
@@ -670,6 +951,21 @@ export default function JohnHulkReferencias() {
   // ── Insights ─────────────────────────────────────────────────────────────────
   const [insights, setInsights] = useState<InsightsResponse>({ available: false });
   const [insightsLoading, setInsightsLoading] = useState(true);
+  const [cost, setCost] = useState<CostResponse>({ available: false });
+  const [costLoading, setCostLoading] = useState(true);
+
+  const fetchCost = useCallback(async () => {
+    setCostLoading(true);
+    try {
+      const res = await fetch(`${API}/api/john-hulk/cost`);
+      const data = await res.json();
+      setCost(data);
+    } catch {
+      setCost({ available: false });
+    } finally {
+      setCostLoading(false);
+    }
+  }, []);
 
   const fetchInsights = useCallback(async () => {
     setInsightsLoading(true);
@@ -684,7 +980,7 @@ export default function JohnHulkReferencias() {
     }
   }, []);
 
-  useEffect(() => { if (subView === 'insights') fetchInsights(); }, [subView, fetchInsights]);
+  useEffect(() => { if (subView === 'insights') { fetchInsights(); fetchCost(); } }, [subView, fetchInsights, fetchCost]);
 
   // ── Sub-views ────────────────────────────────────────────────────────────────
 
@@ -693,14 +989,25 @@ export default function JohnHulkReferencias() {
       <div className="space-y-4">
         <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <button
-              onClick={handleRefreshLibrary}
-              disabled={refreshingLib || libraryState.refreshing}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors disabled:opacity-60"
-            >
-              {(refreshingLib || libraryState.refreshing) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              {libraryState.refreshing ? 'Atualizando biblioteca…' : 'Atualizar biblioteca'}
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => handleRefreshLibrary()}
+                disabled={refreshingLib || refreshingLibFast || libraryState.refreshing}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors disabled:opacity-60"
+              >
+                {(refreshingLib || libraryState.refreshing) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                {libraryState.refreshing ? 'Atualizando biblioteca…' : 'Atualizar biblioteca'}
+              </button>
+              <button
+                onClick={() => handleRefreshLibrary('incremental')}
+                disabled={refreshingLib || refreshingLibFast || libraryState.refreshing}
+                title="Busca só os últimos reels (limite 30) — mais rápido e mais barato."
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 text-foreground text-xs font-semibold transition-colors disabled:opacity-60"
+              >
+                {refreshingLibFast ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+                Atualizar (rápido)
+              </button>
+            </div>
             {libraryState.lastFinishedAt && !libraryState.refreshing && (
               <span className="text-[11px] text-muted-foreground">
                 última atualização: {new Date(libraryState.lastFinishedAt).toLocaleString('pt-BR')}
@@ -791,10 +1098,53 @@ export default function JohnHulkReferencias() {
                 onToggleSelect={() => toggleSelect(r.shortCode)}
                 onToggleFavorite={() => handleToggleFavorite(r.shortCode)}
                 favoriting={!!favoritingMap[r.shortCode]}
-                onModel={(regenerate) => handleModelReel(r.shortCode, regenerate)}
-                modeling={!!modelingMap[r.shortCode]}
+                onRequestModel={(variants, angle) => handleRequestModel(r, variants, angle)}
+                onRetryError={() => handleRetryError(r.shortCode)}
+                modeling={!!modelingMap[r.shortCode] || !!dupeChecking[r.shortCode]}
               />
             ))}
+          </div>
+        )}
+
+        {pendingDupe && (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setPendingDupe(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-card border border-border rounded-2xl w-full max-w-sm p-5 space-y-3"
+            >
+              <div className="flex items-center gap-2 text-amber-400">
+                <AlertTriangle size={18} />
+                <h3 className="font-semibold text-foreground">Tema parecido encontrado</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Você já modelou tema parecido nos últimos 21 dias:
+              </p>
+              <ul className="space-y-1">
+                {pendingDupe.similar.slice(0, 4).map((s) => (
+                  <li key={s.shortCode} className="text-xs text-foreground bg-secondary/50 border border-border rounded-lg px-2.5 py-1.5">
+                    “{s.topic || s.shortCode}”
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">Modelar “{pendingDupe.topic || pendingDupe.shortCode}” mesmo assim?</p>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={confirmPendingDupeModel}
+                  className="flex-1 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-lg py-2"
+                >
+                  Modelar mesmo assim
+                </button>
+                <button
+                  onClick={() => setPendingDupe(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg hover:bg-secondary"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -811,20 +1161,30 @@ export default function JohnHulkReferencias() {
             Nenhum rascunho ainda. Modele um reel na aba <b className="text-foreground">Biblioteca</b> ou gere pelo <b className="text-foreground">Diário automático</b>.
           </div>
         ) : (
-          drafts.map((d) => (
-            <DraftCard
-              key={d.id}
-              draft={d}
-              reel={d.sourceReel?.shortCode ? reelByShortCode[d.sourceReel.shortCode] : undefined}
-              batchId={carouselIdToBatchId[d.id]}
-              editingOpen={draftEditing?.id === d.id}
-              onToggleEdit={() => handleToggleDraftEdit(d)}
-              captionOpen={!!openDraftCaption[d.id]}
-              onToggleCaption={() => setOpenDraftCaption((s) => ({ ...s, [d.id]: !s[d.id] }))}
-              approving={!!approvingDraft[d.id]}
-              approved={!!approvedDraft[d.id]}
-              onApprove={() => handleApproveDraft(d)}
-            />
+          draftGroups.map(({ key, items }) => (
+            <div key={key} className={items.length > 1 ? 'border border-purple-500/20 rounded-2xl p-3 space-y-3 bg-purple-500/5' : 'space-y-3'}>
+              {items.length > 1 && (
+                <p className="text-xs font-semibold text-purple-300 px-1">
+                  {items.length} variações do mesmo reel — compare e aprove a que preferir
+                </p>
+              )}
+              {items.map((d, i) => (
+                <DraftCard
+                  key={d.id}
+                  draft={d}
+                  reel={d.sourceReel?.shortCode ? reelByShortCode[d.sourceReel.shortCode] : undefined}
+                  batchId={carouselIdToBatchId[d.id]}
+                  variantLabel={items.length > 1 ? `Variação ${d.variantIndex ?? i + 1}` : undefined}
+                  editingOpen={draftEditing?.id === d.id}
+                  onToggleEdit={() => handleToggleDraftEdit(d)}
+                  captionOpen={!!openDraftCaption[d.id]}
+                  onToggleCaption={() => setOpenDraftCaption((s) => ({ ...s, [d.id]: !s[d.id] }))}
+                  approving={!!approvingDraft[d.id]}
+                  approved={!!approvedDraft[d.id]}
+                  onApprove={(dates) => handleApproveDraft(d, dates)}
+                />
+              ))}
+            </div>
           ))
         )}
 
@@ -894,36 +1254,68 @@ export default function JohnHulkReferencias() {
     );
   }
 
-  function renderInsights() {
-    if (insightsLoading) {
-      return <div className="flex items-center justify-center h-40 text-muted-foreground"><Loader2 size={22} className="animate-spin mr-2" /> Carregando insights...</div>;
-    }
-    if (!insights.available || !insights.summary?.length) {
+  function renderCostPanel() {
+    if (costLoading) {
       return (
-        <div className="bg-card border border-border rounded-2xl p-6 text-center text-muted-foreground space-y-2">
-          <TrendingUp size={24} className="mx-auto opacity-40" />
-          <p>Ainda sem dados suficientes pra aprendizado.</p>
-          <p className="text-xs">Conecte/sincronize o Instagram e modele alguns reels na Biblioteca pra ver aqui o que performou melhor.</p>
+        <div className="bg-card border border-border rounded-2xl p-3.5 flex items-center gap-2 text-muted-foreground text-xs">
+          <Loader2 size={14} className="animate-spin" /> Carregando custo...
         </div>
       );
     }
+    if (!cost.available) return null;
+    const jh = cost.johnHulk;
     return (
-      <div className="bg-card border border-border rounded-2xl divide-y divide-border">
-        {insights.summary.map((item, i) => (
-          <div key={item.shortCode + i} className="p-3.5 flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{item.topic || item.shortCode}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {item.matchedPosts} post{item.matchedPosts === 1 ? '' : 's'} relacionado{item.matchedPosts === 1 ? '' : 's'}
-                {item.themeTag && <> · tema: {item.themeTag}</>}
-              </p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-sm font-bold text-purple-400">{item.avgEngagement != null ? formatCompact(item.avgEngagement) : '—'}</p>
-              <p className="text-[10px] text-muted-foreground">engajamento médio</p>
-            </div>
+      <div className="bg-card border border-border rounded-2xl p-3.5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 text-foreground">
+          <Wallet size={16} className="text-purple-400" />
+          <div>
+            <p className="text-sm font-semibold">{formatBRL(jh?.brl ?? 0)} <span className="text-xs font-normal text-muted-foreground">no John Hulk</span></p>
+            <p className="text-[11px] text-muted-foreground">
+              {jh?.count ?? 0} gerações
+              {jh?.savedBrl != null && jh.savedBrl > 0 && <> · {formatBRL(jh.savedBrl)} economizados (cache/dedupe)</>}
+            </p>
           </div>
-        ))}
+        </div>
+        <div className="text-right text-[11px] text-muted-foreground">
+          <p>hoje (app todo): {formatBRL(cost.today)}</p>
+          <p>total (app todo): {formatBRL(cost.total)}</p>
+        </div>
+      </div>
+    );
+  }
+
+  function renderInsights() {
+    return (
+      <div className="space-y-4">
+        {renderCostPanel()}
+
+        {insightsLoading ? (
+          <div className="flex items-center justify-center h-40 text-muted-foreground"><Loader2 size={22} className="animate-spin mr-2" /> Carregando insights...</div>
+        ) : !insights.available || !insights.summary?.length ? (
+          <div className="bg-card border border-border rounded-2xl p-6 text-center text-muted-foreground space-y-2">
+            <TrendingUp size={24} className="mx-auto opacity-40" />
+            <p>Ainda sem dados suficientes pra aprendizado.</p>
+            <p className="text-xs">Conecte/sincronize o Instagram e modele alguns reels na Biblioteca pra ver aqui o que performou melhor.</p>
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-2xl divide-y divide-border">
+            {insights.summary.map((item, i) => (
+              <div key={item.shortCode + i} className="p-3.5 flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{item.topic || item.shortCode}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {item.matchedPosts} post{item.matchedPosts === 1 ? '' : 's'} relacionado{item.matchedPosts === 1 ? '' : 's'}
+                    {item.themeTag && <> · tema: {item.themeTag}</>}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-bold text-purple-400">{item.avgEngagement != null ? formatCompact(item.avgEngagement) : '—'}</p>
+                  <p className="text-[10px] text-muted-foreground">engajamento médio</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -1057,14 +1449,12 @@ export default function JohnHulkReferencias() {
                           Legenda {captionOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
                       )}
-                      <button
-                        onClick={() => handleApprove(b)}
-                        disabled={approving[b.id] || alreadyApproved || !c.screenshots?.length}
-                        className="text-xs font-medium text-foreground bg-blue-600 hover:bg-blue-500 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors disabled:opacity-60"
-                      >
-                        {approving[b.id] ? <Loader2 size={12} className="animate-spin" /> : alreadyApproved ? <Check size={12} /> : <CalendarClock size={12} />}
-                        {alreadyApproved ? 'Aprovado' : 'Aprovar → agendar no mLabs'}
-                      </button>
+                      <ApproveScheduleControl
+                        approving={!!approving[b.id]}
+                        approved={!!alreadyApproved}
+                        disabled={!c.screenshots?.length}
+                        onApprove={(dates) => handleApprove(b, dates)}
+                      />
                     </div>
 
                     {captionOpen && c.legenda && (
@@ -1076,6 +1466,90 @@ export default function JohnHulkReferencias() {
                   </div>
                 </div>
               )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Item 5: Kanban/Pipeline — agrupa os reels da biblioteca por status em colunas.
+  // 'erro' vira uma coluna própria (destacada em vermelho) fora da sequência normal
+  // do pipeline, já que é uma falha e não um passo do fluxo.
+  function renderPipeline() {
+    const columns: { status: ReelRuntimeStatus; label: string }[] = [
+      { status: 'erro', label: 'Falhou' },
+      ...PIPELINE_ORDER.map((s) => ({ status: s as ReelRuntimeStatus, label: REEL_STATUS_LABELS[s] })),
+    ];
+    const byStatus = (s: ReelRuntimeStatus) => reels.filter((r) => r.status === s);
+
+    if (reelsLoading) {
+      return <div className="flex items-center justify-center h-40 text-muted-foreground"><Loader2 size={22} className="animate-spin mr-2" /> Carregando pipeline...</div>;
+    }
+    if (!reels.length) {
+      return (
+        <div className="bg-card border border-border rounded-2xl p-6 text-center text-muted-foreground">
+          Nenhum reel na biblioteca ainda. Vá em <b className="text-foreground">Biblioteca</b> e atualize.
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {columns.map((col) => {
+          const items = byStatus(col.status);
+          if (col.status === 'erro' && !items.length) return null;
+          const nextStatus = col.status !== 'erro'
+            ? PIPELINE_ORDER[PIPELINE_ORDER.indexOf(col.status as ReelStatus) + 1]
+            : undefined;
+          return (
+            <div key={col.status} className={`w-64 shrink-0 rounded-2xl border p-2.5 space-y-2 ${col.status === 'erro' ? 'border-red-500/30 bg-red-500/5' : 'border-border bg-card'}`}>
+              <div className="flex items-center justify-between px-1">
+                <span className={`text-xs font-semibold ${col.status === 'erro' ? 'text-red-400' : 'text-foreground'}`}>{col.label}</span>
+                <span className="text-[10px] text-muted-foreground">{items.length}</span>
+              </div>
+              <div className="space-y-2 max-h-[65vh] overflow-y-auto pr-0.5">
+                {items.map((r) => (
+                  <div key={r.shortCode} className="rounded-xl border border-border bg-secondary/30 p-2 space-y-1.5">
+                    <div className="flex gap-2">
+                      <div className="w-10 h-12 rounded-md bg-secondary overflow-hidden shrink-0">
+                        {r.thumbnailUrl ? (
+                          <img src={r.thumbnailUrl} alt={r.caption || r.shortCode} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon size={12} className="opacity-40" /></div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-foreground line-clamp-2 leading-tight">{r.topic || r.caption || r.shortCode}</p>
+                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                          <span className="inline-flex items-center gap-0.5"><Eye size={9} /> {formatCompact(r.views)}</span>
+                          <span className="inline-flex items-center gap-0.5"><Heart size={9} /> {formatCompact(r.likes)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {col.status === 'erro' ? (
+                      <button
+                        onClick={() => handleRetryError(r.shortCode)}
+                        disabled={!!modelingMap[r.shortCode]}
+                        className="w-full text-[10px] font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg py-1 inline-flex items-center justify-center gap-1 disabled:opacity-60"
+                      >
+                        {modelingMap[r.shortCode] ? <Loader2 size={10} className="animate-spin" /> : <Repeat size={10} />}
+                        Tentar de novo
+                      </button>
+                    ) : nextStatus ? (
+                      <button
+                        onClick={() => handleMoveStatus(r.shortCode, nextStatus)}
+                        disabled={!!movingStatusMap[r.shortCode]}
+                        className="w-full text-[10px] font-medium text-foreground bg-secondary hover:bg-secondary/70 rounded-lg py-1 inline-flex items-center justify-center gap-1 disabled:opacity-60"
+                      >
+                        {movingStatusMap[r.shortCode] ? <Loader2 size={10} className="animate-spin" /> : <ArrowRight size={10} />}
+                        mover pra {REEL_STATUS_LABELS[nextStatus]}
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+                {!items.length && <p className="text-[10px] text-muted-foreground text-center py-3">vazio</p>}
+              </div>
             </div>
           );
         })}
@@ -1097,6 +1571,7 @@ export default function JohnHulkReferencias() {
         <div className="flex gap-1 bg-secondary rounded-lg p-0.5">
           {([
             { id: 'biblioteca', label: 'Biblioteca', icon: Library },
+            { id: 'pipeline', label: 'Pipeline', icon: Kanban },
             { id: 'rascunhos', label: 'Rascunhos', icon: FileStack },
             { id: 'insights', label: 'Insights', icon: TrendingUp },
             { id: 'auto', label: 'Diário automático', icon: Film },
@@ -1113,6 +1588,7 @@ export default function JohnHulkReferencias() {
       </div>
 
       {subView === 'biblioteca' && renderBiblioteca()}
+      {subView === 'pipeline' && renderPipeline()}
       {subView === 'rascunhos' && renderRascunhos()}
       {subView === 'insights' && renderInsights()}
       {subView === 'auto' && renderAuto()}
