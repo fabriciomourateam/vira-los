@@ -743,4 +743,106 @@ async function analyzeLocalVideo(filePath, caption = '') {
   }
 }
 
-module.exports = { analyzeReel, analyzeLocalVideo, getState, sseClients };
+// ─── Extração PURA (sem tocar no analyzerState singleton) ─────────────────────
+// Usada por fluxos automatizados (ex.: johnHulkService) que rodam em paralelo ao
+// analisador manual da UI e não podem colidir com o `analyzerState`/SSE dele.
+// Reusa os mesmos helpers de baixo nível (Apify, yt-dlp/ffmpeg, Whisper, Claude
+// Vision) mas usa seu PRÓPRIO tmpDir, limpo no `finally`. Resiliente: se
+// ffmpeg/yt-dlp/Whisper não estiverem disponíveis, ainda devolve caption +
+// visualAnalysis (baseada só na legenda), com `transcription: null`.
+async function extractReelContent(url) {
+  if (!url) throw new Error('URL do Reel obrigatória.');
+
+  const tempDir = path.join(os.tmpdir(), `viralos-jh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  fs.mkdirSync(tempDir, { recursive: true });
+
+  try {
+    // Passo 1: dados do post (Apify)
+    const mediaData = await fetchMediaData(url);
+    const caption = mediaData.caption || '';
+    const owner = mediaData.ownerUsername || '';
+    const likes = mediaData.likesCount || 0;
+    const views = mediaData.videoViewCount || 0;
+    const shortCode = mediaData.shortCode || '';
+    const thumbnailUrl = mediaData.thumbnailUrl || null;
+    const videoUrl = mediaData.videoUrl || null;
+
+    // Passo 2: mídia (thumbnail + frames + vídeo cru p/ transcrição)
+    const hasFfmpeg = ffmpegAvailable();
+    const hasYtDlp = hasFfmpeg && ytDlpAvailable();
+    const thumbnailBase64 = await downloadThumbnail(mediaData);
+    let frames = [];
+    let videoPath = null;
+
+    if (hasFfmpeg) {
+      const dlPath = path.join(tempDir, 'reel.mp4');
+      if (hasYtDlp) {
+        const ok = downloadVideoViaYtDlp(url, dlPath);
+        if (ok) {
+          videoPath = dlPath;
+          const framesPattern = path.join(tempDir, 'frame%03d.jpg');
+          try {
+            execFileSync(
+              'ffmpeg',
+              ['-i', videoPath, '-vf', 'select=eq(n\\,0)+eq(n\\,25)+eq(n\\,55)', '-vsync', 'vfr', framesPattern, '-y'],
+              { timeout: 30000, stdio: ['ignore', 'ignore', 'ignore'] }
+            );
+          } catch {
+            try {
+              execFileSync(
+                'ffmpeg',
+                ['-i', videoPath, '-r', '0.3', '-frames:v', '3', framesPattern, '-y'],
+                { timeout: 30000, stdio: ['ignore', 'ignore', 'ignore'] }
+              );
+            } catch { /* segue sem frames */ }
+          }
+          for (let i = 1; i <= 5; i++) {
+            const fp = path.join(tempDir, `frame${String(i).padStart(3, '0')}.jpg`);
+            if (fs.existsSync(fp)) frames.push(fs.readFileSync(fp).toString('base64'));
+          }
+        }
+      } else if (videoUrl) {
+        try {
+          const extracted = await extractFrames(videoUrl, tempDir);
+          frames = extracted.frames;
+          videoPath = extracted.videoPath;
+        } catch (e) {
+          console.warn('[ReelsAnalyzer/extractReelContent] frames via URL direta falharam:', e.message);
+        }
+      }
+    }
+
+    // Passo 3: transcrição (best-effort — null se indisponível)
+    let transcription = null;
+    if (hasFfmpeg && videoPath && process.env.OPENAI_API_KEY) {
+      try {
+        transcription = await transcribeAudio(videoPath);
+      } catch (e) {
+        console.warn('[ReelsAnalyzer/extractReelContent] transcrição falhou:', e.message);
+      }
+    }
+
+    // Passo 4: análise visual (best-effort)
+    let visualAnalysis = '';
+    if (thumbnailBase64 || frames.length || caption) {
+      try {
+        visualAnalysis = await analyzeVisuals(frames, thumbnailBase64, caption);
+      } catch (e) {
+        console.warn('[ReelsAnalyzer/extractReelContent] análise visual falhou:', e.message);
+        visualAnalysis = caption ? `Análise contextual baseada na legenda do post:\n${caption}` : '';
+      }
+    }
+
+    return {
+      caption, owner, likes, views, transcription, visualAnalysis,
+      thumbnailUrl, shortCode, videoUrl,
+    };
+  } finally {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignora */ }
+  }
+}
+
+module.exports = {
+  analyzeReel, analyzeLocalVideo, getState, sseClients,
+  extractReelContent, runApifyActor,
+};

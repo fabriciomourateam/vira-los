@@ -74,6 +74,7 @@ const FEATURE_PATTERNS = [
   ['/api/carousel/regenerate-slide',  'regenerate-slide'],
   ['/api/carousel/generate',          'carousel'],
   ['/api/daily-content/generate',     'daily-content'],
+  ['/api/john-hulk/generate',         'john-hulk'],
   ['/api/maquina/headlines',          'maquina-headlines'],
   ['/api/maquina/structure',          'maquina-structure'],
   ['/api/maquina/generate',           'maquina-html'],
@@ -106,6 +107,7 @@ app.use('/api/research',        require('./routes/research'));
 app.use('/api/agent',           require('./routes/agent'));
 app.use('/api/carousel',        require('./routes/carousel'));
 app.use('/api/daily-content',   require('./routes/dailyContent'));
+app.use('/api/john-hulk',       require('./routes/johnHulk'));
 app.use('/api/docs',            require('./routes/docs'));
 app.use('/api/reels',           require('./routes/reels'));
 app.use('/api/reels-analyzer',  require('./routes/reelsAnalyzer'));

@@ -611,6 +611,36 @@ const CAROUSEL_CTA_DEFAULT = { label: 'COMENTA:', keyword: 'DIETA', benefit: 'Pr
 const getCarouselCta = () => ({ ...CAROUSEL_CTA_DEFAULT, ...readObj('carousel_cta') });
 const setCarouselCta = (c) => writeObj('carousel_cta', { ...getCarouselCta(), ...c, updated_at: now() });
 
+// ── John Hulk (job separado: reel de referência → carrossel FMTeam, rascunho) ──
+// Seen: shortCodes de reels já usados (nunca re-seleciona o mesmo reel).
+const getJohnHulkSeen = () => { const o = readObj('john_hulk_seen'); return Array.isArray(o.shortCodes) ? o.shortCodes : []; };
+const addJohnHulkSeen = (shortCode) => {
+  if (!shortCode) return;
+  const cur = getJohnHulkSeen();
+  if (cur.includes(shortCode)) return;
+  writeObj('john_hulk_seen', { shortCodes: [shortCode, ...cur].slice(0, 500), updated_at: now() });
+};
+
+// Batches: histórico das execuções do job (1 por dia, mais recente primeiro).
+const getAllJohnHulkBatches = () => readDb('john_hulk_batches').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+const saveJohnHulkBatch    = (b) => { const db = readDb('john_hulk_batches'); db.push({ ...b, created_at: now() }); writeDb('john_hulk_batches', db); };
+const updateJohnHulkBatch  = (id, data) => { const db = readDb('john_hulk_batches').map((b) => b.id === id ? { ...b, ...data } : b); writeDb('john_hulk_batches', db); };
+
+// Cache de transcrição/análise por shortCode — evita re-scrape/re-transcrever o
+// mesmo reel (economia de Apify + Whisper) se ele for revisitado.
+const getJohnHulkTranscript  = (shortCode) => { const o = readObj('john_hulk_transcripts'); return (o && o[shortCode]) || null; };
+const saveJohnHulkTranscript = (shortCode, data) => {
+  const o = readObj('john_hulk_transcripts');
+  o[shortCode] = { ...data, savedAt: now() };
+  writeObj('john_hulk_transcripts', o);
+};
+
+// Settings: kill-switch (default ligado) + auto-agendamento opcional (default off
+// — fica como rascunho até o dono aprovar).
+const JOHN_HULK_SETTINGS_DEFAULTS = { johnHulkEnabled: true, autoScheduleJohnHulk: false };
+const getJohnHulkSettings = () => ({ ...JOHN_HULK_SETTINGS_DEFAULTS, ...readObj('john_hulk_settings') });
+const setJohnHulkSettings = (patch) => writeObj('john_hulk_settings', { ...getJohnHulkSettings(), ...patch, updated_at: now() });
+
 module.exports = {
   getAllContent, getContent, createContent, updateContent, deleteContent,
   getAllSchedules, getSchedule, createSchedule, deleteSchedule,
@@ -665,4 +695,9 @@ module.exports = {
   getRecentTopics, addRecentTopics,
   getReelsCta, setReelsCta,
   getCarouselCta, setCarouselCta,
+  // John Hulk (job separado)
+  getJohnHulkSeen, addJohnHulkSeen,
+  getAllJohnHulkBatches, saveJohnHulkBatch, updateJohnHulkBatch,
+  getJohnHulkTranscript, saveJohnHulkTranscript,
+  getJohnHulkSettings, setJohnHulkSettings,
 };
