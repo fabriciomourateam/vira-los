@@ -74,7 +74,11 @@ const FEATURE_PATTERNS = [
   ['/api/carousel/regenerate-slide',  'regenerate-slide'],
   ['/api/carousel/generate',          'carousel'],
   ['/api/daily-content/generate',     'daily-content'],
-  ['/api/john-hulk/generate',         'john-hulk'],
+  // Prefixo inteiro (não só /generate) — assim modelReel/deriveViralInsight
+  // disparados por /reels/:sc/model, /reels/model-url, /reels/model-batch e
+  // /reels/refresh também contam como 'john-hulk' no usageTracker (item G do
+  // plano de melhorias do johnHulkService — GET /api/john-hulk/cost).
+  ['/api/john-hulk',                  'john-hulk'],
   ['/api/maquina/headlines',          'maquina-headlines'],
   ['/api/maquina/structure',          'maquina-structure'],
   ['/api/maquina/generate',           'maquina-html'],
