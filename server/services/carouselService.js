@@ -208,8 +208,12 @@ const IMAGEN_CACHE_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, 
 if (!fs.existsSync(IMAGEN_CACHE_DIR)) fs.mkdirSync(IMAGEN_CACHE_DIR, { recursive: true });
 
 async function fetchImagenImage(query, fallbackQuery, opts = {}) {
-  // Prompt enxuto pra fitness/lifestyle vertical (1080x1350 ~ 9:16 portrait)
-  const prompt = `Professional photography, ${query}, cinematic lighting, high detail, photorealistic, no text, vertical composition`;
+  // Prompt enxuto pra fitness/lifestyle vertical (1080x1350 ~ 9:16 portrait).
+  // imageSubject (opcional) prefixa o sujeito da foto (ex.: "muscular bodybuilder
+  // physique") em TODA imagem gerada por IA — usado pelo job do John Hulk pra
+  // enviesar a reserva de IA pra bodybuilder sem mexer no comportamento default.
+  const subjectPrefix = opts.imageSubject ? `${opts.imageSubject}, ` : '';
+  const prompt = `Professional photography, ${subjectPrefix}${query}, cinematic lighting, high detail, photorealistic, no text, vertical composition`;
 
   // Provider: 'pollinations' (default, gratuito sem auth) ou 'google' (Imagen/Nano Banana — exige billing).
   // Override via env IMAGE_PROVIDER. Quando 'google', usa IMAGEN_MODEL (default: gemini-2.5-flash-image).
@@ -294,7 +298,7 @@ async function fetchImages(query, count = 12) {
 // AI fica por último porque Unsplash entrega fotos reais com anatomia/iluminação
 // melhores pra fitness na maioria das queries genéricas. O usuário pode usar o
 // botão "Gerar com IA" no editor pra forçar AI quando o stock não der bom.
-async function fetchOneImage(query, fallbackQuery) {
+async function fetchOneImage(query, fallbackQuery, imageSubject = '') {
   try {
     let imgs = await fetchUnsplashImages(query, 1);
     if (!imgs.length) imgs = await fetchPexelsImages(query, 1);
@@ -309,7 +313,7 @@ async function fetchOneImage(query, fallbackQuery) {
     const aiEnabled = provider === 'pollinations' || (provider === 'google' && !!process.env.GOOGLE_AI_API_KEY);
     if (aiEnabled) {
       try {
-        const ai = await fetchImagenImage(query, fallbackQuery);
+        const ai = await fetchImagenImage(query, fallbackQuery, imageSubject ? { imageSubject } : {});
         if (ai) return ai;
       } catch (e) {
         console.log(`[CarouselService] AI fallback falhou para "${query}": ${e.message}`);
@@ -344,7 +348,7 @@ async function fetchImageCandidates(query, fallbackQuery, count = 12) {
 }
 
 // Gera queries de imagem específicas por slide via Claude (chamada leve)
-async function generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle = '') {
+async function generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle = '', imageSubject = '') {
   const roteiroContext = roteiro
     ? `Roteiro:\n${roteiro.slice(0, 1200)}`
     : `Tema: "${topic}" — nicho: ${niche}`;
@@ -376,11 +380,19 @@ Slide 6 = PORTRAIT (dark, foto de impacto para a frase final)`
     ? `Slide 1 = capa (foto vertical impactante), slides 2 a ${queryCount} = conteúdo específico de cada ponto (alterne cenas verticais e amplas)`
     : `Slide 1 = capa (foto impactante do tema), slides 2 a ${queryCount - 1} = conteúdo específico de cada ponto, slide ${queryCount} = CTA/motivação`;
 
+  // imageSubject (opcional): quando setado, cada query deve incluir o sujeito
+  // (ex.: "muscular bodybuilder") junto da cena do slide — usado pelo job do
+  // John Hulk pra enviesar TODA busca de imagem pra bodybuilder. Sem mudar
+  // comportamento quando vazio (default).
+  const subjectRule = imageSubject
+    ? `\nIMPORTANTE: cada query DEVE incluir o sujeito "${imageSubject}" combinado com a cena do slide (ex.: "${imageSubject} flexing" ou "${imageSubject} gym"). Mantenha 2-4 palavras em inglês por query.`
+    : '';
+
   const prompt = `${roteiroContext}
 
 Gere exatamente ${queryCount} queries de busca de imagens no Unsplash/Pexels, uma por slide.
 Cada query deve ser em INGLÊS, 2-4 palavras, descrevendo a imagem ideal para aquele slide.
-${slideDesc}
+${slideDesc}${subjectRule}
 
 Responda APENAS com um JSON array de strings, sem markdown:
 ["query slide 1", "query slide 2", ...]`;
@@ -2335,6 +2347,7 @@ async function generateCarousel(config, setStep = () => {}) {
     ctaStyle = 'dark-fullbleed',  // 'dark-fullbleed' (default) | 'light-card'
     fmteamCover = {},             // personalização da capa fmteam (cores + toggles + imagem do CTA)
     avoidPhotoUrls = [],          // URLs de fotos a evitar (carrosséis recentes) — dedup
+    imageSubject = '',            // opcional: enviesa TODAS as imagens (queries + reserva IA) pro sujeito (ex.: "muscular bodybuilder physique")
   } = config;
 
   // Opções de personalização da capa fmteam (com defaults seguros)
@@ -2375,7 +2388,7 @@ async function generateCarousel(config, setStep = () => {}) {
   console.log(`[GenerateCarousel] Passo 1 — buscando tendências Reddit + queries de imagem...`);
   const [redditTrends, slideQueries] = await Promise.all([
     roteiro ? Promise.resolve([]) : fetchRedditTrends(topic),
-    generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle),
+    generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle, imageSubject),
   ]);
 
   // Passo 2: busca imagem específica para cada slide em paralelo
@@ -2400,7 +2413,7 @@ async function generateCarousel(config, setStep = () => {}) {
       // não trouxeram nada, cai pro AI (fetchOneImage) como último recurso.
       let choice = candidates.find(img => img && img.url && !usedKeys.has(photoKey(img.url)));
       if (!choice && candidates.length) choice = candidates.find(img => img && img.url);
-      if (!choice) choice = await fetchOneImage(slideQueries[i], topic);
+      if (!choice) choice = await fetchOneImage(slideQueries[i], topic, imageSubject);
       if (choice && choice.url) usedKeys.add(photoKey(choice.url));
       perSlide.push(choice || null);
     }

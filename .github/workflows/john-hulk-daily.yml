@@ -1,0 +1,61 @@
+name: Carrossel John Hulk (diário)
+
+# Job SEPARADO do "Conteúdo diário" (daily-content.yml) — não compete com ele,
+# roda em minuto diferente. Pega 1 Reel de referência (@john.hulk_ por padrão),
+# transcreve, reescreve na voz FMTeam e gera um carrossel com imagens de
+# bodybuilder, salvo como RASCUNHO (sem auto-publicar).
+#
+# Mesma lógica de backup do daily-content: o agendamento do GitHub Actions é
+# "melhor esforço" e às vezes dropa execuções — por isso um horário de manhã e
+# um de backup à tarde. O guard de idempotência do serviço evita gerar em
+# dobro (se a manhã já gerou um carrossel, o backup só confere e sai).
+#   09:47 BRT = 12:47 UTC  ·  13:47 BRT (backup) = 16:47 UTC
+
+on:
+  schedule:
+    - cron: '47 12 * * *'   # manhã (~09:47 BRT)
+    - cron: '47 16 * * *'   # backup à tarde (~13:47 BRT) — cobre se a manhã dropar
+  workflow_dispatch: {}   # permite rodar manualmente pelo botão do GitHub
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar e aguardar a geração do carrossel John Hulk
+        env:
+          BASE: https://vira-los.fly.dev
+          KEY: ${{ secrets.DAILY_CRON_SECRET }}   # opcional; só é exigida se setada no Fly
+        run: |
+          set -e
+          today=$(TZ=America/Sao_Paulo date +%F)
+          echo "Acordando a máquina e disparando a geração John Hulk de $today..."
+          curl -sS -m 60 -X POST "$BASE/api/john-hulk/generate" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-key: $KEY" \
+            -d '{"trigger":"cron"}' || true
+
+          echo "Aguardando o batch ficar pronto (mantém a máquina acordada)..."
+          for i in $(seq 1 40); do
+            sleep 30
+            resp=$(curl -sS -m 30 "$BASE/api/john-hulk" || echo '{}')
+            # Prioriza SUCESSO: qualquer batch de hoje done/partial (mesmo sem reel
+            # novo, "done" sem carouselId é sucesso — não é erro) reporta done.
+            status=$(echo "$resp" | jq -r --arg d "$today" '
+              [.batches[]? | select(.date==$d)] as $t
+              | if   ([$t[] | select(.status=="done" or .status=="partial")] | length) > 0 then "done"
+                elif ([$t[] | select(.status=="generating")] | length) > 0 then "generating"
+                elif ([$t[] | select(.status=="error")] | length) > 0 then "error"
+                else "none" end')
+            echo "  tentativa $i — status de hoje: $status"
+            if [ "$status" = "done" ] || [ "$status" = "partial" ]; then
+              echo "✅ Batch John Hulk de $today concluído (status: $status)."
+              exit 0
+            fi
+            if [ "$status" = "error" ]; then
+              errs=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d and .status=="error") | .errors[]?] | unique | join(" || ")')
+              echo "❌ Geração John Hulk de $today falhou no servidor. Erros: $errs"
+              exit 1
+            fi
+          done
+          echo "⚠️ Timeout aguardando concluir — a geração pode ainda estar rodando no servidor."
+          exit 1
