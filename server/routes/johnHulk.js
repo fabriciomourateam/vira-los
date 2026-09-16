@@ -10,9 +10,12 @@
  * POST /api/john-hulk/settings            → liga/desliga kill-switch e auto-agendamento
  * GET  /api/john-hulk/reels               → lista a biblioteca (filtros/sort)
  * POST /api/john-hulk/reels/refresh       → atualiza a biblioteca (Apify, background; body {mode:'full'|'incremental'})
- * POST /api/john-hulk/reels/:sc/model     → modela 1 reel da biblioteca (background; body {regenerate,variants,angle})
- * POST /api/john-hulk/reels/model-url     → modela 1 reel por URL avulsa (background)
- * POST /api/john-hulk/reels/model-batch   → modela vários reels em sequência (background)
+ * POST /api/john-hulk/reels/:sc/model     → modela 1 reel da biblioteca (background; body
+ *                                            {regenerate,variants,angle,mode,ctaDestination,offer,numSlides})
+ * POST /api/john-hulk/reels/model-url     → modela 1 reel por URL avulsa (background; mesmo body
+ *                                            + {url}, inclui as mesmas opções de modo anúncio)
+ * POST /api/john-hulk/reels/model-batch   → modela vários reels em sequência (background; sempre
+ *                                            orgânico — body {shortCodes,numSlides?})
  * POST /api/john-hulk/reels/:sc/status    → seta status manual do reel (inclui 'erro')
  * POST /api/john-hulk/reels/:sc/favorite  → toggle favorito
  * GET  /api/john-hulk/reels/:sc/dupe-check → aviso de reel com tema parecido já modelado (não bloqueia)
@@ -70,6 +73,54 @@ router.post('/settings', (req, res) => {
 // + retry) 2x seguidas. Se comporta como 'novo' pro guard de "já modelado".
 const REEL_STATUS_VALUES = ['novo', 'modelado', 'editado', 'agendado', 'postado', 'erro'];
 
+// ── Modo anúncio (tráfego pago) — validação compartilhada entre /reels/:sc/model
+// e /reels/model-url (os dois pontos de entrada que modelam um reel de verdade). ──
+const AD_CTA_DESTINATIONS = ['whatsapp', 'link', 'dm'];
+
+// Lê e valida as opções COMUNS de modelagem do body: {regenerate,variants,angle,
+// mode,ctaDestination,offer,numSlides}. Em caso de erro já responde 400 e devolve
+// null — o chamador só precisa checar `if (!opts) return;`. `mode` default
+// 'organico' (comportamento igual ao de sempre); 'anuncio' exige ctaDestination.
+function parseModelOpts(req, res) {
+  const body = req.body || {};
+  const regenerate = !!body.regenerate;
+  const angle = body.angle ? String(body.angle).slice(0, 300) : undefined;
+
+  let variants = 1;
+  if (body.variants != null) {
+    variants = Number(body.variants);
+    if (!Number.isInteger(variants) || variants < 1 || variants > 3) {
+      res.status(400).json({ error: 'variants deve ser um inteiro entre 1 e 3.' });
+      return null;
+    }
+  }
+
+  let numSlides;
+  if (body.numSlides != null) {
+    numSlides = Number(body.numSlides);
+    if (!Number.isInteger(numSlides) || numSlides < 4 || numSlides > 10) {
+      res.status(400).json({ error: 'numSlides deve ser um inteiro entre 4 e 10.' });
+      return null;
+    }
+  }
+
+  const mode = body.mode === 'anuncio' ? 'anuncio' : 'organico';
+  let ctaDestination;
+  let offer;
+  if (mode === 'anuncio') {
+    ctaDestination = body.ctaDestination;
+    if (!AD_CTA_DESTINATIONS.includes(ctaDestination)) {
+      res.status(400).json({ error: `mode:'anuncio' exige ctaDestination — use um de: ${AD_CTA_DESTINATIONS.join(', ')}` });
+      return null;
+    }
+    offer = body.offer ? String(body.offer).slice(0, 200) : undefined;
+  }
+
+  return {
+    regenerate, angle, variants, numSlides, mode, ctaDestination, offer,
+  };
+}
+
 // Extração simples de palavras-chave (PT-BR) — compartilhada entre /insights e
 // /reels/:shortCode/dupe-check (item D do plano de melhorias).
 const KEYWORD_STOPWORDS = new Set(['para', 'como', 'sobre', 'esse', 'essa', 'isso', 'você', 'mais', 'nunca', 'sempre', 'tudo', 'pelo', 'pela']);
@@ -123,19 +174,13 @@ router.post('/reels/refresh', (req, res) => {
 });
 
 // Modela 1 reel específico da biblioteca (Modeling Studio).
-// Body opcional: { regenerate?:boolean, variants?:1-3, angle?:string }.
+// Body opcional: { regenerate?:boolean, variants?:1-3, angle?:string, numSlides?:4-10,
+// mode?:'organico'|'anuncio' (default 'organico'), ctaDestination?:'whatsapp'|'link'|'dm'
+// (obrigatório se mode:'anuncio'), offer?:string }.
 router.post('/reels/:shortCode/model', (req, res) => {
   const { shortCode } = req.params;
-  const regenerate = !!(req.body && req.body.regenerate);
-  const angle = req.body && req.body.angle ? String(req.body.angle).slice(0, 300) : undefined;
-
-  let variants = 1;
-  if (req.body && req.body.variants != null) {
-    variants = Number(req.body.variants);
-    if (!Number.isInteger(variants) || variants < 1 || variants > 3) {
-      return res.status(400).json({ error: 'variants deve ser um inteiro entre 1 e 3.' });
-    }
-  }
+  const opts = parseModelOpts(req, res);
+  if (!opts) return; // parseModelOpts já respondeu 400
 
   const reel = db.getJohnHulkReel(shortCode);
   if (!reel) return res.status(404).json({ error: `Reel ${shortCode} não encontrado na biblioteca.` });
@@ -144,31 +189,46 @@ router.post('/reels/:shortCode/model', (req, res) => {
   }
 
   res.json({ started: true });
-  johnHulk.modelReel({ shortCode, regenerate, variants, angle })
+  johnHulk.modelReel({ shortCode, ...opts })
     .then((r) => console.log(`[JohnHulk] modelReel ${shortCode}: carrossel(s) ${(r.carouselIds || [r.carouselId]).join(', ')}`))
     .catch((e) => console.error(`[JohnHulk] modelReel ${shortCode} falhou:`, e.message));
 });
 
 // Modela um reel a partir de uma URL avulsa do Instagram (fora da biblioteca).
+// Body: { url } + as mesmas opções opcionais de /reels/:shortCode/model (variants,
+// angle, numSlides, mode, ctaDestination, offer) — dá pra criar um anúncio a partir
+// de uma URL avulsa também.
 router.post('/reels/model-url', (req, res) => {
   const url = req.body && req.body.url;
   if (!url || !/instagram\.com/i.test(String(url))) {
     return res.status(400).json({ error: 'Informe uma URL válida do Instagram (reel/post).' });
   }
+  const opts = parseModelOpts(req, res);
+  if (!opts) return; // parseModelOpts já respondeu 400
 
   res.json({ started: true });
-  johnHulk.modelReel({ url: String(url) })
+  johnHulk.modelReel({ url: String(url), ...opts })
     .then((r) => console.log(`[JohnHulk] modelReel (URL avulsa) ${r.reelShortCode}: carrossel ${r.carouselId}`))
     .catch((e) => console.error('[JohnHulk] modelReel (URL avulsa) falhou:', e.message));
 });
 
 // Modela vários reels em sequência (lote) — resiliente, 1 falha não para os outros.
+// Sempre orgânico (sem opções de anúncio, pra manter o batch simples) — só aceita
+// numSlides opcional (4-10), passado igual pra cada reel do lote.
 router.post('/reels/model-batch', (req, res) => {
   const shortCodes = Array.isArray(req.body && req.body.shortCodes) ? req.body.shortCodes : [];
   if (!shortCodes.length) return res.status(400).json({ error: 'Informe shortCodes (array não vazio).' });
 
+  let numSlides;
+  if (req.body && req.body.numSlides != null) {
+    numSlides = Number(req.body.numSlides);
+    if (!Number.isInteger(numSlides) || numSlides < 4 || numSlides > 10) {
+      return res.status(400).json({ error: 'numSlides deve ser um inteiro entre 4 e 10.' });
+    }
+  }
+
   res.json({ started: true });
-  johnHulk.modelBatch({ shortCodes })
+  johnHulk.modelBatch({ shortCodes, numSlides })
     .then((results) => console.log(`[JohnHulk] modelBatch: ${results.filter((r) => r.ok).length}/${results.length} ok.`))
     .catch((e) => console.error('[JohnHulk] modelBatch falhou:', e.message));
 });
