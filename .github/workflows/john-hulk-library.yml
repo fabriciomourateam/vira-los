@@ -92,8 +92,10 @@ jobs:
               echo "✅ Reel $sc modelado — carrossel $cid"
               echo "$r" | jq -r --arg sc "$sc" '.reels[] | select(.shortCode==$sc) | "tema=\(.topic) status=\(.status)"'
               echo "----- carrossel gerado (mode/cta/offer) -----"
-              curl -sS -m 30 "$BASE/api/carousel/saved" \
-                | jq -r --arg id "$cid" '.[] | select(.id==$id) | "mode=\(.mode // "-") ctaDestination=\(.ctaDestination // "-") offer=\(.offer // "-") numSlides=\(.numSlides)"'
+              saved=$(curl -sS -m 30 "$BASE/api/carousel/saved" || echo '[]')
+              echo "$saved" | jq -r --arg id "$cid" '.[] | select(.id==$id) | "mode=\(.mode // "-") ctaDestination=\(.ctaDestination // "-") offer=\(.offer // "-") numSlides=\(.numSlides)"'
+              echo "----- legenda gerada (deve estar SEM rotulos [LEGENDA]/[HASHTAGS]) -----"
+              echo "$saved" | jq -r --arg id "$cid" '.[] | select(.id==$id) | .legenda'
               exit 0
             fi
           done
