@@ -2169,17 +2169,21 @@ function buildLegendaPrompt({ topic, instagramHandle, niche, cta }) {
   // não-seguidor = mais gente comentando).
   return `Crie uma legenda profissional para um post do Instagram sobre: "${topic}" (nicho: ${niche}).
 
-Retorne EXATAMENTE neste formato, sem explicações:
+Retorne SÓ a legenda pronta pra copiar e colar — SEM rótulos (nada de "[LEGENDA]", "[HASHTAGS]", "Legenda:", etc.), SEM explicações e SEM aspas em volta. Separe cada parágrafo com UMA linha em branco. Siga EXATAMENTE esta estrutura:
 
-[LEGENDA]
-Texto da legenda aqui — 3 a 5 linhas, tom direto e impactante, em português (sem jargão gringo), sem hashtags. A PRIMEIRA linha tem que fisgar sozinha.
+Corpo da legenda — 3 a 5 parágrafos curtos, tom direto e impactante, em português (sem jargão gringo). A PRIMEIRA linha tem que fisgar sozinha. Uma linha em branco entre cada parágrafo.
 
 📌 Salva esse post pra aplicar depois.
 
 Comenta ${keyword} para receber um cardápio que vai te fazer secar sem passar fome.
 
-[HASHTAGS]
-#emagrecimento #dieta #nutricao #vidasaudavel #saudedohomem #saudehormonal #reeducacaoalimentar #comidadeverdade #habitos #homem30`;
+#emagrecimento #dieta #nutricao #vidasaudavel #saudedohomem #saudehormonal
+
+Regras de formatação (obrigatórias):
+- NÃO escreva nenhum rótulo/marcador (ex.: [LEGENDA], [HASHTAGS], "Hashtags:").
+- Parágrafos separados por UMA linha em branco (nunca colados, nunca com 2+ linhas em branco).
+- As 2 últimas linhas ANTES das hashtags são exatamente a de "📌 Salva..." e a de "Comenta ${keyword}...".
+- Termine com UMA linha de 6 a 10 hashtags relevantes ao tema, todas na MESMA linha, após uma linha em branco.`;
 }
 
 // ─── Passo 5: Screenshots com Playwright (lógica DPR do gist) ────────────────
