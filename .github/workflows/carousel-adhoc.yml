@@ -1,0 +1,76 @@
+name: Carrossel — gerar sob demanda (roteiro fixo)
+
+# Manual: gera um carrossel FMTeam a partir de um roteiro fixo (tema do MÉTODO/
+# acompanhamento, sem substância), tira screenshots e SALVA como rascunho na aba
+# Carrossel do app. Usado pra criar a versão anunciável adaptada ao negócio.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gerar + screenshots + salvar
+        env:
+          BASE: https://vira-los.fly.dev
+        run: |
+          set -e
+          ROTEIRO=$(cat <<'EOF'
+          SLIDE 1 (capa): Definição muscular não é sorte. É método.
+          SLIDE 2: A maioria treina pesado, come bastante e espera o corpo responder. Sem sistema, o resultado vira loteria — às vezes vem, quase sempre trava.
+          SLIDE 3: Quem fica realmente seco não treina mais. Treina diferente: calorias ajustadas por fase, macro na medida certa e treino que mantém força enquanto corta gordura. É isso que separa amador de quem tem estrutura.
+          SLIDE 4: Definição de verdade é sequência: déficit calibrado (sem passar fome), proteína protegendo a massa magra e periodização do treino pra não murchar junto com a gordura.
+          SLIDE 5: Quando treino, macros e descanso ficam organizados em torno de um plano real, a composição corporal muda em semanas — não em meses de achismo.
+          SLIDE 6: O atalho não é fórmula mágica. É parar de adivinhar. Com acompanhamento, cada ajuste é feito pro SEU corpo e pra SUA rotina — e você só executa.
+          SLIDE 7 (CTA): Se você treina sério, merece um plano sério. Comenta DIETA que eu te mando o caminho pra secar sem passar fome.
+          EOF
+          )
+          INSTR="Carrossel FMTeam para um profissional de treino/nutricao (acompanhamento). Venda o METODO/acompanhamento. NAO cite nenhuma substancia, hormonio ou esteroide; NAO prometa resultado garantido; NAO aponte o corpo do leitor. Tom direto, pratico, sem jargao gringo, sem clichê."
+          TOPIC="Definicao muscular e metodo, nao sorte — acompanhamento profissional"
+
+          echo "=== disparando geração ==="
+          body=$(jq -n --arg t "$TOPIC" --arg r "$ROTEIRO" --arg i "$INSTR" \
+            '{topic:$t, roteiro:$r, instructions:$i, numSlides:7, layoutStyle:"fmteam", ctaStyle:"dark-fullbleed"}')
+          resp=$(curl -sS -m 60 -X POST "$BASE/api/carousel/generate" -H "Content-Type: application/json" -d "$body")
+          jobId=$(echo "$resp" | jq -r '.jobId // empty')
+          if [ -z "$jobId" ]; then echo "❌ sem jobId: $resp"; exit 1; fi
+          echo "jobId=$jobId"
+
+          echo "=== aguardando geração ==="
+          html=""; folder=""; legenda=""; nslides=7
+          for i in $(seq 1 40); do
+            sleep 15
+            j=$(curl -sS -m 30 "$BASE/api/carousel/jobs/$jobId" || echo '{}')
+            st=$(echo "$j" | jq -r '.status // "?"')
+            echo "  tentativa $i — status=$st $(echo "$j" | jq -r '.step // ""')"
+            if [ "$st" = "error" ]; then echo "❌ erro:"; echo "$j" | jq -r '.error'; exit 1; fi
+            if [ "$st" = "done" ]; then
+              folder=$(echo "$j" | jq -r '.result.folderName')
+              nslides=$(echo "$j" | jq -r '.result.numSlides // 7')
+              legenda=$(echo "$j" | jq -r '.result.legenda // ""')
+              echo "$j" | jq -r '.result.html' > /tmp/carrossel.html
+              echo "✅ gerado — folder=$folder ($nslides slides)"
+              break
+            fi
+            if [ "$i" = "40" ]; then echo "⚠️ geração não concluiu"; exit 1; fi
+          done
+
+          echo "=== screenshots ==="
+          ss=$(jq -Rs --arg f "$folder" '{html: ., folderName:$f}' < /tmp/carrossel.html | \
+            curl -sS -m 120 -X POST "$BASE/api/carousel/screenshots-pp" -H "Content-Type: application/json" -d @- )
+          shots=$(echo "$ss" | jq -c '.screenshots // []')
+          echo "screenshots: $(echo "$shots" | jq 'length')"
+
+          echo "=== salvar como rascunho ==="
+          id="carousel_$(date +%s)_metodo"
+          save=$(jq -n --arg id "$id" --arg t "$TOPIC" --arg f "$folder" --argjson n "$nslides" \
+            --argjson s "$shots" --arg l "$legenda" \
+            '{id:$id, topic:$t, folderName:$f, numSlides:$n, screenshots:$s, legenda:$l}')
+          r=$(echo "$save" | curl -sS -m 30 -X POST "$BASE/api/carousel/saved" -H "Content-Type: application/json" -d @- )
+          echo "save: $r"
+          echo ""
+          echo "✅ PRONTO — abra na aba Carrossel (rascunhos) ou:"
+          echo "   $BASE/output/$folder/carrossel.html"
+          echo "----- legenda -----"
+          echo "$legenda"
