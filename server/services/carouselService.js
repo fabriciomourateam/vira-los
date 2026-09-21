@@ -2161,6 +2161,32 @@ Gere o HTML completo agora (apenas HTML, nada mais):`;
 
 // ─── Passo 4: Legenda via Claude ──────────────────────────────────────────────
 
+// Remove preâmbulo/rótulo/separador que o modelo às vezes cola no TOPO da legenda
+// (ex.: "Texto puro e sem rótulos, pronto para copiar e colar:" seguido de "---"),
+// mesmo o prompt pedindo pra não fazer. Só mexe nas linhas do INÍCIO — o corpo da
+// legenda fica intacto. Conservador: só tira linhas que claramente são meta-texto.
+function sanitizeLegenda(raw) {
+  let text = String(raw || '').trim();
+  if (!text) return text;
+
+  const PREAMBLE_RE = /(copiar e colar|sem r[óo]tulos?|aqui (est[áa]|vai)|segue (a legenda|abaixo)|legenda pronta|pront[ao] (pra|para) (postar|copiar)|conforme solicitad|espero que)/i;
+  const SEP_RE = /^(\s*[-*_]{3,}\s*)$/;                    // --- *** ___ (regra horizontal)
+  const LABEL_RE = /^\s*\[?\s*(legenda|hashtags?)\s*\]?\s*:?\s*$/i; // [LEGENDA] / Legenda: / Hashtags:
+
+  let lines = text.split('\n');
+  // Remove do topo, repetidamente: linha vazia, separador, rótulo, ou 1 linha de
+  // preâmbulo (uma frase curta de meta-texto terminando ou não em ":").
+  let guard = 0;
+  while (lines.length && guard++ < 8) {
+    const first = lines[0].trim();
+    if (first === '' || SEP_RE.test(first) || LABEL_RE.test(first)) { lines.shift(); continue; }
+    // Preâmbulo: linha curta (<= 120 chars) que casa o padrão de meta-texto.
+    if (first.length <= 120 && PREAMBLE_RE.test(first)) { lines.shift(); continue; }
+    break;
+  }
+  return lines.join('\n').trim();
+}
+
 function buildLegendaPrompt({ topic, instagramHandle, niche, cta }) {
   const handle = (instagramHandle || 'seucanal').replace('@', '');
   const keyword = String((cta && cta.keyword) || 'DIETA').toUpperCase().trim();
@@ -2641,7 +2667,7 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6
     }
   }
 
-  const legenda = (legendaRes.content[0]?.text || '').trim();
+  const legenda = sanitizeLegenda(legendaRes.content[0]?.text || '');
 
   // ── Pós-processamento fmteam: injeta CSS + avatar + fontes no HTML ──────────
   // O prompt fmteam não inclui o CSS nem o avatar base64 (economia de ~25k chars por chamada).
