@@ -164,20 +164,32 @@ function pickReel(reels, seen) {
 // central real do material (ex.: se o material fala de Epitalon/telômeros, o topic
 // tem que ser sobre isso — não um tema "inspirado" que desvia pra outro assunto do
 // nicho). Default false = comportamento antigo (tema livre, só inspiração).
-async function deriveTopic({ transcription, caption, visualAnalysis } = {}, { faithful = false } = {}) {
+async function deriveTopic({ transcription, caption, visualAnalysis } = {}, { faithful = false, isAd = false } = {}) {
   const context = [
     transcription ? `TRANSCRIÇÃO DO ÁUDIO:\n${transcription.slice(0, 2000)}` : '',
     visualAnalysis ? `ANÁLISE VISUAL:\n${String(visualAnalysis).slice(0, 1000)}` : '',
     caption ? `LEGENDA ORIGINAL:\n${caption.slice(0, 500)}` : '',
   ].filter(Boolean).join('\n\n');
 
-  const fallbackTopic = (caption || transcription || 'Treino sério e composição corporal')
+  // Modo fiel de ANÚNCIO: a COPY do anúncio (texto do próprio anunciante) é a fonte
+  // AUTORITATIVA do assunto — o vídeo do criativo pode ser genérico/reaproveitado e
+  // falar de outra coisa. Por isso a copy vem PRIMEIRO, completa (até 2000 chars), e
+  // a transcrição do vídeo entra só como apoio (o prompt manda seguir a copy se
+  // divergir). Isso corrige o desvio de assunto (ex.: copy de Epitalon → carrossel
+  // de Masteron por causa do áudio do vídeo).
+  const contextFaithfulAd = [
+    caption ? `COPY DO ANÚNCIO (fonte autoritativa do assunto — é o que o anunciante está de fato anunciando):\n${caption.slice(0, 2000)}` : '',
+    transcription ? `TRANSCRIÇÃO DO VÍDEO (apoio — pode ser de um criativo genérico; se falar de outro produto/protocolo que NÃO a copy, IGNORE):\n${transcription.slice(0, 1500)}` : '',
+    visualAnalysis ? `ANÁLISE VISUAL (apoio):\n${String(visualAnalysis).slice(0, 800)}` : '',
+  ].filter(Boolean).join('\n\n');
+
+  const fallbackTopic = ((faithful && isAd ? caption : (caption || transcription)) || 'Treino sério e composição corporal')
     .toString().slice(0, 80).trim() || 'Treino sério e composição corporal';
 
-  const promptFaithful = `Você vai extrair o TEMA CENTRAL REAL de um material de referência (bodybuilding/fitness) pra virar um carrossel FIEL ao assunto do material — o carrossel será reescrito na voz FMTeam, mas SEM MUDAR DE ASSUNTO: o tema tem que ser exatamente sobre o que o material trata (se fala de um suplemento/protocolo/substância específica, é sobre ISSO; não desvie pra um tema genérico do nicho).
+  const promptFaithful = `Você vai extrair o TEMA CENTRAL REAL de um material de referência (bodybuilding/fitness) pra virar um carrossel FIEL ao assunto do material — o carrossel será reescrito na voz FMTeam, mas SEM MUDAR DE ASSUNTO: o tema tem que ser exatamente sobre o que o material trata (se fala de um suplemento/protocolo/substância específica, é sobre ISSO; não desvie pra um tema genérico do nicho).${isAd ? '\nATENÇÃO: a COPY DO ANÚNCIO é a fonte autoritativa. O tema TEM que ser o assunto da copy. Se a transcrição do vídeo falar de outro produto/protocolo, IGNORE a transcrição e siga a copy.' : ''}
 
 MATERIAL DE ORIGEM:
-${context || '(sem transcrição/análise disponível — use o bom senso do nicho bodybuilding)'}
+${(isAd ? contextFaithfulAd : context) || '(sem transcrição/análise disponível — use o bom senso do nicho bodybuilding)'}
 
 Responda APENAS com um JSON (sem markdown, sem comentário):
 {"topic":"o tema central REAL do material em PT-BR, 4-14 palavras, fiel ao assunto (cite o produto/protocolo/conceito específico se houver), sem citar nenhum perfil","tone":"um de: direto|investigativo|provocativo|acolhedor|motivacional","emotion":"um de: surpresa|curiosidade|urgência|indignação|motivação|orgulho"}`;
@@ -220,12 +232,23 @@ Responda APENAS com um JSON (sem markdown, sem comentário):
 // ── Passo 4: monta as instruções do carrossel (reescrita, sem anti-ban extra) ──
 // `extraDirective` (opcional) — usado pelas VARIAÇÕES (item B): injeta uma linha extra
 // de ângulo/tom pro Claude diversificar carrosséis do MESMO reel.
-function buildInstructions({ transcription, caption, visualAnalysis } = {}, extraDirective = '', { faithful = false } = {}) {
+function buildInstructions({ transcription, caption, visualAnalysis } = {}, extraDirective = '', { faithful = false, isAd = false } = {}) {
   const material = [
     transcription ? `Transcrição do áudio:\n${transcription.slice(0, 3000)}` : '',
     visualAnalysis ? `Análise visual:\n${String(visualAnalysis).slice(0, 1200)}` : '',
     caption ? `Legenda original:\n${caption.slice(0, 600)}` : '',
   ].filter(Boolean).join('\n\n');
+
+  // Modo fiel de ANÚNCIO: a COPY é a fonte autoritativa do assunto — vem primeiro e
+  // completa; a transcrição do vídeo (que pode ser de um criativo genérico) entra só
+  // como apoio, e o carrossel deve seguir a COPY se divergirem.
+  const materialFaithfulAd = [
+    caption ? `COPY DO ANÚNCIO (fonte autoritativa — é o que o anunciante está anunciando; o carrossel TEM que ser sobre ISTO):\n${caption.slice(0, 2500)}` : '',
+    transcription ? `Transcrição do vídeo (apoio — se falar de outro produto/protocolo que NÃO a copy, IGNORE):\n${transcription.slice(0, 1500)}` : '',
+    visualAnalysis ? `Análise visual (apoio):\n${String(visualAnalysis).slice(0, 1000)}` : '',
+  ].filter(Boolean).join('\n\n');
+
+  const materialBlock = (faithful && isAd) ? materialFaithfulAd : material;
 
   // Diretriz de reescrita: no modo fiel, preserva o assunto/tese/argumentos/oferta
   // reais do material (adaptados à voz FMTeam), sem trocar de tema. No modo padrão
@@ -234,12 +257,13 @@ function buildInstructions({ transcription, caption, visualAnalysis } = {}, extr
     ? [
         'MODO FIEL — reescreva na voz FMTeam MANTENDO-SE FIEL ao material acima: o carrossel tem que tratar do MESMO assunto/tese, cobrir os MESMOS argumentos/pontos principais e manter a MESMA promessa/oferta do material de origem. NÃO troque de tema, NÃO invente um ângulo novo que desvie do assunto, NÃO generalize pra um tema "do nicho".',
         'Adapte só a LINGUAGEM e a ESTRUTURA pro estilo FMTeam (não copie frases literais nem cite o autor/perfil original), mas o CONTEÚDO — o que é dito, os dados, o produto/protocolo/conceito específico e a conclusão — tem que bater com o material.',
-      ].join('\n')
+        isAd ? 'A COPY DO ANÚNCIO acima é a fonte autoritativa do assunto: o carrossel TEM que ser sobre o que a copy anuncia. Se a transcrição do vídeo falar de outro produto/protocolo, IGNORE a transcrição.' : '',
+      ].filter(Boolean).join('\n')
     : 'REESCREVA na voz FMTeam, NÃO copie literalmente o texto acima, NÃO cite o autor/perfil original — use só a IDEIA/TEMA do material como inspiração, com as palavras e a estrutura do FMTeam.';
 
   return [
     'MATERIAL DE ORIGEM (transcrição/análise de um reel de referência):',
-    material || '(sem material detalhado disponível — use o bom senso do nicho bodybuilding/fitness)',
+    materialBlock || '(sem material detalhado disponível — use o bom senso do nicho bodybuilding/fitness)',
     '',
     rewriteDirective,
     'Fala com quem treina sério e quer shape/composição corporal de verdade — direto, prático, sem jargão gringo, sem clichê ("não é X é Y", "jornada").',
@@ -866,7 +890,7 @@ async function modelReelAttempt({
   }
 
   const derived = await withTimeout(
-    runStep(steps, 'derive-topic', `Derivando tema/tom/emoção (Claude Haiku)${faithful ? ' [MODO FIEL]' : ''}`, () => deriveTopic(content, { faithful })),
+    runStep(steps, 'derive-topic', `Derivando tema/tom/emoção (Claude Haiku)${faithful ? ' [MODO FIEL]' : ''}`, () => deriveTopic(content, { faithful, isAd: isAdSource })),
     90 * 1000, 'deriveTopic'
   );
   const topic = derived.topic;
@@ -898,7 +922,7 @@ async function modelReelAttempt({
       angle ? `Direcionamento extra pedido pelo dono: ${String(angle).slice(0, 200)}` : '',
       isAdMode ? buildAdDirective({ ctaDestination, offer }) : '',
     ].filter(Boolean).join('\n\n');
-    const instructions = buildInstructions(content, angleNote, { faithful });
+    const instructions = buildInstructions(content, angleNote, { faithful, isAd: isAdSource });
     // Modo anúncio: troca o CTA final (kbox) pra resposta direta ao destino
     // escolhido — ausente/undefined em modo orgânico, mantendo o CTA configurado
     // (db.getCarouselCta()) 100% igual ao de antes.
