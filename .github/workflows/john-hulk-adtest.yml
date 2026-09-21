@@ -18,6 +18,10 @@ on:
         description: "destino do clique no modo anuncio: whatsapp | link | dm"
         required: false
         default: "whatsapp"
+      faithful:
+        description: "modo fiel (carrossel fiel ao assunto do anúncio): true | false"
+        required: false
+        default: "true"
 
 jobs:
   adtest:
@@ -28,6 +32,7 @@ jobs:
           BASE: https://vira-los.fly.dev
           MODE: ${{ github.event.inputs.mode }}
           CTA: ${{ github.event.inputs.cta }}
+          FAITHFUL: ${{ github.event.inputs.faithful }}
         run: |
           set -e
           echo "=== atualizando a Biblioteca de Anúncios ==="
@@ -58,10 +63,11 @@ jobs:
           echo "----- copy do anúncio de origem -----"
           echo "$resp" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0] | "runningDays=\(.runningDays) formato=\(.displayFormat)\ncopy:\n\(.adCopy // "-")"'
 
+          if [ "$FAITHFUL" = "true" ]; then FAITHFUL_JSON=true; else FAITHFUL_JSON=false; fi
           if [ "$MODE" = "anuncio" ]; then
-            body=$(jq -n --arg cta "$CTA" '{mode:"anuncio", ctaDestination:$cta, numSlides:6}')
+            body=$(jq -n --arg cta "$CTA" --argjson f "$FAITHFUL_JSON" '{mode:"anuncio", ctaDestination:$cta, numSlides:6, faithful:$f}')
           else
-            body='{}'
+            body=$(jq -n --argjson f "$FAITHFUL_JSON" '{faithful:$f}')
           fi
           echo "body: $body"
           curl -sS -m 60 -X POST "$BASE/api/john-hulk/reels/$sc/model" \
@@ -82,7 +88,7 @@ jobs:
               echo "✅ Anúncio $sc modelado — carrossel $cid"
               saved=$(curl -sS -m 30 "$BASE/api/carousel/saved" || echo '[]')
               echo "----- carrossel gerado -----"
-              echo "$saved" | jq -r --arg id "$cid" '.[] | select(.id==$id) | "tema=\(.topic)\nsourceType=\(.mode // "-")/\(.sourceType // "-")\nnumSlides=\(.numSlides) folder=\(.folderName)\nabrir: '"$BASE"'/output/\(.folderName)/carrossel.html"'
+              echo "$saved" | jq -r --arg id "$cid" '.[] | select(.id==$id) | "tema=\(.topic)\nderivedTopic=\(.derivedTopic // "-")\nmodoFiel=\(.faithful // false)\nsourceType=\(.mode // "-")/\(.sourceType // "-")\nnumSlides=\(.numSlides) folder=\(.folderName)\nabrir: '"$BASE"'/output/\(.folderName)/carrossel.html"'
               echo "----- legenda (pronta pra postar) -----"
               echo "$saved" | jq -r --arg id "$cid" '.[] | select(.id==$id) | .legenda'
               exit 0

@@ -160,7 +160,11 @@ function pickReel(reels, seen) {
 }
 
 // ── Passo 3: deriva tema/tom/emoção via Claude Haiku ───────────────────────────
-async function deriveTopic({ transcription, caption, visualAnalysis } = {}) {
+// `faithful` (modo fiel): quando true, o tema extraído tem que ser FIEL ao assunto
+// central real do material (ex.: se o material fala de Epitalon/telômeros, o topic
+// tem que ser sobre isso — não um tema "inspirado" que desvia pra outro assunto do
+// nicho). Default false = comportamento antigo (tema livre, só inspiração).
+async function deriveTopic({ transcription, caption, visualAnalysis } = {}, { faithful = false } = {}) {
   const context = [
     transcription ? `TRANSCRIÇÃO DO ÁUDIO:\n${transcription.slice(0, 2000)}` : '',
     visualAnalysis ? `ANÁLISE VISUAL:\n${String(visualAnalysis).slice(0, 1000)}` : '',
@@ -170,19 +174,29 @@ async function deriveTopic({ transcription, caption, visualAnalysis } = {}) {
   const fallbackTopic = (caption || transcription || 'Treino sério e composição corporal')
     .toString().slice(0, 80).trim() || 'Treino sério e composição corporal';
 
+  const promptFaithful = `Você vai extrair o TEMA CENTRAL REAL de um material de referência (bodybuilding/fitness) pra virar um carrossel FIEL ao assunto do material — o carrossel será reescrito na voz FMTeam, mas SEM MUDAR DE ASSUNTO: o tema tem que ser exatamente sobre o que o material trata (se fala de um suplemento/protocolo/substância específica, é sobre ISSO; não desvie pra um tema genérico do nicho).
+
+MATERIAL DE ORIGEM:
+${context || '(sem transcrição/análise disponível — use o bom senso do nicho bodybuilding)'}
+
+Responda APENAS com um JSON (sem markdown, sem comentário):
+{"topic":"o tema central REAL do material em PT-BR, 4-14 palavras, fiel ao assunto (cite o produto/protocolo/conceito específico se houver), sem citar nenhum perfil","tone":"um de: direto|investigativo|provocativo|acolhedor|motivacional","emotion":"um de: surpresa|curiosidade|urgência|indignação|motivação|orgulho"}`;
+
+  const promptLoose = `Você vai extrair o GANCHO/TEMA de um Reel de referência (bodybuilding/fitness) — o material abaixo é só INSPIRAÇÃO pra um carrossel NOVO, que será totalmente reescrito (sem copiar frase nem citar o autor original).
+
+MATERIAL DE ORIGEM:
+${context || '(sem transcrição/análise disponível — use o bom senso do nicho bodybuilding)'}
+
+Responda APENAS com um JSON (sem markdown, sem comentário):
+{"topic":"gancho/tema em PT-BR, 4-12 palavras, sem citar nenhum perfil","tone":"um de: direto|investigativo|provocativo|acolhedor|motivacional","emotion":"um de: surpresa|curiosidade|urgência|indignação|motivação|orgulho"}`;
+
   try {
     const res = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 220,
       messages: [{
         role: 'user',
-        content: `Você vai extrair o GANCHO/TEMA de um Reel de referência (bodybuilding/fitness) — o material abaixo é só INSPIRAÇÃO pra um carrossel NOVO, que será totalmente reescrito (sem copiar frase nem citar o autor original).
-
-MATERIAL DE ORIGEM:
-${context || '(sem transcrição/análise disponível — use o bom senso do nicho bodybuilding)'}
-
-Responda APENAS com um JSON (sem markdown, sem comentário):
-{"topic":"gancho/tema em PT-BR, 4-12 palavras, sem citar nenhum perfil","tone":"um de: direto|investigativo|provocativo|acolhedor|motivacional","emotion":"um de: surpresa|curiosidade|urgência|indignação|motivação|orgulho"}`,
+        content: faithful ? promptFaithful : promptLoose,
       }],
     });
     const text = (res.content[0]?.text || '').trim();
@@ -206,18 +220,28 @@ Responda APENAS com um JSON (sem markdown, sem comentário):
 // ── Passo 4: monta as instruções do carrossel (reescrita, sem anti-ban extra) ──
 // `extraDirective` (opcional) — usado pelas VARIAÇÕES (item B): injeta uma linha extra
 // de ângulo/tom pro Claude diversificar carrosséis do MESMO reel.
-function buildInstructions({ transcription, caption, visualAnalysis } = {}, extraDirective = '') {
+function buildInstructions({ transcription, caption, visualAnalysis } = {}, extraDirective = '', { faithful = false } = {}) {
   const material = [
     transcription ? `Transcrição do áudio:\n${transcription.slice(0, 3000)}` : '',
     visualAnalysis ? `Análise visual:\n${String(visualAnalysis).slice(0, 1200)}` : '',
     caption ? `Legenda original:\n${caption.slice(0, 600)}` : '',
   ].filter(Boolean).join('\n\n');
 
+  // Diretriz de reescrita: no modo fiel, preserva o assunto/tese/argumentos/oferta
+  // reais do material (adaptados à voz FMTeam), sem trocar de tema. No modo padrão
+  // (default), usa o material só como inspiração de ideia/tema (comportamento antigo).
+  const rewriteDirective = faithful
+    ? [
+        'MODO FIEL — reescreva na voz FMTeam MANTENDO-SE FIEL ao material acima: o carrossel tem que tratar do MESMO assunto/tese, cobrir os MESMOS argumentos/pontos principais e manter a MESMA promessa/oferta do material de origem. NÃO troque de tema, NÃO invente um ângulo novo que desvie do assunto, NÃO generalize pra um tema "do nicho".',
+        'Adapte só a LINGUAGEM e a ESTRUTURA pro estilo FMTeam (não copie frases literais nem cite o autor/perfil original), mas o CONTEÚDO — o que é dito, os dados, o produto/protocolo/conceito específico e a conclusão — tem que bater com o material.',
+      ].join('\n')
+    : 'REESCREVA na voz FMTeam, NÃO copie literalmente o texto acima, NÃO cite o autor/perfil original — use só a IDEIA/TEMA do material como inspiração, com as palavras e a estrutura do FMTeam.';
+
   return [
     'MATERIAL DE ORIGEM (transcrição/análise de um reel de referência):',
     material || '(sem material detalhado disponível — use o bom senso do nicho bodybuilding/fitness)',
     '',
-    'REESCREVA na voz FMTeam, NÃO copie literalmente o texto acima, NÃO cite o autor/perfil original — use só a IDEIA/TEMA do material como inspiração, com as palavras e a estrutura do FMTeam.',
+    rewriteDirective,
     'Fala com quem treina sério e quer shape/composição corporal de verdade — direto, prático, sem jargão gringo, sem clichê ("não é X é Y", "jornada").',
     extraDirective ? `\n${extraDirective}` : '',
   ].filter(Boolean).join('\n');
@@ -703,7 +727,7 @@ const REEL_LOCKED_STATUSES = new Set(['modelado', 'editado', 'agendado', 'postad
 // exceção é relançada pro chamador (rota/batch/rotina diária) tratar.
 async function modelReel({
   shortCode, url, regenerate = false, variants = 1, angle,
-  mode = 'organico', ctaDestination, offer, numSlides,
+  mode = 'organico', ctaDestination, offer, numSlides, faithful = false,
 } = {}) {
   let resolvedShortCode = shortCode || null;
   let resolvedUrl = url || null;
@@ -741,6 +765,7 @@ async function modelReel({
       ctaDestination: isAdMode ? ctaDestination : undefined,
       offer: isAdMode ? offer : undefined,
       numSlides: baseSlides,
+      faithful: !!faithful,
     });
 
     try {
@@ -774,7 +799,7 @@ async function modelReel({
 // pelo chamador).
 async function modelReelAttempt({
   resolvedShortCode, resolvedUrl, regenerate, numVariants, angle,
-  mode = 'organico', ctaDestination, offer, numSlides = 7,
+  mode = 'organico', ctaDestination, offer, numSlides = 7, faithful = false,
 } = {}) {
   const isAdMode = mode === 'anuncio';
   const steps = [];
@@ -841,7 +866,7 @@ async function modelReelAttempt({
   }
 
   const derived = await withTimeout(
-    runStep(steps, 'derive-topic', 'Derivando tema/tom/emoção (Claude Haiku)', () => deriveTopic(content)),
+    runStep(steps, 'derive-topic', `Derivando tema/tom/emoção (Claude Haiku)${faithful ? ' [MODO FIEL]' : ''}`, () => deriveTopic(content, { faithful })),
     90 * 1000, 'deriveTopic'
   );
   const topic = derived.topic;
@@ -873,7 +898,7 @@ async function modelReelAttempt({
       angle ? `Direcionamento extra pedido pelo dono: ${String(angle).slice(0, 200)}` : '',
       isAdMode ? buildAdDirective({ ctaDestination, offer }) : '',
     ].filter(Boolean).join('\n\n');
-    const instructions = buildInstructions(content, angleNote);
+    const instructions = buildInstructions(content, angleNote, { faithful });
     // Modo anúncio: troca o CTA final (kbox) pra resposta direta ao destino
     // escolhido — ausente/undefined em modo orgânico, mantendo o CTA configurado
     // (db.getCarouselCta()) 100% igual ao de antes.
@@ -951,6 +976,9 @@ async function modelReelAttempt({
       // Biblioteca de Anúncios (Meta Ad Library), ausente/undefined pra reel
       // (comportamento 100% igual ao de antes).
       sourceType: isAdSource ? 'ad' : undefined,
+      // Modo fiel — registra no rascunho se foi gerado preservando o assunto/tese
+      // do material de origem (true) ou como reinterpretação livre (ausente = antigo).
+      faithful: faithful ? true : undefined,
     });
     carouselIds.push(carouselId);
   }
