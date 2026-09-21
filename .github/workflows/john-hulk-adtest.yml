@@ -22,6 +22,10 @@ on:
         description: "modo fiel (carrossel fiel ao assunto do anúncio): true | false"
         required: false
         default: "true"
+      regenerate:
+        description: "remodelar o MELHOR anúncio mesmo já modelado (ignora filtro status=novo): true | false"
+        required: false
+        default: "true"
 
 jobs:
   adtest:
@@ -33,6 +37,7 @@ jobs:
           MODE: ${{ github.event.inputs.mode }}
           CTA: ${{ github.event.inputs.cta }}
           FAITHFUL: ${{ github.event.inputs.faithful }}
+          REGEN: ${{ github.event.inputs.regenerate }}
         run: |
           set -e
           echo "=== atualizando a Biblioteca de Anúncios ==="
@@ -55,20 +60,31 @@ jobs:
             if [ "$i" = "20" ]; then echo "⚠️ refresh de anúncios não concluiu"; exit 1; fi
           done
 
-          echo "=== escolhendo o MELHOR anúncio (mais tempo no ar, ainda não usado) ==="
-          resp=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?sourceType=ad&status=novo&sort=running&order=desc" || echo '{}')
+          if [ "$REGEN" = "true" ]; then
+            echo "=== escolhendo o MELHOR anúncio (mais tempo no ar; regenerate=true, ignora status) ==="
+            resp=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?sourceType=ad&sort=running&order=desc" || echo '{}')
+          else
+            echo "=== escolhendo o MELHOR anúncio (mais tempo no ar, ainda não usado) ==="
+            resp=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?sourceType=ad&status=novo&sort=running&order=desc" || echo '{}')
+          fi
           sc=$(echo "$resp" | jq -r '[.reels[]? | select(.sourceType=="ad")][0].shortCode // empty')
-          if [ -z "$sc" ]; then echo "nenhum anúncio 'novo' pra modelar."; exit 0; fi
+          if [ -z "$sc" ]; then echo "nenhum anúncio pra modelar."; exit 0; fi
           echo "anúncio escolhido: $sc"
           echo "----- copy do anúncio de origem -----"
-          echo "$resp" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0] | "runningDays=\(.runningDays) formato=\(.displayFormat)\ncopy:\n\(.adCopy // "-")"'
+          echo "$resp" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0] | "runningDays=\(.runningDays) status=\(.status) formato=\(.displayFormat)\ncopy:\n\(.adCopy // "-")"'
 
           if [ "$FAITHFUL" = "true" ]; then FAITHFUL_JSON=true; else FAITHFUL_JSON=false; fi
+          if [ "$REGEN" = "true" ]; then REGEN_JSON=true; else REGEN_JSON=false; fi
           if [ "$MODE" = "anuncio" ]; then
-            body=$(jq -n --arg cta "$CTA" --argjson f "$FAITHFUL_JSON" '{mode:"anuncio", ctaDestination:$cta, numSlides:6, faithful:$f}')
+            body=$(jq -n --arg cta "$CTA" --argjson f "$FAITHFUL_JSON" --argjson r "$REGEN_JSON" '{mode:"anuncio", ctaDestination:$cta, numSlides:6, faithful:$f, regenerate:$r}')
           else
-            body=$(jq -n --argjson f "$FAITHFUL_JSON" '{faithful:$f}')
+            body=$(jq -n --argjson f "$FAITHFUL_JSON" --argjson r "$REGEN_JSON" '{faithful:$f, regenerate:$r}')
           fi
+          # carouselId ANTES de modelar — no regenerate de um anúncio já modelado, o
+          # status continua 'modelado' e o carouselId só muda quando a NOVA geração
+          # termina; esperamos o cid MUDAR pra não ler o carrossel antigo (drifted).
+          prev_cid=$(echo "$resp" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0].carouselId // "-"')
+          echo "carouselId anterior: $prev_cid"
           echo "body: $body"
           curl -sS -m 60 -X POST "$BASE/api/john-hulk/reels/$sc/model" \
             -H "Content-Type: application/json" -d "$body" || true
@@ -84,7 +100,7 @@ jobs:
             if [ "$st" = "erro" ]; then
               echo "❌ Modelagem falhou:"; echo "$r" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0].errorMessage'; exit 1
             fi
-            if [ "$st" != "novo" ] && [ "$cid" != "-" ]; then
+            if [ "$st" != "novo" ] && [ "$cid" != "-" ] && [ "$cid" != "$prev_cid" ]; then
               echo "✅ Anúncio $sc modelado — carrossel $cid"
               saved=$(curl -sS -m 30 "$BASE/api/carousel/saved" || echo '[]')
               echo "----- carrossel gerado -----"
