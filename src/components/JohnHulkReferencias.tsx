@@ -26,7 +26,7 @@ interface JHCarousel {
   derivedTopic?: string; config?: Record<string, unknown>; created_at?: string;
   viralInsight?: string | null; variantIndex?: number;
   mode?: JHMode; ctaDestination?: CtaDestination; offer?: string;
-  sourceType?: 'reel' | 'ad';
+  sourceType?: 'reel' | 'ad'; faithful?: boolean;
 }
 
 interface Batch {
@@ -283,7 +283,7 @@ function ApproveScheduleControl({
 
 interface ModelRequestOpts {
   variants: number; angle: string; numSlides: number; mode: JHMode;
-  ctaDestination?: CtaDestination; offer?: string;
+  ctaDestination?: CtaDestination; offer?: string; faithful?: boolean;
 }
 
 function ReelCard({
@@ -303,6 +303,7 @@ function ReelCard({
   const [mode, setMode] = useState<JHMode>('organico');
   const [ctaDestination, setCtaDestination] = useState<CtaDestination>('whatsapp');
   const [offer, setOffer] = useState('');
+  const [faithful, setFaithful] = useState(false);
   const isErro = reel.status === 'erro';
   const used = reel.status !== 'novo' && !isErro;
   const isAd = reel.sourceType === 'ad';
@@ -456,6 +457,24 @@ function ReelCard({
                 />
 
                 <div className="pt-1 border-t border-border space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-[11px] text-foreground font-medium">Modo fiel</span>
+                      <p className="text-[10px] text-muted-foreground leading-snug">
+                        Mantém o carrossel fiel ao assunto/argumentos do material de origem (sem reinterpretar o tema).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={faithful}
+                      onClick={() => setFaithful((v) => !v)}
+                      className={`shrink-0 mt-0.5 relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${faithful ? 'bg-purple-600' : 'bg-secondary'}`}
+                    >
+                      <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${faithful ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] text-muted-foreground">Tipo</span>
                     <div className="flex gap-1 bg-secondary rounded-lg p-0.5">
@@ -510,6 +529,7 @@ function ReelCard({
                         variants, angle: angle.trim(), numSlides, mode,
                         ctaDestination: mode === 'anuncio' ? ctaDestination : undefined,
                         offer: mode === 'anuncio' && offer.trim() ? offer.trim() : undefined,
+                        faithful: faithful || undefined,
                       });
                     }}
                     className="flex-1 text-[11px] font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-lg py-1.5"
@@ -562,6 +582,11 @@ function DraftCard({
         {draft.mode === 'anuncio' && (
           <span className="text-[10px] px-2 py-0.5 rounded-full border bg-amber-500/15 text-amber-400 border-amber-500/30 font-semibold">
             Anúncio
+          </span>
+        )}
+        {draft.faithful && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold" title="Gerado em modo fiel — mantém o assunto/argumentos do material de origem">
+            Modo fiel
           </span>
         )}
         {draft.sourceType === 'ad' && (
@@ -789,7 +814,7 @@ export default function JohnHulkReferencias() {
   const [refreshingLibFast, setRefreshingLibFast] = useState(false);
   const [pendingDupe, setPendingDupe] = useState<{
     shortCode: string; topic?: string; variants: number; angle: string; numSlides: number; mode: JHMode;
-    ctaDestination?: CtaDestination; offer?: string; similar: DupeCheckItem[];
+    ctaDestination?: CtaDestination; offer?: string; faithful?: boolean; similar: DupeCheckItem[];
   } | null>(null);
   const [dupeChecking, setDupeChecking] = useState<Record<string, boolean>>({});
   const [movingStatusMap, setMovingStatusMap] = useState<Record<string, boolean>>({});
@@ -939,7 +964,7 @@ export default function JohnHulkReferencias() {
   // confirmação de duplicidade (fluxo normal do botão "Modelar").
   async function handleModelReel(shortCode: string, opts: {
     regenerate?: boolean; variants?: number; angle?: string; numSlides?: number; mode?: JHMode;
-    ctaDestination?: CtaDestination; offer?: string;
+    ctaDestination?: CtaDestination; offer?: string; faithful?: boolean;
   } = {}) {
     setModelingMap((m) => ({ ...m, [shortCode]: Date.now() }));
     try {
@@ -953,6 +978,7 @@ export default function JohnHulkReferencias() {
           mode: opts.mode || undefined,
           ctaDestination: opts.mode === 'anuncio' ? opts.ctaDestination : undefined,
           offer: opts.mode === 'anuncio' && opts.offer ? opts.offer : undefined,
+          faithful: opts.faithful || undefined,
         }),
       });
       const data = await res.json();
@@ -968,13 +994,13 @@ export default function JohnHulkReferencias() {
   // Se achar tema parecido, abre confirmação; senão modela direto.
   async function handleRequestModel(reel: Reel, opts: ModelRequestOpts) {
     const shortCode = reel.shortCode;
-    const { variants, angle, numSlides, mode, ctaDestination, offer } = opts;
+    const { variants, angle, numSlides, mode, ctaDestination, offer, faithful } = opts;
     setDupeChecking((s) => ({ ...s, [shortCode]: true }));
     try {
       const res = await fetch(`${API}/api/john-hulk/reels/${shortCode}/dupe-check?days=21`);
       const data: DupeCheckResponse = await res.json();
       if (data.count > 0) {
-        setPendingDupe({ shortCode, topic: reel.topic || reel.caption, variants, angle, numSlides, mode, ctaDestination, offer, similar: data.similar });
+        setPendingDupe({ shortCode, topic: reel.topic || reel.caption, variants, angle, numSlides, mode, ctaDestination, offer, faithful, similar: data.similar });
         return;
       }
     } catch {
@@ -982,15 +1008,15 @@ export default function JohnHulkReferencias() {
     } finally {
       setDupeChecking((s) => { const n = { ...s }; delete n[shortCode]; return n; });
     }
-    handleModelReel(shortCode, { regenerate: reel.status !== 'novo', variants, angle, numSlides, mode, ctaDestination, offer });
+    handleModelReel(shortCode, { regenerate: reel.status !== 'novo', variants, angle, numSlides, mode, ctaDestination, offer, faithful });
   }
 
   function confirmPendingDupeModel() {
     if (!pendingDupe) return;
-    const { shortCode, variants, angle, numSlides, mode, ctaDestination, offer } = pendingDupe;
+    const { shortCode, variants, angle, numSlides, mode, ctaDestination, offer, faithful } = pendingDupe;
     const reel = reels.find((r) => r.shortCode === shortCode);
     setPendingDupe(null);
-    handleModelReel(shortCode, { regenerate: reel ? reel.status !== 'novo' : false, variants, angle, numSlides, mode, ctaDestination, offer });
+    handleModelReel(shortCode, { regenerate: reel ? reel.status !== 'novo' : false, variants, angle, numSlides, mode, ctaDestination, offer, faithful });
   }
 
   // Item 2: retry rápido de um reel com status 'erro' — sem passar pelo painel

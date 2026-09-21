@@ -144,8 +144,13 @@ function parseModelOpts(req, res) {
     offer = body.offer ? String(body.offer).slice(0, 200) : undefined;
   }
 
+  // Modo fiel (opcional, vale pra reel e pra anúncio): quando true, o carrossel
+  // fica FIEL ao assunto/tese/argumentos/oferta do material de origem, em vez de
+  // usar o material só como inspiração livre. Default false = comportamento antigo.
+  const faithful = !!body.faithful;
+
   return {
-    regenerate, angle, variants, numSlides, mode, ctaDestination, offer,
+    regenerate, angle, variants, numSlides, mode, ctaDestination, offer, faithful,
   };
 }
 
