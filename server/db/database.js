@@ -636,8 +636,14 @@ const saveJohnHulkTranscript = (shortCode, data) => {
 };
 
 // Settings: kill-switch (default ligado) + auto-agendamento opcional (default off
-// — fica como rascunho até o dono aprovar).
-const JOHN_HULK_SETTINGS_DEFAULTS = { johnHulkEnabled: true, autoScheduleJohnHulk: false };
+// — fica como rascunho até o dono aprovar) + fonte "Anúncios" (Meta Ad Library):
+// página-alvo (default a página configurada) e país (default BR).
+const JOHN_HULK_SETTINGS_DEFAULTS = {
+  johnHulkEnabled: true,
+  autoScheduleJohnHulk: false,
+  adLibraryPageId: '104976985677870',
+  adLibraryCountry: 'BR',
+};
 const getJohnHulkSettings = () => ({ ...JOHN_HULK_SETTINGS_DEFAULTS, ...readObj('john_hulk_settings') });
 const setJohnHulkSettings = (patch) => writeObj('john_hulk_settings', { ...getJohnHulkSettings(), ...patch, updated_at: now() });
 
@@ -649,10 +655,31 @@ const setJohnHulkSettings = (patch) => writeObj('john_hulk_settings', { ...getJo
 const getJohnHulkReels = () => readDb('john_hulk_reels').sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0));
 const getJohnHulkReel = (shortCode) => readDb('john_hulk_reels').find((r) => r.shortCode === shortCode) || null;
 
-// Upsert em lote (vindo do refreshLibrary). Reel NOVO entra com status:'novo' e
-// metricsHistory semeado com as métricas atuais. Reel EXISTENTE tem métricas/legenda/
-// thumbnail atualizadas (só grava nova entrada em metricsHistory se views/likes/comments
-// mudou — evita inchar o histórico em refreshes sem mudança real), mas PRESERVA
+// Campos ADICIONAIS só da fonte "Anúncios" (Meta Ad Library, sourceType:'ad') —
+// aditivo: reels (sourceType ausente/'reel') nunca passam por esse bloco porque
+// nunca mandam essas chaves em `incoming`. Ausentes em `incoming` (undefined)
+// preservam o valor existente (ou ficam undefined/ausentes num insert novo — o
+// JSON.stringify do writeDb já omite chaves undefined, então não polui reels
+// normais nem cria chaves fantasma). Overwrite simples (sem histórico) — ao
+// contrário de views/likes/comments, esses campos não têm "métrica ao longo do
+// tempo" que valha a pena guardar.
+const JOHN_HULK_AD_FIELDS = [
+  'sourceType', 'adVideoUrl', 'adCopy', 'displayFormat', 'runningDays',
+  'adActive', 'adStartDate', 'adEndDate', 'linkUrl', 'ctaType',
+];
+function pickAdFieldsPatch(incoming, existing) {
+  const patch = {};
+  for (const key of JOHN_HULK_AD_FIELDS) {
+    patch[key] = incoming[key] !== undefined ? incoming[key] : (existing ? existing[key] : undefined);
+  }
+  return patch;
+}
+
+// Upsert em lote (vindo do refreshLibrary ou do refreshAdLibrary). Reel/anúncio
+// NOVO entra com status:'novo' e metricsHistory semeado com as métricas atuais.
+// Item EXISTENTE tem métricas/legenda/thumbnail/campos de anúncio atualizados (só
+// grava nova entrada em metricsHistory se views/likes/comments mudou — evita
+// inchar o histórico em refreshes sem mudança real), mas PRESERVA
 // status/usedAt/carouselId/favorite/topic/themeTag (o que o dono já decidiu não se mexe).
 function upsertJohnHulkReels(reelsArray) {
   if (!Array.isArray(reelsArray) || !reelsArray.length) return { added: 0, updated: 0 };
@@ -682,6 +709,7 @@ function upsertJohnHulkReels(reelsArray) {
         durationSec: incoming.durationSec != null ? incoming.durationSec : existing.durationSec,
         fetchedAt,
         metricsHistory,
+        ...pickAdFieldsPatch(incoming, existing),
         // status/usedAt/carouselId/favorite/topic/themeTag preservados de propósito.
       });
       updated++;
@@ -706,6 +734,7 @@ function upsertJohnHulkReels(reelsArray) {
         topic: null,
         favorite: false,
         themeTag: null,
+        ...pickAdFieldsPatch(incoming, null),
       });
       added++;
     }

@@ -26,6 +26,7 @@ interface JHCarousel {
   derivedTopic?: string; config?: Record<string, unknown>; created_at?: string;
   viralInsight?: string | null; variantIndex?: number;
   mode?: JHMode; ctaDestination?: CtaDestination; offer?: string;
+  sourceType?: 'reel' | 'ad';
 }
 
 interface Batch {
@@ -52,6 +53,18 @@ interface Reel {
   favorite?: boolean; themeTag?: string;
   errorMessage?: string | null; errorAt?: string | null; carouselIds?: string[];
   viralInsight?: string | null;
+  // Campos extras de itens vindos da Biblioteca de Anúncios (Meta Ad Library) —
+  // `sourceType:'ad'`. Ausentes/undefined em reels orgânicos comuns.
+  sourceType?: 'reel' | 'ad';
+  adCopy?: string;
+  adVideoUrl?: string | null;
+  displayFormat?: 'VIDEO' | 'IMAGE' | 'DCO' | string | null;
+  runningDays?: number | null;
+  adActive?: boolean;
+  adStartDate?: number | null;
+  adEndDate?: number | null;
+  linkUrl?: string | null;
+  ctaType?: string | null;
 }
 
 interface LibraryState { refreshing: boolean; startedAt?: string; lastHandle?: string; lastError?: string; lastFinishedAt?: string; }
@@ -292,6 +305,7 @@ function ReelCard({
   const [offer, setOffer] = useState('');
   const isErro = reel.status === 'erro';
   const used = reel.status !== 'novo' && !isErro;
+  const isAd = reel.sourceType === 'ad';
 
   return (
     <div className={`rounded-xl border bg-card overflow-hidden flex flex-col transition-opacity ${isErro ? 'border-red-500/40' : 'border-border'} ${used ? 'opacity-60' : ''}`}>
@@ -333,15 +347,41 @@ function ReelCard({
             {formatDuration(reel.durationSec)}
           </span>
         )}
+
+        {isAd && (
+          <span className="absolute bottom-1.5 left-1.5 z-10 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500 text-white font-semibold shadow">
+            Anúncio
+          </span>
+        )}
       </div>
 
       <div className="p-2.5 space-y-1.5 flex-1 flex flex-col">
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-0.5" title="Views"><Eye size={11} /> {formatCompact(reel.views)}</span>
-          <span className="inline-flex items-center gap-0.5" title="Likes"><Heart size={11} /> {formatCompact(reel.likes)}</span>
-          <span className="inline-flex items-center gap-0.5" title="Comentários"><MessageCircle size={11} /> {formatCompact(reel.comments)}</span>
-        </div>
-        <p className="text-[11px] text-muted-foreground line-clamp-2 flex-1">{reel.caption || 'Sem legenda'}</p>
+        {isAd ? (
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground flex-wrap">
+            <span className="inline-flex items-center gap-1 text-amber-400 font-medium" title="Tempo no ar — principal sinal de que o anúncio converte">
+              <Clock size={11} /> no ar há {reel.runningDays != null ? `${reel.runningDays} dia${reel.runningDays === 1 ? '' : 's'}` : '—'}
+            </span>
+            {reel.displayFormat && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-blue-500/15 text-blue-400 border-blue-500/30 font-semibold uppercase">
+                {reel.displayFormat === 'VIDEO' ? 'Vídeo' : reel.displayFormat === 'IMAGE' ? 'Imagem' : reel.displayFormat}
+              </span>
+            )}
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] ${reel.adActive ? 'text-green-400' : 'text-muted-foreground'}`}
+              title={reel.adActive ? 'Anúncio ativo' : 'Anúncio inativo'}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${reel.adActive ? 'bg-green-400' : 'bg-slate-500'}`} />
+              {reel.adActive ? 'ativo' : 'inativo'}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-0.5" title="Views"><Eye size={11} /> {formatCompact(reel.views)}</span>
+            <span className="inline-flex items-center gap-0.5" title="Likes"><Heart size={11} /> {formatCompact(reel.likes)}</span>
+            <span className="inline-flex items-center gap-0.5" title="Comentários"><MessageCircle size={11} /> {formatCompact(reel.comments)}</span>
+          </div>
+        )}
+        <p className="text-[11px] text-muted-foreground line-clamp-2 flex-1">{reel.caption || reel.adCopy || 'Sem legenda'}</p>
 
         {reel.viralInsight && (
           <p className="text-[10px] italic text-purple-300/90 line-clamp-2" title={reel.viralInsight}>
@@ -360,7 +400,7 @@ function ReelCard({
         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
           <span>{formatDate(reel.timestampMs)}</span>
           <a href={reel.url} target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 inline-flex items-center gap-0.5">
-            <ExternalLink size={10} /> Instagram
+            <ExternalLink size={10} /> {isAd ? 'ver na Biblioteca de Anúncios' : 'Instagram'}
           </a>
         </div>
 
@@ -522,6 +562,11 @@ function DraftCard({
         {draft.mode === 'anuncio' && (
           <span className="text-[10px] px-2 py-0.5 rounded-full border bg-amber-500/15 text-amber-400 border-amber-500/30 font-semibold">
             Anúncio
+          </span>
+        )}
+        {draft.sourceType === 'ad' && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-slate-500/15 text-slate-300 border-slate-500/30" title="Modelado a partir de um item da Biblioteca de Anúncios (Meta)">
+            de anúncio
           </span>
         )}
       </div>
@@ -713,9 +758,14 @@ export default function JohnHulkReferencias() {
     return map;
   }, [batches]);
 
-  // ── Biblioteca de reels ─────────────────────────────────────────────────────
+  // ── Biblioteca de reels / anúncios ──────────────────────────────────────────
+  // Toggle "Fonte" (Reels | Anúncios) — troca sourceType na busca; os demais
+  // filtros/sort continuam valendo dentro de cada fonte.
+  const [librarySource, setLibrarySource] = useState<'reel' | 'ad'>('reel');
   const [reels, setReels] = useState<Reel[]>([]);
   const [libraryState, setLibraryState] = useState<LibraryState>({ refreshing: false });
+  const [adLibraryState, setAdLibraryState] = useState<LibraryState>({ refreshing: false });
+  const [refreshingAds, setRefreshingAds] = useState(false);
   const [reelsLoading, setReelsLoading] = useState(true);
   const [handleOptions, setHandleOptions] = useState<string[]>([]);
   const [handleFilter, setHandleFilter] = useState('');
@@ -723,7 +773,7 @@ export default function JohnHulkReferencias() {
   const [favoriteFilter, setFavoriteFilter] = useState<'all' | 'true' | 'false'>('all');
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
-  const [sort, setSort] = useState<'views' | 'likes' | 'comments' | 'date'>('date');
+  const [sort, setSort] = useState<'views' | 'likes' | 'comments' | 'date' | 'running'>('date');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [favoritingMap, setFavoritingMap] = useState<Record<string, boolean>>({});
@@ -751,6 +801,8 @@ export default function JohnHulkReferencias() {
 
   const libraryStateRef = useRef(libraryState);
   libraryStateRef.current = libraryState;
+  const adLibraryStateRef = useRef(adLibraryState);
+  adLibraryStateRef.current = adLibraryState;
   const modelingMapRef = useRef(modelingMap);
   modelingMapRef.current = modelingMap;
 
@@ -761,6 +813,7 @@ export default function JohnHulkReferencias() {
       if (statusFilter) params.set('status', statusFilter);
       if (favoriteFilter !== 'all') params.set('favorite', favoriteFilter);
       if (qDebounced) params.set('q', qDebounced);
+      params.set('sourceType', librarySource);
       params.set('sort', sort);
       params.set('order', order);
 
@@ -769,15 +822,21 @@ export default function JohnHulkReferencias() {
       const data = await res.json();
       const list: Reel[] = Array.isArray(data.reels) ? data.reels : [];
       const wasRefreshing = libraryStateRef.current.refreshing;
+      const wasAdRefreshing = adLibraryStateRef.current.refreshing;
       const nowState: LibraryState = data.libraryState || { refreshing: false };
+      const nowAdState: LibraryState = data.adLibraryState || { refreshing: false };
 
       setLibraryState(nowState);
+      setAdLibraryState(nowAdState);
       setReels(list);
       if (!handleFilter) {
         setHandleOptions(Array.from(new Set(list.map((r) => r.handle).filter(Boolean))).sort());
       }
       if (wasRefreshing && !nowState.refreshing) {
         toast.success(nowState.lastError ? `Atualização concluída com aviso: ${nowState.lastError}` : 'Biblioteca atualizada!');
+      }
+      if (wasAdRefreshing && !nowAdState.refreshing) {
+        toast.success(nowAdState.lastError ? `Atualização de anúncios concluída com aviso: ${nowAdState.lastError}` : 'Anúncios atualizados!');
       }
 
       // Detecta reels que terminaram de modelar (status saiu de 'novo').
@@ -804,18 +863,54 @@ export default function JohnHulkReferencias() {
     } finally {
       setReelsLoading(false);
     }
-  }, [handleFilter, statusFilter, favoriteFilter, qDebounced, sort, order]);
+  }, [handleFilter, statusFilter, favoriteFilter, qDebounced, sort, order, librarySource]);
 
   useEffect(() => { if (subView === 'biblioteca' || subView === 'pipeline') fetchReels(); }, [subView, fetchReels]);
 
-  // Poll enquanto o refresh da biblioteca ou a modelagem de algum reel estiver rodando.
+  // Poll enquanto o refresh da biblioteca de reels, o refresh de anúncios (Meta
+  // Ad Library) ou a modelagem de algum item estiver rodando — mesmo mecanismo
+  // reutilizado pros dois refreshes (~5-6s), sem duplicar lógica de polling.
   useEffect(() => {
     if (subView !== 'biblioteca' && subView !== 'pipeline') return;
-    const active = libraryState.refreshing || Object.keys(modelingMap).length > 0;
+    const active = libraryState.refreshing || adLibraryState.refreshing || Object.keys(modelingMap).length > 0;
     if (!active) return;
-    const id = setInterval(fetchReels, 5000);
+    const id = setInterval(fetchReels, 6000);
     return () => clearInterval(id);
-  }, [subView, libraryState.refreshing, modelingMap, fetchReels]);
+  }, [subView, libraryState.refreshing, adLibraryState.refreshing, modelingMap, fetchReels]);
+
+  // Fonte Reels|Anúncios — troca sourceType e ajusta o default de sort (ads
+  // ordenam por "tempo no ar" por padrão; reels voltam a ordenar por data).
+  function handleSourceToggle(next: 'reel' | 'ad') {
+    if (next === librarySource) return;
+    setLibrarySource(next);
+    setSort((s) => {
+      if (next === 'ad') return s === 'date' ? 'running' : s;
+      return s === 'running' ? 'date' : s;
+    });
+    setSelected(new Set());
+  }
+
+  async function handleRefreshAds() {
+    setRefreshingAds(true);
+    try {
+      const res = await fetch(`${API}/api/john-hulk/ads/refresh`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      if (res.status === 409) throw new Error(data.error || 'Já existe uma atualização de anúncios em andamento.');
+      if (!res.ok) throw new Error(data.error || 'Falha ao atualizar anúncios.');
+      if (data.skipped === 'disabled') {
+        toast.error('Atualização de anúncios está desativada (kill-switch).');
+        return;
+      }
+      toast.info('Atualizando anúncios da Biblioteca de Anúncios (Meta)… pode levar alguns minutos.');
+      fetchReels();
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao atualizar anúncios.');
+    } finally {
+      setRefreshingAds(false);
+    }
+  }
 
   async function handleRefreshLibrary(mode?: 'incremental') {
     const setBusy = mode === 'incremental' ? setRefreshingLibFast : setRefreshingLib;
@@ -1116,31 +1211,69 @@ export default function JohnHulkReferencias() {
     return (
       <div className="space-y-4">
         <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-1 bg-secondary rounded-lg p-0.5 w-fit">
+            <button
+              onClick={() => handleSourceToggle('reel')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${librarySource === 'reel' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Reels
+            </button>
+            <button
+              onClick={() => handleSourceToggle('ad')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${librarySource === 'ad' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Anúncios
+            </button>
+          </div>
+
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => handleRefreshLibrary()}
-                disabled={refreshingLib || refreshingLibFast || libraryState.refreshing}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors disabled:opacity-60"
-              >
-                {(refreshingLib || libraryState.refreshing) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                {libraryState.refreshing ? 'Atualizando biblioteca…' : 'Atualizar biblioteca'}
-              </button>
-              <button
-                onClick={() => handleRefreshLibrary('incremental')}
-                disabled={refreshingLib || refreshingLibFast || libraryState.refreshing}
-                title="Busca só os últimos reels (limite 30) — mais rápido e mais barato."
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 text-foreground text-xs font-semibold transition-colors disabled:opacity-60"
-              >
-                {refreshingLibFast ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-                Atualizar (rápido)
-              </button>
-            </div>
-            {libraryState.lastFinishedAt && !libraryState.refreshing && (
-              <span className="text-[11px] text-muted-foreground">
-                última atualização: {new Date(libraryState.lastFinishedAt).toLocaleString('pt-BR')}
-                {libraryState.lastError && <span className="text-red-400"> · {libraryState.lastError}</span>}
-              </span>
+            {librarySource === 'reel' ? (
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleRefreshLibrary()}
+                    disabled={refreshingLib || refreshingLibFast || libraryState.refreshing}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors disabled:opacity-60"
+                  >
+                    {(refreshingLib || libraryState.refreshing) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    {libraryState.refreshing ? 'Atualizando biblioteca…' : 'Atualizar biblioteca'}
+                  </button>
+                  <button
+                    onClick={() => handleRefreshLibrary('incremental')}
+                    disabled={refreshingLib || refreshingLibFast || libraryState.refreshing}
+                    title="Busca só os últimos reels (limite 30) — mais rápido e mais barato."
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 text-foreground text-xs font-semibold transition-colors disabled:opacity-60"
+                  >
+                    {refreshingLibFast ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+                    Atualizar (rápido)
+                  </button>
+                </div>
+                {libraryState.lastFinishedAt && !libraryState.refreshing && (
+                  <span className="text-[11px] text-muted-foreground">
+                    última atualização: {new Date(libraryState.lastFinishedAt).toLocaleString('pt-BR')}
+                    {libraryState.lastError && <span className="text-red-400"> · {libraryState.lastError}</span>}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={handleRefreshAds}
+                    disabled={refreshingAds || adLibraryState.refreshing}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-colors disabled:opacity-60"
+                  >
+                    {(refreshingAds || adLibraryState.refreshing) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    {adLibraryState.refreshing ? 'Atualizando anúncios…' : 'Atualizar anúncios'}
+                  </button>
+                </div>
+                {adLibraryState.lastFinishedAt && !adLibraryState.refreshing && (
+                  <span className="text-[11px] text-muted-foreground">
+                    última atualização: {new Date(adLibraryState.lastFinishedAt).toLocaleString('pt-BR')}
+                    {adLibraryState.lastError && <span className="text-red-400"> · {adLibraryState.lastError}</span>}
+                  </span>
+                )}
+              </>
             )}
           </div>
 
@@ -1250,6 +1383,7 @@ export default function JohnHulkReferencias() {
             </div>
             <select value={sort} onChange={(e) => setSort(e.target.value as any)} className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs">
               <option value="date">Ordenar: data</option>
+              {librarySource === 'ad' && <option value="running">Ordenar: tempo no ar</option>}
               <option value="views">Ordenar: views</option>
               <option value="likes">Ordenar: likes</option>
               <option value="comments">Ordenar: comentários</option>
@@ -1261,7 +1395,11 @@ export default function JohnHulkReferencias() {
           </div>
 
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <span className="text-[11px] text-muted-foreground">{reels.length} reel{reels.length === 1 ? '' : 's'} na lista</span>
+            <span className="text-[11px] text-muted-foreground">
+              {librarySource === 'ad'
+                ? `${reels.length} anúncio${reels.length === 1 ? '' : 's'} na lista`
+                : `${reels.length} reel${reels.length === 1 ? '' : 's'} na lista`}
+            </span>
             <button
               onClick={handleModelSelected}
               disabled={selected.size === 0}
@@ -1276,7 +1414,11 @@ export default function JohnHulkReferencias() {
           <div className="flex items-center justify-center h-40 text-muted-foreground"><Loader2 size={22} className="animate-spin mr-2" /> Carregando reels...</div>
         ) : reels.length === 0 ? (
           <div className="bg-card border border-border rounded-2xl p-6 text-center text-muted-foreground">
-            Nenhum reel na biblioteca ainda. Clique em <b className="text-foreground">Atualizar biblioteca</b> para buscar os últimos reels da(s) conta(s) de referência.
+            {librarySource === 'ad' ? (
+              <>Nenhum anúncio na biblioteca ainda. Clique em <b className="text-foreground">Atualizar anúncios</b> para buscar os anúncios ativos na Biblioteca de Anúncios (Meta).</>
+            ) : (
+              <>Nenhum reel na biblioteca ainda. Clique em <b className="text-foreground">Atualizar biblioteca</b> para buscar os últimos reels da(s) conta(s) de referência.</>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">

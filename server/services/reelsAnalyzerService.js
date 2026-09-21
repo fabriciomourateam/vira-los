@@ -845,4 +845,8 @@ async function extractReelContent(url) {
 module.exports = {
   analyzeReel, analyzeLocalVideo, getState, sseClients,
   extractReelContent, runApifyActor,
+  // Exportados adicionalmente pra reuso por outros fluxos automatizados (ex.:
+  // johnHulkService/extractAdContent) — os mesmos helpers de baixo nível que já
+  // eram usados internamente por extractReelContent, agora expostos.
+  transcribeAudio, analyzeVisuals, downloadBuffer, ffmpegAvailable,
 };

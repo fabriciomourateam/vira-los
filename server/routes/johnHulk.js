@@ -8,8 +8,9 @@
  * POST /api/john-hulk/generate            → dispara geração (cron/manual), mesmo guard
  *                                            x-cron-key/DAILY_CRON_SECRET do daily-content
  * POST /api/john-hulk/settings            → liga/desliga kill-switch e auto-agendamento
- * GET  /api/john-hulk/reels               → lista a biblioteca (filtros/sort)
- * POST /api/john-hulk/reels/refresh       → atualiza a biblioteca (Apify, background; body {mode:'full'|'incremental'})
+ * GET  /api/john-hulk/reels               → lista a biblioteca (filtros/sort; sourceType:'reel'|'ad', sort:'running' p/ ads)
+ * POST /api/john-hulk/reels/refresh       → atualiza a biblioteca de REELS (Apify, background; body {mode:'full'|'incremental'})
+ * POST /api/john-hulk/ads/refresh         → atualiza a biblioteca de ANÚNCIOS/Meta Ad Library (Apify, background; body {pageId?,count?})
  * POST /api/john-hulk/reels/:sc/model     → modela 1 reel da biblioteca (background; body
  *                                            {regenerate,variants,angle,mode,ctaDestination,offer,numSlides})
  * POST /api/john-hulk/reels/model-url     → modela 1 reel por URL avulsa (background; mesmo body
@@ -158,25 +159,57 @@ const keywordsOf = (text) => String(text || '')
   .filter((w) => w.length >= 4 && !KEYWORD_STOPWORDS.has(w));
 
 // Lista a biblioteca com filtros/ordenação server-side.
+// `sourceType` (novo, ADITIVO): 'reel' = itens sem sourceType OU sourceType:'reel'
+// (comportamento de sempre); 'ad' = sourceType:'ad' (Biblioteca de Anúncios);
+// omitido = todos (reels + ads juntos, comportamento de antes preservado quando
+// o filtro não é usado).
+// `sort=running` (novo): ordena por `runningDays` desc — só faz sentido pra ads,
+// mas não quebra reels (runningDays fica undefined/0 neles).
 router.get('/reels', (req, res) => {
-  const { handle, status, favorite, q, sort = 'date', order = 'desc' } = req.query;
+  const {
+    handle, status, favorite, q, sort = 'date', order = 'desc', sourceType,
+  } = req.query;
   let reels = db.getJohnHulkReels();
 
   if (handle) reels = reels.filter((r) => r.handle === handle);
   if (status) reels = reels.filter((r) => r.status === status);
   if (favorite === 'true') reels = reels.filter((r) => r.favorite === true);
   if (favorite === 'false') reels = reels.filter((r) => r.favorite !== true);
+  if (sourceType === 'ad') reels = reels.filter((r) => r.sourceType === 'ad');
+  else if (sourceType === 'reel') reels = reels.filter((r) => !r.sourceType || r.sourceType === 'reel');
   if (q) {
     const needle = String(q).toLowerCase();
     reels = reels.filter((r) => (r.caption || '').toLowerCase().includes(needle) || (r.topic || '').toLowerCase().includes(needle));
   }
 
-  const sortKeyMap = { views: 'views', likes: 'likes', comments: 'comments', date: 'timestampMs' };
+  const sortKeyMap = {
+    views: 'views', likes: 'likes', comments: 'comments', date: 'timestampMs', running: 'runningDays',
+  };
   const sortKey = sortKeyMap[sort] || 'timestampMs';
   const dir = order === 'asc' ? 1 : -1;
   reels = reels.slice().sort((a, b) => dir * ((a[sortKey] || 0) - (b[sortKey] || 0)));
 
-  res.json({ libraryState: johnHulk.getLibraryState(), reels });
+  res.json({ libraryState: johnHulk.getLibraryState(), adLibraryState: johnHulk.getAdLibraryState(), reels });
+});
+
+// Atualiza a biblioteca de ANÚNCIOS (Meta Ad Library) via Apify — mesmo padrão
+// background de /reels/refresh. Body opcional: { pageId?, count? } — sem pageId,
+// usa settings.adLibraryPageId.
+router.post('/ads/refresh', (req, res) => {
+  if (!db.getJohnHulkSettings().johnHulkEnabled) {
+    return res.json({ skipped: 'disabled' });
+  }
+  if (johnHulk.getAdLibraryState().refreshing) {
+    return res.status(409).json({ error: 'Já existe um refresh da biblioteca de anúncios em andamento.' });
+  }
+
+  const pageId = req.body && req.body.pageId ? String(req.body.pageId) : undefined;
+  const count = req.body && req.body.count ? Number(req.body.count) : undefined;
+
+  res.json({ started: true });
+  johnHulk.refreshAdLibrary({ pageId, count })
+    .then((r) => console.log(`[JohnHulk] refreshAdLibrary: +${r.added} novos, ${r.updated} atualizados (total ${r.total}).`))
+    .catch((e) => console.error('[JohnHulk] refreshAdLibrary falhou:', e.message));
 });
 
 // Atualiza a biblioteca via Apify (pode levar minutos — roda em background).

@@ -1,0 +1,91 @@
+name: John Hulk — teste de anúncio (best ad e2e)
+
+# Manual: atualiza os anúncios da Biblioteca de Anúncios do anunciante, escolhe o
+# MELHOR (mais tempo no ar = campeão comprovado) e modela em carrossel FMTeam.
+# Imprime a copy do anúncio de origem + o carrossel gerado (folder/tema/legenda),
+# pra revisar/publicar um teste. Fora da rotina diária.
+#
+#   input mode=organico (default) ou anuncio ; cta=whatsapp|link|dm (só no modo anuncio)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "organico (default) ou anuncio"
+        required: false
+        default: "organico"
+      cta:
+        description: "destino do clique no modo anuncio: whatsapp | link | dm"
+        required: false
+        default: "whatsapp"
+
+jobs:
+  adtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Atualizar anúncios + modelar o melhor
+        env:
+          BASE: https://vira-los.fly.dev
+          MODE: ${{ github.event.inputs.mode }}
+          CTA: ${{ github.event.inputs.cta }}
+        run: |
+          set -e
+          echo "=== atualizando a Biblioteca de Anúncios ==="
+          curl -sS -m 60 -X POST "$BASE/api/john-hulk/ads/refresh" \
+            -H "Content-Type: application/json" -d '{}' || true
+          echo ""
+
+          echo "=== aguardando o refresh dos anúncios ==="
+          for i in $(seq 1 20); do
+            sleep 15
+            resp=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?sourceType=ad&sort=running&order=desc" || echo '{}')
+            refreshing=$(echo "$resp" | jq -r '.adLibraryState.refreshing // false')
+            total=$(echo "$resp" | jq -r '[.reels[]? | select(.sourceType=="ad")] | length')
+            echo "  tentativa $i — refreshing=$refreshing · anúncios=$total"
+            if [ "$refreshing" = "false" ] && [ "$total" -gt 0 ]; then
+              echo "✅ $total anúncios na biblioteca. Top 5 por tempo no ar:"
+              echo "$resp" | jq -r '[.reels[]? | select(.sourceType=="ad")][:5][] | "runningDays=\(.runningDays) ativo=\(.adActive) formato=\(.displayFormat) \(.url)  copy=\((.adCopy // "")[:70])"'
+              break
+            fi
+            if [ "$i" = "20" ]; then echo "⚠️ refresh de anúncios não concluiu"; exit 1; fi
+          done
+
+          echo "=== escolhendo o MELHOR anúncio (mais tempo no ar, ainda não usado) ==="
+          resp=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?sourceType=ad&status=novo&sort=running&order=desc" || echo '{}')
+          sc=$(echo "$resp" | jq -r '[.reels[]? | select(.sourceType=="ad")][0].shortCode // empty')
+          if [ -z "$sc" ]; then echo "nenhum anúncio 'novo' pra modelar."; exit 0; fi
+          echo "anúncio escolhido: $sc"
+          echo "----- copy do anúncio de origem -----"
+          echo "$resp" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0] | "runningDays=\(.runningDays) formato=\(.displayFormat)\ncopy:\n\(.adCopy // "-")"'
+
+          if [ "$MODE" = "anuncio" ]; then
+            body=$(jq -n --arg cta "$CTA" '{mode:"anuncio", ctaDestination:$cta, numSlides:6}')
+          else
+            body='{}'
+          fi
+          echo "body: $body"
+          curl -sS -m 60 -X POST "$BASE/api/john-hulk/reels/$sc/model" \
+            -H "Content-Type: application/json" -d "$body" || true
+          echo ""
+
+          echo "=== aguardando a modelagem ==="
+          for i in $(seq 1 30); do
+            sleep 20
+            r=$(curl -sS -m 30 "$BASE/api/john-hulk/reels?sourceType=ad" || echo '{}')
+            st=$(echo "$r" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0].status')
+            cid=$(echo "$r" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0].carouselId // "-"')
+            echo "  tentativa $i — status=$st carouselId=$cid"
+            if [ "$st" = "erro" ]; then
+              echo "❌ Modelagem falhou:"; echo "$r" | jq -r --arg sc "$sc" '[.reels[]? | select(.shortCode==$sc)][0].errorMessage'; exit 1
+            fi
+            if [ "$st" != "novo" ] && [ "$cid" != "-" ]; then
+              echo "✅ Anúncio $sc modelado — carrossel $cid"
+              saved=$(curl -sS -m 30 "$BASE/api/carousel/saved" || echo '[]')
+              echo "----- carrossel gerado -----"
+              echo "$saved" | jq -r --arg id "$cid" '.[] | select(.id==$id) | "tema=\(.topic)\nsourceType=\(.mode // "-")/\(.sourceType // "-")\nnumSlides=\(.numSlides) folder=\(.folderName)\nabrir: '"$BASE"'/output/\(.folderName)/carrossel.html"'
+              echo "----- legenda (pronta pra postar) -----"
+              echo "$saved" | jq -r --arg id "$cid" '.[] | select(.id==$id) | .legenda'
+              exit 0
+            fi
+          done
+          echo "⚠️ modelagem não concluiu no tempo esperado."
