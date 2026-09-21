@@ -171,22 +171,22 @@ async function deriveTopic({ transcription, caption, visualAnalysis } = {}, { fa
     caption ? `LEGENDA ORIGINAL:\n${caption.slice(0, 500)}` : '',
   ].filter(Boolean).join('\n\n');
 
-  // Modo fiel de ANÚNCIO: a COPY do anúncio (texto do próprio anunciante) é a fonte
-  // AUTORITATIVA do assunto — o vídeo do criativo pode ser genérico/reaproveitado e
-  // falar de outra coisa. Por isso a copy vem PRIMEIRO, completa (até 2000 chars), e
-  // a transcrição do vídeo entra só como apoio (o prompt manda seguir a copy se
-  // divergir). Isso corrige o desvio de assunto (ex.: copy de Epitalon → carrossel
-  // de Masteron por causa do áudio do vídeo).
+  // Modo fiel de ANÚNCIO: o que vale é o que é FALADO no ÁUDIO/vídeo — é o conteúdo
+  // REAL do anúncio. A COPY/texto do anúncio costuma ser um texto "seguro" só pra não
+  // ser barrado pela revisão da Meta (ex.: copy fala de Epitalon/telômeros, mas o
+  // áudio fala do protocolo de fato). Por isso a transcrição vem PRIMEIRO e é
+  // autoritativa; a copy entra só como contexto secundário (o prompt manda seguir o
+  // áudio se divergir). Se não houver áudio, cai pra copy/visual naturalmente.
   const contextFaithfulAd = [
-    caption ? `COPY DO ANÚNCIO (fonte autoritativa do assunto — é o que o anunciante está de fato anunciando):\n${caption.slice(0, 2000)}` : '',
-    transcription ? `TRANSCRIÇÃO DO VÍDEO (apoio — pode ser de um criativo genérico; se falar de outro produto/protocolo que NÃO a copy, IGNORE):\n${transcription.slice(0, 1500)}` : '',
+    transcription ? `TRANSCRIÇÃO DO ÁUDIO/VÍDEO (fonte autoritativa — é o que o anúncio REALMENTE fala):\n${transcription.slice(0, 2500)}` : '',
     visualAnalysis ? `ANÁLISE VISUAL (apoio):\n${String(visualAnalysis).slice(0, 800)}` : '',
+    caption ? `COPY/TEXTO DO ANÚNCIO (contexto secundário — pode ser um texto "seguro" pra não ser barrado pela Meta, NÃO necessariamente o assunto real):\n${caption.slice(0, 800)}` : '',
   ].filter(Boolean).join('\n\n');
 
-  const fallbackTopic = ((faithful && isAd ? caption : (caption || transcription)) || 'Treino sério e composição corporal')
+  const fallbackTopic = ((faithful && isAd ? (transcription || caption) : (caption || transcription)) || 'Treino sério e composição corporal')
     .toString().slice(0, 80).trim() || 'Treino sério e composição corporal';
 
-  const promptFaithful = `Você vai extrair o TEMA CENTRAL REAL de um material de referência (bodybuilding/fitness) pra virar um carrossel FIEL ao assunto do material — o carrossel será reescrito na voz FMTeam, mas SEM MUDAR DE ASSUNTO: o tema tem que ser exatamente sobre o que o material trata (se fala de um suplemento/protocolo/substância específica, é sobre ISSO; não desvie pra um tema genérico do nicho).${isAd ? '\nATENÇÃO: a COPY DO ANÚNCIO é a fonte autoritativa. O tema TEM que ser o assunto da copy. Se a transcrição do vídeo falar de outro produto/protocolo, IGNORE a transcrição e siga a copy.' : ''}
+  const promptFaithful = `Você vai extrair o TEMA CENTRAL REAL de um material de referência (bodybuilding/fitness) pra virar um carrossel FIEL ao assunto do material — o carrossel será reescrito na voz FMTeam, mas SEM MUDAR DE ASSUNTO: o tema tem que ser exatamente sobre o que o material trata (se fala de um suplemento/protocolo/substância específica, é sobre ISSO; não desvie pra um tema genérico do nicho).${isAd ? '\nATENÇÃO: para ANÚNCIO, o que vale é o que é FALADO no ÁUDIO/vídeo. O texto/copy do anúncio pode ser só um texto "seguro" pra não ser barrado pela Meta — se o áudio falar de outro produto/protocolo, o tema é o do ÁUDIO, NÃO o da copy.' : ''}
 
 MATERIAL DE ORIGEM:
 ${(isAd ? contextFaithfulAd : context) || '(sem transcrição/análise disponível — use o bom senso do nicho bodybuilding)'}
@@ -239,13 +239,14 @@ function buildInstructions({ transcription, caption, visualAnalysis } = {}, extr
     caption ? `Legenda original:\n${caption.slice(0, 600)}` : '',
   ].filter(Boolean).join('\n\n');
 
-  // Modo fiel de ANÚNCIO: a COPY é a fonte autoritativa do assunto — vem primeiro e
-  // completa; a transcrição do vídeo (que pode ser de um criativo genérico) entra só
-  // como apoio, e o carrossel deve seguir a COPY se divergirem.
+  // Modo fiel de ANÚNCIO: o ÁUDIO/vídeo é a fonte autoritativa (conteúdo real do
+  // anúncio) — vem primeiro e completo; a copy/texto do anúncio costuma ser só um
+  // texto "seguro" pra não ser barrado pela Meta, então entra como contexto
+  // secundário, e o carrossel deve seguir o ÁUDIO se divergirem.
   const materialFaithfulAd = [
-    caption ? `COPY DO ANÚNCIO (fonte autoritativa — é o que o anunciante está anunciando; o carrossel TEM que ser sobre ISTO):\n${caption.slice(0, 2500)}` : '',
-    transcription ? `Transcrição do vídeo (apoio — se falar de outro produto/protocolo que NÃO a copy, IGNORE):\n${transcription.slice(0, 1500)}` : '',
+    transcription ? `Transcrição do áudio/vídeo (fonte autoritativa — é o que o anúncio REALMENTE fala; o carrossel TEM que ser sobre ISTO):\n${transcription.slice(0, 3000)}` : '',
     visualAnalysis ? `Análise visual (apoio):\n${String(visualAnalysis).slice(0, 1000)}` : '',
+    caption ? `Copy/texto do anúncio (contexto secundário — pode ser um texto "seguro" pra não ser barrado pela Meta, NÃO necessariamente o assunto real):\n${caption.slice(0, 800)}` : '',
   ].filter(Boolean).join('\n\n');
 
   const materialBlock = (faithful && isAd) ? materialFaithfulAd : material;
@@ -257,7 +258,7 @@ function buildInstructions({ transcription, caption, visualAnalysis } = {}, extr
     ? [
         'MODO FIEL — reescreva na voz FMTeam MANTENDO-SE FIEL ao material acima: o carrossel tem que tratar do MESMO assunto/tese, cobrir os MESMOS argumentos/pontos principais e manter a MESMA promessa/oferta do material de origem. NÃO troque de tema, NÃO invente um ângulo novo que desvie do assunto, NÃO generalize pra um tema "do nicho".',
         'Adapte só a LINGUAGEM e a ESTRUTURA pro estilo FMTeam (não copie frases literais nem cite o autor/perfil original), mas o CONTEÚDO — o que é dito, os dados, o produto/protocolo/conceito específico e a conclusão — tem que bater com o material.',
-        isAd ? 'A COPY DO ANÚNCIO acima é a fonte autoritativa do assunto: o carrossel TEM que ser sobre o que a copy anuncia. Se a transcrição do vídeo falar de outro produto/protocolo, IGNORE a transcrição.' : '',
+        isAd ? 'Para ANÚNCIO, o que vale é o que é FALADO no ÁUDIO/vídeo: o carrossel TEM que ser sobre o que o áudio fala. O texto/copy do anúncio pode ser só um texto de conformidade (pra não ser barrado pela Meta) — se divergir do áudio, siga o ÁUDIO.' : '',
       ].filter(Boolean).join('\n')
     : 'REESCREVA na voz FMTeam, NÃO copie literalmente o texto acima, NÃO cite o autor/perfil original — use só a IDEIA/TEMA do material como inspiração, com as palavras e a estrutura do FMTeam.';
 
