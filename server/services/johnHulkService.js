@@ -23,13 +23,19 @@
  */
 
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
 const db = require('../db/database');
 const {
   generateCarousel, takeScreenshotsPixelPerfect, OUTPUT_DIR,
 } = require('./carouselService');
-const { extractReelContent, runApifyActor } = require('./reelsAnalyzerService');
+const {
+  extractReelContent, runApifyActor,
+  // Helpers de baixo nível reaproveitados pra extractAdContent (fonte "Anúncios").
+  transcribeAudio, analyzeVisuals, downloadBuffer, ffmpegAvailable,
+} = require('./reelsAnalyzerService');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -436,6 +442,229 @@ async function refreshLibraryImpl({ handle, limit = 100 } = {}) {
   }
 }
 
+// ── Biblioteca de Anúncios (Meta Ad Library) — fonte "Anúncios" ADITIVA ────────
+// Mesmo padrão da Biblioteca de Reels acima (upsert na MESMA tabela
+// `john_hulk_reels`, agora com `sourceType:'ad'` pra diferenciar), mas via Apify
+// (`curious_coder/facebook-ads-library-scraper`) em vez do instagram-scraper. O
+// item da Ad Library não tem métricas de engajamento (views/likes/comments ficam
+// 0) — o que importa aqui é `runningDays` (peça rodando há muito tempo = validada
+// pelo mercado) em vez de performance social.
+
+// Monta a URL da Ad Library pra uma página — EXATAMENTE o template validado
+// manualmente contra a página real (ver instruções da tarefa).
+function buildAdLibraryUrl(pageId, country = 'BR') {
+  return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${encodeURIComponent(country)}&is_targeted_country=false&media_type=all&search_type=page&sort_data[mode]=total_impressions&sort_data[direction]=desc&view_all_page_id=${encodeURIComponent(pageId)}`;
+}
+
+// Estado em memória do refresh da Ad Library — lock PRÓPRIO (separado de
+// `libraryState`, que é só da biblioteca de reels) pra um refresh de anúncios
+// não bloquear nem ser bloqueado por um refresh de reels rodando ao mesmo tempo.
+const adLibraryState = {
+  refreshing: false, startedAt: null, lastPageId: null, lastError: null, lastFinishedAt: null,
+};
+function getAdLibraryState() { return { ...adLibraryState }; }
+
+// Busca os anúncios da página via Apify, com o mesmo retry/backoff (2s/4s/8s,
+// até 3 tentativas) usado por listProfileReels — scrapers de terceiros são flaky.
+async function listAdLibraryAds(pageId, country, count = 30) {
+  const url = buildAdLibraryUrl(pageId, country);
+  const input = {
+    urls: [{ url, method: 'GET' }],
+    count,
+    'scrapePageAds.activeStatus': 'all',
+  };
+  const delays = [2000, 4000, 8000];
+  let lastErr = null;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      const items = await runApifyActor('curious_coder/facebook-ads-library-scraper', input, 180);
+      return Array.isArray(items) ? items : [];
+    } catch (e) {
+      lastErr = e;
+      if (attempt < delays.length) {
+        console.warn(`[JohnHulk] listAdLibraryAds(page ${pageId}) falhou (tentativa ${attempt + 1}/${delays.length + 1}): ${e.message} — retry em ${delays[attempt] / 1000}s`);
+        await sleep(delays[attempt]);
+      }
+    }
+  }
+  throw lastErr || new Error(`listAdLibraryAds(page ${pageId}) falhou sem detalhe.`);
+}
+
+// Normaliza 1 item bruto do actor pro shape da biblioteca (mesma tabela dos
+// reels, campos extras marcados com sourceType:'ad'). shortCode prefixado com
+// 'ad_' pra nunca colidir com um shortCode de reel do Instagram.
+function normalizeAdItem(ad, pageId) {
+  if (!ad || !ad.ad_archive_id) return null;
+  const snapshot = ad.snapshot || {};
+  const video = Array.isArray(snapshot.videos) && snapshot.videos[0] ? snapshot.videos[0] : null;
+  const image = Array.isArray(snapshot.images) && snapshot.images[0] ? snapshot.images[0] : null;
+  const adCopy = (snapshot.body && snapshot.body.text) || '';
+  const thumbnailUrl = (video && video.video_preview_image_url)
+    || (image && image.original_image_url)
+    || snapshot.page_profile_picture_url
+    || null;
+  const adVideoUrl = (video && (video.video_hd_url || video.video_sd_url)) || null;
+  const startDate = ad.start_date != null ? Number(ad.start_date) : null;
+  const endDate = ad.end_date != null ? Number(ad.end_date) : null;
+  const totalActiveTime = ad.total_active_time != null ? Number(ad.total_active_time) : null;
+  // runningDays: preferência pelo total_active_time do actor (mais preciso —
+  // conta só o tempo em que o anúncio esteve de fato ativo); fallback pra
+  // (agora - start_date) se o actor não devolver total_active_time.
+  let runningDays = null;
+  if (totalActiveTime != null) {
+    runningDays = Math.round(totalActiveTime / 86400);
+  } else if (startDate) {
+    runningDays = Math.round((Date.now() / 1000 - startDate) / 86400);
+  }
+
+  return {
+    shortCode: `ad_${ad.ad_archive_id}`,
+    sourceType: 'ad',
+    handle: ad.page_name || pageId,
+    url: ad.ad_library_url || ad.url || '',
+    caption: adCopy,
+    adCopy,
+    thumbnailUrl,
+    adVideoUrl,
+    displayFormat: snapshot.display_format || null,
+    adActive: !!ad.is_active,
+    adStartDate: startDate,
+    adEndDate: endDate,
+    runningDays,
+    timestampMs: startDate ? startDate * 1000 : 0,
+    // Ads não têm métrica de engajamento social — ficam 0, mesmo shape dos reels
+    // (mantém upsertJohnHulkReels/ordenação por views funcionando sem branch extra).
+    views: 0,
+    likes: 0,
+    comments: 0,
+    durationSec: null,
+    linkUrl: snapshot.link_url || null,
+    ctaType: snapshot.cta_type || null,
+  };
+}
+
+// Varre a Ad Library de UMA página (a informada, ou `adLibraryPageId` das
+// settings) e faz upsert na MESMA tabela da biblioteca de reels
+// (`john_hulk_reels`), via `db.upsertJohnHulkReels` (já preserva
+// status/favorite/carouselId/etc. de itens existentes). `count` (opcional,
+// default 30) é repassado direto pro actor.
+async function refreshAdLibrary({ pageId, count = 30 } = {}) {
+  if (adLibraryState.refreshing) throw new Error('Já existe um refresh da biblioteca de anúncios em andamento.');
+
+  const settings = db.getJohnHulkSettings();
+  const resolvedPageId = pageId || settings.adLibraryPageId;
+  const country = settings.adLibraryCountry || 'BR';
+  if (!resolvedPageId) throw new Error('adLibraryPageId não configurado (settings.adLibraryPageId).');
+
+  adLibraryState.refreshing = true;
+  adLibraryState.startedAt = new Date().toISOString();
+  adLibraryState.lastError = null;
+  adLibraryState.lastPageId = resolvedPageId;
+
+  try {
+    const items = await withTimeout(
+      listAdLibraryAds(resolvedPageId, country, count),
+      JOHN_HULK_STEP_TIMEOUT_MS, `listAdLibraryAds(${resolvedPageId})`
+    );
+    const normalized = items.map((ad) => normalizeAdItem(ad, resolvedPageId)).filter(Boolean);
+    const { added, updated } = db.upsertJohnHulkReels(normalized);
+    adLibraryState.lastFinishedAt = new Date().toISOString();
+    return { added, updated, total: db.getJohnHulkReels().length };
+  } catch (e) {
+    adLibraryState.lastError = e.message;
+    adLibraryState.lastFinishedAt = new Date().toISOString();
+    throw e;
+  } finally {
+    adLibraryState.refreshing = false;
+  }
+}
+
+// Extração de conteúdo de UM anúncio (equivalente ao extractReelContent, mas pra
+// item da Ad Library) — reusa os helpers de baixo nível do reelsAnalyzerService
+// (transcribeAudio/analyzeVisuals/downloadBuffer/ffmpegAvailable). Devolve o MESMO
+// shape de extractReelContent ({caption, transcription, visualAnalysis, ...}) pra
+// alimentar deriveTopic/buildInstructions sem nenhuma mudança nelas.
+// - Com vídeo (VIDEO/DCO) + ffmpeg disponível: baixa o mp4, transcreve (Whisper) e
+//   roda a análise visual sobre a thumbnail/preview.
+// - Sem vídeo (IMAGE) ou sem ffmpeg/download falhou: cai pra análise visual só da
+//   thumbnail (ou nota baseada na legenda, se nem isso der).
+// Defensivo: nunca lança por causa de download/transcrição/visão — sempre devolve
+// pelo menos {caption, transcription:null, visualAnalysis}.
+async function extractAdContent(item) {
+  if (!item) throw new Error('extractAdContent requer o item (anúncio) da biblioteca.');
+  const caption = item.adCopy || item.caption || '';
+
+  // Fallback só-thumbnail (usado tanto pra IMAGE quanto quando o vídeo falha).
+  async function thumbnailOnlyAnalysis() {
+    let visualAnalysis = '';
+    if (item.thumbnailUrl) {
+      try {
+        const buf = await downloadBuffer(item.thumbnailUrl, 20000);
+        visualAnalysis = await analyzeVisuals([], buf.toString('base64'), caption);
+      } catch (e) {
+        console.warn('[JohnHulk] extractAdContent: análise visual (thumbnail) falhou:', e.message);
+      }
+    }
+    if (!visualAnalysis) {
+      visualAnalysis = caption
+        ? `Análise contextual baseada na legenda do anúncio:\n${caption}`
+        : 'Sem dados visuais disponíveis para análise.';
+    }
+    return visualAnalysis;
+  }
+
+  const hasVideo = !!item.adVideoUrl;
+  if (!hasVideo || !ffmpegAvailable()) {
+    return {
+      caption, transcription: null, visualAnalysis: await thumbnailOnlyAnalysis(), thumbnailUrl: item.thumbnailUrl || null,
+    };
+  }
+
+  const tempDir = path.join(os.tmpdir(), `viralos-jh-ad-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  fs.mkdirSync(tempDir, { recursive: true });
+  try {
+    const videoPath = path.join(tempDir, 'ad.mp4');
+    try {
+      const buf = await downloadBuffer(item.adVideoUrl, 90000);
+      fs.writeFileSync(videoPath, buf);
+    } catch (e) {
+      console.warn('[JohnHulk] extractAdContent: download do vídeo do anúncio falhou:', e.message);
+      return {
+        caption, transcription: null, visualAnalysis: await thumbnailOnlyAnalysis(), thumbnailUrl: item.thumbnailUrl || null,
+      };
+    }
+
+    let transcription = null;
+    try {
+      transcription = await transcribeAudio(videoPath);
+    } catch (e) {
+      console.warn('[JohnHulk] extractAdContent: transcrição falhou:', e.message);
+    }
+
+    let thumbnailBase64 = null;
+    if (item.thumbnailUrl) {
+      try {
+        const tbuf = await downloadBuffer(item.thumbnailUrl, 20000);
+        thumbnailBase64 = tbuf.toString('base64');
+      } catch (e) { /* segue sem thumbnail — analyzeVisuals ainda funciona só com caption */ }
+    }
+
+    let visualAnalysis = '';
+    try {
+      visualAnalysis = await analyzeVisuals([], thumbnailBase64, caption);
+    } catch (e) {
+      console.warn('[JohnHulk] extractAdContent: análise visual falhou:', e.message);
+      visualAnalysis = caption ? `Análise contextual baseada na legenda do anúncio:\n${caption}` : '';
+    }
+
+    return {
+      caption, transcription, visualAnalysis, thumbnailUrl: item.thumbnailUrl || null,
+    };
+  } finally {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) { /* ignora */ }
+  }
+}
+
 // ── Modelagem (Modeling Studio) — núcleo usado tanto pelo fluxo manual (rotas
 // /reels/:shortCode/model, /reels/model-url, /reels/model-batch) quanto pela
 // rotina diária automática (generateDailyCarousel, abaixo). ──────────────────
@@ -550,10 +779,21 @@ async function modelReelAttempt({
   const isAdMode = mode === 'anuncio';
   const steps = [];
   let reel = db.getJohnHulkReel(resolvedShortCode);
+  // sourceType:'ad' = item veio da Biblioteca de Anúncios (Meta Ad Library) — NÃO
+  // confundir com `mode`/`isAdMode` acima (modo "anúncio pago" da geração, que se
+  // aplica igualmente a reels e a ads). Reel normal: sourceType ausente/'reel' —
+  // comportamento 100% igual ao de antes.
+  const isAdSource = !!(reel && reel.sourceType === 'ad');
 
   let content = regenerate ? null : db.getJohnHulkTranscript(resolvedShortCode);
   if (content) {
     console.log(`[JohnHulk] transcript em cache pra ${resolvedShortCode} — sem re-scrape/re-transcrever.`);
+  } else if (isAdSource) {
+    content = await withTimeout(
+      runStep(steps, 'extract', `Transcrevendo/analisando anúncio ${resolvedShortCode}`, () => extractAdContent(reel)),
+      JOHN_HULK_STEP_TIMEOUT_MS, `extractAdContent(${resolvedShortCode})`
+    );
+    db.saveJohnHulkTranscript(resolvedShortCode, content);
   } else {
     content = await withTimeout(
       runStep(steps, 'extract', `Transcrevendo/analisando reel ${resolvedShortCode}`, () => extractReelContent(resolvedUrl)),
@@ -707,6 +947,10 @@ async function modelReelAttempt({
       mode: isAdMode ? 'anuncio' : 'organico',
       ctaDestination: isAdMode ? ctaDestination : undefined,
       offer: isAdMode && offer ? String(offer).slice(0, 200) : undefined,
+      // Rótulo de origem do rascunho — 'ad' quando o material-fonte veio da
+      // Biblioteca de Anúncios (Meta Ad Library), ausente/undefined pra reel
+      // (comportamento 100% igual ao de antes).
+      sourceType: isAdSource ? 'ad' : undefined,
     });
     carouselIds.push(carouselId);
   }
@@ -954,4 +1198,6 @@ module.exports = {
   modelReel, modelBatch, isReelModeling,
   // Modo anúncio (item novo) — exportados pra teste/reuso
   buildAdCtaOverride, buildAdDirective, deriveAdCaption, AD_CTA_DESTINATIONS,
+  // Biblioteca de Anúncios (Meta Ad Library) — fonte "Anúncios" (ADITIVO)
+  refreshAdLibrary, getAdLibraryState, buildAdLibraryUrl, extractAdContent,
 };
