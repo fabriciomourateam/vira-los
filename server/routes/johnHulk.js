@@ -320,6 +320,35 @@ router.post('/reels/:shortCode/favorite', (req, res) => {
   res.json(updated);
 });
 
+// Transcreve o áudio do reel/anúncio (Whisper) e guarda a transcrição no próprio
+// item — assim reabrir é instantâneo e não re-cobra a API. Reusa o pipeline pronto:
+// extractAdContent (anúncio: baixa o vídeo direto do CDN da Meta Ad Library) ou
+// extractReelContent (reel orgânico: Apify + yt-dlp). Síncrono (pode levar dezenas
+// de segundos). ?force=1 refaz ignorando o cache. NÃO toca no estado do Analisador
+// de Reels manual (funções isoladas), então não conflita com "análise em andamento".
+router.post('/reels/:shortCode/transcribe', async (req, res) => {
+  const { shortCode } = req.params;
+  const force = req.query.force === '1' || (req.body && req.body.force === true);
+  const reel = db.getJohnHulkReel(shortCode);
+  if (!reel) return res.status(404).json({ error: `Reel ${shortCode} não encontrado.` });
+
+  // Cache: já transcrito e sem force → devolve na hora (transcription '' = sem fala).
+  if (!force && reel.transcription !== undefined && reel.transcription !== null) {
+    return res.json({ transcription: reel.transcription, cached: true });
+  }
+
+  try {
+    const content = reel.sourceType === 'ad'
+      ? await johnHulk.extractAdContent(reel)
+      : await require('../services/reelsAnalyzerService').extractReelContent(reel.url);
+    const transcription = (content && content.transcription) || '';
+    db.updateJohnHulkReel(shortCode, { transcription, transcribedAt: Date.now() });
+    res.json({ transcription, cached: false, hadAudio: !!transcription });
+  } catch (e) {
+    res.status(502).json({ error: e.message || 'Falha ao transcrever.' });
+  }
+});
+
 // Dedupe por tema (item D do plano de melhorias) — AVISO, não bloqueia: compara
 // caption/topic deste reel com reels JÁ MODELADOS nos últimos `days` (default 21)
 // por overlap simples de palavras-chave. Best-effort/defensivo.
