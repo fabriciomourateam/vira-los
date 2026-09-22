@@ -5,7 +5,7 @@ import {
   Copy, ChevronDown, ChevronUp, AlertTriangle, CalendarClock, Check, Clock,
   RefreshCw, Search, Star, Eye, Heart, MessageCircle, Link2, Edit3, X,
   Library, FileStack, TrendingUp, Film, CheckSquare, Kanban, Zap, Wallet,
-  Lightbulb, Plus, Trash2, ArrowRight, Repeat,
+  Lightbulb, Plus, Trash2, ArrowRight, Repeat, FileText,
 } from 'lucide-react';
 import CarouselEditor from './CarouselEditor';
 import { MlabsScheduleButton } from './MlabsScheduler';
@@ -53,6 +53,7 @@ interface Reel {
   favorite?: boolean; themeTag?: string;
   errorMessage?: string | null; errorAt?: string | null; carouselIds?: string[];
   viralInsight?: string | null;
+  transcription?: string | null; transcribedAt?: number;
   // Campos extras de itens vindos da Biblioteca de Anúncios (Meta Ad Library) —
   // `sourceType:'ad'`. Ausentes/undefined em reels orgânicos comuns.
   sourceType?: 'reel' | 'ad';
@@ -304,9 +305,30 @@ function ReelCard({
   const [ctaDestination, setCtaDestination] = useState<CtaDestination>('whatsapp');
   const [offer, setOffer] = useState('');
   const [faithful, setFaithful] = useState(false);
+  const [transcript, setTranscript] = useState<string | null>(reel.transcription ?? null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const isErro = reel.status === 'erro';
   const used = reel.status !== 'novo' && !isErro;
   const isAd = reel.sourceType === 'ad';
+  const isImageAd = isAd && reel.displayFormat === 'IMAGE';
+
+  async function handleTranscribe(force = false) {
+    // Se já tenho o texto e não é refazer, só alterna o painel.
+    if (transcript !== null && !force) { setTranscriptOpen((o) => !o); return; }
+    setTranscribing(true);
+    try {
+      const r = await fetch(`${API}/api/john-hulk/reels/${encodeURIComponent(reel.shortCode)}/transcribe${force ? '?force=1' : ''}`, { method: 'POST' });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error || 'falhou');
+      setTranscript(data.transcription || '');
+      setTranscriptOpen(true);
+    } catch (e: any) {
+      toast.error(`Não consegui transcrever: ${e.message}`);
+    } finally {
+      setTranscribing(false);
+    }
+  }
 
   return (
     <div className={`rounded-xl border bg-card overflow-hidden flex flex-col transition-opacity ${isErro ? 'border-red-500/40' : 'border-border'} ${used ? 'opacity-60' : ''}`}>
@@ -404,6 +426,48 @@ function ReelCard({
             <ExternalLink size={10} /> {isAd ? 'ver na Biblioteca de Anúncios' : 'Instagram'}
           </a>
         </div>
+
+        {/* Transcrição do áudio do vídeo */}
+        {isImageAd ? (
+          <div className="text-[10px] text-muted-foreground italic">Anúncio de imagem — sem áudio pra transcrever.</div>
+        ) : (
+          <div>
+            <button
+              onClick={() => handleTranscribe(false)}
+              disabled={transcribing}
+              className="w-full flex items-center justify-center gap-1.5 text-[11px] font-semibold px-2 py-1.5 rounded-lg border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors disabled:opacity-60"
+            >
+              {transcribing ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+              {transcribing ? 'Transcrevendo…' : transcript !== null ? (transcriptOpen ? 'Ocultar transcrição' : 'Ver transcrição') : 'Transcrever vídeo'}
+            </button>
+            {transcriptOpen && transcript !== null && (
+              <div className="mt-1.5 rounded-lg border border-border bg-background/50 p-2">
+                {transcript.trim() ? (
+                  <>
+                    <pre className="whitespace-pre-wrap break-words text-[11px] leading-snug text-foreground max-h-48 overflow-y-auto font-sans">{transcript}</pre>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <button
+                        onClick={() => { navigator.clipboard?.writeText(transcript); toast.success('Transcrição copiada!'); }}
+                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                      >
+                        <Copy size={10} /> copiar
+                      </button>
+                      <button
+                        onClick={() => handleTranscribe(true)}
+                        disabled={transcribing}
+                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      >
+                        <RefreshCw size={10} /> refazer
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-[11px] text-muted-foreground">Sem áudio/fala detectada neste vídeo.</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {isErro ? (
           <button
