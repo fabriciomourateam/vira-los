@@ -10,6 +10,7 @@ import { Layers, Video, MessageCircleQuestion } from 'lucide-react';
 import CarrosselInstagram from './CarrosselInstagram';
 import ReelsGerador from './ReelsGerador';
 import CaixinhasPerguntas from './CaixinhasPerguntas';
+import MiniAgendaCard from './MiniAgendaCard';
 
 type SubTabId = 'basico' | 'reels' | 'caixinhas';
 
@@ -81,11 +82,18 @@ export default function CriarTabs({
         onChange={setSubTab}
       />
       <div style={{ display: subTab === 'basico' ? 'block' : 'none' }}>
-        <CarrosselInstagram
-          prefillScript={prefillScript}
-          prefillTopic={prefillTopic}
-          onGenerateReels={handleGenerateReelsFromCarousel}
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
+          <div className="min-w-0">
+            <CarrosselInstagram
+              prefillScript={prefillScript}
+              prefillTopic={prefillTopic}
+              onGenerateReels={handleGenerateReelsFromCarousel}
+            />
+          </div>
+          <aside className="order-first lg:order-last lg:sticky lg:top-20 self-start">
+            <MiniAgendaCard />
+          </aside>
+        </div>
       </div>
       <div style={{ display: subTab === 'reels' ? 'block' : 'none' }}>
         <ReelsGerador
