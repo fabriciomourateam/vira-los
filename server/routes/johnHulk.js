@@ -69,33 +69,6 @@ router.post('/settings', (req, res) => {
   res.json(settings);
 });
 
-// ── SONDA TEMPORÁRIA: valida actor/input do Apify pra Biblioteca de Anúncios ────
-// Aditivo e inofensivo (só lê). Serve pra descobrir qual actor da Ad Library
-// devolve os anúncios e qual o shape dos dados, sem redeploy (itero o actor/input
-// via CI). Será removida quando a fonte "Anúncios" estiver pronta.
-router.post('/ads/probe', async (req, res) => {
-  const { actor, input } = req.body || {};
-  if (!actor || !input || typeof input !== 'object') {
-    return res.status(400).json({ error: 'Informe { actor, input } (input = objeto).' });
-  }
-  try {
-    const { runApifyActor } = require('../services/reelsAnalyzerService');
-    const items = await runApifyActor(actor, input, 120);
-    const first = Array.isArray(items) && items.length ? items[0] : null;
-    // Corta o sample pra não estourar o log/response.
-    const sample = first ? JSON.parse(JSON.stringify(first)) : null;
-    const sampleStr = sample ? JSON.stringify(sample).slice(0, 4000) : null;
-    res.json({
-      ok: true,
-      count: Array.isArray(items) ? items.length : 0,
-      firstKeys: first ? Object.keys(first) : [],
-      sample: sampleStr,
-    });
-  } catch (e) {
-    res.status(502).json({ ok: false, error: e.message });
-  }
-});
-
 // ── Biblioteca de Reels (Reel Library) ─────────────────────────────────────────
 // 'erro' (item A do plano de melhorias) — reel cuja modelagem falhou (1ª tentativa
 // + retry) 2x seguidas. Se comporta como 'novo' pro guard de "já modelado".
