@@ -4,9 +4,10 @@
  * v1: ver quais DIAS/HORÁRIOS já estão ocupados (inclusive meses à frente), pra
  *     programar sem sobrescrever data/horário. Mês navegável, aviso de conflito <1h.
  * v2 (atalho): clicar num dia abre "Agendar aqui" — escolhe um carrossel salvo, o
- *     horário e quantos dias em sequência (padrão 4 = esse dia + os 3 seguintes), e
- *     agenda o MESMO carrossel nesses dias via POST /api/mlabs/schedule (o mesmo
- *     endpoint do botão Agendar de cada carrossel). Mostra conflito por dia antes.
+ *     horário, quantas repetições e o intervalo em MESES (padrão 4× a cada 3 meses,
+ *     evergreen, igual ao modal do carrossel), e agenda o MESMO carrossel nessas datas
+ *     via POST /api/mlabs/schedule (o mesmo endpoint do botão Agendar de cada
+ *     carrossel). Mostra conflito por data antes.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -66,10 +67,11 @@ function monthWeeks(year: number, month: number): (number | null)[][] {
   return weeks;
 }
 
-// "YYYY-MM-DD" (dia base) + i dias → "YYYY-MM-DDTHH:MM" (mesma hora), respeitando virada de mês.
-function seqDateTime(baseKey: string, addDays: number, time: string): { key: string; dt: string } {
+// "YYYY-MM-DD" (dia base) + addMonths MESES → "YYYY-MM-DDTHH:MM" (mesmo dia/hora),
+// respeitando virada de mês/ano. Evergreen igual ao modal do carrossel (a cada N meses).
+function seqDateTime(baseKey: string, addMonths: number, time: string): { key: string; dt: string } {
   const [y, m, d] = baseKey.split('-').map(Number);
-  const dd = new Date(y, m - 1, d + addDays);
+  const dd = new Date(y, m - 1 + addMonths, d);
   const key = dateKey(dd.getFullYear(), dd.getMonth(), dd.getDate());
   return { key, dt: `${key}T${time}` };
 }
@@ -86,6 +88,7 @@ export default function MiniAgendaCard() {
   const [selCarousel, setSelCarousel] = useState<string>('');
   const [time, setTime] = useState<string>('18:00');
   const [count, setCount] = useState<number>(4);
+  const [intervalMonths, setIntervalMonths] = useState<number>(3);
   const [submitting, setSubmitting] = useState(false);
 
   const loadCalendar = useCallback(() => {
@@ -148,17 +151,18 @@ export default function MiniAgendaCard() {
     return entries.filter((e) => e.date >= floor).length;
   }, [entries, anchor]);
 
-  // Datas-alvo do atalho: dia selecionado + (count-1) dias seguidos, no horário escolhido.
+  // Datas-alvo do atalho: dia selecionado + repetições a cada N meses (evergreen,
+  // igual ao modal do carrossel), no horário escolhido.
   const targets = useMemo(() => {
     if (!selected) return [];
     return Array.from({ length: count }, (_, i) => {
-      const { key, dt } = seqDateTime(selected, i, time);
+      const { key, dt } = seqDateTime(selected, i * intervalMonths, time);
       const dayItems = byDate.get(key) || [];
       const clash = dayItems.some((e) => Math.abs(toMin(e.time) - toMin(time)) < 60);
       const past = `${key}T${time}` < `${todayKey}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
       return { key, dt, clash, past };
     });
-  }, [selected, count, time, byDate, todayKey, now]);
+  }, [selected, count, intervalMonths, time, byDate, todayKey, now]);
 
   function shiftMonth(delta: number) {
     setAnchor((a) => { const d = new Date(a.y, a.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -167,7 +171,7 @@ export default function MiniAgendaCard() {
 
   async function agendar() {
     if (!selCarousel) { toast.error('Escolhe um carrossel primeiro.'); return; }
-    const dates = targets.filter((t) => !t.past).map((t) => t.dt);
+    const dates = [...new Set(targets.filter((t) => !t.past).map((t) => t.dt))]; // dedupe (ex.: intervalo 0)
     if (!dates.length) { toast.error('Todas as datas escolhidas já passaram.'); return; }
     const cur = carousels.find((c) => c.id === selCarousel);
     setSubmitting(true);
@@ -179,7 +183,7 @@ export default function MiniAgendaCard() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || 'falhou');
-      toast.success(`Agendado em ${dates.length} dia(s)!`);
+      toast.success(`Agendado em ${dates.length} data(s)!`);
       await loadCalendar();
     } catch (e: any) {
       toast.error(`Não consegui agendar: ${e.message}`);
@@ -310,13 +314,20 @@ export default function MiniAgendaCard() {
                         <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
                           className="w-full text-[12px] rounded-lg border border-border bg-card px-2 py-1.5 text-foreground tabular-nums" />
                       </div>
-                      <div className="w-[92px]">
-                        <label className="text-[10px] text-muted-foreground">Dias seguidos</label>
-                        <input type="number" min={1} max={14} value={count}
-                          onChange={(e) => setCount(Math.max(1, Math.min(14, Number(e.target.value) || 1)))}
+                      <div className="w-[84px]">
+                        <label className="text-[10px] text-muted-foreground">Repetições</label>
+                        <input type="number" min={1} max={12} value={count}
+                          onChange={(e) => setCount(Math.max(1, Math.min(12, Number(e.target.value) || 1)))}
                           className="w-full text-[12px] rounded-lg border border-border bg-card px-2 py-1.5 text-foreground tabular-nums" />
                       </div>
                     </div>
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      Replicar a cada
+                      <input type="number" min={0} max={12} value={intervalMonths}
+                        onChange={(e) => setIntervalMonths(Math.max(0, Math.min(12, Number(e.target.value) || 0)))}
+                        className="w-[52px] text-[12px] rounded-lg border border-border bg-card px-2 py-1 text-foreground tabular-nums text-center" />
+                      meses {intervalMonths === 0 && <span className="text-amber-600 dark:text-amber-400">(mesmo dia)</span>}
+                    </label>
 
                     {/* Preview das datas-alvo com aviso de conflito */}
                     <div className="flex flex-col gap-0.5">
@@ -324,7 +335,7 @@ export default function MiniAgendaCard() {
                         const [ty, tm, td] = t.key.split('-').map(Number);
                         return (
                           <div key={t.key} className={`flex items-center gap-1.5 text-[11px] ${t.past ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
-                            <span className="tabular-nums">{td}/{pad(tm)} {time}</span>
+                            <span className="tabular-nums">{td}/{pad(tm)}/{ty} {time}</span>
                             {t.past && <span className="text-[9px] text-muted-foreground">(passou)</span>}
                             {!t.past && t.clash && <span className="text-red-500 text-[10px] font-semibold flex items-center gap-0.5"><AlertTriangle size={9} /> colide</span>}
                             {!t.past && !t.clash && <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">livre</span>}
@@ -342,9 +353,9 @@ export default function MiniAgendaCard() {
                       className="mt-0.5 w-full flex items-center justify-center gap-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-bold py-2 disabled:opacity-60 hover:opacity-90 transition-opacity"
                     >
                       {submitting ? <Loader2 size={13} className="animate-spin" /> : <CalendarPlus size={13} />}
-                      Agendar em {targets.filter((t) => !t.past).length} dia(s)
+                      Agendar em {new Set(targets.filter((t) => !t.past).map((t) => t.dt)).size} data(s)
                     </button>
-                    <div className="text-[9px] text-muted-foreground leading-tight">Agenda o MESMO carrossel nesses dias, direto no mLabs (igual ao botão Agendar do carrossel).</div>
+                    <div className="text-[9px] text-muted-foreground leading-tight">Agenda o MESMO carrossel nessas datas (evergreen, a cada {intervalMonths} {intervalMonths === 1 ? 'mês' : 'meses'}), direto no mLabs — igual ao botão Agendar do carrossel.</div>
                   </>
                 )}
               </div>
