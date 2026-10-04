@@ -1050,11 +1050,15 @@ function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bo
 //   - Progress bar .prog no rodapé de todos os slides
 //   - Sem swipe hint
 //
-function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 42, contextSize = 64, coverColors = {} }) {
+function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 42, contextSize = 64, coverColors = {}, format = '4:5' }) {
+  // format '1:1' (quadrado 1080x1080) recalibra a altura e os valores verticais
+  // (imagem, fontes, espaçamentos) pra caber sem estourar — MESMO estilo visual.
+  const SQ = format === '1:1';
+  const H  = SQ ? 1080 : 1350;
   const P  = primaryColor || '#FFC300';
-  const HS = Number(headlineSize) || 114;
-  const BS = Number(bodySize)    || 42;
-  const CS = Number(contextSize) || 64;
+  const HS = SQ ? Math.round((Number(headlineSize) || 114) * 0.86) : (Number(headlineSize) || 114);
+  const BS = SQ ? Math.round((Number(bodySize) || 42) * 0.90)      : (Number(bodySize) || 42);
+  const CS = SQ ? Math.round((Number(contextSize) || 64) * 0.86)   : (Number(contextSize) || 64);
   // Cores customizáveis dos textos da capa (vazio = default da identidade fmteam).
   // Os <em> internos mantêm o gradiente dourado — só a cor base do texto muda.
   const headlineColor = (coverColors.headlineColor || '').trim() || '#fff';
@@ -1087,7 +1091,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── SLIDE BASE ── */
     .slide {
-      width:1080px; height:1350px;
+      width:1080px; height:${H}px;
       position:relative; overflow:hidden; flex-shrink:0;
       font-family:var(--F-BODY);
       page-break-after:always;
@@ -1106,7 +1110,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     /* ── BRAND BAR ── */
     .brand-bar {
       position:absolute; top:7px; left:0; right:0;
-      padding:28px 56px 0;
+      padding:${SQ ? '22px 56px 0' : '28px 56px 0'};
       display:flex; justify-content:space-between; align-items:center;
       z-index:20; font-family:var(--F-BODY);
       font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
@@ -1118,7 +1122,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     /* ── PROGRESS BAR ── */
     .prog {
       position:absolute; bottom:0; left:0; right:0;
-      padding:0 56px 28px; z-index:20;
+      padding:${SQ ? '0 56px 22px' : '0 56px 28px'}; z-index:20;
       display:flex; align-items:center; gap:16px;
     }
     .prog-track { flex:1; height:3px; border-radius:2px; overflow:hidden; }
@@ -1136,8 +1140,8 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── TAG ── */
     .tag {
-      font-family:var(--F-BODY); font-size:26px; font-weight:900;
-      letter-spacing:3px; text-transform:uppercase; margin-bottom:20px;
+      font-family:var(--F-BODY); font-size:${SQ ? 22 : 26}px; font-weight:900;
+      letter-spacing:3px; text-transform:uppercase; margin-bottom:${SQ ? 14 : 20}px;
     }
     .on-dark  .tag { color:var(--PL); }
     .on-light .tag { color:var(--PD); }
@@ -1145,15 +1149,15 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── CONTENT AREA ── */
     .content {
-      position:absolute; top:110px; left:56px; right:56px; bottom:80px;
+      position:absolute; top:${SQ ? 92 : 110}px; left:56px; right:56px; bottom:${SQ ? 70 : 80}px;
       display:flex; flex-direction:column; justify-content:flex-end;
-      padding-bottom:36px; z-index:10;
+      padding-bottom:${SQ ? 24 : 36}px; z-index:10;
     }
     /* Light e gradient slides: conteúdo flui de cima para baixo */
     .slide-light .content,
     .slide-grad  .content {
       justify-content:flex-start;
-      padding-top:20px;
+      padding-top:${SQ ? 12 : 20}px;
     }
 
     /* ── FOTO DE FUNDO (dark full-bleed) ── */
@@ -1186,8 +1190,8 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── IMG BOX (light e gradient slides) ── */
     .img-box-top {
-      width:100%; height:300px; border-radius:18px;
-      overflow:hidden; margin-bottom:24px; flex-shrink:0;
+      width:100%; height:${SQ ? 208 : 300}px; border-radius:18px;
+      overflow:hidden; margin-bottom:${SQ ? 18 : 24}px; flex-shrink:0;
       position:relative; /* necessário para overlay de brightness posicionar-se corretamente */
     }
     .img-box-top img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -1198,7 +1202,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     .dark-h1 {
       font-family:var(--F-HEAD); font-size:${HS}px; font-weight:800;
       line-height:0.90; letter-spacing:-4px; text-transform:uppercase;
-      color:#fff; margin-bottom:28px;
+      color:#fff; margin-bottom:${SQ ? 20 : 28}px;
     }
     .dark-h1 em {
       font-style:normal;
@@ -1218,7 +1222,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     .light-h1 {
       font-family:var(--F-HEAD); font-size:${Math.max(60, HS - 6)}px; font-weight:800;
       line-height:0.90; letter-spacing:-4px; text-transform:uppercase;
-      color:var(--DB); margin-bottom:22px;
+      color:var(--DB); margin-bottom:${SQ ? 16 : 22}px;
     }
     .light-h1 em {
       font-style:normal;
@@ -1242,25 +1246,25 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── STAT ROWS ── */
     .stat-row {
-      display:flex; align-items:stretch; margin-bottom:18px;
+      display:flex; align-items:stretch; margin-bottom:${SQ ? 12 : 18}px;
       background:#fff; border-radius:16px; overflow:hidden;
       border:1.5px solid var(--LR);
       box-shadow:0 2px 12px rgba(184,134,11,0.08);
     }
     .stat-num {
       background:var(--G); color:#0D0D0F;
-      font-family:var(--F-HEAD); font-size:48px; font-weight:900;
-      padding:16px 20px; min-width:140px; flex-shrink:0;
+      font-family:var(--F-HEAD); font-size:${SQ ? 40 : 48}px; font-weight:900;
+      padding:16px 20px; min-width:${SQ ? 118 : 140}px; flex-shrink:0;
       display:flex; align-items:center; justify-content:center;
       text-align:center; line-height:1.2; letter-spacing:-0.5px;
     }
-    .stat-content { padding:20px 24px; display:flex; flex-direction:column; justify-content:center; }
-    .stat-title { font-family:var(--F-BODY); font-size:30px; font-weight:800; color:var(--DB); margin-bottom:8px; line-height:1.25; }
-    .stat-desc  { font-family:var(--F-BODY); font-size:24px; font-weight:400; color:rgba(15,13,8,0.62); line-height:1.4; }
+    .stat-content { padding:${SQ ? '14px 22px' : '20px 24px'}; display:flex; flex-direction:column; justify-content:center; }
+    .stat-title { font-family:var(--F-BODY); font-size:${SQ ? 26 : 30}px; font-weight:800; color:var(--DB); margin-bottom:${SQ ? 6 : 8}px; line-height:1.25; }
+    .stat-desc  { font-family:var(--F-BODY); font-size:${SQ ? 22 : 24}px; font-weight:400; color:rgba(15,13,8,0.62); line-height:1.4; }
 
     /* ── CAPA HEADLINE ── */
     .capa-headline-area {
-      position:absolute; bottom:70px; left:0; right:0;
+      position:absolute; bottom:${SQ ? 54 : 70}px; left:0; right:0;
       padding:0 52px; z-index:10;
     }
     .capa-headline {
@@ -1300,7 +1304,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     }
 
     /* ── BADGE DA CAPA ── */
-    .capa-badge { display:flex; align-items:center; gap:18px; width:fit-content; margin-bottom:28px; }
+    .capa-badge { display:flex; align-items:center; gap:18px; width:fit-content; margin-bottom:${SQ ? 18 : 28}px; }
     .badge-ring {
       width:88px; height:88px; flex-shrink:0; border-radius:50%;
       background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
@@ -1321,22 +1325,22 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── CTA SLIDE ── */
     .cta-bridge {
-      font-family:var(--F-BODY); font-size:32px; font-weight:500;
-      line-height:1.5; color:rgba(15,13,8,0.50); margin-bottom:28px;
+      font-family:var(--F-BODY); font-size:${SQ ? 28 : 32}px; font-weight:500;
+      line-height:1.5; color:rgba(15,13,8,0.50); margin-bottom:${SQ ? 20 : 28}px;
     }
     .cta-bridge strong { color:var(--DB); font-weight:800; }
     .cta-kbox {
       background:#fff; border:2px solid rgba(184,134,11,0.20);
-      border-radius:20px; padding:32px 40px; margin-bottom:22px;
+      border-radius:20px; padding:${SQ ? '24px 36px' : '32px 40px'}; margin-bottom:${SQ ? 16 : 22}px;
       box-shadow:0 2px 16px rgba(184,134,11,0.10);
     }
     .cta-kbox-label {
-      font-family:var(--F-BODY); font-size:30px; font-weight:500;
+      font-family:var(--F-BODY); font-size:${SQ ? 26 : 30}px; font-weight:500;
       letter-spacing:4px; text-transform:uppercase; color:rgba(15,13,8,0.35);
       margin-bottom:12px; text-align:center;
     }
     .cta-kbox-keyword {
-      font-family:var(--F-HEAD); font-size:110px; font-weight:900;
+      font-family:var(--F-HEAD); font-size:${SQ ? 90 : 110}px; font-weight:900;
       letter-spacing:-4px; line-height:0.90; text-align:center;
       text-transform:uppercase;
       background:var(--G);
@@ -1348,11 +1352,11 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
       background:linear-gradient(to right, transparent, rgba(184,134,11,0.45) 30%, rgba(184,134,11,0.45) 70%, transparent);
     }
     .cta-kbox-benefit {
-      font-family:var(--F-BODY); font-size:26px; font-weight:500;
+      font-family:var(--F-BODY); font-size:${SQ ? 24 : 26}px; font-weight:500;
       color:rgba(15,13,8,0.55); text-align:center;
     }
     .cta-kbox-sub {
-      font-family:var(--F-BODY); font-size:21px; font-weight:400;
+      font-family:var(--F-BODY); font-size:${SQ ? 19 : 21}px; font-weight:400;
       font-style:italic; color:rgba(15,13,8,0.38); text-align:center; margin-top:8px;
     }
     .cta-footer-badge {
@@ -1398,8 +1402,8 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
 
     /* ── ARROW ROWS (listas de pontos no gradient/dark) ── */
     .arrow-row {
-      display:flex; align-items:flex-start; gap:16px; padding:8px 0;
-      font-family:var(--F-BODY); font-size:36px; line-height:1.4;
+      display:flex; align-items:flex-start; gap:16px; padding:${SQ ? '6px 0' : '8px 0'};
+      font-family:var(--F-BODY); font-size:${SQ ? 32 : 36}px; line-height:1.4;
     }
     .arrow-icon { font-weight:800; flex-shrink:0; margin-top:4px; line-height:1; }
     .on-dark  .arrow-icon { color:var(--PL); }
@@ -1417,7 +1421,7 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     /* ── NÚMERO DECORATIVO DE FUNDO (slide gradient) ── */
     .grad-num {
       position:absolute; right:-10px; bottom:30px;
-      font-family:var(--F-HEAD); font-size:400px; font-weight:900;
+      font-family:var(--F-HEAD); font-size:${SQ ? 300 : 400}px; font-weight:900;
       line-height:1; color:rgba(15,13,8,0.06); user-select:none;
       pointer-events:none; z-index:0;
     }
@@ -2882,12 +2886,12 @@ Retorne apenas o <div> externo com novo conteúdo:`;
  *  - Single pass: todos os slides visíveis, tira screenshot por bounding box
  *    de cada elemento (Playwright .screenshot() em locator)
  */
-async function takeScreenshotsPixelPerfect(html, outputDir) {
+async function takeScreenshotsPixelPerfect(html, outputDir, format = '4:5') {
   const browser = await getBrowser();
   if (!browser) throw new Error('Playwright não disponível neste server');
 
   const context = await browser.newContext({
-    viewport: { width: 1080, height: 1350 },
+    viewport: { width: 1080, height: format === '1:1' ? 1080 : 1350 },
     deviceScaleFactor: 2,  // retina-quality (2160x2700 internamente)
   });
   const page = await context.newPage();

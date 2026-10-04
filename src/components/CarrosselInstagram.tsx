@@ -6,7 +6,7 @@ import {
   Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Palette, Type, Hash, Layers, Mic2, Copy, CopyPlus, Check, FileText, Image, Search,
   Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
-  Archive, ArchiveRestore, Save, X, Code2, Video, CalendarClock,
+  Archive, ArchiveRestore, Save, X, Code2, Video, CalendarClock, Square,
 } from 'lucide-react';
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 import PromptTemplateModal from './PromptTemplateModal';
@@ -33,6 +33,7 @@ interface CarouselConfig {
   dominantEmotion: string;
   roteiro: string;
   layoutStyle: 'editorial' | 'clean' | 'fmteam';
+  format?: '4:5' | '1:1';
   titleFontSize: number;       // 0 = auto, otherwise px
   bodyFontSize: number;        // 0 = auto, otherwise px
   bannerFontSize: number;      // 0 = auto, otherwise px
@@ -833,6 +834,22 @@ ${stats ? `- Stats: ${stats}` : ''}
   }
 
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [squaringId, setSquaringId] = useState<string | null>(null);
+  async function handleRenderSquare(saved: SavedCarousel) {
+    setSquaringId(saved.id);
+    try {
+      const res = await fetch(`${API}/api/carousel/saved/${saved.id}/render-square`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falhou');
+      toast.success('Versão quadrada criada!');
+      const list = await fetch(`${API}/api/carousel/saved`).then(r => r.json()).catch(() => null);
+      if (Array.isArray(list)) setSavedCarousels(list);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falhou');
+    } finally {
+      setSquaringId(null);
+    }
+  }
   async function handleDuplicate(saved: SavedCarousel) {
     setDuplicatingId(saved.id);
     try {
@@ -909,6 +926,11 @@ ${stats ? `- Stats: ${stats}` : ''}
               <button onClick={() => handleDuplicate(saved)} disabled={duplicatingId === saved.id} className="p-1.5 rounded text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50" title="Duplicar (cópia editável)">
                 {duplicatingId === saved.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CopyPlus className="w-4 h-4" />}
               </button>
+              {saved.config?.format !== '1:1' && (!saved.config?.layoutStyle || saved.config.layoutStyle === 'fmteam') && (
+                <button onClick={() => handleRenderSquare(saved)} disabled={squaringId === saved.id} className="p-1.5 rounded text-muted-foreground hover:text-amber-400 transition-colors disabled:opacity-50" title="Gerar versão quadrada (1:1)">
+                  {squaringId === saved.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
+                </button>
+              )}
               {!saved.archived && (
                 <button onClick={() => handleEditSaved(saved)} className={`p-1.5 rounded transition-colors ${editingSaved?.id === saved.id ? 'text-purple-400 bg-purple-500/10' : 'text-muted-foreground hover:text-purple-400'}`} title="Editar"><Edit3 className="w-4 h-4" /></button>
               )}
