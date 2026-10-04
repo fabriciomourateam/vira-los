@@ -965,12 +965,12 @@ export async function downloadAsJpeg(imageUrl: string, filename: string): Promis
 
 // ─── Miniatura de slide ───────────────────────────────────────────────────────
 
-function SlideThumbnail({ slideHtml, head, index, selected, onClick, horizontal }: {
-  slideHtml: string; head: string; index: number; selected: boolean; onClick: () => void; horizontal?: boolean;
+function SlideThumbnail({ slideHtml, head, index, selected, onClick, horizontal, slideH = 1350 }: {
+  slideHtml: string; head: string; index: number; selected: boolean; onClick: () => void; horizontal?: boolean; slideH?: number;
 }) {
   const THUMB_W = horizontal ? 80 : 120;
   const scale = THUMB_W / 1080;
-  const thumbH = Math.round(1350 * scale);
+  const thumbH = Math.round(slideH * scale);
   const srcDoc = `<!DOCTYPE html><html><head>${head}${ALL_FONTS_LINK}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
   return (
     <button type="button" onClick={onClick}
@@ -980,7 +980,7 @@ function SlideThumbnail({ slideHtml, head, index, selected, onClick, horizontal 
       style={{ width: THUMB_W, height: thumbH }}
     >
       <iframe srcDoc={srcDoc} sandbox="allow-scripts allow-same-origin"
-        style={{ width: 1080, height: 1350, border: 'none',
+        style={{ width: 1080, height: slideH, border: 'none',
           transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }}
         title={`Slide ${index + 1}`}
       />
@@ -993,7 +993,7 @@ function SlideThumbnail({ slideHtml, head, index, selected, onClick, horizontal 
 
 // ─── Preview estático ─────────────────────────────────────────────────────────
 
-function SlidePreview({ slideHtml, head }: { slideHtml: string; head: string }) {
+function SlidePreview({ slideHtml, head, slideH = 1350 }: { slideHtml: string; head: string; slideH?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(280);
 
@@ -1012,14 +1012,14 @@ function SlidePreview({ slideHtml, head }: { slideHtml: string; head: string }) 
 
   const PREVIEW_W = containerW;
   const scale = PREVIEW_W / 1080;
-  const previewH = Math.round(1350 * scale);
+  const previewH = Math.round(slideH * scale);
   const srcDoc = `<!DOCTYPE html><html><head>${head}${ALL_FONTS_LINK}</head><body style="margin:0;padding:0;overflow:hidden;">${slideHtml}</body></html>`;
   return (
     <div ref={containerRef} className="w-full">
     <div className="rounded-xl overflow-hidden border border-border shadow-lg mx-auto"
       style={{ width: PREVIEW_W, height: previewH }}>
       <iframe srcDoc={srcDoc} sandbox="allow-scripts allow-same-origin"
-        style={{ width: 1080, height: 1350, border: 'none',
+        style={{ width: 1080, height: slideH, border: 'none',
           transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }}
         title="Preview"
       />
@@ -1408,13 +1408,14 @@ function buildDragScript(displayScale: number): string {
 </script>`;
 }
 
-function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited, selectedIndex, globalFont }: {
+function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited, selectedIndex, globalFont, slideH = 1350 }: {
   slideHtml: string;
   head: string;
   onElementMoved: (data: { selector: string; elemIdx?: number; mode: string; left?: string; top?: string; transform?: string; ctIdx?: string | null; width?: string; height?: string; bgPosition?: string }) => void;
   onTextEdited: (selector: string, innerHTML: string) => void;
   selectedIndex: number;
   globalFont?: string;
+  slideH?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -1434,7 +1435,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited
   }, []);
 
   const scale = displayW / 1080;
-  const displayH = Math.round(1350 * scale);
+  const displayH = Math.round(slideH * scale);
   const dragScript = buildDragScript(scale);
   const fontOverride = globalFont
     ? `<style>*:not(.verified-badge):not(.verified-badge *){font-family:'${globalFont}',sans-serif!important}</style>`
@@ -1484,7 +1485,7 @@ function InteractiveSlidePreview({ slideHtml, head, onElementMoved, onTextEdited
           key={`${selectedIndex}-${slideHtml.length}`}
           srcDoc={srcDoc}
           sandbox="allow-scripts allow-same-origin"
-          style={{ width: 1080, height: 1350, border: 'none',
+          style={{ width: 1080, height: slideH, border: 'none',
             transform: `scale(${scale})`, transformOrigin: 'top left',
             pointerEvents: 'auto', cursor: 'default' }}
           title="Editor visual"
@@ -1658,6 +1659,8 @@ export default function CarouselEditor({
   html, folderName, topic, numSlides, legenda, config,
   onScreenshotsUpdated, onTemplateSaved, onHtmlUpdated,
 }: CarouselEditorProps) {
+  // Altura do slide no editor: 1080 pra carrossel quadrado (1:1), senão 1350 (4:5).
+  const slideH = (config as any)?.format === '1:1' ? 1080 : 1350;
   const [head, setHead] = useState('');
   const [globalFont, setGlobalFont] = useState<string>('');
   const [slides, setSlides] = useState<EditableSlide[]>([]);
@@ -2467,7 +2470,7 @@ export default function CarouselEditor({
   function addNewSlide() {
     const bgColor = (config as any)?.bgColor || '#1a1a1a';
     const primaryColor = (config as any)?.primaryColor || '#B078FF';
-    const newOuterHtml = `<div class="slide-editorial" style="position:relative;width:1080px;height:1350px;background:${bgColor};overflow:hidden;font-family:'Raleway',sans-serif;">
+    const newOuterHtml = `<div class="slide-editorial" style="position:relative;width:1080px;height:${slideH}px;background:${bgColor};overflow:hidden;font-family:'Raleway',sans-serif;">
   <div class="overlay" style="position:absolute;inset:0;z-index:1;background:linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,rgba(0,0,0,0.6) 100%);"></div>
   <div class="custom-text" style="position:absolute;z-index:10;top:100px;left:60px;right:60px;font-size:36px;color:#ffffff;text-align:center;">Novo slide — edite o texto</div>
   <div class="slide-footer" style="position:absolute;bottom:30px;left:0;right:0;z-index:10;display:flex;align-items:center;justify-content:center;gap:8px;">
@@ -2937,7 +2940,7 @@ export default function CarouselEditor({
         body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
       // Gera screenshots no cliente e faz upload slide-a-slide
-      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
+      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName, undefined, slideH);
       onScreenshotsUpdated(screenshots);
       for (let i = 0; i < screenshots.length; i++) {
         const url = `${API}/output/${folderName}/${screenshots[i]}`;
@@ -3063,7 +3066,7 @@ export default function CarouselEditor({
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ html: modifiedHtml, folderName }),
     });
-    const screenshots = await generateAndSaveScreenshotsHiFi(API, modifiedHtml, folderName);
+    const screenshots = await generateAndSaveScreenshotsHiFi(API, modifiedHtml, folderName, undefined, slideH);
     if (!screenshots.length) {
       throw new Error('Nenhum screenshot foi gerado — verifique o console para erros do html2canvas');
     }
@@ -3176,7 +3179,7 @@ export default function CarouselEditor({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
-      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName);
+      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName, undefined, slideH);
       onScreenshotsUpdated(screenshots);
       toast.success(`${screenshots.length} screenshots atualizados!`);
     } catch (err: any) { toast.error(err.message); }
@@ -3203,7 +3206,7 @@ export default function CarouselEditor({
       toast.success(`Modelo "${name}" salvo! Gerando capa…`);
 
       try {
-        const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, data.folderName);
+        const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, data.folderName, undefined, slideH);
         await fetch(`${API}/api/carousel/saved/${data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -3245,7 +3248,7 @@ export default function CarouselEditor({
 
       // 2. Screenshots em segundo plano — não bloqueia o botão
       setThumbLoading(true);
-      generateAndSaveScreenshots(API, modifiedHtml, folderName)
+      generateAndSaveScreenshots(API, modifiedHtml, folderName, undefined, slideH)
         .then(screenshots => {
           if (screenshots.length) onScreenshotsUpdated(screenshots);
           toast.success('Miniaturas atualizadas!');
@@ -3508,6 +3511,7 @@ export default function CarouselEditor({
                 index={listIdx} selected={selectedIndex === listIdx}
                 onClick={() => setSelectedIndex(listIdx)}
                 horizontal
+                slideH={slideH}
               />
             ))}
           </div>
@@ -3571,6 +3575,7 @@ export default function CarouselEditor({
                   slideHtml={liveSlideHtml(listIdx)} head={head}
                   index={listIdx} selected={selectedIndex === listIdx}
                   onClick={() => setSelectedIndex(listIdx)}
+                  slideH={slideH}
                 />
               </div>
             ))}
@@ -3713,7 +3718,7 @@ export default function CarouselEditor({
                         </div>
                       </div>
                       <div className="flex-1 flex items-start justify-center px-3 py-4 overflow-hidden">
-                        <SlidePreview slideHtml={liveSlideHtml(selectedIndex)} head={head} />
+                        <SlidePreview slideHtml={liveSlideHtml(selectedIndex)} head={head} slideH={slideH} />
                       </div>
                     </div>
 
@@ -4931,6 +4936,7 @@ export default function CarouselEditor({
                       onTextEdited={handleInlineTextEdit}
                       selectedIndex={selectedIndex}
                       globalFont={globalFont || undefined}
+                      slideH={slideH}
                     />
 
                     {/* Mostrar overrides aplicados */}
