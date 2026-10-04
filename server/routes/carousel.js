@@ -370,6 +370,77 @@ router.post('/saved/:id/duplicate', (req, res) => {
   }
 });
 
+// ─── Gerar versão QUADRADA (1:1) de um carrossel salvo (gêmeo, sem IA) ────────
+// Reusa o MESMO HTML: troca o CSS fmteam pelo calibrado 1080x1080, ajusta as
+// alturas inline das imagens e cria pasta + registro NOVOS (original intacto).
+router.post('/saved/:id/render-square', async (req, res) => {
+  try {
+    const src = db.getAllCarousels().find((c) => c.id === req.params.id);
+    if (!src) return res.status(404).json({ error: 'Carrossel não encontrado.' });
+    if (src.config?.layoutStyle && src.config.layoutStyle !== 'fmteam') {
+      return res.status(400).json({ error: 'Por enquanto só carrosséis do layout fmteam podem virar quadrado.' });
+    }
+    if (src.config?.format === '1:1') {
+      return res.status(400).json({ error: 'Esse carrossel já é quadrado.' });
+    }
+    if (!src.folderName || !isSafeFolderName(src.folderName)) {
+      return res.status(400).json({ error: 'Pasta do carrossel inválida.' });
+    }
+    const srcPath = path.join(OUTPUT_DIR, src.folderName);
+    const htmlFile = path.join(srcPath, 'carrossel.html');
+    if (!fs.existsSync(htmlFile)) return res.status(404).json({ error: 'HTML do carrossel não encontrado.' });
+
+    let updated = fs.readFileSync(htmlFile, 'utf8');
+    // Mesmo strip + inject do /re-apply-fmteam-css, agora com format '1:1'
+    updated = updated.replace(/<style[\s\S]*?<\/style>/gi, '');
+    updated = updated.replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, '');
+    const fs_ = src.config?.fmteamFontSizes || {};
+    const fmteamCss = buildFmteamCSSTemplate({
+      primaryColor: '#FFC300', // igual ao generate/re-apply: gold fmteam fixo
+      headlineSize: fs_.headlineSize,
+      bodySize:     fs_.bodySize,
+      contextSize:  fs_.contextSize,
+      coverColors:  src.config?.fmteamCover || {},
+      format: '1:1',
+    });
+    if (updated.includes('</head>')) {
+      updated = updated.replace('</head>', `${fmteamCss}\n</head>`);
+    } else {
+      updated = `${fmteamCss}\n${updated}`;
+    }
+    // Alturas inline de imagem pro quadrado (300 -> 208, 380 -> 300)
+    updated = updated.replace(/height:\s*300px/g, 'height:208px');
+    updated = updated.replace(/height:\s*380px/g, 'height:300px');
+
+    const newFolder = `${src.folderName}-sq-${Date.now()}`;
+    const newPath = path.join(OUTPUT_DIR, newFolder);
+    fs.mkdirSync(newPath, { recursive: true });
+    fs.writeFileSync(path.join(newPath, 'carrossel.html'), updated, 'utf8');
+    const legendaSrc = path.join(srcPath, 'legenda.txt');
+    if (fs.existsSync(legendaSrc)) fs.copyFileSync(legendaSrc, path.join(newPath, 'legenda.txt'));
+
+    const newId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    db.saveCarousel({
+      id: newId,
+      topic: `${src.topic || 'Carrossel'} (quadrado)`,
+      folderName: newFolder,
+      numSlides: src.numSlides || 0,
+      screenshots: [],
+      legenda: src.legenda || '',
+      config: { ...(src.config || {}), format: '1:1' },
+      isTemplate: false,
+      done: true,
+    });
+
+    const screenshots = await takeScreenshotsPixelPerfect(updated, newPath, '1:1');
+    db.updateCarousel(newId, { screenshots });
+    res.json({ ok: true, id: newId, folderName: newFolder, screenshots });
+  } catch (e) {
+    console.error('[render-square]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Diagnóstico de variáveis e conectividade ────────────────────────────────
 
 router.get('/check', async (req, res) => {
