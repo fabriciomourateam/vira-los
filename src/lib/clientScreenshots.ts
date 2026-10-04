@@ -403,6 +403,7 @@ export async function generateAndSaveScreenshots(
   html: string,
   folderName: string,
   onProgress?: (done: number, total: number) => void,
+  height: number = 1350, // 1080 pra carrossel quadrado (1:1)
 ): Promise<string[]> {
   const { default: html2canvas } = await import('html2canvas-pro');
 
@@ -446,7 +447,7 @@ export async function generateAndSaveScreenshots(
 
   const container = document.createElement('div');
   container.style.cssText =
-    'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;overflow:hidden;z-index:-1;';
+    `position:fixed;top:-9999px;left:-9999px;width:1080px;height:${height}px;overflow:hidden;z-index:-1;`;
   document.body.appendChild(container);
 
   const savedFiles: string[] = [];
@@ -461,7 +462,7 @@ export async function generateAndSaveScreenshots(
       container.appendChild(slides[i].cloneNode(true));
       const slide = container.firstElementChild as HTMLElement;
       slide.style.width    = '1080px';
-      slide.style.height   = '1350px';
+      slide.style.height   = `${height}px`;
       slide.style.overflow = 'hidden';
       slide.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.remove());
 
@@ -516,7 +517,7 @@ export async function generateAndSaveScreenshots(
       let dataUrl: string;
       try {
         const canvas = await html2canvas(slide, {
-          width: 1080, height: 1350,
+          width: 1080, height,
           useCORS: true, allowTaint: false,
           backgroundColor: null, logging: false,
           imageTimeout: 15000,
@@ -565,6 +566,7 @@ export async function generateAndSaveScreenshotsHiFi(
   html: string,
   folderName: string,
   onProgress?: (done: number, total: number) => void,
+  height: number = 1350, // 1080 pra carrossel quadrado (1:1)
 ): Promise<string[]> {
   const { default: html2canvas } = await import('html2canvas-pro');
 
@@ -635,7 +637,7 @@ export async function generateAndSaveScreenshotsHiFi(
   for (let i = 0; i < slides.length; i++) {
     const iframe = document.createElement('iframe');
     iframe.style.cssText =
-      'position:fixed;top:-9999px;left:-9999px;width:1080px;height:1350px;border:0;';
+      `position:fixed;top:-9999px;left:-9999px;width:1080px;height:${height}px;border:0;`;
     iframe.src = 'about:blank';
     document.body.appendChild(iframe);
 
@@ -652,7 +654,7 @@ export async function generateAndSaveScreenshotsHiFi(
       }
 
       // open/write/close preserva o Document object e a Window do iframe.
-      const iframeHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">${headHtml}<style>html,body{margin:0;padding:0;width:1080px;height:1350px;overflow:hidden;background:transparent}</style></head><body>${slides[i].outerHTML}</body></html>`;
+      const iframeHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">${headHtml}<style>html,body{margin:0;padding:0;width:1080px;height:${height}px;overflow:hidden;background:transparent}</style></head><body>${slides[i].outerHTML}</body></html>`;
       idoc.open();
       idoc.write(iframeHtml);
       idoc.close();
@@ -851,14 +853,14 @@ export async function generateAndSaveScreenshotsHiFi(
       try {
         const canvas = await html2canvas(idoc.body as HTMLElement, {
           width: 1080,
-          height: 1350,
+          height,
           useCORS: true,
           allowTaint: true,
           backgroundColor: null,
           logging: false,
           imageTimeout: 10000,
           windowWidth: 1080,
-          windowHeight: 1350,
+          windowHeight: height,
           scale: 1,
           // Manual rendering (sem foreignObject): respeita Google Fonts (o modo
           // foreignObject carrega o DOM como SVG image, o que bloqueia fontes
