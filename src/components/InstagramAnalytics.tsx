@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import {
   Instagram, RefreshCw, Loader2, Zap, TrendingUp, BarChart3,
@@ -437,6 +437,294 @@ function CollapseHeader({
         className={`transition-transform ${open ? '' : '-rotate-90'}`}
       />
     </button>
+  );
+}
+
+// ── Raio-X: o que focar ───────────────────────────────────────────────────────
+// Rankings e comparativos calculados sobre os posts já carregados (sem fetch novo).
+type RaioXPeriod = 90 | 365 | 0;
+type RaioXTab = 'reelViews' | 'reelShares' | 'carViews' | 'carFollows';
+
+interface GroupStats {
+  count: number;
+  medViews: number;
+  avgViews: number;
+  pctHigh: number;
+  pctDead: number;
+  avgShares: number;
+  avgSaves: number;
+  avgEng: number;
+  sumFollows: number;
+  avgFollows: number;
+}
+
+const nf = (n: number, digits = 0) =>
+  n.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+function median(arr: number[]): number {
+  if (arr.length === 0) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+function mean(arr: number[]): number {
+  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+}
+
+function groupStats(list: IGPost[]): GroupStats {
+  const n = list.length;
+  const views = list.map((p) => p.views || 0);
+  const follows = list.map((p) => p.follows || 0);
+  return {
+    count: n,
+    medViews: median(views),
+    avgViews: mean(views),
+    pctHigh: n ? (views.filter((v) => v >= 10000).length / n) * 100 : 0,
+    pctDead: n ? (views.filter((v) => v < 1500).length / n) * 100 : 0,
+    avgShares: mean(list.map((p) => p.shares || 0)),
+    avgSaves: mean(list.map((p) => p.saves || 0)),
+    avgEng: mean(list.map((p) => p.engagementRate || 0)),
+    sumFollows: follows.reduce((a, b) => a + b, 0),
+    avgFollows: mean(follows),
+  };
+}
+
+function RaioX({ posts }: { posts: IGPost[] }) {
+  const [open, setOpen] = usePersistedBool('raiox_open', true);
+  const [period, setPeriod] = useState<RaioXPeriod>(90);
+  const [tab, setTab] = useState<RaioXTab>('reelViews');
+
+  const data = useMemo(() => {
+    const cutoff = period ? Date.now() - period * 86400000 : 0;
+    const filtered = posts.filter((p) => {
+      const t = new Date(p.timestamp).getTime();
+      return period === 0 || (Number.isFinite(t) && t >= cutoff);
+    });
+    const reels = filtered.filter((p) => p.mediaType === 'REELS');
+    const carros = filtered.filter((p) => p.mediaType === 'CAROUSEL_ALBUM');
+    const top = (list: IGPost[], key: 'views' | 'shares' | 'follows') =>
+      [...list].sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10);
+    const sr = groupStats(reels);
+    const sc = groupStats(carros);
+    const totalFollows = filtered.reduce((s, p) => s + (p.follows || 0), 0);
+    const pctCar = totalFollows ? (sc.sumFollows / totalFollows) * 100 : 0;
+    const pctReel = totalFollows ? (sr.sumFollows / totalFollows) * 100 : 0;
+    const noConv = [...filtered]
+      .filter((p) => (p.follows || 0) === 0)
+      .sort((a, b) => (b.reach || 0) - (a.reach || 0))
+      .slice(0, 2);
+    const best = filtered.reduce<IGPost | null>(
+      (b, p) => ((p.follows || 0) > (b?.follows || 0) ? p : b),
+      null,
+    );
+    return {
+      total: filtered.length, sr, sc, totalFollows, pctCar, pctReel, noConv,
+      best: best && best.follows > 0 ? best : null,
+      ranks: {
+        reelViews: top(reels, 'views'),
+        reelShares: top(reels, 'shares'),
+        carViews: top(carros, 'views'),
+        carFollows: top(carros, 'follows'),
+      } as Record<RaioXTab, IGPost[]>,
+      viewMult: sr.medViews ? sc.medViews / sr.medViews : 0,
+    };
+  }, [posts, period]);
+
+  const { sr, sc } = data;
+  const periods: { v: RaioXPeriod; label: string }[] = [
+    { v: 90, label: '90 dias' }, { v: 365, label: '365 dias' }, { v: 0, label: 'Tudo' },
+  ];
+  const tabs: { k: RaioXTab; label: string; metric: 'views' | 'shares' | 'follows' }[] = [
+    { k: 'reelViews', label: 'Reels · views', metric: 'views' },
+    { k: 'reelShares', label: 'Reels · shares', metric: 'shares' },
+    { k: 'carViews', label: 'Carrosséis · views', metric: 'views' },
+    { k: 'carFollows', label: 'Carrosséis · follows', metric: 'follows' },
+  ];
+  const activeTab = tabs.find((t) => t.k === tab) || tabs[0];
+
+  // Linhas do comparativo: higher=true => maior vence; false => menor vence
+  const rows: { label: string; r: number; c: number; fmt: (n: number) => string; higher: boolean }[] = [
+    { label: 'Quantidade', r: sr.count, c: sc.count, fmt: (n) => nf(n), higher: true },
+    { label: 'Views (mediana)', r: sr.medViews, c: sc.medViews, fmt: (n) => nf(n), higher: true },
+    { label: 'Views (média)', r: sr.avgViews, c: sc.avgViews, fmt: (n) => nf(n), higher: true },
+    { label: '% com 10 mil+ views', r: sr.pctHigh, c: sc.pctHigh, fmt: (n) => `${nf(n, 1)}%`, higher: true },
+    { label: '% mortos (< 1.500 views)', r: sr.pctDead, c: sc.pctDead, fmt: (n) => `${nf(n, 1)}%`, higher: false },
+    { label: 'Shares (média)', r: sr.avgShares, c: sc.avgShares, fmt: (n) => nf(n, 1), higher: true },
+    { label: 'Saves (média)', r: sr.avgSaves, c: sc.avgSaves, fmt: (n) => nf(n, 1), higher: true },
+    { label: 'Engajamento (média)', r: sr.avgEng, c: sc.avgEng, fmt: (n) => `${nf(n, 2)}%`, higher: true },
+    { label: 'Follows (soma)', r: sr.sumFollows, c: sc.sumFollows, fmt: (n) => nf(n), higher: true },
+    { label: 'Follows (média)', r: sr.avgFollows, c: sc.avgFollows, fmt: (n) => nf(n, 1), higher: true },
+  ];
+
+  const miniPost = (p: IGPost, label: string) => (
+    <a
+      key={p.id}
+      href={p.permalink}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 text-xs hover:bg-secondary/50 rounded-lg p-1.5 transition-colors"
+    >
+      <img src={igImg(p.thumbnailUrl)} alt="" className="w-8 h-8 rounded object-cover bg-secondary shrink-0" />
+      <span className="truncate flex-1 text-foreground">
+        {mediaLabel(p.mediaType)} · {formatDate(p.timestamp)} · {(p.caption || '').split('\n')[0] || 'sem legenda'}
+      </span>
+      <span className="tabular-nums text-muted-foreground shrink-0">{label}</span>
+    </a>
+  );
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <CollapseHeader open={open} onToggle={() => setOpen(!open)} className="text-amber-400">
+          🏆 Raio-X: o que focar
+        </CollapseHeader>
+        {open && posts.length > 0 && (
+          <div className="flex rounded-lg bg-secondary p-0.5 text-xs">
+            {periods.map((p) => (
+              <button
+                key={p.v}
+                type="button"
+                onClick={() => setPeriod(p.v)}
+                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                  period === p.v ? 'bg-purple-600 text-white' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {open && posts.length === 0 && (
+        <p className="text-sm text-muted-foreground">Sincronize seus posts do Instagram pra ver o Raio-X.</p>
+      )}
+
+      {open && posts.length > 0 && data.total === 0 && (
+        <p className="text-sm text-muted-foreground">Nenhum post nesse período. Tente um período maior.</p>
+      )}
+
+      {open && data.total > 0 && (
+        <>
+          {/* Veredito */}
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-foreground">
+            <p className="font-semibold">Veredito</p>
+            <p className="mt-1">
+              {sr.count > 0 && sc.count > 0 && data.viewMult > 0
+                ? `Carrossel entrega ${nf(data.viewMult, 1)}× a view mediana do reel e ${nf(data.pctCar, 0)}% dos seguidores do período. `
+                : `Poucos dados pra comparar reel e carrossel neste período (${sr.count} reels, ${sc.count} carrosséis). `}
+              Foco: 1 reel/dia bem feito + carrossel direcionado ao homem 25-40.
+            </p>
+          </div>
+
+          {/* Comparativo */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Reel × Carrossel</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm tabular-nums">
+                <thead>
+                  <tr className="text-xs text-muted-foreground">
+                    <th className="text-left font-medium py-1.5">Métrica</th>
+                    <th className="text-right font-medium py-1.5">Reels</th>
+                    <th className="text-right font-medium py-1.5">Carrosséis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => {
+                    const tie = row.r === row.c;
+                    const rWins = !tie && (row.higher ? row.r > row.c : row.r < row.c);
+                    const cWins = !tie && !rWins;
+                    const win = 'text-green-400 font-bold';
+                    return (
+                      <tr key={i} className="border-t border-border">
+                        <td className="py-1.5 text-muted-foreground">{row.label}</td>
+                        <td className={`py-1.5 text-right ${rWins ? win : 'text-foreground'}`}>
+                          {rWins && '🏅 '}{row.fmt(row.r)}
+                        </td>
+                        <td className={`py-1.5 text-right ${cWins ? win : 'text-foreground'}`}>
+                          {cWins && '🏅 '}{row.fmt(row.c)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Mira */}
+          <div className="rounded-xl border border-pink-500/30 bg-pink-500/10 px-4 py-3 text-sm space-y-2">
+            <p className="font-semibold text-foreground">🎯 View que não vira seguidor</p>
+            {data.totalFollows > 0 ? (
+              <p className="text-foreground">
+                {nf(data.totalFollows)} follows no período: {nf(data.pctCar, 0)}% de carrossel e {nf(data.pctReel, 0)}% de reel.
+              </p>
+            ) : (
+              <p className="text-foreground">Nenhum follow registrado nos posts do período.</p>
+            )}
+            {data.noConv.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground">Alcance que não converteu (0 follows):</p>
+                {data.noConv.map((p) => miniPost(p, `${compactNum(p.reach || 0)} alcance`))}
+              </div>
+            )}
+            {data.best && (
+              <div>
+                <p className="text-xs text-muted-foreground">Modelo a repetir (mais follows):</p>
+                {miniPost(data.best, `${nf(data.best.follows)} follows`)}
+              </div>
+            )}
+          </div>
+
+          {/* Rankings */}
+          <div className="space-y-2">
+            <div className="flex gap-1.5 flex-wrap">
+              {tabs.map((t) => (
+                <button
+                  key={t.k}
+                  type="button"
+                  onClick={() => setTab(t.k)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    tab === t.k ? 'bg-purple-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {data.ranks[activeTab.k].length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sem posts desse formato no período.</p>
+            ) : (
+              <div className="space-y-1">
+                {data.ranks[activeTab.k].map((p, i) => (
+                  <div key={p.id} className="flex items-center gap-2 text-xs tabular-nums">
+                    <span className="w-5 text-right text-muted-foreground">{i + 1}</span>
+                    <img src={igImg(p.thumbnailUrl)} alt="" className="w-9 h-9 rounded object-cover bg-secondary shrink-0" />
+                    <span className="text-muted-foreground shrink-0">{formatDate(p.timestamp)}</span>
+                    <span className="truncate flex-1 text-foreground">
+                      {(p.caption || '').split('\n')[0] || 'sem legenda'}
+                    </span>
+                    <span className="shrink-0 text-foreground font-semibold">
+                      {nf(p[activeTab.metric] || 0)} {activeTab.metric}
+                    </span>
+                    <span className={`shrink-0 ${engColor(p.engagementRate)}`}>{nf(p.engagementRate || 0, 2)}%</span>
+                    <a
+                      href={p.permalink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-purple-400 hover:underline"
+                    >
+                      abrir
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -880,6 +1168,9 @@ export default function InstagramAnalytics({ onCreateReels, onCreateCarousel, on
           </div>
         </div>
       )}
+
+      {/* ── Raio-X: o que focar ── */}
+      {status?.connected && <RaioX posts={posts} />}
 
       {/* ── Gráfico de Evolução ── */}
       {status?.connected && <GrowthChart history={history} />}
