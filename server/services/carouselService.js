@@ -1153,16 +1153,22 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
       display:flex; flex-direction:column; justify-content:flex-end;
       padding-bottom:${SQ ? 24 : 36}px; z-index:10;
     }
-    /* Light e gradient slides: conteúdo flui de cima para baixo */
+    /* Light e gradient slides: conteúdo flui de cima para baixo.
+       overflow:hidden = trava de segurança: se o texto for longo demais, clipa
+       dentro da área em vez de vazar por cima da barra de progresso/linha. */
     .slide-light .content,
     .slide-grad  .content {
       justify-content:flex-start;
       padding-top:${SQ ? 12 : 20}px;
+      overflow:hidden;
     }
 
     /* ── FOTO DE FUNDO (dark full-bleed) ── */
     .photo-bg { position:absolute; inset:0; z-index:0; }
-    .photo-bg img { width:100%; height:100%; object-fit:cover; display:block; }
+    /* object-position puxado pra cima (32%): em foto de pessoa/corpo o rosto e o
+       tronco ficam na parte de cima — e nas capas/darks o texto fica embaixo (sob
+       o gradiente), então mostrar mais o topo deixa o sujeito visível na área clara. */
+    .photo-bg img { width:100%; height:100%; object-fit:cover; object-position:center 32%; display:block; }
 
     /* overlay capa — escurece da base */
     .overlay-capa {
@@ -1189,12 +1195,20 @@ function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 4
     .slide-with-bg .prog { z-index:3; }
 
     /* ── IMG BOX (light e gradient slides) ── */
+    /* A imagem é FLEXÍVEL: cresce pra preencher o espaço que o texto deixar e
+       encolhe (até min-height) quando o texto é longo. Assim o slide se auto-ajusta
+       sem precisar adivinhar altura por slide — imagem nunca fica espremida e o
+       texto nunca vaza (o overflow:hidden do .content é a trava de segurança). */
     .img-box-top {
-      width:100%; height:${SQ ? 208 : 300}px; border-radius:18px;
-      overflow:hidden; margin-bottom:${SQ ? 18 : 24}px; flex-shrink:0;
+      width:100%; flex:1 1 auto;
+      min-height:${SQ ? 150 : 200}px; max-height:${SQ ? 560 : 680}px;
+      border-radius:18px; overflow:hidden; margin-bottom:${SQ ? 18 : 24}px;
       position:relative; /* necessário para overlay de brightness posicionar-se corretamente */
     }
     .img-box-top img { width:100%; height:100%; object-fit:cover; display:block; }
+    /* Só a IMAGEM flexiona; os blocos de texto mantêm a altura natural (não encolhem). */
+    .slide-light .content > *, .slide-grad .content > * { flex:0 0 auto; }
+    .slide-light .img-box-top, .slide-grad .img-box-top { flex:1 1 auto; }
     /* Gradient slide: img-box com borda escura sutil */
     .slide-grad .img-box-top { border:1.5px solid rgba(15,13,8,0.12); }
 
