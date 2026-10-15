@@ -533,6 +533,31 @@ router.post('/saved/:id/dismiss', (req, res) => {
   }
 });
 
+// Descarta VÁRIOS de uma vez. body: { ids:[...] }  OU  { all:true } (todos os pendentes).
+router.post('/review/dismiss-bulk', (req, res) => {
+  try {
+    const { ids, all } = req.body || {};
+    let targets;
+    if (all) {
+      targets = db.getAllCarousels().filter((c) =>
+        !c.archived && !c.isTemplate
+        && c.approvalStatus !== 'approved' && c.approvalStatus !== 'dismissed'
+        && REVIEW_SOURCES.has(c.source)
+        && Array.isArray(c.screenshots) && c.screenshots.length,
+      ).map((c) => c.id);
+    } else if (Array.isArray(ids) && ids.length) {
+      targets = ids;
+    } else {
+      return res.status(400).json({ error: 'Passe { all:true } ou { ids:[...] } não-vazio.' });
+    }
+    const dismissed = db.dismissCarouselsBulk(targets);
+    res.json({ ok: true, dismissed });
+  } catch (e) {
+    console.error('[dismiss-bulk]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Diagnóstico de variáveis e conectividade ────────────────────────────────
 
 router.get('/check', async (req, res) => {
