@@ -2,12 +2,12 @@
  * dailyContentService.js — Rotina diária automática do Fabricio Moura.
  *
  * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de temas DISTINTOS
- * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e 2 REELS
- * CURTOS tirados da FILA de roteiros pré-escritos (reel_content_queue), um por
- * horário (default 14h e 19h30), renderizados no estilo dourado, cada um com um
- * clipe cru DIFERENTE (do dia e dos dias anteriores). Fila vazia → reel por IA
- * (reserva). Salva tudo DENTRO do viralos (carousels.json + reels.json +
- * daily_content.json) — sem Notion.
+ * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e 1 REEL
+ * CURTO metric-driven MIRANDO O HOMEM 25-40 (o comprador): escolhe um tema
+ * vencedor (hormônio/caneta/história-homem/comparação) com anti-repetição, gera no
+ * dourado e agenda no PICO de alcance (11h, dado Metricool). Fonte do reel: tema →
+ * (fallback) fila de roteiros → (fallback) IA a partir de um carrossel do dia.
+ * Salva tudo DENTRO do viralos (carousels.json + reels.json + daily_content.json).
  *
  * Substitui a rotina do fmteam-gerador. Mira o HOMEM 25-40, evita repetir
  * temas das últimas 2 semanas.
@@ -18,7 +18,7 @@ const db = require('../db/database');
 const {
   generateCarousel, takeScreenshotsPixelPerfect, OUTPUT_DIR,
 } = require('./carouselService');
-const { generateShortReelFromCarousel } = require('./reelsGeneratorService');
+const { generateShortReelFromCarousel, generateShortReelFromTheme } = require('./reelsGeneratorService');
 const { SUBSTANCE_INTEL } = require('./substanceIntel');
 
 const HANDLE = 'fabriciomourateam';
@@ -475,13 +475,67 @@ function timeWindow(hhmm) {
   });
 }
 
-// Monta 1 reel (fila → IA reserva), renderiza no dourado com clipe diferente e
-// agenda no horário alvo. Retorna { reelId, rawVideoId } pra encadear anti-repetição.
-async function buildAndScheduleQueuedReel({ time, carousels = [], avoidRawIds = [] }) {
+// Escolhe 1 tema pro REEL do dia — mira o HOMEM 25-40 (o comprador), metric-driven,
+// com a MESMA anti-repetição dos carrosséis. Evita os temas/grupos já usados HOJE nos
+// carrosséis (excludeThemeIds/Groups) e os temas dos últimos 14 dias. Lane do reel:
+// hormônio/caneta e história-de-homem pesam cheio; comparação (unisex) pesa menos.
+const isReelMaleTheme = (t) =>
+  t.group === 'hormonio' || t.group === 'caneta'
+  || (t.group === 'historia' && t.audience === 'homem')
+  || t.format === 'comparacao';
+
+function pickReelTheme(excludeThemeIds = [], excludeGroups = []) {
+  const recentIds = recentThemeIds();            // 14 dias
+  const exId = new Set([...(excludeThemeIds || []), ...recentIds]);
+  const exG = new Set(excludeGroups || []);
+  const scores = scoreThemes();
+  const maxScore = Math.max(0, ...THEMES.map((t) => scores[t.id] || 0));
+  const perf = (t) => 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4;
+  // história-homem e hormônio/caneta pesam cheio; comparação (unisex) pesa 0.6×.
+  const weightOf = (t) => perf(t) * (isHormoneTheme(t) || t.group === 'historia' ? 1 : 0.6);
+
+  let pool = THEMES.filter(isReelMaleTheme).filter((t) => !exId.has(t.id) && !exG.has(t.group));
+  if (!pool.length) pool = THEMES.filter(isReelMaleTheme).filter((t) => !exId.has(t.id));
+  if (!pool.length) pool = THEMES.filter(isReelMaleTheme);
+  if (!pool.length) return null;
+  const theme = weightedSample(pool, pool.map(weightOf), 1)[0];
+  if (!theme) return null;
+  return { ...theme, topic: pickAngle(theme) };
+}
+
+// Monta 1 reel e agenda no horário alvo. Ordem de fonte do conteúdo:
+//   1) reelTheme (metric-driven, mira o homem) → generateShortReelFromTheme [PADRÃO novo]
+//   2) item da FILA de roteiros (db.getNextReelQueueItem), se houver
+//   3) RESERVA por IA a partir de um carrossel do dia
+// Retorna { reelId, rawVideoId } pra encadear anti-repetição de clipe.
+async function buildAndScheduleQueuedReel({ time, carousels = [], avoidRawIds = [], reelTheme = null }) {
   const cfg = db.getMlabsSettings();
   let reelId = null;
   let queueSlug = null;
 
+  // 1) Reel METRIC-DRIVEN a partir do tema escolhido (mira o homem 25-40).
+  if (reelTheme) {
+    try {
+      const isHorm = reelTheme.group === 'hormonio' || reelTheme.group === 'caneta';
+      const audience = reelTheme.audience === 'mulher' ? 'mulher' : 'homem';
+      const nicheR = audience === 'mulher' ? NICHE : NICHE_HOMEM;
+      const reel = await generateShortReelFromTheme({
+        topic: reelTheme.topic, niche: nicheR, instagramHandle: `@${HANDLE}`,
+        duration: 7, audience, isHormone: isHorm,
+      });
+      reelId = `reel_theme_${Date.now()}_${reelTheme.id}`;
+      db.saveReel({
+        ...reel, id: reelId, niche: nicheR, instagramHandle: `@${HANDLE}`,
+        source: 'daily-theme', themeId: reelTheme.id, audience, archived: false,
+      });
+      console.log(`[DailyContent] reel METRIC-DRIVEN (${time}) do tema ${reelTheme.id} (${audience}).`);
+    } catch (e) {
+      console.warn(`[DailyContent] reel por tema falhou (${reelTheme && reelTheme.id}) — tenta fila/IA:`, e.message);
+      reelId = null;
+    }
+  }
+
+  if (!reelId) {
   const item = db.getNextReelQueueItem();
   if (item) {
     reelId = `reel_q_${Date.now()}_${item.slug}`;
@@ -517,9 +571,10 @@ async function buildAndScheduleQueuedReel({ time, carousels = [], avoidRawIds = 
       return { reelId: null, rawVideoId: null };
     }
   } else {
-    console.warn('[DailyContent] sem item na fila e sem carrossel — reel pulado.');
+    console.warn('[DailyContent] sem tema, sem item na fila e sem carrossel — reel pulado.');
     return { reelId: null, rawVideoId: null };
   }
+  } // fim do if (!reelId) — só cai aqui se o reel por tema não gerou
 
   let rawVideoId = null;
   try {
@@ -549,26 +604,25 @@ async function buildAndScheduleQueuedReel({ time, carousels = [], avoidRawIds = 
   return { reelId, rawVideoId };
 }
 
-// Gera os reels do dia (1 por horário configurado — default 14h e 19h30), da FILA
-// de roteiros meus (qualidade), no dourado, cada um com um clipe DIFERENTE (do dia
-// e dos dias anteriores). Isolado: falha aqui não derruba o batch de carrosséis.
-async function generateQueuedReel({ carousels = [] } = {}) {
+// Gera O REEL DO DIA — 1 só, METRIC-DRIVEN, mirando o HOMEM 25-40 (o comprador).
+// Escolhe o tema vencedor (hormônio/caneta/história-homem/comparação) evitando os
+// temas/grupos dos carrosséis de hoje e os dos últimos 14 dias, gera no dourado e
+// agenda no PICO de alcance (11h, dado do Metricool). Isolado: falha aqui não
+// derruba o batch de carrosséis. (Antes saíam 2 reels/dia mirando mulher — os dados
+// mostraram que o 2º reel não traz seguidor; 1 bem feito pro homem rende mais.)
+async function generateQueuedReel({ carousels = [], excludeThemeIds = [], excludeGroups = [] } = {}) {
   const times = reelDailyTimes();
+  const time = times[0] || '11:00';              // 1 reel/dia no pico (11h)
+  const reelTheme = pickReelTheme(excludeThemeIds, excludeGroups);
   const reelIds = [];
-  const usedToday = [];   // clipes já usados hoje → não repete entre os reels do dia
-  // CADA reel tem seu PRÓPRIO timeout — se o 1º render demorar/falhar, o 2º ainda
-  // roda (antes um timeout único cobria os dois e derrubava o 2º, saindo só 1/dia).
-  for (const t of times) {
-    try {
-      const r = await withTimeout(
-        buildAndScheduleQueuedReel({ time: t, carousels, avoidRawIds: usedToday }),
-        DAILY_THEME_TIMEOUT_MS, `reel ${t}`,
-      );
-      if (r.reelId) reelIds.push(r.reelId);
-      if (r.rawVideoId) usedToday.push(r.rawVideoId);
-    } catch (e) {
-      console.warn(`[DailyContent] reel ${t} falhou/timeout — segue pro próximo:`, e.message);
-    }
+  try {
+    const r = await withTimeout(
+      buildAndScheduleQueuedReel({ time, carousels, avoidRawIds: [], reelTheme }),
+      DAILY_THEME_TIMEOUT_MS, `reel ${time}`,
+    );
+    if (r.reelId) reelIds.push(r.reelId);
+  } catch (e) {
+    console.warn(`[DailyContent] reel ${time} falhou/timeout:`, e.message);
   }
   return { reelIds };
 }
@@ -652,7 +706,11 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
       // 1 reel/dia da FILA de roteiros meus (dourado, 19h30). Reserva: IA a partir
       // de um carrossel do dia se a fila esgotou. Isolado do loop de carrosséis.
       try {
-        const rq = await withTimeout(generateQueuedReel({ carousels: dayCarousels }), 3 * DAILY_THEME_TIMEOUT_MS, 'reel-fila');
+        const rq = await withTimeout(generateQueuedReel({
+          carousels: dayCarousels,
+          excludeThemeIds: resolved.map((t) => t.id),
+          excludeGroups: resolved.map((t) => t.group),
+        }), 3 * DAILY_THEME_TIMEOUT_MS, 'reel-fila');
         for (const id of (rq.reelIds || [])) reelIds.push(id);
       } catch (e) {
         console.error('[DailyContent] reel da fila falhou:', e.message);
