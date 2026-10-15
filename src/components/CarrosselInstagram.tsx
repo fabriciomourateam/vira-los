@@ -11,6 +11,7 @@ import {
 import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
 import PromptTemplateModal from './PromptTemplateModal';
 import { MlabsScheduleButton } from './MlabsScheduler';
+import CarouselReviewPanel from './CarouselReviewPanel';
 import { generateAndSaveScreenshots as libGenerateScreenshots } from '@/lib/clientScreenshots';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -2598,6 +2599,12 @@ document.addEventListener('DOMContentLoaded', function() {
         accept=".html,.htm"
         className="hidden"
         onChange={handleHtmlImport}
+      />
+
+      {/* ── Revisar e aprovar (carrosséis do robô) ── */}
+      <CarouselReviewPanel
+        api={API}
+        onApproved={() => { fetch(`${API}/api/carousel/saved`).then(r => r.json()).then(l => { if (Array.isArray(l)) setSavedCarousels(l); }).catch(() => {}); }}
       />
 
       {/* ── Carrosseis Salvos ── */}
