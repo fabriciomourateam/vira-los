@@ -441,6 +441,98 @@ router.post('/saved/:id/render-square', async (req, res) => {
   }
 });
 
+// ─── Fila "Revisar → Aprovar → posta sozinho" (carrosséis gerados pelo robô) ──────
+// O robô (daily / daily-theme / John Hulk) gera carrossel como RASCUNHO. Aqui o
+// Fabricio revisa, escolhe data/hora e o método evergreen (de N em N meses, igual
+// aos outros agendadores) e aprova — aí agenda no mLabs (mesma via do auto-agendamento).
+
+const REVIEW_SOURCES = new Set(['daily', 'daily-theme', 'john-hulk', 'johnhulk', 'john_hulk']);
+
+// Lista os carrosséis pendentes de revisão (gerados pelo robô, ainda não aprovados/descartados).
+router.get('/review', (req, res) => {
+  try {
+    const pend = db.getAllCarousels().filter((c) =>
+      !c.archived && !c.isTemplate
+      && c.approvalStatus !== 'approved' && c.approvalStatus !== 'dismissed'
+      && REVIEW_SOURCES.has(c.source)
+      && Array.isArray(c.screenshots) && c.screenshots.length,
+    ).map((c) => ({
+      id: c.id, topic: c.topic, folderName: c.folderName, numSlides: c.numSlides,
+      screenshots: c.screenshots, legenda: c.legenda, source: c.source,
+      themeId: c.themeId || null, created_at: c.created_at,
+    }));
+    res.json({ pending: pend });
+  } catch (e) {
+    console.error('[review-list]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Aprova um carrossel: calcula as datas evergreen e agenda no mLabs.
+// body: { firstDate:'AAAA-MM-DDTHH:MM' (hora SP), intervalMonths=3, repetitions=4, caption? }
+router.post('/saved/:id/approve', async (req, res) => {
+  try {
+    const c = db.getAllCarousels().find((x) => x.id === req.params.id);
+    if (!c) return res.status(404).json({ error: 'Carrossel não encontrado.' });
+    if (!c.folderName || !isSafeFolderName(c.folderName)) return res.status(400).json({ error: 'Pasta do carrossel inválida.' });
+    if (!Array.isArray(c.screenshots) || !c.screenshots.length) return res.status(400).json({ error: 'Carrossel sem imagens (PNG) para postar.' });
+
+    const { firstDate, intervalMonths = 3, repetitions = 4, caption } = req.body || {};
+    if (!firstDate || isNaN(new Date(firstDate).getTime())) {
+      return res.status(400).json({ error: 'Data/hora inicial inválida (use AAAA-MM-DDTHH:MM).' });
+    }
+    const months = Math.max(0, parseInt(intervalMonths, 10) || 0);
+    const reps = Math.max(1, parseInt(repetitions, 10) || 1);
+
+    const mlabs = require('../services/mlabsService');
+    const { v4: uuidv4 } = require('uuid');
+    // Evergreen: mesma lógica dos outros agendadores (amanhã, +3, +6, +9 meses…).
+    // Se months=0, posta 1 vez só (sem repetição).
+    const dates = months > 0 ? mlabs.expandMonthly(firstDate, months, reps) : [firstDate];
+
+    // Só os PNGs que existem em disco (evita quebrar o agendamento por arquivo faltando).
+    const mediaPaths = c.screenshots
+      .map((name) => path.join(OUTPUT_DIR, c.folderName, name))
+      .filter((p) => { try { return fs.existsSync(p); } catch { return false; } });
+    if (!mediaPaths.length) return res.status(400).json({ error: 'Nenhum PNG encontrado em disco para esse carrossel.' });
+
+    const cap = (caption != null ? String(caption) : (c.legenda || ''));
+    const cfg = db.getMlabsSettings();
+    const recId = uuidv4();
+    db.createMlabsSchedule({
+      id: recId, contentType: 'carousel', contentId: c.id,
+      caption: cap, dates, platforms: cfg.channelSourceIds, status: 'enviando',
+    });
+    try {
+      const r = await mlabs.scheduleContent({ type: 'IMAGE', mediaPaths, caption: cap, dates });
+      db.updateMlabsSchedule(recId, { status: 'agendado', mlabsResponse: r.scheduleResponse || null });
+      db.updateCarousel(c.id, { approvalStatus: 'approved', scheduledDates: dates, scheduledAt: new Date().toISOString() });
+      console.log(`[approve] carrossel ${c.id} agendado no mLabs (${dates.length} datas).`);
+      res.json({ ok: true, id: c.id, dates, scheduleId: recId });
+    } catch (e) {
+      db.updateMlabsSchedule(recId, { status: 'erro', error: e.message });
+      console.error('[approve] agendar mLabs falhou:', e.message);
+      res.status(502).json({ error: `Falha ao agendar no mLabs: ${e.message}`, scheduleId: recId });
+    }
+  } catch (e) {
+    console.error('[approve]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Descarta um carrossel da fila de revisão (arquiva — não aparece mais).
+router.post('/saved/:id/dismiss', (req, res) => {
+  try {
+    const c = db.getAllCarousels().find((x) => x.id === req.params.id);
+    if (!c) return res.status(404).json({ error: 'Carrossel não encontrado.' });
+    db.updateCarousel(c.id, { approvalStatus: 'dismissed', archived: true });
+    res.json({ ok: true, id: c.id });
+  } catch (e) {
+    console.error('[dismiss]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Diagnóstico de variáveis e conectividade ────────────────────────────────
 
 router.get('/check', async (req, res) => {
