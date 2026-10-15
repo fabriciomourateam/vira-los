@@ -78,6 +78,11 @@ export default function CarouselReviewPanel({ api, onApproved }: Props) {
   const [confirmDismissId, setConfirmDismissId] = useState<string | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
 
+  // Seleção em lote
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmBulk, setConfirmBulk] = useState<'selected' | 'all' | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -169,6 +174,40 @@ export default function CarouselReviewPanel({ api, onApproved }: Props) {
     setThumbIdx(prev => ({ ...prev, [item.id]: (((prev[item.id] ?? 0) + delta) % n + n) % n }));
   }
 
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
+  function toggleSelectAll() {
+    setSelected(prev => (prev.size === pending.length ? new Set() : new Set(pending.map(p => p.id))));
+  }
+
+  async function doBulkDismiss(mode: 'selected' | 'all') {
+    setBulkBusy(true);
+    try {
+      const body = mode === 'all' ? { all: true } : { ids: [...selected] };
+      const res = await fetch(`${api}/api/carousel/review/dismiss-bulk`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const data: { dismissed?: number } = await res.json();
+      if (mode === 'all') setPending([]);
+      else setPending(p => p.filter(x => !selected.has(x.id)));
+      setSelected(new Set());
+      setConfirmBulk(null);
+      toast.success(`${data.dismissed ?? 0} carrossel(is) descartado(s)`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao descartar em lote');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  const allSelected = pending.length > 0 && selected.size === pending.length;
+
   return (
     <div className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
       <div className="flex items-center gap-2">
@@ -212,14 +251,49 @@ export default function CarouselReviewPanel({ api, onApproved }: Props) {
             <p className="text-sm text-muted-foreground py-4 text-center">Nada pra revisar 🎉</p>
           )}
 
+          {!loading && !loadError && pending.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/60 p-2">
+              <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none">
+                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="accent-amber-500 w-4 h-4" />
+                Selecionar todos
+              </label>
+              <span className="text-xs text-muted-foreground">{selected.size} selecionado(s)</span>
+              <div className="ml-auto flex items-center gap-2">
+                {confirmBulk ? (
+                  <>
+                    <span className="text-xs text-red-400">
+                      {confirmBulk === 'all' ? `Descartar TODOS os ${pending.length}?` : `Descartar ${selected.size} selecionado(s)?`}
+                    </span>
+                    <button type="button" disabled={bulkBusy} onClick={() => doBulkDismiss(confirmBulk)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold disabled:opacity-50">
+                      {bulkBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />} Sim, descartar
+                    </button>
+                    <button type="button" disabled={bulkBusy} onClick={() => setConfirmBulk(null)} className="px-2.5 py-1.5 rounded-lg bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50">Cancelar</button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" disabled={selected.size === 0} onClick={() => setConfirmBulk('selected')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-red-400 text-xs font-semibold disabled:opacity-40">
+                      <Trash2 className="w-3 h-3" /> Descartar selecionados
+                    </button>
+                    <button type="button" onClick={() => setConfirmBulk('all')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white text-xs font-semibold">
+                      <Trash2 className="w-3 h-3" /> Descartar todos
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {pending.map(item => {
               const idx = thumbIdx[item.id] ?? 0;
               const shot = item.screenshots?.[idx];
               const busy = dismissingId === item.id;
               return (
-                <div key={item.id} className="rounded-lg border border-border bg-card overflow-hidden flex flex-col">
+                <div key={item.id} className={`rounded-lg border bg-card overflow-hidden flex flex-col ${selected.has(item.id) ? 'border-amber-500 ring-2 ring-amber-500/60' : 'border-border'}`}>
                   <div className="relative aspect-[4/5] bg-secondary">
+                    <label className="absolute left-1.5 top-1.5 z-10 cursor-pointer bg-black/50 rounded p-0.5 flex" title="Selecionar">
+                      <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleSelect(item.id)} className="accent-amber-500 w-5 h-5" />
+                    </label>
                     {shot ? (
                       <img src={`${api}/output/${item.folderName}/${shot}`} alt={item.topic} className="w-full h-full object-cover" />
                     ) : (

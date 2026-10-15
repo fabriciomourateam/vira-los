@@ -282,6 +282,17 @@ const getAllCarousels  = () => readDb('carousels').sort((a, b) => b.created_at.l
 const saveCarousel    = (c) => { const db = readDb('carousels'); db.push({ ...c, created_at: now() }); writeDb('carousels', db); };
 const updateCarousel  = (id, data) => { const db = readDb('carousels').map((c) => c.id === id ? { ...c, ...data } : c); writeDb('carousels', db); };
 const deleteCarousel  = (id) => writeDb('carousels', readDb('carousels').filter((c) => c.id !== id));
+// Descarta vários carrosseis de uma vez (1 leitura + 1 escrita). Pula os ja aprovados.
+const dismissCarouselsBulk = (ids) => {
+  const set = new Set(ids || []);
+  let n = 0;
+  const rows = readDb('carousels').map((c) => {
+    if (set.has(c.id) && c.approvalStatus !== 'approved') { n++; return { ...c, approvalStatus: 'dismissed', archived: true }; }
+    return c;
+  });
+  writeDb('carousels', rows);
+  return n;
+};
 
 // ── Reels (roteiros gerados a partir de carrosseis salvos) ────────────────────
 const getAllReels = () => readDb('reels').sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -765,7 +776,7 @@ module.exports = {
   logPostResult,
   getSavedSlides, saveSlide, deleteSavedSlide,
   getCarouselConfig, setCarouselConfig,
-  getAllCarousels, saveCarousel, updateCarousel, deleteCarousel,
+  getAllCarousels, saveCarousel, updateCarousel, deleteCarousel, dismissCarouselsBulk,
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
   getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo, pickRandomRawVideo, countUsableRawVideos,
