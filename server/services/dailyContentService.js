@@ -356,6 +356,10 @@ async function buildOne(theme) {
   // 1) Carrossel fmteam — instrução muda pelo tipo do tema. Hormônio/GLP-1 usa a
   //    instrução com ANTI-BAN duro; comparação usa a de número; o resto, a padrão.
   const isHormoneGroup = theme.group === 'hormonio' || theme.group === 'caneta';
+  // Viés de imagem: temas de HOMEM (hormônio/caneta/história-homem) puxam foto de
+  // homem atlético/bodybuilder em todos os slides (igual ao John Hulk). Comida/trocas
+  // e história-mulher NÃO enviesam — a cena da foto é o assunto (comida, etc.).
+  const isMaleSubjectTheme = isHormoneGroup || (theme.group === 'historia' && theme.audience === 'homem');
   const carouselResult = await generateCarousel({
     topic: theme.topic,
     instructions: theme.format === 'historia' ? instructionHistoria(theme.audience)
@@ -370,6 +374,7 @@ async function buildOne(theme) {
     dominantEmotion: theme.emotion,
     layoutStyle: 'fmteam',
     ctaStyle: 'dark-fullbleed',
+    imageSubject: isMaleSubjectTheme ? 'muscular athletic man' : '',
     // Capa SÓ com o gancho — sem a frase entre parênteses (capa-context).
     fmteamCover: { showContext: false },
     avoidPhotoUrls,
