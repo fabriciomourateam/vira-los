@@ -17,7 +17,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { FABRICIO_AVATAR_DATA_URL } = require('./fmteamAssets');
-const { FMTEAM_EDITORIAL } = require('./fmteamEditorial');
+const { FMTEAM_EDITORIAL, stripAiTells } = require('./fmteamEditorial');
 const db = require('../db/database'); // CTA configurável do carrossel (getCarouselCta)
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -2685,7 +2685,15 @@ IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6
     }
   }
 
-  const legenda = sanitizeLegenda(legendaRes.content[0]?.text || '');
+  const legenda = stripAiTells(sanitizeLegenda(legendaRes.content[0]?.text || ''));
+
+  // ── Limpeza anti-IA: tira o travessão (—/–) do texto dos slides ─────────────
+  // É a marca d'água nº1 de IA. Feito ANTES de injetar o CSS (o CSS usa só hífen).
+  // Seguro no HTML: travessão só aparece em texto visível, nunca em tag/classe.
+  html = html
+    .replace(/&mdash;|&#8212;|&#x2014;|&ndash;|&#8211;|&#x2013;/gi, ', ')
+    .replace(/(\d)\s*[—–]\s*(?=\d)/g, '$1 a ')
+    .replace(/\s*[—–]\s*/g, ', ');
 
   // ── Pós-processamento fmteam: injeta CSS + avatar + fontes no HTML ──────────
   // O prompt fmteam não inclui o CSS nem o avatar base64 (economia de ~25k chars por chamada).

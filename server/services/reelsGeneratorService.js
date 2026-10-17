@@ -5,7 +5,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
-const { FMTEAM_EDITORIAL } = require('./fmteamEditorial');
+const { FMTEAM_EDITORIAL, stripAiTells } = require('./fmteamEditorial');
 const { SUBSTANCE_INTEL } = require('./substanceIntel');
 const db = require('../db/database');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -196,6 +196,14 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
     ].filter(Boolean).join('\n\n');
   }
 
+  // Limpeza anti-IA (travessão) nos campos de texto do roteiro.
+  if (parsed.hook?.fala) parsed.hook.fala = stripAiTells(parsed.hook.fala);
+  if (parsed.cta?.fala) parsed.cta.fala = stripAiTells(parsed.cta.fala);
+  if (Array.isArray(parsed.body)) parsed.body.forEach((b) => { if (b && b.fala) b.fala = stripAiTells(b.fala); });
+  if (parsed.teleprompter) parsed.teleprompter = stripAiTells(parsed.teleprompter);
+  if (parsed.legendaPost) parsed.legendaPost = stripAiTells(parsed.legendaPost);
+  if (parsed.title) parsed.title = stripAiTells(parsed.title);
+
   return parsed;
 }
 
@@ -336,6 +344,10 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
   if (!parsed.fraseTela || !parsed.legendaPost) {
     throw new Error('Resposta incompleta — fraseTela ou legendaPost faltando.');
   }
+  // Limpeza anti-IA: remove travessão (—/–) do texto que vai pra tela e pra legenda.
+  parsed.fraseTela = stripAiTells(parsed.fraseTela);
+  parsed.legendaPost = stripAiTells(parsed.legendaPost);
+  if (parsed.title) parsed.title = stripAiTells(parsed.title);
   parsed.tipo = 'short';
   if (!parsed.duration) parsed.duration = duration;
   if (!parsed.ctaTela) parsed.ctaTela = '👇 LEIA A LEGENDA';
@@ -483,6 +495,10 @@ RESPONDA APENAS com JSON válido, nada antes ou depois.
   if (!parsed.fraseTela || !parsed.legendaPost) {
     throw new Error('Resposta incompleta — fraseTela ou legendaPost faltando.');
   }
+  // Limpeza anti-IA: remove travessão (—/–) do texto que vai pra tela e pra legenda.
+  parsed.fraseTela = stripAiTells(parsed.fraseTela);
+  parsed.legendaPost = stripAiTells(parsed.legendaPost);
+  if (parsed.title) parsed.title = stripAiTells(parsed.title);
   parsed.tipo = 'short';
   if (!parsed.duration) parsed.duration = duration;
   if (!parsed.ctaTela) parsed.ctaTela = '👇 LEIA A LEGENDA';
