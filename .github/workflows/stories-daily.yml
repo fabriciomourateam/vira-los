@@ -1,16 +1,17 @@
-name: Stories do dia (10h BRT)
+name: Stories do dia (08h BRT)
 
-# Gera o pack de STORIES do dia (rotação de modos + voz do Fabricio + render 9:16),
-# amarrado no carrossel do dia. Roda DEPOIS do conteúdo diário (09h17) pra o post do
-# dia já existir. Mesma lógica de backup do daily-content (o agendamento do GitHub
-# Actions às vezes dropa execuções), e o serviço é idempotente por dia (se a manhã já
-# gerou, o backup só confere e sai).
-#   10:23 BRT = 13:23 UTC  ·  14:23 BRT (backup) = 17:23 UTC
+# Gera o pack de STORIES do dia (rotação de modos + voz do Fabricio + render 9:16) e
+# agenda no mLabs pra sair às 08h BRT. Roda ANTES das 08h; como o conteúdo diário só
+# gera às 09h17, o story se amarra no carrossel MAIS RECENTE (tema do dia anterior),
+# o que não muda a função dele (abrir DM num tema hormonal/performance). Mesma lógica
+# de backup do daily-content (o GitHub Actions às vezes dropa execuções) e o serviço é
+# idempotente por dia (se a 1ª já gerou, o backup só confere e sai).
+#   06:28 BRT = 09:28 UTC  ·  06:58 BRT (backup) = 09:58 UTC  → story agendado p/ 08:00 BRT
 
 on:
   schedule:
-    - cron: '23 13 * * *'   # manhã (~10:23 BRT)
-    - cron: '23 17 * * *'   # backup à tarde (~14:23 BRT)
+    - cron: '28 9 * * *'    # manhã cedo (~06:28 BRT) — antes das 08h
+    - cron: '58 9 * * *'    # backup (~06:58 BRT)
   workflow_dispatch: {}
 
 jobs:
