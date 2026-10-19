@@ -43,10 +43,10 @@ function storyCss() {
   .story .bg { position:absolute; inset:0; z-index:0; }
   /* escurece a PRÓPRIA foto (garante legibilidade mesmo em imagem clara/carregada) */
   .story .bg img { width:100%; height:100%; object-fit:cover; object-position:center 32%;
-    display:block; filter:brightness(0.55) saturate(1.05) contrast(1.02); }
+    display:block; filter:brightness(0.38) saturate(1.02) contrast(1.0); }
   /* overlay por cima: reforça o escuro no geral e mais ainda em cima/embaixo */
   .story .overlay { position:absolute; inset:0; z-index:1; background:
-    linear-gradient(to bottom, rgba(8,7,5,0.82) 0%, rgba(8,7,5,0.52) 28%, rgba(8,7,5,0.56) 54%, rgba(8,7,5,0.92) 100%); }
+    linear-gradient(to bottom, rgba(6,5,4,0.88) 0%, rgba(6,5,4,0.66) 28%, rgba(6,5,4,0.70) 54%, rgba(6,5,4,0.95) 100%); }
   /* barra de progresso (segmentos) no topo, estilo Instagram */
   .prog { position:absolute; top:40px; left:56px; right:56px; z-index:3; display:flex; gap:8px; }
   .prog .seg { flex:1; height:4px; border-radius:3px; background:rgba(255,255,255,0.3); }
