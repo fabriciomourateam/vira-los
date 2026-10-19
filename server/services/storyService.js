@@ -98,7 +98,7 @@ async function generateDailyStories({ trigger = 'manual' } = {}) {
   } catch (e) {
     console.error('[Stories] geração falhou:', e.message);
     state.lastError = e.message;
-    try { db.saveStoryBatch({ id: batchId, date, trigger, status: 'error', errors: [e.message], screenshots: [] }); } catch (_) {}
+    try { db.saveStoryBatch({ id: batchId, date, trigger, status: 'error', error: e.message, errors: [e.message], screenshots: [] }); } catch (_) {}
     throw e;
   } finally {
     state.generating = false;
