@@ -17,6 +17,7 @@ interface StoryBatch {
   ctaKeyword: string | null;
   status: 'done' | 'error';
   error?: string;
+  schedule?: { ok: boolean; when?: string; error?: string } | null;
   created_at: string;
 }
 
@@ -125,6 +126,11 @@ function BatchMeta({ batch }: { batch: StoryBatch }) {
       </div>
       <h3 className="text-base font-semibold text-foreground">{batch.topic}</h3>
       {batch.resumo && <p className="text-sm text-muted-foreground">{batch.resumo}</p>}
+      {batch.schedule && (
+        batch.schedule.ok
+          ? <p className="text-xs text-green-400">✓ Agendado no mLabs{batch.schedule.when ? ` p/ ${batch.schedule.when.replace('T', ' ')} (SP)` : ''}</p>
+          : <p className="text-xs text-amber-400">Agendamento no mLabs falhou — pack pronto pra postar manual. {batch.schedule.error}</p>
+      )}
     </div>
   );
 }
@@ -207,8 +213,8 @@ export default function StoriesDoDia() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-foreground flex items-center gap-2"><Smartphone className="w-5 h-5" /> Stories do dia</h2>
-            <p className="text-sm text-muted-foreground mt-1">Pronto pra postar: baixa e sobe no teu story.</p>
-            <p className="text-xs text-muted-foreground mt-1">Os stories de engajamento e oferta pedem pra pessoa RESPONDER, e a resposta cai na tua DM.</p>
+            <p className="text-sm text-muted-foreground mt-1">Gera e agenda sozinho no mLabs todo dia. Dá pra baixar e postar manual também.</p>
+            <p className="text-xs text-muted-foreground mt-1">Os stories de engajamento e oferta pedem pra pessoa RESPONDER, e a resposta cai na sua DM.</p>
           </div>
           <button
             onClick={generate}

@@ -547,10 +547,14 @@ const MLABS_DEFAULTS = {
   profileId: null,
   channelSourceIds: [],          // canais de CARROSSEL/feed (ex.: [3,1,23])
   channelSourceIdsReel: [],      // canais de REEL/shorts/tiktok (ex.: [15,18,20,19])
+  channelSourceIdsStory: [],     // canal(is) de STORY (aprendido sozinho de um story real no mLabs)
+  storyPayloadTemplate: null,    // attributes crus de um story real (clonado p/ conformar ao formato do mLabs)
   youtubeShortsChannelId: 20,    // id do canal YouTube Shorts (exige título no agendamento)
   ownerId: null,
   autoScheduleCarousel: false,
   autoScheduleReel: false,       // agenda o reel sozinho assim que o vídeo renderiza
+  autoScheduleStory: true,       // agenda o pack de stories do dia sozinho (igual carrossel/reel)
+  storyDailyTime: '10:00',       // hora SP preferida do story do dia (cai p/ agora+15min se já passou)
   autoRenderReel: false,         // rotina diária queima o texto no clipe cru do banco
   defaultTime: '11:00',          // hora SP padrão das postagens
   dateOffsetsMonths: [0, 3, 6, 9], // CARROSSEL: amanhã e a cada 3 meses → 4 datas (evergreen)
