@@ -16,7 +16,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
-const { FMTEAM_EDITORIAL, stripAiTells } = require('./fmteamEditorial');
+const { FMTEAM_EDITORIAL, stripAiTells, applySkinTone } = require('./fmteamEditorial');
 const { SUBSTANCE_INTEL } = require('./substanceIntel');
 const db = require('../db/database');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -32,7 +32,9 @@ const FABRICIO_STORY_VOICE = `━━━ VOZ DO FABRICIO NOS STORIES (OBRIGATÓRI
 - GÍRIA LEVE de academia OK ("cara", "mano", "olha", "presta atenção", "segura a boca aí", "kkk"). Português, nunca jargão gringo ("falso magro", não "skinny fat").
 - TRATAMENTO "você" (seu/sua/te). PROIBIDO "tu/ti/teu/tua".
 - SEM TRAÇO: NUNCA travessão ("—"/"–") nem hífen solto entre espaços (" - ") pra emendar ideia. Use vírgula ou ponto. (É regra do próprio Fabricio.)
-- BORDÕES PROIBIDOS (soam IA, ele corta): "vou ser direto/sincero/real contigo", "sem drama", "roda isso e me conta"/"aplica e me conta", "ataquei", "não é X, é Y" e variações, "imagina se...", "a verdade é que", "spoiler". Não anuncie que vai ser direto: seja direto.
+- BORDÕES PROIBIDOS (soam IA, ele corta): "vou ser direto/sincero/real contigo", "sem drama", "roda isso e me conta"/"aplica e me conta", "ataquei", "imagina se...", "a verdade é que", "spoiler". Não anuncie que vai ser direto: seja direto.
+- CLICHÊ Nº1 DE IA, PROIBIDÍSSIMO: a construção espelhada "não é X, é Y" e TODAS as variações: "não é sorte, é método", "não é X. É Y", "o problema não é X, é Y", "não é sobre X, é sobre Y", "menos X, mais Y". NUNCA emende duas ideias nesse formato. Fala direto o que é.
+- EMOJI com tom de pele usa SEMPRE o tom do Fabricio: 🏼. Ex.: 💪🏼, 👊🏼, 🙏🏼, 👍🏼. Nunca o amarelo neutro em mão/corpo/pessoa.
 - CAIXA NORMAL no texto (1ª maiúscula, resto minúsculo). NÃO escreva em CAIXA ALTA.
 - Fecha provocando RESPOSTA: pergunta curta e específica, ou o CTA da palavra.`;
 
@@ -85,12 +87,12 @@ function modeInstruction(mode, { ctaKeyword, ctaBenefit }) {
 3) O que fazer na prática (1 passo concreto, aplicável hoje).
 4) Fecho leve conectando ao post: "tem o resto no post de hoje" + convida a arrastar/ver. Sem CTA de venda.`;
     case 'engajamento':
-      return `MODO = ENGAJAMENTO (o maior gerador de DM). 5 stories, com 1 ENQUETE de autodiagnóstico por SINTOMA:
+      return `MODO = ENGAJAMENTO (o maior gerador de DM). 5 stories. IMPORTANTE: o autodiagnóstico é por RESPOSTA (texto), NÃO sticker de enquete (sticker nativo não dá pra agendar). Toda interação pede pra pessoa RESPONDER o story, e o reply cai na DM onde a IA assume:
 1) Gancho/dor do tema.
 2) Agita + mecanismo (liga o sintoma ao hormônio/rotina).
-3) ENQUETE de autodiagnóstico: pergunta "Qual você sente?" com 2 a 4 opções curtas de SINTOMA (sticker=enquete). As opções vão em "sticker.opcoes".
-4) Prova/autoridade curta ("já destravei isso com vários caras, é método").
-5) CTA pra DM: manda responder a palavra ${cta} ("marcou 2 ou mais? responde ${cta} aqui que eu te falo o que investigar"). A palavra vai em "cta".`;
+3) Autodiagnóstico EM TEXTO: lista 2 a 4 sintomas curtos (ex.: "1) cansaço mesmo dormindo  2) libido baixa  3) barriga teimosa") e manda RESPONDER qual mais pega ("me responde aqui qual é mais você"). sticker = null.
+4) Prova/autoridade curta, SEM clichê (nada de "não é X, é Y").
+5) CTA pra DM: manda responder a palavra ${cta} ("respondeu 2 ou mais? manda ${cta} aqui que eu te falo o que investigar"). A palavra vai em "cta".`;
     case 'oferta':
       return `MODO = OFERTA LEVE (direto pra DM, sem queimar). 4 stories:
 1) Gancho de resultado/dor ("travado no shape há meses?").
@@ -107,7 +109,7 @@ function modeInstruction(mode, { ctaKeyword, ctaBenefit }) {
       return `MODO = CONEXÃO (humaniza, quebra a monotonia). 3 stories:
 1) Bastidor real do Fabricio OU uma opinião forte dele sobre treino/nutrição (sem mimimi).
 2) Desenvolve com autoridade e papo reto.
-3) Fecho com uma PERGUNTA de caixinha pra abrir conversa (sticker=pergunta). Sem CTA de venda. "cta" fica null.`;
+3) Fecho com uma PERGUNTA pra abrir conversa, pedindo pra pessoa RESPONDER o story ("me responde aqui..."), NÃO sticker. sticker = null. Sem CTA de venda, "cta" fica null.`;
     default:
       return modeInstruction('valor', { ctaKeyword, ctaBenefit });
   }
@@ -164,7 +166,7 @@ ${modeInstruction(mode, { ctaKeyword, ctaBenefit })}
   ],
   "resumo": "1 frase do arco da sequência"
 }
-Regras do JSON: "sticker" só no story que pede (enquete → {"tipo":"enquete","opcoes":["...","..."]}; pergunta → {"tipo":"pergunta"}); senão null. "cta" só no story de CTA (a palavra ${ctaKeyword} ou o convite); senão null.`;
+Regras do JSON: "sticker" é SEMPRE null (no fluxo automático não dá pra agendar sticker nativo; a interação é por RESPOSTA em texto). "cta" só no story de CTA (a palavra ${ctaKeyword} ou o convite pra responder); senão null.`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
@@ -186,15 +188,13 @@ Regras do JSON: "sticker" só no story que pede (enquete → {"tipo":"enquete","
 
   // Limpeza anti-IA (travessão) em todo texto que vai pra tela.
   parsed.mode = mode;
+  const clean = (t) => applySkinTone(stripAiTells(String(t || '')));
   parsed.stories = parsed.stories.map((s, i) => ({
     n: s.n || i + 1,
-    texto: stripAiTells(String(s.texto || '')),
-    visual: stripAiTells(String(s.visual || '')),
-    sticker: s.sticker && s.sticker.tipo ? {
-      tipo: s.sticker.tipo,
-      opcoes: Array.isArray(s.sticker.opcoes) ? s.sticker.opcoes.map((o) => stripAiTells(String(o))) : undefined,
-    } : null,
-    cta: s.cta ? stripAiTells(String(s.cta)) : null,
+    texto: clean(s.texto),
+    visual: stripAiTells(String(s.visual || '')), // instrução interna, não vai pra tela
+    sticker: null,                                 // fluxo automático não agenda sticker
+    cta: s.cta ? clean(s.cta) : null,
   }));
   if (parsed.resumo) parsed.resumo = stripAiTells(String(parsed.resumo));
   return parsed;
