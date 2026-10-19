@@ -827,4 +827,151 @@ async function fetchMlabsSchedules(dateStartDDMMYYYY, dateEndDDMMYYYY) {
   }
 }
 
-module.exports = { scheduleContent, calibrate, computeDefaultDates, computeNextReelSlots, expandMonthly, spToUtcIso, buildSchedulePayload, fetchMlabsSchedules };
+// ── STORIES ─────────────────────────────────────────────────────────────────────
+// O app agenda stories pelo MESMO caminho de carrossel/reel (browser + post-api
+// antigo), mas o formato de STORY (canal + slot `media-stories`) não vinha no HAR.
+// Em vez de adivinhar, o app APRENDE de um story real já existente na conta: lê o
+// GET /schedules, acha um agendamento com `media-stories` não-vazio, copia o formato
+// e só troca mídia/datas/canais. Assim conforma ao que o mLabs realmente espera.
+
+// Acha um STORY de referência no mLabs (media-stories não-vazio) numa janela ampla.
+// Retorna { channelSourceIds, template(attributes crus) } ou null se não houver nenhum.
+async function fetchStoryTemplate(page, auth) {
+  const p = (d) => {
+    const x = new Date(d);
+    return `${String(x.getDate()).padStart(2, '0')}-${String(x.getMonth() + 1).padStart(2, '0')}-${x.getFullYear()}`;
+  };
+  const qs = new URLSearchParams({
+    'page[number]': '0',
+    'page[limit]': '500',
+    'filter[date-start]': p(Date.now() - 120 * 864e5),
+    'filter[date-end]': p(Date.now() + 120 * 864e5),
+  });
+  const res = await apiFetch(page, `${MLABS.schedules}?${qs}`, {
+    method: 'GET', headers: { accept: 'application/vnd.api+json' },
+  }, auth);
+  if (!res.ok) throw new Error(`GET /schedules (template de story) falhou (${res.status}): ${JSON.stringify(res.body).slice(0, 300)}`);
+  const data = (res.body && res.body.data) || [];
+  for (const item of data) {
+    const a = item.attributes || {};
+    const ms = a['media-stories'];
+    if (Array.isArray(ms) && ms.length) {
+      const chans = (a['channel-source-ids'] && a['channel-source-ids'].length)
+        ? a['channel-source-ids']
+        : (a['channel-source-id'] ? [a['channel-source-id']] : []);
+      return { channelSourceIds: chans.map(Number).filter(Boolean), template: a };
+    }
+  }
+  return null;
+}
+
+// Clona o template de um story real e troca só o que muda (mídia, datas, canais, ids).
+// Mantém quaisquer flags específicas de story que o mLabs gravou no original (via ...t).
+function buildStoryPayloadFromTemplate({ template, mediaIds, dates, caption, channelSourceIds, profileId, requestId }) {
+  const t = JSON.parse(JSON.stringify(template || {}));
+  const frameModel = (Array.isArray(t['media-stories']) && t['media-stories'][0])
+    ? t['media-stories'][0]
+    : { id: null, 'image-id': null, position: 0 };
+  const mediaStories = mediaIds.map((id, i) => {
+    const f = JSON.parse(JSON.stringify(frameModel));
+    f.id = null;
+    // Troca qualquer chave que referencie a imagem antiga pelo novo id numérico.
+    for (const k of Object.keys(f)) if (/image-?id|media-?id|video-?id/i.test(k)) f[k] = id;
+    if (!('image-id' in f)) f['image-id'] = id;
+    f.position = i;
+    return f;
+  });
+  const dateObjs = dates.map((d) => ({
+    'channel-source-ids': channelSourceIds, date: spToUtcIso(d), 'post-now': false, status: null,
+  }));
+  const attributes = {
+    ...t,
+    date: null, message: caption || '', title: null, 'message-resume': null, status: 1,
+    'error-message': null, 'message-error': '', 'warning-message': null, 'adicional-info': null,
+    'can-edit-all': false, 'can-edit': false,
+    'media-stories': mediaStories,
+    'image-objects-attributes': [], 'video-objects-attributes': [], 'document-objects-attributes': [],
+    'profile-ids': [profileId], 'request-id': requestId, 'channel-source-ids': channelSourceIds,
+    dates: dateObjs, 'publish-now': false, 'from-other-schedule': false,
+    'verify-more-schedules': false, 'loaded-preview': false, 'approval-link': null, version: null,
+  };
+  delete attributes.id; // id é só de leitura (vem no template real)
+  return { data: { type: 'schedules', attributes } };
+}
+
+/**
+ * scheduleStories({ mediaPaths, dates, caption?, profileId? }) → { ok, mlabsStatus, dates, scheduleResponse }
+ * Sobe os PNGs do story (em ordem = frames), aprende/usa o formato de story e agenda tudo
+ * como UMA sequência de story no(s) canal(is) de story. Datas no passado são descartadas.
+ */
+async function scheduleStories({ mediaPaths, dates, caption = '', profileId }) {
+  if (!mediaPaths || !mediaPaths.length) throw new Error('Nenhuma imagem de story pra subir.');
+  if (!dates || !dates.length) throw new Error('Nenhuma data informada pro story.');
+
+  const nowMs = Date.now();
+  const GRACE_MS = 2 * 60 * 1000;
+  dates = dates.filter((d) => {
+    let t; try { t = new Date(spToUtcIso(d)).getTime(); } catch { t = NaN; }
+    return isNaN(t) || t > nowMs - GRACE_MS;
+  });
+  if (!dates.length) throw new Error('A data do story já passou — o mLabs não posta no passado.');
+
+  const cfg = (db.getMlabsSettings && db.getMlabsSettings()) || {};
+  profileId = profileId || cfg.profileId;
+  if (!profileId) throw new Error('profileId não definido — rode a calibração do mLabs primeiro.');
+
+  const { browser } = await connectBrowser();
+  try {
+    const ctx = await newContext(browser);
+    const page = await ensureSession(ctx);
+    const auth = await learnAuthHeaders(page);
+    const ownerId = cfg.ownerId || profileId;
+
+    // 1) Formato do story: usa o que já foi aprendido; senão aprende de um story real.
+    let storyChannelIds = (cfg.channelSourceIdsStory && cfg.channelSourceIdsStory.length)
+      ? cfg.channelSourceIdsStory.map(Number) : null;
+    let template = cfg.storyPayloadTemplate || null;
+    if (!storyChannelIds || !template) {
+      const learned = await fetchStoryTemplate(page, auth);
+      if (!learned || !learned.channelSourceIds.length) {
+        throw new Error(
+          'Não achei um story de referência no mLabs pra aprender o formato. ' +
+          'Deixe 1 story publicar/agendar na conta uma vez e o app aprende sozinho na próxima run.'
+        );
+      }
+      storyChannelIds = storyChannelIds || learned.channelSourceIds;
+      template = template || learned.template;
+      try { db.setMlabsSettings && db.setMlabsSettings({ channelSourceIdsStory: storyChannelIds, storyPayloadTemplate: template }); } catch (_) {}
+      console.log(`[Stories] formato de story aprendido do mLabs — canais ${storyChannelIds.join(',')}.`);
+    }
+
+    // 2) Sobe os frames e pega os ids numéricos (em ordem).
+    const uploads = await Promise.all(mediaPaths.map((pth) => uploadMedia(page, pth, auth, ownerId, 'IMAGE')));
+    const { ids, last } = await waitForMediaIds(page, uploads.map((u) => u.uuid), auth);
+    const mediaIds = uploads.map((u) => ids[u.uuid]);
+    if (mediaIds.some((id) => !id)) {
+      const faltou = uploads.filter((u) => !ids[u.uuid]).map((u) => `${u.uuid} → ${JSON.stringify(last[u.uuid])}`).join(' | ');
+      throw new Error(`Frame do story subiu mas sem id numérico: ${faltou}`.slice(0, 1500));
+    }
+
+    // 3) Clona o template real → agenda.
+    const { v4: uuidv4 } = require('uuid');
+    const payload = buildStoryPayloadFromTemplate({
+      template, mediaIds, dates, caption, channelSourceIds: storyChannelIds, profileId, requestId: uuidv4(),
+    });
+    const res = await apiFetch(
+      page, MLABS.schedules,
+      { method: 'POST', headers: { 'content-type': 'application/vnd.api+json', accept: 'application/vnd.api+json' }, json: payload },
+      auth,
+    );
+    if (!res.ok) {
+      throw new Error(`POST /schedules (story) falhou (${res.status}): ${JSON.stringify(res.body).slice(0, 400)}`);
+    }
+    saveSession(await ctx.storageState());
+    return { ok: true, mlabsStatus: res.status, dates: dates.map(spToUtcIso), scheduleResponse: res.body };
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
+module.exports = { scheduleContent, scheduleStories, calibrate, computeDefaultDates, computeNextReelSlots, expandMonthly, spToUtcIso, buildSchedulePayload, fetchMlabsSchedules };

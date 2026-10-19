@@ -5,9 +5,10 @@
  * (o carrossel principal do batch diário) → gera a sequência na voz do Fabricio →
  * renderiza os PNGs 9:16 dourados → salva o batch. Idempotente por dia (cron não regera).
  *
- * Entrega: o pack fica salvo e aparece na aba "Stories do dia" do vira-los. Agendamento
- * de story no mLabs não é suportado hoje (campo media-stories vazio + não testável por
- * API daqui), então o modelo é "pronto pra postar em 1 toque".
+ * Entrega: o pack é renderizado, salvo (aba "Stories do dia") E agendado sozinho no
+ * mLabs como sequência de story (igual carrossel/reel), quando autoScheduleStory=true.
+ * O agendamento aprende o formato de story de um story real na conta (ver mlabsService).
+ * Se o agendamento falhar, o pack renderizado NÃO se perde — o erro fica no batch.
  */
 
 const path = require('path');
@@ -15,6 +16,7 @@ const db = require('../db/database');
 const { OUTPUT_DIR } = require('./carouselService');
 const { pickStoryMode, generateStorySequence } = require('./storyRotationService');
 const { renderStorySequence } = require('./storyRenderService');
+const mlabs = require('./mlabsService');
 
 const HANDLE = 'fabriciomourateam';
 
@@ -28,6 +30,22 @@ const CTA_BY_MODE = {
 };
 
 const state = { generating: false, startedAt: null, lastError: null };
+
+// Horário SP (UTC-3 fixo) do story do dia: usa storyDailyTime se ainda for futuro
+// (com 10 min de folga), senão agora+15min. Retorna "AAAA-MM-DDTHH:MM" (hora local SP).
+function storyScheduleTime() {
+  const cfg = (db.getMlabsSettings && db.getMlabsSettings()) || {};
+  const p = (n) => String(n).padStart(2, '0');
+  const spNow = new Date(Date.now() - 3 * 3600 * 1000); // componentes UTC = relógio de SP
+  const [hh, mm] = String(cfg.storyDailyTime || '10:00').split(':').map((n) => parseInt(n, 10));
+  const y = spNow.getUTCFullYear(), mo = spNow.getUTCMonth(), da = spNow.getUTCDate();
+  const preferMs = Date.UTC(y, mo, da, hh || 10, mm || 0);           // horário preferido, em "UTC-como-SP"
+  const nowAsSpMs = Date.UTC(y, mo, da, spNow.getUTCHours(), spNow.getUTCMinutes());
+  const chosen = preferMs > nowAsSpMs + 10 * 60000
+    ? new Date(preferMs)
+    : new Date(nowAsSpMs + 15 * 60000);
+  return `${chosen.getUTCFullYear()}-${p(chosen.getUTCMonth() + 1)}-${p(chosen.getUTCDate())}T${p(chosen.getUTCHours())}:${p(chosen.getUTCMinutes())}`;
+}
 
 // Fonte do dia: o carrossel PRINCIPAL do batch diário de hoje (o 1º = mira hormonal).
 // Fallback: o carrossel não-template mais recente.
@@ -94,10 +112,27 @@ async function generateDailyStories({ trigger = 'manual' } = {}) {
     const outDir = path.join(OUTPUT_DIR, folderName);
     const screenshots = await renderStorySequence(seq, outDir, { topic: src.topic, handle: HANDLE, fetchImages: true });
 
+    // Agenda sozinho no mLabs (sequência de story), igual carrossel/reel. Guardado:
+    // se falhar, o pack renderizado continua salvo e o erro fica visível no batch.
+    const cfg = (db.getMlabsSettings && db.getMlabsSettings()) || {};
+    let schedule = null;
+    if (cfg.autoScheduleStory !== false && screenshots.length) {
+      const when = storyScheduleTime();
+      try {
+        const mediaPaths = screenshots.map((f) => path.join(outDir, f));
+        const r = await mlabs.scheduleStories({ mediaPaths, dates: [when] });
+        schedule = { ok: true, when, mlabsStatus: r.mlabsStatus, dates: r.dates };
+        console.log(`[Stories] batch ${batchId} agendado no mLabs p/ ${when} (SP).`);
+      } catch (e) {
+        schedule = { ok: false, when, error: e.message };
+        console.error(`[Stories] agendamento no mLabs falhou: ${e.message}`);
+      }
+    }
+
     const batch = {
       id: batchId, date, trigger, mode, topic: src.topic, sourceId: src.sourceId,
       folderName, stories: seq.stories, resumo: seq.resumo || '',
-      ctaKeyword: cta.keyword || null, screenshots, status: 'done', errors: [],
+      ctaKeyword: cta.keyword || null, screenshots, schedule, status: 'done', errors: [],
     };
     db.saveStoryBatch(batch);
     console.log(`[Stories] batch ${batchId} (${mode}) com ${screenshots.length} stories.`);
