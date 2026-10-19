@@ -43,7 +43,14 @@ function pickSourcePost() {
     carousel = carousels.find((c) => c.id === cid) || null;
     group = ((todayBatch.themes || [])[0] || {}).group || null;
   }
-  if (!carousel) carousel = carousels.find((c) => !c.isTemplate && !c.archived) || carousels[0] || null;
+  // Fallback: prefere o carrossel DIÁRIO (mira no homem), nunca o John Hulk (reescreve
+  // reels aleatórios, tema fora da marca). Só cai em "qualquer" como último recurso.
+  if (!carousel) {
+    const live = carousels.filter((c) => !c.isTemplate && !c.archived);
+    carousel = live.find((c) => c.source === 'daily' || c.source === 'daily-theme')
+      || live.find((c) => c.source !== 'john-hulk' && c.source !== 'johnhulk' && c.source !== 'john_hulk')
+      || live[0] || carousels[0] || null;
+  }
   if (!carousel) return null;
   const topic = carousel.topic || '';
   const isHormone = group === 'hormonio' || group === 'caneta'
