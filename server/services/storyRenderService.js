@@ -41,10 +41,12 @@ function storyCss() {
     background:#0f0d08; font-family:'Plus Jakarta Sans',system-ui,sans-serif;
   }
   .story .bg { position:absolute; inset:0; z-index:0; }
-  .story .bg img { width:100%; height:100%; object-fit:cover; object-position:center 32%; display:block; }
-  /* overlay: escurece o todo + reforça embaixo e no topo pra texto e marca lerem */
+  /* escurece a PRÓPRIA foto (garante legibilidade mesmo em imagem clara/carregada) */
+  .story .bg img { width:100%; height:100%; object-fit:cover; object-position:center 32%;
+    display:block; filter:brightness(0.55) saturate(1.05) contrast(1.02); }
+  /* overlay por cima: reforça o escuro no geral e mais ainda em cima/embaixo */
   .story .overlay { position:absolute; inset:0; z-index:1; background:
-    linear-gradient(to bottom, rgba(10,9,6,0.72) 0%, rgba(10,9,6,0.38) 22%, rgba(10,9,6,0.42) 55%, rgba(10,9,6,0.86) 100%); }
+    linear-gradient(to bottom, rgba(8,7,5,0.82) 0%, rgba(8,7,5,0.52) 28%, rgba(8,7,5,0.56) 54%, rgba(8,7,5,0.92) 100%); }
   /* barra de progresso (segmentos) no topo, estilo Instagram */
   .prog { position:absolute; top:40px; left:56px; right:56px; z-index:3; display:flex; gap:8px; }
   .prog .seg { flex:1; height:4px; border-radius:3px; background:rgba(255,255,255,0.3); }
