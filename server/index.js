@@ -74,6 +74,7 @@ const FEATURE_PATTERNS = [
   ['/api/carousel/regenerate-slide',  'regenerate-slide'],
   ['/api/carousel/generate',          'carousel'],
   ['/api/daily-content/generate',     'daily-content'],
+  ['/api/stories/generate',           'stories-daily'],
   // Prefixo inteiro (não só /generate) — assim modelReel/deriveViralInsight
   // disparados por /reels/:sc/model, /reels/model-url, /reels/model-batch e
   // /reels/refresh também contam como 'john-hulk' no usageTracker (item G do
@@ -111,6 +112,7 @@ app.use('/api/research',        require('./routes/research'));
 app.use('/api/agent',           require('./routes/agent'));
 app.use('/api/carousel',        require('./routes/carousel'));
 app.use('/api/daily-content',   require('./routes/dailyContent'));
+app.use('/api/stories',         require('./routes/stories'));
 app.use('/api/john-hulk',       require('./routes/johnHulk'));
 app.use('/api/docs',            require('./routes/docs'));
 app.use('/api/reels',           require('./routes/reels'));

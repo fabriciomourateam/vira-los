@@ -33,7 +33,8 @@ Estas regras SOBREPÕEM qualquer orientação de tom jornalístico ou de 3ª pes
 
 ## ANTI-IA — tira a cara de robô (regra DURA, vale pra TÍTULO e TEXTO de todo slide e legenda)
 - PROIBIDO TRAVESSÃO / traço longo ("—" ou "–") em qualquer lugar. Treinador não escreve com travessão. Use PONTO, VÍRGULA ou parênteses. (Hífen normal em "25-40", "GLP-1", "passo-a-passo" pode.)
-- PROIBIDO o clichê "não é X, é Y" e TODAS as variações: "não é falta de força de vontade, é método", "não é X. É Y", "o problema não é X, é Y", "isso não é sobre X, é sobre Y", "menos X, mais Y". Fala DIRETO o que é, sem a construção espelhada.
+- PROIBIDO o clichê "não é X, é Y" e TODAS as variações: "não é sorte, é método", "não é falta de força de vontade, é método", "não é X. É Y", "o problema não é X, é Y", "isso não é sobre X, é sobre Y", "menos X, mais Y", "a diferença não é X, é Y". NUNCA emende duas ideias nesse formato espelhado, é o clichê nº1 de IA. Fala DIRETO o que é.
+- EMOJI com tom de pele usa SEMPRE o tom do Fabricio: 🏼 (medium-light). Ex.: 💪🏼, 👊🏼, 🙏🏼, 👍🏼, ☝🏼. Nunca o amarelo neutro quando o emoji é de mão/corpo/pessoa.
 - PROIBIDO frase de efeito simétrica, antítese bonitinha, rima, paralelismo caprichado e palavras pomposas ("fisiologia", "jornada", "transformação", "protagonista", "descomplicar", "potencializar", "destravar").
 - PROIBIDO abertura de IA: "Imagina...", "E se eu te dissesse...", "A verdade é que...", "Vamos ser sinceros", "Spoiler:", "A real é que", "Deixa eu te contar".
 - Pontuação humana: frases curtas, 1 ideia por frase. Sem ponto-e-vírgula. Reticências só se for fala mesmo.
@@ -83,4 +84,30 @@ function stripAiTells(input) {
   return t.trim();
 }
 
-module.exports = { FMTEAM_EDITORIAL, stripAiTells };
+// ─── Tom de pele do Fabricio nos emojis (🏼 medium-light) ────────────────────────
+// Garante que emoji de mão/corpo/pessoa saia com o tom dele, não o amarelo neutro.
+// Pula se o emoji já tem modificador de tom, ou se é parte de sequência ZWJ.
+const SKIN_TONE = '\u{1F3FC}'; // 🏼
+const TONE_MODS = ['\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}'];
+const SKIN_BASES = new Set([
+  '👍', '👎', '👌', '👊', '👆', '👇', '👈', '👉', '👋', '👐', '🙌', '🙏', '🤚', '🤛',
+  '🤜', '🤝', '🤞', '🤟', '🤘', '🤙', '🖕', '🖖', '🖐', '🤌', '🤏', '🫵', '🫶', '🫰',
+  '🫱', '🫲', '🫳', '🫴', '👏', '🙋', '🤦', '🤷', '💅', '💪', '✊', '✋', '✌', '☝', '👈',
+]);
+function applySkinTone(input) {
+  if (!input || typeof input !== 'string') return input;
+  const chars = [...input];
+  const out = [];
+  for (let i = 0; i < chars.length; i++) {
+    out.push(chars[i]);
+    if (SKIN_BASES.has(chars[i])) {
+      const next = chars[i + 1];
+      if (TONE_MODS.includes(next) || next === '‍') continue; // já tem tom ou é ZWJ
+      if (next === '️') { out.push(SKIN_TONE); i++; continue; } // troca VS16 pelo tom
+      out.push(SKIN_TONE);
+    }
+  }
+  return out.join('');
+}
+
+module.exports = { FMTEAM_EDITORIAL, stripAiTells, applySkinTone };

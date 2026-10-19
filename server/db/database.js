@@ -294,6 +294,13 @@ const dismissCarouselsBulk = (ids) => {
   return n;
 };
 
+// ── Stories (sequências geradas por dia) ──────────────────────────────────────
+const getAllStoryBatches = () => readDb('story_batches').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+const saveStoryBatch = (b) => { const db = readDb('story_batches'); const item = { ...b, created_at: now() }; db.push(item); writeDb('story_batches', db); return item; };
+const updateStoryBatch = (id, data) => { const db = readDb('story_batches').map((b) => b.id === id ? { ...b, ...data } : b); writeDb('story_batches', db); };
+// Modos dos últimos N batches (mais recente primeiro) — pro anti-repetição da rotação.
+const getRecentStoryModes = (n = 7) => getAllStoryBatches().filter((b) => b.mode && b.status !== 'error').slice(0, n).map((b) => b.mode);
+
 // ── Reels (roteiros gerados a partir de carrosseis salvos) ────────────────────
 const getAllReels = () => readDb('reels').sort((a, b) => b.created_at.localeCompare(a.created_at));
 const getReel    = (id) => readDb('reels').find((r) => r.id === id) || null;
@@ -777,6 +784,7 @@ module.exports = {
   getSavedSlides, saveSlide, deleteSavedSlide,
   getCarouselConfig, setCarouselConfig,
   getAllCarousels, saveCarousel, updateCarousel, deleteCarousel, dismissCarouselsBulk,
+  getAllStoryBatches, saveStoryBatch, updateStoryBatch, getRecentStoryModes,
   // Reels
   getAllReels, getReel, saveReel, updateReel, deleteReel,
   getAllRawVideos, getRawVideo, saveRawVideo, updateRawVideo, deleteRawVideo, pickUnusedRawVideo, pickRandomRawVideo, countUsableRawVideos,

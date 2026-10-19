@@ -1,0 +1,56 @@
+name: Stories do dia (10h BRT)
+
+# Gera o pack de STORIES do dia (rotação de modos + voz do Fabricio + render 9:16),
+# amarrado no carrossel do dia. Roda DEPOIS do conteúdo diário (09h17) pra o post do
+# dia já existir. Mesma lógica de backup do daily-content (o agendamento do GitHub
+# Actions às vezes dropa execuções), e o serviço é idempotente por dia (se a manhã já
+# gerou, o backup só confere e sai).
+#   10:23 BRT = 13:23 UTC  ·  14:23 BRT (backup) = 17:23 UTC
+
+on:
+  schedule:
+    - cron: '23 13 * * *'   # manhã (~10:23 BRT)
+    - cron: '23 17 * * *'   # backup à tarde (~14:23 BRT)
+  workflow_dispatch: {}
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar e aguardar a geração dos stories do dia
+        env:
+          BASE: https://vira-los.fly.dev
+          KEY: ${{ secrets.DAILY_CRON_SECRET }}   # opcional; só exigida se setada no Fly
+        run: |
+          set -e
+          today=$(TZ=America/Sao_Paulo date +%F)
+          echo "Acordando a máquina e disparando os stories de $today..."
+          curl -sS -m 60 -X POST "$BASE/api/stories/generate" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-key: $KEY" \
+            -d '{"trigger":"cron"}' || true
+
+          echo "Aguardando o pack ficar pronto (mantém a máquina acordada)..."
+          for i in $(seq 1 40); do
+            sleep 30
+            resp=$(curl -sS -m 30 "$BASE/api/stories" || echo '{}')
+            status=$(echo "$resp" | jq -r --arg d "$today" '
+              [.batches[]? | select(.date==$d)] as $t
+              | if   ([$t[] | select(.status=="done" and ((.screenshots|length)>0))] | length) > 0 then "done"
+                elif (.state.generating == true) then "generating"
+                elif ([$t[] | select(.status=="error")] | length) > 0 then "error"
+                else "none" end')
+            echo "  tentativa $i — status de hoje: $status"
+            if [ "$status" = "done" ]; then
+              echo "✅ Stories de $today gerados."
+              echo "$resp" | jq -r --arg d "$today" '.batches[] | select(.date==$d and .status=="done") | "modo=\(.mode) tema=\(.topic // "-") stories=\((.screenshots|length))"' | head -1 || true
+              exit 0
+            fi
+            if [ "$status" = "error" ]; then
+              errs=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d and .status=="error") | .errors[]?] | unique | join(" || ")')
+              echo "❌ Geração dos stories de $today falhou: $errs"
+              exit 1
+            fi
+          done
+          echo "⚠️ Timeout aguardando concluir — pode ainda estar rodando no servidor."
+          exit 1
