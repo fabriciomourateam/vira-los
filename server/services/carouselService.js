@@ -2913,7 +2913,7 @@ async function takeScreenshotsPixelPerfect(html, outputDir, format = '4:5') {
   if (!browser) throw new Error('Playwright não disponível neste server');
 
   const context = await browser.newContext({
-    viewport: { width: 1080, height: format === '1:1' ? 1080 : 1350 },
+    viewport: { width: 1080, height: format === '1:1' ? 1080 : format === '9:16' ? 1920 : 1350 },
     deviceScaleFactor: 2,  // retina-quality (2160x2700 internamente)
   });
   const page = await context.newPage();
