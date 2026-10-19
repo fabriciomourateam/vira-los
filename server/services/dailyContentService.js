@@ -20,6 +20,7 @@ const {
 } = require('./carouselService');
 const { generateShortReelFromCarousel, generateShortReelFromTheme } = require('./reelsGeneratorService');
 const { SUBSTANCE_INTEL } = require('./substanceIntel');
+const { stripAiTells } = require('./fmteamEditorial');
 
 const HANDLE = 'fabriciomourateam';
 const CREATOR = 'Fabricio Moura';
@@ -547,12 +548,12 @@ async function buildAndScheduleQueuedReel({ time, carousels = [], avoidRawIds = 
     queueSlug = item.slug;
     db.saveReel({
       id: reelId,
-      fraseTela: item.fraseTela,
+      fraseTela: stripAiTells(item.fraseTela),
       fraseTelaTiming: '0-4s',
       ctaTela: item.ctaTela || '👇 LEIA A LEGENDA',
       ctaTelaTiming: '4-5s',
-      legendaPost: item.legendaPost,
-      title: item.title || (item.fraseTela || '').replace(/\*\*/g, '').slice(0, 60),
+      legendaPost: stripAiTells(item.legendaPost),
+      title: stripAiTells(item.title || (item.fraseTela || '').replace(/\*\*/g, '').slice(0, 60)),
       niche: NICHE, instagramHandle: `@${HANDLE}`,
       source: 'queue', queueSlug, audience: item.audience || null, archived: false,
     });

@@ -14,6 +14,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
 const { renderReel } = require('./reelRenderService');
+const { stripAiTells } = require('./fmteamEditorial');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
 const RENDERED_DIR = path.join(UPLOADS_DIR, 'reels', 'rendered');
@@ -52,7 +53,9 @@ async function renderReelVideo(reelId, { rawVideoId = null, avoidRawVideoIds = [
   await renderReel({
     rawVideoPath: raw.path,
     outPath,
-    fraseTela: reel.fraseTela,
+    // Limpeza anti-IA no chokepoint: o texto QUEIMADO no vídeo sai sem travessão,
+    // não importa a origem do reel (fila, tema, IA ou reel antigo re-renderizado).
+    fraseTela: stripAiTells(reel.fraseTela),
     fraseTelaTiming: reel.fraseTelaTiming,
     ctaTela: reel.ctaTela,
     ctaTelaTiming: reel.ctaTelaTiming,
@@ -129,7 +132,7 @@ async function scheduleReelNow(reelId, { dates = null, caption = null, platforms
 
   const cfg = db.getMlabsSettings();
   const finalDates = (dates && dates.length) ? dates : mlabs().computeNextReelSlots(1);
-  const cap = caption || reel.legendaPost || reel.legenda || reel.caption || '';
+  const cap = stripAiTells(caption || reel.legendaPost || reel.legenda || reel.caption || '');
   const youtubeTitle = (reel.title || cap.split('\n')[0] || '').replace(/\s+/g, ' ').trim().slice(0, 100);
   const chans = platforms || (cfg.channelSourceIdsReel && cfg.channelSourceIdsReel.length ? cfg.channelSourceIdsReel : undefined);
 
