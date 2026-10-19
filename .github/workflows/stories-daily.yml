@@ -18,7 +18,7 @@ jobs:
   gerar:
     runs-on: ubuntu-latest
     steps:
-      - name: Disparar e aguardar a geração dos stories do dia
+      - name: Disparar a geração dos stories do dia (fire-and-forget)
         env:
           BASE: https://vira-los.fly.dev
           KEY: ${{ secrets.DAILY_CRON_SECRET }}   # opcional; só exigida se setada no Fly
@@ -26,14 +26,19 @@ jobs:
           set -e
           today=$(TZ=America/Sao_Paulo date +%F)
           echo "Acordando a máquina e disparando os stories de $today..."
-          curl -sS -m 60 -X POST "$BASE/api/stories/generate" \
+          curl -sS -m 90 -X POST "$BASE/api/stories/generate" \
             -H "Content-Type: application/json" \
             -H "x-cron-key: $KEY" \
             -d '{"trigger":"cron"}' || true
+          echo ""
 
-          echo "Aguardando o pack ficar pronto (mantém a máquina acordada)..."
-          for i in $(seq 1 40); do
-            sleep 30
+          # FIRE-AND-FORGET: render dos stories + upload/agendamento no mLabs leva alguns
+          # minutos e TERMINA sozinho no servidor. Este job não fica preso esperando o
+          # "done" (isso só dava falsa-falha por timeout). Confere ~2 min pra pegar erro
+          # rápido; se ainda estiver gerando, sai com SUCESSO.
+          echo "Conferindo o arranque (fire-and-forget; o servidor conclui sozinho)..."
+          for i in $(seq 1 6); do
+            sleep 20
             resp=$(curl -sS -m 30 "$BASE/api/stories" || echo '{}')
             status=$(echo "$resp" | jq -r --arg d "$today" '
               [.batches[]? | select(.date==$d)] as $t
@@ -41,17 +46,17 @@ jobs:
                 elif (.state.generating == true) then "generating"
                 elif ([$t[] | select(.status=="error")] | length) > 0 then "error"
                 else "none" end')
-            echo "  tentativa $i — status de hoje: $status"
+            echo "  check $i — status de hoje: $status"
             if [ "$status" = "done" ]; then
-              echo "✅ Stories de $today gerados."
+              echo "✅ Stories de $today já ficaram prontos."
               echo "$resp" | jq -r --arg d "$today" '.batches[] | select(.date==$d and .status=="done") | "modo=\(.mode) tema=\(.topic // "-") stories=\((.screenshots|length))"' | head -1 || true
               exit 0
             fi
             if [ "$status" = "error" ]; then
               errs=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d and .status=="error") | .errors[]?] | unique | join(" || ")')
-              echo "❌ Geração dos stories de $today falhou: $errs"
+              echo "❌ Geração dos stories de $today falhou logo de cara: $errs"
               exit 1
             fi
           done
-          echo "⚠️ Timeout aguardando concluir — pode ainda estar rodando no servidor."
-          exit 1
+          echo "🚀 Stories de $today seguem rodando no servidor (fire-and-forget) — job encerrado com sucesso."
+          exit 0
