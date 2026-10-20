@@ -2975,6 +2975,30 @@ async function takeScreenshotsPixelPerfect(html, outputDir, format = '4:5') {
       });
     });
 
+    // ── Story: texto encolhe pra caber na faixa segura (não colar no selo/rodapé) ──
+    // O texto do story (.content .txt) é centralizado; quando é longo (lista 1/2/3) ele
+    // estoura pra cima (cola no selo) e pra baixo. Encolhe o font-size até o bloco caber
+    // entre ~16% e ~88% da altura. Só afeta stories (.story); carrossel não tem .story.
+    await page.evaluate(() => {
+      const MINFS = 30, STEP = 2;
+      document.querySelectorAll('.story').forEach((story) => {
+        const txt = story.querySelector('.content .txt');
+        const content = story.querySelector('.content');
+        if (!txt || !content) return;
+        const r = story.getBoundingClientRect();
+        const topSafe = r.top + r.height * 0.16;
+        const botSafe = r.top + r.height * 0.88;
+        let guard = 0;
+        while (guard++ < 120) {
+          const c = content.getBoundingClientRect();
+          if (c.top >= topSafe && c.bottom <= botSafe) break;
+          const fs = parseFloat(getComputedStyle(txt).fontSize) || 0;
+          if (fs <= MINFS) break;
+          txt.style.fontSize = (fs - STEP) + 'px';
+        }
+      });
+    });
+
     // Cada filho direto de body é 1 slide
     const slidesCount = await page.evaluate(() => document.body.children.length);
     if (slidesCount === 0) throw new Error('Nenhum slide encontrado no HTML');
