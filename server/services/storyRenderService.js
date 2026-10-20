@@ -59,7 +59,7 @@ function storyCss() {
   /* conteúdo: alinhado à esquerda, centralizado na vertical */
   .content { position:absolute; left:80px; right:80px; top:50%; transform:translateY(-50%); z-index:2; }
   .content .txt {
-    color:#fff; text-align:left; font-weight:700; font-size:66px; line-height:1.24;
+    color:#fff; text-align:left; font-weight:700; font-size:52px; line-height:1.26;
     letter-spacing:-0.5px; text-shadow:0 2px 24px rgba(0,0,0,0.45);
   }
   .content .txt .g { color:${GOLD}; }
