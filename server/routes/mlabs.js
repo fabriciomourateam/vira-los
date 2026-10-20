@@ -89,6 +89,18 @@ router.put('/settings', (req, res) => {
 });
 
 router.get('/default-dates', (_req, res) => res.json({ dates: computeDefaultDates() }));
+
+// ── DIAGNÓSTICO (temporário): captura as chamadas de API do site do mLabs ───────
+// Pra descobrir os endpoints da API NOVA e ligar o agendamento de STORY pelo formato
+// novo. Read-only, abre o browser logado (~40s). Remover depois que a descoberta acabar.
+router.get('/capture-api', async (_req, res) => {
+  try {
+    const out = await mlabs().captureApiTraffic();
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 // Próximos slots livres de REEL (esquema N/dia por X dias). Cada reel = 1 slot.
 router.get('/reel-slots', (req, res) => {
   const count = Math.max(1, Math.min(50, parseInt(req.query.count, 10) || 1));
