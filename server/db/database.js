@@ -547,8 +547,7 @@ const MLABS_DEFAULTS = {
   profileId: null,
   channelSourceIds: [],          // canais de CARROSSEL/feed (ex.: [3,1,23])
   channelSourceIdsReel: [],      // canais de REEL/shorts/tiktok (ex.: [15,18,20,19])
-  channelSourceIdsStory: [],     // canal(is) de STORY (aprendido sozinho de um story real no mLabs)
-  storyPayloadTemplate: null,    // attributes crus de um story real (clonado p/ conformar ao formato do mLabs)
+  channelSourceIdsStory: [4],    // canal(is) de STORY. 4 = instagram_stories (confirmado no post-api)
   youtubeShortsChannelId: 20,    // id do canal YouTube Shorts (exige título no agendamento)
   ownerId: null,
   autoScheduleCarousel: false,
