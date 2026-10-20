@@ -463,17 +463,37 @@ export async function generateAndSaveScreenshots(
   const parser = new DOMParser();
   const doc = parser.parseFromString(proxied, 'text/html');
 
-  // Injeta <style> sem @import de fontes remotas (causam CORS)
+  // Injeta <style> e CARREGA as fontes do carrossel via <link> (em vez de só dropar o
+  // @import). Sem isso, a fonte CONDENSADA (ex.: Barlow Condensed no título) não carrega
+  // no html2canvas e o texto cai num fallback largo — "perde a proporção, fica maior e
+  // mais espaçado" ao editar. O <link rel=stylesheet> de fonts.googleapis não dá CORS
+  // (diferente do @import dentro do style clonado), e as famílias entram em document.fonts.
   const injected: HTMLElement[] = [];
+  const fontUrls = new Set<string>();
+  const familyNames = new Set<string>();
+  const IMPORT_RE = /@import\s+url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)\s*;?/g;
   doc.querySelectorAll('style').forEach(s => {
-    const cleaned = (s.textContent || '').replace(
-      /@import\s+url\(['"]?https?:\/\/[^'")\s]+['"]?\)\s*;?/g, '',
-    );
+    const raw = s.textContent || '';
+    let m: RegExpExecArray | null;
+    while ((m = IMPORT_RE.exec(raw))) fontUrls.add(m[1]);
+    let fm: RegExpExecArray | null;
+    const FAM_RE = /font-family:\s*['"]([^'"]+)['"]/g;
+    while ((fm = FAM_RE.exec(raw))) familyNames.add(fm[1]);
+    const cleaned = raw.replace(IMPORT_RE, '');
     const el = document.createElement('style');
     el.textContent = cleaned;
     document.head.appendChild(el);
     injected.push(el);
   });
+  const fontLinks: HTMLLinkElement[] = [];
+  for (const href of fontUrls) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+    injected.push(link);
+    fontLinks.push(link);
+  }
 
   const container = document.createElement('div');
   container.style.cssText =
@@ -483,7 +503,19 @@ export async function generateAndSaveScreenshots(
   const savedFiles: string[] = [];
 
   try {
-    await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 3000))]);
+    // Espera os <link> de fonte carregarem e força o carregamento das famílias usadas,
+    // pra o html2canvas renderizar com a fonte certa (condensada) e não o fallback largo.
+    await Promise.all(fontLinks.map(l => new Promise<void>(res => {
+      if (l.sheet) return res();
+      l.addEventListener('load', () => res(), { once: true });
+      l.addEventListener('error', () => res(), { once: true });
+      setTimeout(res, 5000);
+    })));
+    try {
+      await Promise.all(Array.from(familyNames).map(f =>
+        (document as any).fonts.load(`900 68px '${f}'`).catch(() => {})));
+    } catch { /* fonts.load pode não existir em browsers antigos */ }
+    await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 6000))]);
 
     const slides = Array.from(doc.body.children) as HTMLElement[];
 
