@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Loader2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, CalendarClock, Check, Trash2, X, RefreshCw, ClipboardCheck,
+  Loader2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, CalendarClock, Check, Trash2, X, RefreshCw, ClipboardCheck, AlertTriangle,
 } from 'lucide-react';
 
 // Carrosséis gerados pelo robô aguardando revisão: Aprovar (agenda evergreen) ou Descartar.
@@ -19,6 +19,7 @@ interface PendingCarousel {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
+const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
 
 // Soma `months` a "AAAA-MM-DDTHH:MM" preservando a hora (mesma lógica de setMonth
 // do MiniAgendaCard/MlabsScheduler e do backend).
@@ -83,6 +84,26 @@ export default function CarouselReviewPanel({ api, onApproved }: Props) {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulk, setConfirmBulk] = useState<'selected' | 'all' | null>(null);
 
+  // Agenda existente (local + mLabs) pra avisar encavalamento de data/hora — mesma
+  // fonte e regra (<1h) do calendário ao lado (MiniAgendaCard).
+  const [sched, setSched] = useState<{ date: string; time: string; label: string }[]>([]);
+  const loadSchedule = useCallback(async () => {
+    try {
+      const localP = fetch(`${api}/api/mlabs/calendar`).then(r => (r.ok ? r.json() : [])).catch(() => []);
+      const extP = fetch(`${api}/api/mlabs/mlabs-schedules`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+      const [local, ext] = await Promise.all([localP, extP]);
+      const out: { date: string; time: string; label: string }[] = [];
+      if (Array.isArray(local)) for (const e of local) {
+        if (e?.date && e?.time) out.push({ date: e.date, time: e.time, label: e.typeLabel || e.contentType || 'post' });
+      }
+      if (ext && !ext.needsSync && Array.isArray(ext.items)) for (const it of ext.items) {
+        const m = String(it.date).match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+        if (m) out.push({ date: m[1], time: m[2], label: 'mLabs' });
+      }
+      setSched(out);
+    } catch { /* agenda indisponível: sem aviso, não bloqueia aprovar */ }
+  }, [api]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -98,7 +119,7 @@ export default function CarouselReviewPanel({ api, onApproved }: Props) {
     }
   }, [api]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadSchedule(); }, [load, loadSchedule]);
 
   const totalDates = intervalMonths <= 0 ? 1 : Math.max(1, repetitions);
   const dates = useMemo(() => {
@@ -106,6 +127,21 @@ export default function CarouselReviewPanel({ api, onApproved }: Props) {
     const first = `${dateStr}T${timeStr}`;
     return Array.from({ length: totalDates }, (_, k) => (k === 0 ? first : shiftMonthsLocal(first, k * intervalMonths)));
   }, [dateStr, timeStr, intervalMonths, totalDates]);
+
+  // Pra cada data-alvo (inclusive os meses futuros do evergreen), vê se encavala com
+  // um post já agendado no mesmo dia a menos de 1h — mesma regra do calendário.
+  const dateClashes = useMemo(() => {
+    return dates.map((dt) => {
+      const m = dt.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+      if (!m) return { clash: false, conflicts: [] as string[] };
+      const mine = toMin(m[2]);
+      const conflicts = sched
+        .filter((e) => e.date === m[1] && Math.abs(toMin(e.time) - mine) < 60)
+        .map((e) => `${e.time} ${e.label}`);
+      return { clash: conflicts.length > 0, conflicts };
+    });
+  }, [dates, sched]);
+  const anyClash = dateClashes.some((c) => c.clash);
 
   function openApprove(item: PendingCarousel) {
     setApproving(item);
@@ -115,6 +151,7 @@ export default function CarouselReviewPanel({ api, onApproved }: Props) {
     setRepetitions(4);
     setCaption(item.legenda || '');
     setSubmitError(null);
+    loadSchedule(); // atualiza a agenda pra o aviso de encavalamento sair fresco
   }
 
   function closeApprove() {
@@ -423,14 +460,31 @@ export default function CarouselReviewPanel({ api, onApproved }: Props) {
               </label>
             </div>
 
-            <div className="rounded-lg border border-border bg-background p-3 space-y-1">
+            <div className={`rounded-lg border p-3 space-y-1 ${anyClash ? 'border-amber-500/50 bg-amber-500/5' : 'border-border bg-background'}`}>
               <p className="text-xs font-semibold text-foreground">Vai postar em {dates.length} data(s)</p>
               <ul className="text-xs text-muted-foreground space-y-0.5">
-                {dates.map((d, i) => (
-                  <li key={d + i}>{i + 1}. {fmtDate(d)}</li>
-                ))}
+                {dates.map((d, i) => {
+                  const c = dateClashes[i];
+                  return (
+                    <li key={d + i} className={c?.clash ? 'text-red-400' : ''}>
+                      {i + 1}. {fmtDate(d)}
+                      {c?.clash && (
+                        <span className="ml-1 inline-flex items-center gap-0.5 font-semibold" title={`Já tem: ${c.conflicts.join(', ')}`}>
+                          <AlertTriangle size={11} /> encavala
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
-              <p className="text-[10px] text-muted-foreground">Horário de Brasília.</p>
+              {anyClash ? (
+                <p className="text-[11px] text-amber-500 flex items-start gap-1 pt-0.5">
+                  <AlertTriangle size={12} className="shrink-0 mt-px" />
+                  <span>Alguma data cai a menos de 1h de um post já agendado (inclusive meses à frente). Vai agendar mesmo assim — mude a data/hora se não quiser sobrepor.</span>
+                </p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">Horário de Brasília. Nenhum choque com posts já agendados.</p>
+              )}
             </div>
 
             <label className="block space-y-1">
