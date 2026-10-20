@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
-const { generateDailyStories, getState } = require('../services/storyService');
+const { generateDailyStories, getState, rescheduleLatest } = require('../services/storyService');
 
 // Kick-off assíncrono: responde rápido e gera em background (geração+render demora).
 router.post('/generate', (req, res) => {
@@ -18,6 +18,17 @@ router.post('/generate', (req, res) => {
 
 router.get('/', (_req, res) => {
   res.json({ batches: db.getAllStoryBatches().slice(0, 30), state: getState() });
+});
+
+// Reagenda no mLabs o último pack já renderizado (não regera). Pra recuperar quando a
+// geração deu certo mas o agendamento falhou.
+router.post('/reschedule-latest', async (_req, res) => {
+  try {
+    const out = await rescheduleLatest();
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

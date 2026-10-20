@@ -149,4 +149,27 @@ async function generateDailyStories({ trigger = 'manual' } = {}) {
 
 function getState() { return { ...state }; }
 
-module.exports = { generateDailyStories, getState, pickSourcePost };
+// Reagenda no mLabs o último pack de stories já renderizado (sem regerar). Útil quando
+// a geração deu certo mas o agendamento falhou (ex.: canal de story ainda não resolvido).
+async function rescheduleLatest() {
+  const batches = (db.getAllStoryBatches() || [])
+    .filter((b) => b.status === 'done' && (b.screenshots || []).length)
+    .sort((a, b) => String(b.created_at || b.id).localeCompare(String(a.created_at || a.id)));
+  const batch = batches[0];
+  if (!batch) throw new Error('Nenhum pack de story pronto pra reagendar.');
+  const outDir = path.join(OUTPUT_DIR, batch.folderName);
+  const mediaPaths = batch.screenshots.map((f) => path.join(outDir, f));
+  const when = storyScheduleTime();
+  try {
+    const r = await mlabs.scheduleStories({ mediaPaths, dates: [when] });
+    const schedule = { ok: true, when, mlabsStatus: r.mlabsStatus, dates: r.dates };
+    db.updateStoryBatch(batch.id, { schedule });
+    return { batchId: batch.id, mode: batch.mode, topic: batch.topic, schedule };
+  } catch (e) {
+    const schedule = { ok: false, when, error: e.message };
+    db.updateStoryBatch(batch.id, { schedule });
+    return { batchId: batch.id, mode: batch.mode, topic: batch.topic, schedule };
+  }
+}
+
+module.exports = { generateDailyStories, getState, pickSourcePost, rescheduleLatest };
