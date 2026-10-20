@@ -1034,4 +1034,19 @@ async function captureApiTraffic() {
   }
 }
 
-module.exports = { scheduleContent, scheduleStories, calibrate, computeDefaultDates, computeNextReelSlots, expandMonthly, spToUtcIso, buildSchedulePayload, fetchMlabsSchedules, captureApiTraffic };
+// Puxa o JSON CRU de 1 agendamento do post-api (pra ver como um STORY de verdade é
+// representado — o story de teste 366177273 foi criado pelo MCP e deu certo).
+async function fetchRawSchedule(id) {
+  const { browser } = await connectBrowser();
+  try {
+    const ctx = await newContext(browser);
+    const page = await ensureSession(ctx);
+    const auth = await learnAuthHeaders(page);
+    const res = await apiFetch(page, `${MLABS.schedules}/${id}`,
+      { method: 'GET', headers: { accept: 'application/vnd.api+json' } }, auth);
+    saveSession(await ctx.storageState());
+    return { status: res.status, body: res.body };
+  } finally { await browser.close().catch(() => {}); }
+}
+
+module.exports = { scheduleContent, scheduleStories, calibrate, computeDefaultDates, computeNextReelSlots, expandMonthly, spToUtcIso, buildSchedulePayload, fetchMlabsSchedules, captureApiTraffic, fetchRawSchedule };

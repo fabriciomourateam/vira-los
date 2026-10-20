@@ -93,8 +93,12 @@ router.get('/default-dates', (_req, res) => res.json({ dates: computeDefaultDate
 // ── DIAGNÓSTICO (temporário): captura as chamadas de API do site do mLabs ───────
 // Pra descobrir os endpoints da API NOVA e ligar o agendamento de STORY pelo formato
 // novo. Read-only, abre o browser logado (~40s). Remover depois que a descoberta acabar.
-router.get('/capture-api', async (_req, res) => {
+router.get('/capture-api', async (req, res) => {
   try {
+    if (req.query.id) {
+      const out = await mlabs().fetchRawSchedule(String(req.query.id));
+      return res.json(out);
+    }
     const out = await mlabs().captureApiTraffic();
     res.json(out);
   } catch (e) {
