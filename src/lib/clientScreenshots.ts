@@ -398,6 +398,36 @@ async function preloadBackgroundImages(container: HTMLElement): Promise<void> {
 
 // ─── Exportação principal ────────────────────────────────────────────────────
 
+/**
+ * Capa: título não pode "ficar grande" (espelha a lógica do servidor em carouselService).
+ * A .cover-title é 68px fixo; hook + subtítulo juntos viram 3+ linhas e ficam gigantes.
+ * Encolhe o font-size até no MÁXIMO 2 linhas (piso 42px) sem colar no selo acima — hooks
+ * curtos de 1-2 linhas continuam grandes. Roda no DOM real antes do html2canvas capturar.
+ */
+function fitCoverTitle(root: HTMLElement): void {
+  const MINFS = 42, STEP = 2, MAXLINES = 2;
+  root.querySelectorAll<HTMLElement>('.cover-title').forEach((el) => {
+    const slide = (el.closest('.clean-cover') as HTMLElement) || el.parentElement;
+    if (!slide) return;
+    const sTop = slide.getBoundingClientRect().top;
+    const badge = slide.querySelector('.profile-badge') as HTMLElement | null;
+    const limit = badge
+      ? (badge.getBoundingClientRect().bottom - sTop + 24)
+      : slide.getBoundingClientRect().height * 0.42;
+    let guard = 0;
+    while (guard++ < 80) {
+      const cs = getComputedStyle(el);
+      const fs = parseFloat(cs.fontSize) || 0;
+      const lh = parseFloat(cs.lineHeight) || fs * 1.1;
+      const lines = Math.round(el.scrollHeight / lh);
+      const top = el.getBoundingClientRect().top - sTop;
+      if (lines <= MAXLINES && top >= limit) break;
+      if (fs <= MINFS) break;
+      el.style.fontSize = `${fs - STEP}px`;
+    }
+  });
+}
+
 export async function generateAndSaveScreenshots(
   api: string,
   html: string,
@@ -513,6 +543,9 @@ export async function generateAndSaveScreenshots(
         }),
       );
       await new Promise(r => setTimeout(r, 150));
+
+      // 7. Anti-estouro do título da capa (encolhe até caber, igual ao servidor)
+      fitCoverTitle(container);
 
       let dataUrl: string;
       try {

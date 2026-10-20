@@ -2945,6 +2945,36 @@ async function takeScreenshotsPixelPerfect(html, outputDir, format = '4:5') {
     await page.evaluate(() => document.fonts && document.fonts.ready ? document.fonts.ready : null);
     await page.waitForTimeout(150); // settle
 
+    // ── Capa: título não pode "ficar grande" ───────────────────────────────────
+    // A .cover-title é 68px fixo. Quando a IA junta hook + subtítulo ela vira 3+ linhas
+    // e fica gigante/dominante (reclamação real do Fabricio). Aqui encolhemos o font-size
+    // até no MÁXIMO 2 linhas (piso 42px) e garantindo que não cole no selo acima — hooks
+    // curtos de 1-2 linhas continuam grandes (68px). Roda no DOM real antes do screenshot;
+    // a MESMA lógica existe no render do cliente (clientScreenshots.ts) pra bater igual.
+    await page.evaluate(() => {
+      const MINFS = 42, STEP = 2, MAXLINES = 2;
+      document.querySelectorAll('.cover-title').forEach((el) => {
+        const slide = el.closest('.clean-cover') || el.parentElement;
+        if (!slide) return;
+        const sTop = slide.getBoundingClientRect().top;
+        const badge = slide.querySelector('.profile-badge');
+        const limit = badge
+          ? (badge.getBoundingClientRect().bottom - sTop + 24)
+          : slide.getBoundingClientRect().height * 0.42;
+        let guard = 0;
+        while (guard++ < 80) {
+          const cs = getComputedStyle(el);
+          const fs = parseFloat(cs.fontSize) || 0;
+          const lh = parseFloat(cs.lineHeight) || fs * 1.1;
+          const lines = Math.round(el.scrollHeight / lh);
+          const top = el.getBoundingClientRect().top - sTop;
+          if (lines <= MAXLINES && top >= limit) break;
+          if (fs <= MINFS) break;
+          el.style.fontSize = (fs - STEP) + 'px';
+        }
+      });
+    });
+
     // Cada filho direto de body é 1 slide
     const slidesCount = await page.evaluate(() => document.body.children.length);
     if (slidesCount === 0) throw new Error('Nenhum slide encontrado no HTML');
