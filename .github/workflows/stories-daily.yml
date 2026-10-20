@@ -49,7 +49,9 @@ jobs:
             echo "  check $i — status de hoje: $status"
             if [ "$status" = "done" ]; then
               echo "✅ Stories de $today já ficaram prontos."
-              echo "$resp" | jq -r --arg d "$today" '.batches[] | select(.date==$d and .status=="done") | "modo=\(.mode) tema=\(.topic // "-") stories=\((.screenshots|length))"' | head -1 || true
+              # Mostra também o resultado do AGENDAMENTO no mLabs (schedule.ok/erro) —
+              # senão uma falha de agendamento fica invisível (o batch segue "done").
+              echo "$resp" | jq -r --arg d "$today" '.batches[] | select(.date==$d and .status=="done") | "modo=\(.mode) tema=\(.topic // "-") stories=\((.screenshots|length)) | mLabs_agendado=\(.schedule.ok // "?") horario=\(.schedule.when // "-") erro=\(.schedule.error // "-")"' | head -1 || true
               exit 0
             fi
             if [ "$status" = "error" ]; then
