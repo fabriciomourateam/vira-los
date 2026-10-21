@@ -6,12 +6,19 @@ name: Stories do dia (08h BRT)
 # o que não muda a função dele (abrir DM num tema hormonal/performance). Mesma lógica
 # de backup do daily-content (o GitHub Actions às vezes dropa execuções) e o serviço é
 # idempotente por dia (se a 1ª já gerou, o backup só confere e sai).
-#   06:28 BRT = 09:28 UTC  ·  06:58 BRT (backup) = 09:58 UTC  → story agendado p/ 08:00 BRT
+#
+# IMPORTANTE: o cron do GitHub é "melhor esforço" e DROPA execuções (20/10 atrasou ~5h,
+# 21/10 dropou as duas da manhã). Por isso 4 tentativas no dia: as 2 cedo miram as 08h;
+# as 2 da tarde (nos MESMOS horários do daily-content, que raramente dropa) garantem que
+# o story saia mesmo que a manhã caia — nesse caso o horário vira "agora+15min", não 08h.
+#   06:28/06:58 BRT (09:28/09:58 UTC) → alvo 08:00  ·  09:17/13:17 BRT (12:17/16:17 UTC) → backup
 
 on:
   schedule:
-    - cron: '28 9 * * *'    # manhã cedo (~06:28 BRT) — antes das 08h
-    - cron: '58 9 * * *'    # backup (~06:58 BRT)
+    - cron: '28 9 * * *'    # manhã cedo (~06:28 BRT) — mira as 08h
+    - cron: '58 9 * * *'    # 2ª tentativa cedo (~06:58 BRT)
+    - cron: '17 12 * * *'   # backup manhã (~09:17 BRT) — horário que o daily-content usa
+    - cron: '17 16 * * *'   # backup tarde (~13:17 BRT) — última rede de segurança
   workflow_dispatch: {}
 
 jobs:
