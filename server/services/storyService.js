@@ -118,14 +118,21 @@ async function generateDailyStories({ trigger = 'manual' } = {}) {
     let schedule = null;
     if (cfg.autoScheduleStory !== false && screenshots.length) {
       const when = storyScheduleTime();
-      try {
-        const mediaPaths = screenshots.map((f) => path.join(outDir, f));
-        const r = await mlabs.scheduleStories({ mediaPaths, dates: [when] });
-        schedule = { ok: true, when, mlabsStatus: r.mlabsStatus, dates: r.dates };
-        console.log(`[Stories] batch ${batchId} agendado no mLabs p/ ${when} (SP).`);
-      } catch (e) {
-        schedule = { ok: false, when, error: e.message };
-        console.error(`[Stories] agendamento no mLabs falhou: ${e.message}`);
+      const mediaPaths = screenshots.map((f) => path.join(outDir, f));
+      // Retry: o render (Playwright) e o agendamento (outro browser) rodam em sequência;
+      // às vezes o browser do agendamento morre logo após o render ("Target page/context
+      // closed"). Uma nova tentativa com browser fresco resolve. Até 3 tentativas.
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const r = await mlabs.scheduleStories({ mediaPaths, dates: [when] });
+          schedule = { ok: true, when, mlabsStatus: r.mlabsStatus, dates: r.dates };
+          console.log(`[Stories] batch ${batchId} agendado no mLabs p/ ${when} (SP).`);
+          break;
+        } catch (e) {
+          schedule = { ok: false, when, error: e.message, attempts: attempt };
+          console.error(`[Stories] agendamento no mLabs falhou (tentativa ${attempt}/3): ${e.message}`);
+          if (attempt < 3) await new Promise((r) => setTimeout(r, 5000));
+        }
       }
     }
 
