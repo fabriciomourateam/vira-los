@@ -2999,6 +2999,32 @@ async function takeScreenshotsPixelPerfect(html, outputDir, format = '4:5') {
       });
     });
 
+    // ── Capa fmteam: headline não pode tampar a foto inteira ────────────────────
+    // A .capa-headline-area é ancorada em baixo e cresce PRA CIMA. Headline longo
+    // (ex.: 3 frases) enche a capa toda e estoura por cima do selo/foto. Encolhe o
+    // headline (+ sub + context, que escalam juntos) até a área começar no máx. na
+    // metade da altura (~50%), deixando a metade de cima da foto respirar. Piso 40px.
+    await page.evaluate(() => {
+      const slideOf = (el) => { let s = el; while (s.parentElement && s.parentElement !== document.body) s = s.parentElement; return s; };
+      document.querySelectorAll('.capa-headline-area').forEach((area) => {
+        const slide = slideOf(area);
+        const sRect = slide.getBoundingClientRect();
+        const minTop = sRect.top + sRect.height * 0.50;
+        const els = area.querySelectorAll('.capa-headline, .capa-sub, .capa-context');
+        if (!els.length) return;
+        let guard = 0;
+        while (guard++ < 200) {
+          if (area.getBoundingClientRect().top >= minTop) break;
+          let shrunk = false;
+          els.forEach((el) => {
+            const fs = parseFloat(getComputedStyle(el).fontSize) || 0;
+            if (fs > 40) { el.style.fontSize = (fs - 3) + 'px'; shrunk = true; }
+          });
+          if (!shrunk) break;
+        }
+      });
+    });
+
     // Cada filho direto de body é 1 slide
     const slidesCount = await page.evaluate(() => document.body.children.length);
     if (slidesCount === 0) throw new Error('Nenhum slide encontrado no HTML');
