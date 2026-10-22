@@ -745,6 +745,19 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
     try { db.updateDailyBatch(batchId, batch); } catch (e) { console.error('[DailyContent] falha ao salvar batch:', e.message); }
     state.lastFinishedAt = new Date().toISOString();
     state.lastError = errors.length ? errors.join(' | ') : null;
+
+    // Encadeia os STORIES do dia no MESMO ciclo. O cron do GitHub é instável pra disparar
+    // o workflow de stories (dropa/atrasa dias), mas o conteúdo diário roda de forma
+    // confiável e acorda a máquina — então geramos o story logo após o conteúdo, de forma
+    // SEQUENCIAL (sem concorrer com o render acima). Idempotente: se o workflow de stories
+    // já tiver gerado hoje, só confere e sai. Falha aqui não derruba o batch diário.
+    try {
+      const { generateDailyStories } = require('./storyService');
+      await generateDailyStories({ trigger: 'daily-chain' });
+    } catch (e) {
+      console.error('[DailyContent] encadeamento de stories falhou (ignorado):', e.message);
+    }
+
     return batch;
   } finally {
     state.generating = false;
