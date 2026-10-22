@@ -278,6 +278,9 @@ const ALL_FONTS_LINK =
   `&family=DM+Sans:wght@300;400;500;600;700` +
   `&family=Space+Grotesk:wght@300;400;500;600;700` +
   `&family=Syne:wght@400;500;600;700;800` +
+  // fmteam: headline condensada + corpo — sem elas o editar+salvar caía em fonte larga
+  `&family=Barlow+Condensed:wght@400;500;600;700;800;900` +
+  `&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800` +
   `&display=swap" rel="stylesheet">`;
 
 function extractFontSize(el: Element): number | undefined {
@@ -2891,7 +2894,10 @@ export default function CarouselEditor({
     const fontOverrideCss = globalFont
       ? `<style>*:not(.verified-badge):not(.verified-badge *){font-family:'${globalFont}',sans-serif!important}</style>`
       : '';
-    return `<!DOCTYPE html><html><head>${head}${fontOverrideCss}</head><body>\n${built.join('\n')}\n</body></html>`;
+    // Inclui ALL_FONTS_LINK no HTML SALVO (igual ao preview) — garante que o render
+    // (servidor ou cliente) carregue as fontes, inclusive as do fmteam. Sem isso o
+    // editar+salvar saía com fonte larga (fallback) quando o @import do head não pegava.
+    return `<!DOCTYPE html><html><head>${head}${ALL_FONTS_LINK}${fontOverrideCss}</head><body>\n${built.join('\n')}\n</body></html>`;
   }, [slides, head, editedTexts, editedBgUrls, elementOverrides, overlayConfigs, badgeVisible, bgImageConfigs, followBannerConfigs, ctaFullBleedConfigs, ctaCardStyles, globalFont, slideBgColors]);
 
   // ── Persistência: avisa o pai sempre que o HTML reconstruído mudar ───────────
@@ -2931,22 +2937,28 @@ export default function CarouselEditor({
   // carregam e o auto-ajuste de título funciona. O html2canvas do cliente caía em fonte
   // larga (fallback) e estourava o título ao editar. Cai pro cliente só se o servidor falhar.
   async function renderAndSaveScreenshots(html: string, folder: string = folderName): Promise<string[]> {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 120_000);
-      const res = await fetch(`${API}/api/carousel/screenshots-pp`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html, folderName: folder, slideH }),
-        signal: ctrl.signal,
-      });
-      clearTimeout(timer);
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && Array.isArray(data.screenshots) && data.screenshots.length) return data.screenshots;
-      throw new Error(data.error || `HTTP ${res.status}`);
-    } catch (e) {
-      console.warn('[Editor] render no servidor falhou, usando cliente:', e);
-      return generateAndSaveScreenshots(API, html, folder, undefined, slideH);
+    // Tenta o render no servidor até 2x (o Chromium do Fly às vezes cai logo após outro
+    // uso — "Target page/context closed"); só cai pro cliente se as 2 falharem.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 120_000);
+        const res = await fetch(`${API}/api/carousel/screenshots-pp`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ html, folderName: folder, slideH }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && Array.isArray(data.screenshots) && data.screenshots.length) return data.screenshots;
+        throw new Error(data.error || `HTTP ${res.status}`);
+      } catch (e) {
+        console.warn(`[Editor] render no servidor falhou (tentativa ${attempt}/2):`, e);
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 2500));
+      }
     }
+    console.warn('[Editor] usando render do cliente (fallback)');
+    return generateAndSaveScreenshots(API, html, folder, undefined, slideH);
   }
 
   // ── JPEG download ─────────────────────────────────────────────────────────────
