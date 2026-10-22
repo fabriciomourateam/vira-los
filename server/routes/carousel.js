@@ -643,10 +643,15 @@ router.post('/screenshots-pp', async (req, res) => {
   const { html, folderName } = req.body || {};
   if (!html || !folderName) return res.status(400).json({ error: 'html e folderName obrigatórios' });
   if (!isSafeFolderName(folderName)) return res.status(400).json({ error: 'folderName inválido' });
+  // Formato: aceita direto ('1:1'|'4:5'|'9:16') ou deriva da altura do slide.
+  const fmtIn = req.body && req.body.format;
+  const h = req.body && Number(req.body.slideH);
+  const format = ['1:1', '4:5', '9:16'].includes(fmtIn)
+    ? fmtIn : (h === 1080 ? '1:1' : h === 1920 ? '9:16' : '4:5');
   const folderPath = path.join(OUTPUT_DIR, folderName);
   try {
     const t0 = Date.now();
-    const screenshots = await takeScreenshotsPixelPerfect(html, folderPath);
+    const screenshots = await takeScreenshotsPixelPerfect(html, folderPath, format);
     const ms = Date.now() - t0;
     console.log(`[screenshots-pp] ${screenshots.length} slides em ${ms}ms (${Math.round(ms/screenshots.length)}ms/slide)`);
     res.json({ screenshots, ms });

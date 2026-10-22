@@ -2927,6 +2927,28 @@ export default function CarouselEditor({
     );
   }
 
+  // Render dos screenshots PREFERINDO o servidor (Playwright, pixel-perfect): as fontes
+  // carregam e o auto-ajuste de título funciona. O html2canvas do cliente caía em fonte
+  // larga (fallback) e estourava o título ao editar. Cai pro cliente só se o servidor falhar.
+  async function renderAndSaveScreenshots(html: string, folder: string = folderName): Promise<string[]> {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 120_000);
+      const res = await fetch(`${API}/api/carousel/screenshots-pp`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html, folderName: folder, slideH }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.screenshots) && data.screenshots.length) return data.screenshots;
+      throw new Error(data.error || `HTTP ${res.status}`);
+    } catch (e) {
+      console.warn('[Editor] render no servidor falhou, usando cliente:', e);
+      return generateAndSaveScreenshots(API, html, folder, undefined, slideH);
+    }
+  }
+
   // ── JPEG download ─────────────────────────────────────────────────────────────
 
   async function handleDownloadJpegs() {
@@ -2940,7 +2962,7 @@ export default function CarouselEditor({
         body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
       // Gera screenshots no cliente e faz upload slide-a-slide
-      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName, undefined, slideH);
+      const screenshots = await renderAndSaveScreenshots(modifiedHtml);
       onScreenshotsUpdated(screenshots);
       for (let i = 0; i < screenshots.length; i++) {
         const url = `${API}/output/${folderName}/${screenshots[i]}`;
@@ -3179,7 +3201,7 @@ export default function CarouselEditor({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html: modifiedHtml, folderName }),
       });
-      const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, folderName, undefined, slideH);
+      const screenshots = await renderAndSaveScreenshots(modifiedHtml);
       onScreenshotsUpdated(screenshots);
       toast.success(`${screenshots.length} screenshots atualizados!`);
     } catch (err: any) { toast.error(err.message); }
@@ -3206,7 +3228,7 @@ export default function CarouselEditor({
       toast.success(`Modelo "${name}" salvo! Gerando capa…`);
 
       try {
-        const screenshots = await generateAndSaveScreenshots(API, modifiedHtml, data.folderName, undefined, slideH);
+        const screenshots = await renderAndSaveScreenshots(modifiedHtml, data.folderName);
         await fetch(`${API}/api/carousel/saved/${data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -3248,7 +3270,7 @@ export default function CarouselEditor({
 
       // 2. Screenshots em segundo plano — não bloqueia o botão
       setThumbLoading(true);
-      generateAndSaveScreenshots(API, modifiedHtml, folderName, undefined, slideH)
+      renderAndSaveScreenshots(modifiedHtml)
         .then(screenshots => {
           if (screenshots.length) onScreenshotsUpdated(screenshots);
           toast.success('Miniaturas atualizadas!');
