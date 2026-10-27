@@ -19,7 +19,7 @@ jobs:
           # Acorda a maquina (pode estar dormindo) e tenta ler /api/usage ate 6x.
           resp=""
           for i in $(seq 1 6); do
-            code=$(curl -sS -m 40 -o /tmp/usage.json -w '%{http_code}' "$BASE/api/usage")
+            code=$(curl -sS -m 40 -o /tmp/usage.json -w '%{http_code}' "$BASE/api/usage/summary")
             echo "tentativa $i: HTTP $code"
             if [ "$code" = "200" ]; then resp=$(cat /tmp/usage.json); break; fi
             sleep 8
