@@ -1,0 +1,38 @@
+name: Relatorio de custo Claude (manual)
+
+# Disparo manual. Le /api/usage do servidor (Fly) e imprime um resumo legivel
+# do gasto com a API do Claude: hoje, mes atual, mes passado, total, por feature
+# e por mes. So leitura — nao altera nada.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  relatorio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ler e resumir o uso da API do Claude
+        env:
+          BASE: https://vira-los.fly.dev
+        run: |
+          set -e
+          resp=$(curl -sS -m 30 "$BASE/api/usage")
+          echo "========= RESUMO DE CUSTO (Claude API) ========="
+          echo "$resp" | jq -r '
+            def l(c): "R$ " + (c.brl|tostring) + "  | " + (c.count|tostring) + " chamadas | economizou R$ " + (c.savedBrl|tostring);
+            "HOJE......: " + l(.today),
+            "MES ATUAL.: " + l(.thisMonth),
+            "MES PASSADO: " + l(.lastMonth),
+            "TOTAL.....: " + l(.total),
+            "",
+            "--- POR FEATURE (todo o historico) ---",
+            (.byFeature | to_entries | sort_by(-.value.brl) | .[] |
+              (.key + ": R$ " + (.value.brl|tostring) + " (" + (.value.count|tostring) + "x)")),
+            "",
+            "--- POR MES ---",
+            (.byMonth | to_entries | sort_by(.key) | .[] |
+              (.key + ": R$ " + (.value.brl|tostring) + " (" + (.value.count|tostring) + "x)")),
+            "",
+            "cotacao usada: USD/BRL " + (.config.usdBrl|tostring)
+          '
+          echo "================================================"
