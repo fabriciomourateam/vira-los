@@ -15,8 +15,17 @@ jobs:
         env:
           BASE: https://vira-los.fly.dev
         run: |
-          set -e
-          resp=$(curl -sS -m 30 "$BASE/api/usage")
+          set +e
+          # Acorda a maquina (pode estar dormindo) e tenta ler /api/usage ate 6x.
+          resp=""
+          for i in $(seq 1 6); do
+            code=$(curl -sS -m 40 -o /tmp/usage.json -w '%{http_code}' "$BASE/api/usage")
+            echo "tentativa $i: HTTP $code"
+            if [ "$code" = "200" ]; then resp=$(cat /tmp/usage.json); break; fi
+            sleep 8
+          done
+          echo "--- corpo cru (primeiros 400 chars) ---"
+          head -c 400 /tmp/usage.json; echo
           echo "========= RESUMO DE CUSTO (Claude API) ========="
           echo "$resp" | jq -r '
             def l(c): "R$ " + (c.brl|tostring) + "  | " + (c.count|tostring) + " chamadas | economizou R$ " + (c.savedBrl|tostring);
