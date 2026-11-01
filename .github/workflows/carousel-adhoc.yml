@@ -31,7 +31,7 @@ jobs:
 
           echo "=== disparando geração ==="
           body=$(jq -n --arg t "$TOPIC" --arg r "$ROTEIRO" --arg i "$INSTR" \
-            '{topic:$t, roteiro:$r, instructions:$i, numSlides:6, layoutStyle:"fmteam", ctaStyle:"dark-fullbleed"}')
+            '{topic:$t, roteiro:$r, instructions:$i, niche:"consultoria online de treino e nutricao (mentoria para treinadores e nutricionistas)", instagramHandle:"fabriciomourateam", creatorName:"Fabricio Moura", numSlides:6, layoutStyle:"fmteam", ctaStyle:"dark-fullbleed"}')
           resp=$(curl -sS -m 60 -X POST "$BASE/api/carousel/generate" -H "Content-Type: application/json" -d "$body")
           jobId=$(echo "$resp" | jq -r '.jobId // empty')
           if [ -z "$jobId" ]; then echo "❌ sem jobId: $resp"; exit 1; fi
