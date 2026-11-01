@@ -17,17 +17,18 @@ jobs:
         run: |
           set -e
           ROTEIRO=$(cat <<'EOF'
-          SLIDE 1 (capa): Definição muscular não é sorte. É método.
-          SLIDE 2: A maioria treina pesado, come bastante e espera o corpo responder. Sem sistema, o resultado vira loteria — às vezes vem, quase sempre trava.
-          SLIDE 3: Quem fica realmente seco não treina mais. Treina diferente: calorias ajustadas por fase, macro na medida certa e treino que mantém força enquanto corta gordura. É isso que separa amador de quem tem estrutura.
-          SLIDE 4: Definição de verdade é sequência: déficit calibrado (sem passar fome), proteína protegendo a massa magra e periodização do treino pra não murchar junto com a gordura.
-          SLIDE 5: Quando treino, macros e descanso ficam organizados em torno de um plano real, a composição corporal muda em semanas — não em meses de achismo.
-          SLIDE 6: O atalho não é fórmula mágica. É parar de adivinhar. Com acompanhamento, cada ajuste é feito pro SEU corpo e pra SUA rotina — e você só executa.
-          SLIDE 7 (CTA): Se você treina sério, merece um plano sério. Comenta DIETA que eu te mando o caminho pra secar sem passar fome.
+          Use os textos abaixo EXATAMENTE como estao. Nao reescreva, nao resuma, nao acrescente frases.
+          SLIDE 1 (capa, so o gancho): Você não precisa de mais paciente. Precisa de um programa que fidelize seu aluno.
+          SLIDE 2 | Titulo: A dor | Texto: Vende hora, o paciente desmarca, e todo mês você começa do zero.
+          SLIDE 3 | Titulo: O programa | Texto: Um acompanhamento com duração definida, entrega contínua e suporte de perto. O aluno vê resultado e renova.
+          SLIDE 4 | Titulo: Fidelização = previsibilidade | Texto: Aluno que renova é faturamento que você já sabe que vem. Exemplo: 50 alunos num programa de R$ 400 por mês dá R$ 20 mil todo mês.
+          SLIDE 5 | Titulo: Captação e vendas | Texto: Com processo comercial, entra aluno novo sem você depender só de indicação.
+          SLIDE 6 | Titulo: Resultado | Texto: Mais faturamento, menos horas trabalhadas e mais tempo pra viver. Foi o que eu construí e você pode ter o mesmo.
+          SLIDE 7 (CTA) | Texto: Eu monto esse programa junto com você. Comenta MENTORIA.
           EOF
           )
-          INSTR="Carrossel FMTeam para um profissional de treino/nutricao (acompanhamento). Venda o METODO/acompanhamento. NAO cite nenhuma substancia, hormonio ou esteroide; NAO prometa resultado garantido; NAO aponte o corpo do leitor. Tom direto, pratico, sem jargao gringo, sem clichê."
-          TOPIC="Definicao muscular e metodo, nao sorte — acompanhamento profissional"
+          INSTR="Carrossel FMTeam de MENTORIA para profissionais de saude (nutricionistas e personal trainers) que querem sair da venda de hora e montar um programa de acompanhamento. Use os textos do roteiro EXATAMENTE, slide a slide, sem reescrever. Fotos: profissional atendendo/escritorio/notebook, nada de substancia. Legenda curta na voz do Fabricio, tratamento voce, CTA comenta MENTORIA."
+          TOPIC="Mentoria: programa que fideliza aluno em vez de vender hora"
 
           echo "=== disparando geração ==="
           body=$(jq -n --arg t "$TOPIC" --arg r "$ROTEIRO" --arg i "$INSTR" \
@@ -63,7 +64,7 @@ jobs:
           echo "screenshots: $(echo "$shots" | jq 'length')"
 
           echo "=== salvar como rascunho ==="
-          id="carousel_$(date +%s)_metodo"
+          id="carousel_$(date +%s)_roteiro"
           save=$(jq -n --arg id "$id" --arg t "$TOPIC" --arg f "$folder" --argjson n "$nslides" \
             --argjson s "$shots" --arg l "$legenda" \
             '{id:$id, topic:$t, folderName:$f, numSlides:$n, screenshots:$s, legenda:$l}')
