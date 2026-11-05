@@ -62,6 +62,66 @@ async function downloadImage(url: string, name: string) {
   }
 }
 
+// Seletor dos dias da semana em que o story automático sai (hora de SP).
+// Salva em mlabs settings (storyDays: 0=dom ... 6=sáb). O botão "Gerar agora" ignora.
+const WEEK = [
+  { d: 1, l: 'Seg' }, { d: 2, l: 'Ter' }, { d: 3, l: 'Qua' }, { d: 4, l: 'Qui' },
+  { d: 5, l: 'Sex' }, { d: 6, l: 'Sáb' }, { d: 0, l: 'Dom' },
+];
+
+function StoryDaysPicker() {
+  const [days, setDays] = useState<number[] | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API}/api/mlabs/settings`)
+      .then(r => r.json())
+      .then(s => setDays(Array.isArray(s.storyDays) ? s.storyDays : [1, 4, 6]))
+      .catch(() => setDays([1, 4, 6]));
+  }, []);
+
+  const toggle = async (d: number) => {
+    if (!days || saving) return;
+    const prev = days;
+    const next = days.includes(d) ? days.filter(x => x !== d) : [...days, d].sort();
+    setDays(next);
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/api/mlabs/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyDays: next }),
+      });
+      if (!res.ok) throw new Error(`Erro ${res.status}`);
+      toast.success(next.length ? 'Dias dos stories salvos' : 'Stories automáticos desligados');
+    } catch (e) {
+      setDays(prev);
+      toast.error(e instanceof Error ? e.message : 'Falha ao salvar os dias');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground mr-1">Sai automático em:</span>
+      {WEEK.map(({ d, l }) => {
+        const on = !!days?.includes(d);
+        return (
+          <button
+            key={d}
+            onClick={() => toggle(d)}
+            disabled={!days || saving}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors disabled:opacity-60 ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-secondary text-muted-foreground border-border'}`}
+          >
+            {l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function StoryStrip({ batch }: { batch: StoryBatch }) {
   const ref = useRef<HTMLDivElement>(null);
   const scroll = (dir: number) => ref.current?.scrollBy({ left: dir * 480, behavior: 'smooth' });
@@ -213,7 +273,7 @@ export default function StoriesDoDia() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-foreground flex items-center gap-2"><Smartphone className="w-5 h-5" /> Stories do dia</h2>
-            <p className="text-sm text-muted-foreground mt-1">Gera e agenda sozinho no mLabs todo dia. Dá pra baixar e postar manual também.</p>
+            <p className="text-sm text-muted-foreground mt-1">Gera e agenda sozinho no mLabs nos dias marcados abaixo. Dá pra baixar e postar manual também.</p>
             <p className="text-xs text-muted-foreground mt-1">Os stories de engajamento e oferta pedem pra pessoa RESPONDER, e a resposta cai na sua DM.</p>
           </div>
           <button
@@ -225,6 +285,7 @@ export default function StoriesDoDia() {
             {generating ? 'Gerando...' : 'Gerar agora'}
           </button>
         </div>
+        <StoryDaysPicker />
       </div>
 
       {loading && (
