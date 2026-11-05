@@ -553,7 +553,8 @@ const MLABS_DEFAULTS = {
   autoScheduleCarousel: false,
   autoScheduleReel: false,       // agenda o reel sozinho assim que o vídeo renderiza
   autoScheduleStory: true,       // agenda o pack de stories do dia sozinho (igual carrossel/reel)
-  storyDailyTime: '08:00',       // hora SP preferida do story do dia (cai p/ agora+15min se já passou)
+  storyDailyTime: '08:00',
+  storyDays: [1, 4, 6],         // dias da semana (SP) com story automático: 0=dom ... 1=seg, 4=qui, 6=sáb       // hora SP preferida do story do dia (cai p/ agora+15min se já passou)
   autoRenderReel: false,         // rotina diária queima o texto no clipe cru do banco
   defaultTime: '11:00',          // hora SP padrão das postagens
   dateOffsetsMonths: [0, 3, 6, 9], // CARROSSEL: amanhã e a cada 3 meses → 4 datas (evergreen)
