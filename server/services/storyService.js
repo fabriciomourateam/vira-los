@@ -80,6 +80,18 @@ async function generateDailyStories({ trigger = 'manual' } = {}) {
   if (state.generating) throw new Error('Já existe uma geração de stories em andamento.');
   const date = new Date().toISOString().slice(0, 10);
 
+  // Story automático só nos dias configurados (padrão seg/qui/sáb, hora de SP).
+  // O botão manual ignora essa regra.
+  if (trigger !== 'manual') {
+    const cfgDays = (db.getMlabsSettings && db.getMlabsSettings()) || {};
+    const days = Array.isArray(cfgDays.storyDays) ? cfgDays.storyDays : [1, 4, 6];
+    const spWeekday = new Date(Date.now() - 3 * 3600 * 1000).getUTCDay();
+    if (!days.includes(spWeekday)) {
+      console.log(`[Stories] hoje (dia ${spWeekday}) não é dia de story (${days.join(',')}) — ignorado.`);
+      return null;
+    }
+  }
+
   // Cron é idempotente: se já há batch de hoje com conteúdo, não regera (botão manual ignora).
   if (trigger !== 'manual') {
     const already = db.getAllStoryBatches().some(
