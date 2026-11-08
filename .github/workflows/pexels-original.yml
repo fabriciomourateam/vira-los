@@ -1,0 +1,33 @@
+name: Pexels original (manual)
+
+# Baixa fotos do Pexels em resolucao original pelos IDs e salva em orig/ no
+# branch assets-capas (nao mexe na main, nao dispara deploy).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'IDs do Pexels separados por espaco'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  baixar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar originais
+        env:
+          IDS: ${{ inputs.ids }}
+        run: |
+          set +e
+          git fetch origin assets-capas && git checkout assets-capas || git checkout --orphan assets-capas
+          mkdir -p orig
+          for id in $IDS; do
+            curl -sSL -m 90 "https://images.pexels.com/photos/$id/pexels-photo-$id.jpeg" -o "orig/$id.jpg"
+            echo "$id -> $(stat -c %s orig/$id.jpg) bytes"
+          done
+          git config user.name "vira-los-bot"; git config user.email "bot@users.noreply.github.com"
+          git add orig && git commit -qm "pexels originais: $IDS" && git push -f origin HEAD:assets-capas
