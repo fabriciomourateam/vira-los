@@ -318,7 +318,7 @@ function MlabsScheduleModal({
 
 // ── Engrenagem: settings + agendados ────────────────────────────────────────────
 interface Settings {
-  autoScheduleCarousel: boolean; defaultTime: string; dateOffsetsMonths: number[];
+  autoScheduleCarousel: boolean; dailyCarousels?: boolean; defaultTime: string; dateOffsetsMonths: number[];
   profileId: number | null; ownerId: number | null; channelSourceIds: number[];
   channelSourceIdsReel: number[]; youtubeShortsChannelId: number | null;
   autoScheduleReel: boolean; autoRenderReel: boolean;
@@ -422,6 +422,15 @@ function MlabsSettingsModal({ onClose }: { onClose: () => void }) {
                 aprender seu perfil e canais do mLabs.
               </div>
             )}
+
+            {/* Carrosséis da geração diária */}
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span className="text-sm text-foreground">
+                Gerar carrosséis na rotina diária
+                <span className="block text-xs text-muted-foreground">Desligado: a rotina diária só gera o reel e o story.</span>
+              </span>
+              <input type="checkbox" checked={s.dailyCarousels !== false} onChange={(e) => save({ dailyCarousels: e.target.checked })} className="w-5 h-5 accent-blue-500" />
+            </label>
 
             {/* Auto-postar carrossel */}
             <label className="flex items-center justify-between gap-3 cursor-pointer">

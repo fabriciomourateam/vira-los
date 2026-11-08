@@ -695,7 +695,12 @@ async function generateDailyBatch({ trigger = 'manual' } = {}) {
       resolved = themes.map((t) => ({ ...t, topic: pickAngle(t) }));
 
       const dayCarousels = [];
-      for (const theme of resolved) {
+      // Carrosséis diários podem ser pausados nas settings (dailyCarousels:false).
+      // Reel e story seguem normalmente.
+      const cfgDaily = (db.getMlabsSettings && db.getMlabsSettings()) || {};
+      const carouselsOn = cfgDaily.dailyCarousels !== false;
+      if (!carouselsOn) console.log('[DailyContent] carrosséis diários pausados nas settings — só reel/story.');
+      for (const theme of (carouselsOn ? resolved : [])) {
         try {
           // Teto por tema: se travar, cai no catch e a geração segue (não pendura tudo).
           const r = await withTimeout(buildOne(theme), DAILY_THEME_TIMEOUT_MS, `tema ${theme.id}`);
