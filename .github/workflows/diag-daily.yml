@@ -28,3 +28,11 @@ jobs:
           ' /tmp/d.json
           echo "----- fila de reels -----"
           curl -sS -m 60 "$BASE/api/daily-content/reel-queue" | jq -c '{remaining:(.remaining//.pending//null), total:(.total//null), seed:(.seed//null), keys:(keys)}' | head -c 1500
+          echo "----- campos do reel mais recente -----"
+          jq -c '[.batches[]] | sort_by(.date) | reverse | .[0].reels[0] | with_entries(select((.value|type)!="string" or ((.value|length)<200)))' /tmp/d.json | head -c 2500; echo
+          echo "----- reels por dia (video / agendamento) -----"
+          jq -r '.batches | sort_by(.date) | reverse | .[:10][] | .date as $d | .reels[]? | "\($d) | id=\(.id) | video=\(.videoFile//.videoUrl//.outputVideo//.renderedVideo//"-"|tostring|.[:60]) | render=\(.renderStatus//.renderError//"-"|tostring|.[:120]) | mlabs=\(.mlabsStatus//.scheduled//.scheduleStatus//"-"|tostring|.[:120])"' /tmp/d.json
+          echo "----- agendamentos de reel no mLabs (registro local) -----"
+          curl -sS -m 60 "$BASE/api/mlabs/agendados" | jq -r '[.[] | select(.contentType=="reel")] | sort_by(.created_at//.createdAt//"") | reverse | .[:12][] | "\(.created_at//.createdAt//"?") | \(.status) | datas=\((.dates//[])|join(",")) | erro=\(.error//"-"|tostring|.[:300])"'
+          echo "----- videos crus disponiveis -----"
+          curl -sS -m 60 "$BASE/api/reels/raw-videos" -o /tmp/rv.json -w 'HTTP %{http_code}\n'; jq 'if type=="array" then length else (keys) end' /tmp/rv.json 2>/dev/null | head -c 300
