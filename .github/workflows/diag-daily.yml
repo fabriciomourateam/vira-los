@@ -1,0 +1,30 @@
+name: Diagnostico do conteudo diario (manual)
+
+# So leitura. Mostra os ultimos dias do conteudo diario (carrosseis, reel, erros)
+# e o estado da fila de roteiros de reel.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ultimos batches e fila de reels
+        env:
+          BASE: https://vira-los.fly.dev
+        run: |
+          set +e
+          for i in 1 2 3 4; do
+            code=$(curl -sS -m 60 -o /tmp/d.json -w '%{http_code}' "$BASE/api/daily-content")
+            echo "daily-content: HTTP $code"; [ "$code" = "200" ] && break; sleep 8
+          done
+          jq -r '
+            "estado: \(.state|tostring)",
+            (.batches | sort_by(.date) | reverse | .[:12][] |
+              "\(.date) | \(.status) | trig=\(.trigger) | carrosseis=\((.carouselIds//[])|length) | reels=\((.reelIds//[])|length)" +
+              " | reelInfo=\([.reels[]? | {status, err:(.error//.renderError//null), sched:(.schedule//.mlabs//null|tostring|.[:160])}]|tostring|.[:400])" +
+              " | erros=\((.errors//[])|join(" || ")|.[:600])")
+          ' /tmp/d.json
+          echo "----- fila de reels -----"
+          curl -sS -m 60 "$BASE/api/daily-content/reel-queue" | jq -c '{remaining:(.remaining//.pending//null), total:(.total//null), seed:(.seed//null), keys:(keys)}' | head -c 1500
