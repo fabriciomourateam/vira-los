@@ -1,0 +1,184 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../db/database');
+
+// GET /api/platforms/status
+router.get('/status', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const names = ['instagram', 'tiktok', 'youtube', 'gsc'];
+  const status = {};
+  for (const p of names) {
+    const t = db.getPlatformToken(p);
+    status[p] = {
+      connected: !!t,
+      username: t?.username || null,
+      expires_at: t?.token_expires_at || null,
+    };
+  }
+  res.json(status);
+});
+
+// ── Instagram ─────────────────────────────────────────────────────────────────
+
+router.get('/instagram/auth-url', (_req, res) => {
+  try {
+    const ig = require('../services/instagram');
+    res.json({ url: ig.getAuthUrl() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/instagram/callback', async (req, res) => {
+  try {
+    const ig = require('../services/instagram');
+    const result = await ig.exchangeCode(req.body.code);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Conexão manual: o usuário cola o token diretamente (mais simples para desenvolvedores)
+router.post('/instagram/manual', (req, res) => {
+  try {
+    const { access_token, user_id, username } = req.body;
+    if (!access_token || !user_id) {
+      return res.status(400).json({ error: 'access_token e user_id são obrigatórios' });
+    }
+    db.setPlatformToken('instagram', { access_token, user_id, username: username || 'instagram' });
+    res.json({ ok: true, username: username || 'instagram' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/instagram', (_req, res) => {
+  db.deletePlatformToken('instagram');
+  res.json({ ok: true });
+});
+
+// Diagnóstico: quais permissões o token do Instagram tem (confirma instagram_manage_insights).
+router.get('/instagram/permissions', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const ig = require('../services/instagram');
+    res.json(await ig.getGrantedPermissions());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── TikTok ────────────────────────────────────────────────────────────────────
+
+router.get('/tiktok/auth-url', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const tt = require('../services/tiktok');
+    res.json({ url: tt.getAuthUrl() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/tiktok/callback', async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('Código não encontrado');
+    const tt = require('../services/tiktok');
+    const result = await tt.exchangeCode(code);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+    res.redirect(`${frontendUrl}?tiktok=connected&user=${encodeURIComponent(result.username)}`);
+  } catch (e) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+    res.redirect(`${frontendUrl}?tiktok=error&msg=${encodeURIComponent(e.message)}`);
+  }
+});
+
+router.delete('/tiktok', (_req, res) => {
+  db.deletePlatformToken('tiktok');
+  res.json({ ok: true });
+});
+
+// ── YouTube ───────────────────────────────────────────────────────────────────
+
+router.get('/youtube/auth-url', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const yt = require('../services/youtube');
+    res.json({ url: yt.getAuthUrl() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/youtube/callback', async (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+  try {
+    const { code, error } = req.query;
+    if (error) {
+      console.error('[YouTube callback] Google error:', error);
+      return res.redirect(`${frontendUrl}?youtube=error&msg=${encodeURIComponent(error)}`);
+    }
+    if (!code) return res.status(400).send('Código não encontrado');
+    console.log('[YouTube callback] Exchanging code...');
+    const yt = require('../services/youtube');
+    const result = await yt.exchangeCode(code);
+    console.log('[YouTube callback] Connected:', result.username);
+    res.redirect(`${frontendUrl}?youtube=connected&user=${encodeURIComponent(result.username)}`);
+  } catch (e) {
+    console.error('[YouTube callback] Error:', e.message);
+    res.redirect(`${frontendUrl}?youtube=error&msg=${encodeURIComponent(e.message)}`);
+  }
+});
+
+router.delete('/youtube', (_req, res) => {
+  db.deletePlatformToken('youtube');
+  res.json({ ok: true });
+});
+
+// ── Google Search Console ───────────────────────────────────────────────────────
+
+router.get('/gsc/auth-url', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const gsc = require('../services/googleSearchConsole');
+    res.json({ url: gsc.getAuthUrl() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/gsc/callback', async (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8083';
+  try {
+    const { code, error } = req.query;
+    if (error) return res.redirect(`${frontendUrl}?gsc=error&msg=${encodeURIComponent(error)}`);
+    if (!code) return res.status(400).send('Código não encontrado');
+    const gsc = require('../services/googleSearchConsole');
+    const result = await gsc.exchangeCode(code);
+    res.redirect(`${frontendUrl}?gsc=connected&site=${encodeURIComponent(result.site)}`);
+  } catch (e) {
+    console.error('[GSC callback] Error:', e.message);
+    res.redirect(`${frontendUrl}?gsc=error&msg=${encodeURIComponent(e.message)}`);
+  }
+});
+
+router.get('/gsc/data', async (req, res) => {
+  try {
+    const gsc = require('../services/googleSearchConsole');
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 480);
+    res.json(await gsc.getDashboard({ days }));
+  } catch (e) {
+    const reconnect = e.message.includes('não conectado');
+    if (!reconnect) console.error('[GSC data] erro:', e.message);
+    res.status(reconnect ? 409 : 500).json({ error: e.message });
+  }
+});
+
+router.delete('/gsc', (_req, res) => {
+  db.deletePlatformToken('gsc');
+  res.json({ ok: true });
+});
+
+module.exports = router;

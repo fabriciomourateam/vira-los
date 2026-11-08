@@ -1,0 +1,155 @@
+/**
+ * pexels.js
+ * Proxy server-side da Pexels API.
+ * Resolve CORS no mobile (browser nunca chama Pexels diretamente).
+ *
+ * Endpoints:
+ *   GET  /api/pexels?query=...&orientation=portrait&per_page=5
+ *   POST /api/pexels/batch  body: { queries: [{id, query, orientation}] }
+ *   POST /api/pexels/download-zip  body: { photos: [{id, url, theme}] }
+ */
+
+const express = require('express');
+const axios = require('axios');
+const archiver = require('archiver');
+const sharp = require('sharp');
+const router = express.Router();
+
+router.get('/', async (req, res) => {
+  try {
+    const {
+      query = 'fitness',
+      orientation = 'portrait',
+      per_page = 5,
+      page = 1,
+    } = req.query;
+
+    if (!process.env.PEXELS_API_KEY) {
+      return res.status(500).json({ error: 'PEXELS_API_KEY não configurada no .env' });
+    }
+
+    const response = await axios.get('https://api.pexels.com/v1/search', {
+      headers: { Authorization: process.env.PEXELS_API_KEY },
+      params: {
+        query,
+        orientation,
+        per_page: Math.min(parseInt(per_page, 10) || 5, 30),
+        page: parseInt(page, 10) || 1,
+      },
+      timeout: 8000,
+    });
+
+    const photos = response.data.photos || [];
+    if (photos.length === 0) {
+      return res.json({ url: null, photos: [] });
+    }
+
+    const first = photos[0];
+    res.json({
+      url: first.src.large2x || first.src.large,
+      photos: photos.map(p => ({
+        id: p.id,
+        url: p.src.large2x || p.src.large,
+        thumb: p.src.medium,
+        alt: p.alt,
+        photographer: p.photographer,
+      })),
+      total_results: response.data.total_results,
+    });
+  } catch (err) {
+    console.error('[Pexels Route Error]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/batch', async (req, res) => {
+  try {
+    const { queries = [] } = req.body;
+
+    if (!process.env.PEXELS_API_KEY) {
+      return res.status(500).json({ error: 'PEXELS_API_KEY não configurada no .env' });
+    }
+
+    const results = {};
+
+    await Promise.all(
+      queries.map(async ({ id, query, orientation = 'portrait' }) => {
+        try {
+          const response = await axios.get('https://api.pexels.com/v1/search', {
+            headers: { Authorization: process.env.PEXELS_API_KEY },
+            params: { query, orientation, per_page: 5, page: 1 },
+            timeout: 8000,
+          });
+          const photos = response.data.photos || [];
+          if (photos.length > 0) {
+            const photo = photos[Math.floor(Math.random() * photos.length)];
+            results[id] = {
+              url: photo.src.large2x || photo.src.large,
+              thumb: photo.src.medium,
+              photographer: photo.photographer,
+            };
+          } else {
+            results[id] = null;
+          }
+        } catch (e) {
+          results[id] = null;
+        }
+      })
+    );
+
+    res.json({ results });
+  } catch (err) {
+    console.error('[Pexels Batch Error]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Baixa uma imagem e converte para PNG
+router.get('/download-png', async (req, res) => {
+  try {
+    const { url, filename = 'foto' } = req.query;
+    if (!url) return res.status(400).json({ error: 'url obrigatória' });
+
+    const imgRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 });
+    const pngBuffer = await sharp(Buffer.from(imgRes.data)).png().toBuffer();
+
+    const safeName = String(filename).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.png"`);
+    res.send(pngBuffer);
+  } catch (err) {
+    console.error('[Pexels PNG Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/download-zip', async (req, res) => {
+  try {
+    const { photos = [] } = req.body;
+    if (!photos.length) return res.status(400).json({ error: 'Nenhuma foto informada' });
+    if (photos.length > 30) return res.status(400).json({ error: 'Máximo de 30 fotos por download' });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="fotos-pexels.zip"');
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', err => { throw err; });
+    archive.pipe(res);
+
+    await Promise.all(photos.map(async ({ id, url, theme }, index) => {
+      try {
+        const imgRes = await axios.get(url, { responseType: 'stream', timeout: 15000 });
+        const ext = 'jpg';
+        const safeName = (theme || 'foto').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
+        archive.append(imgRes.data, { name: `${String(index + 1).padStart(2, '0')}_${safeName}_${id}.${ext}` });
+      } catch {}
+    }));
+
+    await archive.finalize();
+  } catch (err) {
+    console.error('[Pexels ZIP Error]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;

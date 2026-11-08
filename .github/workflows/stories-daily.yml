@@ -1,0 +1,71 @@
+name: Stories do dia (08h BRT)
+
+# Gera o pack de STORIES do dia (rotação de modos + voz do Fabricio + render 9:16) e
+# agenda no mLabs pra sair às 08h BRT. Roda ANTES das 08h; como o conteúdo diário só
+# gera às 09h17, o story se amarra no carrossel MAIS RECENTE (tema do dia anterior),
+# o que não muda a função dele (abrir DM num tema hormonal/performance). Mesma lógica
+# de backup do daily-content (o GitHub Actions às vezes dropa execuções) e o serviço é
+# idempotente por dia (se a 1ª já gerou, o backup só confere e sai).
+#
+# IMPORTANTE: o cron do GitHub é "melhor esforço" e DROPA execuções (20/10 atrasou ~5h,
+# 21/10 dropou as duas da manhã). Por isso 4 tentativas no dia: as 2 cedo miram as 08h;
+# as 2 da tarde (nos MESMOS horários do daily-content, que raramente dropa) garantem que
+# o story saia mesmo que a manhã caia — nesse caso o horário vira "agora+15min", não 08h.
+#   06:28/06:58 BRT (09:28/09:58 UTC) → alvo 08:00  ·  09:17/13:17 BRT (12:17/16:17 UTC) → backup
+
+on:
+  schedule:
+    - cron: '28 9 * * *'    # manhã cedo (~06:28 BRT) — mira as 08h
+    - cron: '58 9 * * *'    # 2ª tentativa cedo (~06:58 BRT)
+    - cron: '17 12 * * *'   # backup manhã (~09:17 BRT) — horário que o daily-content usa
+    - cron: '17 16 * * *'   # backup tarde (~13:17 BRT) — última rede de segurança
+  workflow_dispatch: {}
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar a geração dos stories do dia (fire-and-forget)
+        env:
+          BASE: https://vira-los.fly.dev
+          KEY: ${{ secrets.DAILY_CRON_SECRET }}   # opcional; só exigida se setada no Fly
+        run: |
+          set -e
+          today=$(TZ=America/Sao_Paulo date +%F)
+          echo "Acordando a máquina e disparando os stories de $today..."
+          curl -sS -m 90 -X POST "$BASE/api/stories/generate" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-key: $KEY" \
+            -d '{"trigger":"cron"}' || true
+          echo ""
+
+          # FIRE-AND-FORGET: render dos stories + upload/agendamento no mLabs leva alguns
+          # minutos e TERMINA sozinho no servidor. Este job não fica preso esperando o
+          # "done" (isso só dava falsa-falha por timeout). Confere ~2 min pra pegar erro
+          # rápido; se ainda estiver gerando, sai com SUCESSO.
+          echo "Conferindo o arranque (fire-and-forget; o servidor conclui sozinho)..."
+          for i in $(seq 1 6); do
+            sleep 20
+            resp=$(curl -sS -m 30 "$BASE/api/stories" || echo '{}')
+            status=$(echo "$resp" | jq -r --arg d "$today" '
+              [.batches[]? | select(.date==$d)] as $t
+              | if   ([$t[] | select(.status=="done" and ((.screenshots|length)>0))] | length) > 0 then "done"
+                elif (.state.generating == true) then "generating"
+                elif ([$t[] | select(.status=="error")] | length) > 0 then "error"
+                else "none" end')
+            echo "  check $i — status de hoje: $status"
+            if [ "$status" = "done" ]; then
+              echo "✅ Stories de $today já ficaram prontos."
+              # Mostra também o resultado do AGENDAMENTO no mLabs (schedule.ok/erro) —
+              # senão uma falha de agendamento fica invisível (o batch segue "done").
+              echo "$resp" | jq -r --arg d "$today" '.batches[] | select(.date==$d and .status=="done") | "modo=\(.mode) tema=\(.topic // "-") stories=\((.screenshots|length)) | mLabs_agendado=\(.schedule.ok // "?") horario=\(.schedule.when // "-") erro=\(.schedule.error // "-")"' | head -1 || true
+              exit 0
+            fi
+            if [ "$status" = "error" ]; then
+              errs=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d and .status=="error") | .errors[]?] | unique | join(" || ")')
+              echo "❌ Geração dos stories de $today falhou logo de cara: $errs"
+              exit 1
+            fi
+          done
+          echo "🚀 Stories de $today seguem rodando no servidor (fire-and-forget) — job encerrado com sucesso."
+          exit 0

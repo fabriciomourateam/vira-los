@@ -1,0 +1,3049 @@
+/**
+ * carouselService.js
+ * Implementação completa do agente de carrosseis para Instagram.
+ * Baseado em: https://gist.github.com/hudsonbrendon/384eb612d4e5cedf562ef88b2bc9ceec
+ *
+ * Fluxo:
+ *  1. Pesquisa tendências no Reddit via Apify (trudax/reddit-scraper, 8 subreddits de IA)
+ *  2. Busca imagens portrait no Unsplash API
+ *  3. Gera HTML completo via Claude (com CSS template exato do gist)
+ *  4. Gera legenda.txt com caption + hashtags
+ *  5. Captura screenshots PNG com Playwright (compensação de DPR conforme gist)
+ *  6. Salva tudo em data/output/<slug>-<timestamp>/
+ */
+
+const Anthropic = require('@anthropic-ai/sdk');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const { FABRICIO_AVATAR_DATA_URL } = require('./fmteamAssets');
+const { FMTEAM_EDITORIAL, stripAiTells } = require('./fmteamEditorial');
+const db = require('../db/database'); // CTA configurável do carrossel (getCarouselCta)
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// ─── Retry automático para erros de sobrecarga da Anthropic ──────────────────
+// HTTP 529 / overloaded_error: tenta novamente com backoff exponencial
+// callTimeoutMs: timeout por chamada individual (default 5 min) — evita travar indefinidamente
+async function anthropicWithRetry(params, maxRetries = 4, callTimeoutMs = 5 * 60 * 1000) {
+  let delay = 5000; // começa com 5s
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // AbortSignal.timeout() cancela a chamada se o Anthropic não responder dentro do prazo
+      const signal = AbortSignal.timeout(callTimeoutMs);
+      return await anthropic.messages.create(params, { signal });
+    } catch (err) {
+      // Timeout da chamada individual → falha rápida, sem retry (seria inútil)
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+        throw new Error(`Anthropic não respondeu em ${callTimeoutMs / 60000} minutos. Tente novamente em alguns instantes.`);
+      }
+      const isOverload =
+        err?.status === 529 ||
+        err?.error?.type === 'overloaded_error' ||
+        (err?.message || '').includes('overloaded');
+      if (isOverload && attempt < maxRetries) {
+        console.warn(`[Anthropic] Sobrecarga (tentativa ${attempt + 1}/${maxRetries}), aguardando ${delay / 1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+        delay = Math.min(delay * 2, 30000); // max 30s
+        continue;
+      }
+      throw err; // outro erro ou última tentativa
+    }
+  }
+}
+
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data');
+const OUTPUT_DIR = path.join(DATA_DIR, 'output');
+if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
+// ─── Mês atual em português ───────────────────────────────────────────────────
+
+const MONTHS_PT = [
+  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
+];
+function currentMonthYear() {
+  const now = new Date();
+  return `${MONTHS_PT[now.getMonth()]} ${now.getFullYear()} ®`;
+}
+
+// ─── SVG Instagram (reutilizado em todos os slides) ───────────────────────────
+
+const IG_SVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>`;
+
+// ─── Passo 1: Reddit — API pública direta (sem Apify) + fallback Apify ───────
+
+const REDDIT_SUBREDDITS = [
+  'artificial', 'ChatGPT', 'OpenAI', 'MachineLearning',
+  'singularity', 'ArtificialIntelligence', 'ClaudeAI', 'LocalLLaMA',
+];
+
+async function fetchRedditDirect() {
+  const results = [];
+  // Busca os 3 primeiros subreddits em paralelo (API pública do Reddit, sem auth)
+  const requests = REDDIT_SUBREDDITS.slice(0, 3).map(sub =>
+    axios.get(`https://www.reddit.com/r/${sub}/top.json`, {
+      params: { t: 'week', limit: 5 },
+      headers: { 'User-Agent': 'ViralOS/1.0 (carousel-agent)' },
+      timeout: 10000,
+    }).catch(() => null)
+  );
+  const responses = await Promise.all(requests);
+  for (const res of responses) {
+    if (!res) continue;
+    const posts = res.data?.data?.children || [];
+    for (const p of posts) {
+      const d = p.data;
+      if (!d?.title) continue;
+      results.push({
+        title: String(d.title).substring(0, 200),
+        score: d.score || 0,
+        subreddit: d.subreddit || '',
+        url: d.url || '',
+      });
+    }
+  }
+  return results.slice(0, 8);
+}
+
+async function fetchRedditApify() {
+  const apiKey = process.env.APIFY_API_KEY;
+  if (!apiKey) return [];
+  const id = 'trudax~reddit-scraper';
+  const url = `https://api.apify.com/v2/acts/${id}/run-sync-get-dataset-items?token=${apiKey}&timeout=90`;
+  const response = await axios.post(url, {
+    startUrls: REDDIT_SUBREDDITS.map(s => ({ url: `https://www.reddit.com/r/${s}/top/?t=week` })),
+    maxItems: 30,
+    sort: 'top',
+    time: 'week',
+  }, { timeout: 105000 });
+  const items = Array.isArray(response.data) ? response.data : [];
+  return items.slice(0, 8).map(p => ({
+    title: String(p.title || '').substring(0, 200),
+    score: p.score || 0,
+    subreddit: p.community || p.subreddit || '',
+    url: p.url || '',
+  }));
+}
+
+async function fetchRedditTrends() {
+  // Tenta Apify primeiro; se falhar (403/erro) usa API pública direta do Reddit
+  try {
+    if (process.env.APIFY_API_KEY) {
+      const results = await fetchRedditApify();
+      if (results.length) return results;
+    }
+  } catch (err) {
+    console.warn('[CarouselService/Reddit/Apify]', err.message, '— usando API direta');
+  }
+  try {
+    return await fetchRedditDirect();
+  } catch (err) {
+    console.error('[CarouselService/Reddit/Direct]', err.message);
+    return [];
+  }
+}
+
+// ─── Passo 2: Unsplash API ────────────────────────────────────────────────────
+
+async function fetchUnsplashImages(query, count = 12) {
+  const key = process.env.UNSPLASH_ACCESS_KEY;
+  if (!key) {
+    console.warn('[CarouselService/Unsplash] UNSPLASH_ACCESS_KEY não definida — sem imagens');
+    return [];
+  }
+
+  try {
+    const r = await axios.get('https://api.unsplash.com/search/photos', {
+      params: { query, per_page: count, orientation: 'portrait' },
+      headers: { Authorization: `Client-ID ${key}` },
+      timeout: 10000,
+    });
+    const results = r.data?.results || [];
+    console.log(`[CarouselService/Unsplash] ${results.length} imagens para "${query}"`);
+    return results.map(img => ({
+      url: img.urls?.regular || '',
+      alt: img.alt_description || query,
+    })).filter(img => img.url);
+  } catch (err) {
+    const status = err.response?.status;
+    const detail = err.response?.data?.errors?.[0] || err.message;
+    console.error(`[CarouselService/Unsplash] Erro ${status || ''}: ${detail}`);
+    return [];
+  }
+}
+
+// ─── Passo 2b: Pexels API (fallback) ─────────────────────────────────────────
+
+async function fetchPexelsImages(query, count = 12) {
+  const key = process.env.PEXELS_API_KEY;
+  if (!key) {
+    console.warn('[CarouselService/Pexels] PEXELS_API_KEY não definida');
+    return [];
+  }
+
+  try {
+    const r = await axios.get('https://api.pexels.com/v1/search', {
+      params: { query, per_page: count, orientation: 'portrait' },
+      headers: { Authorization: key },
+      timeout: 10000,
+    });
+    const photos = r.data?.photos || [];
+    console.log(`[CarouselService/Pexels] ${photos.length} imagens para "${query}"`);
+    return photos.map(p => ({
+      url: p.src?.large2x || p.src?.large || p.src?.portrait || '',
+      alt: p.alt || query,
+    })).filter(p => p.url);
+  } catch (err) {
+    const status = err.response?.status;
+    console.error(`[CarouselService/Pexels] Erro ${status || ''}: ${err.message}`);
+    return [];
+  }
+}
+
+// ─── Passo 2c: Google Imagen 3 (AI image gen — primary quando GOOGLE_AI_API_KEY setado) ──
+
+const crypto = require('crypto');
+const IMAGEN_CACHE_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, '../data'), 'imagen-cache');
+if (!fs.existsSync(IMAGEN_CACHE_DIR)) fs.mkdirSync(IMAGEN_CACHE_DIR, { recursive: true });
+
+async function fetchImagenImage(query, fallbackQuery, opts = {}) {
+  // Prompt enxuto pra fitness/lifestyle vertical (1080x1350 ~ 9:16 portrait).
+  // imageSubject (opcional) prefixa o sujeito da foto (ex.: "muscular bodybuilder
+  // physique") em TODA imagem gerada por IA — usado pelo job do John Hulk pra
+  // enviesar a reserva de IA pra bodybuilder sem mexer no comportamento default.
+  const subjectPrefix = opts.imageSubject ? `${opts.imageSubject}, ` : '';
+  const prompt = `Professional photography, ${subjectPrefix}${query}, cinematic lighting, high detail, photorealistic, no text, vertical composition`;
+
+  // Provider: 'pollinations' (default, gratuito sem auth) ou 'google' (Imagen/Nano Banana — exige billing).
+  // Override via env IMAGE_PROVIDER. Quando 'google', usa IMAGEN_MODEL (default: gemini-2.5-flash-image).
+  const provider = (process.env.IMAGE_PROVIDER || 'pollinations').toLowerCase();
+  const model = provider === 'google' ? (process.env.IMAGEN_MODEL || 'gemini-2.5-flash-image') : 'pollinations-flux';
+
+  // Cache: hash do prompt → reuso entre carrosseis com mesma query (economia de quota/banda).
+  const nonce = opts.nonce ? `:${opts.nonce}` : '';
+  const hash = crypto.createHash('sha256').update(`${provider}:${model}:${prompt}${nonce}`).digest('hex').slice(0, 24);
+  const cacheFile = path.join(IMAGEN_CACHE_DIR, `${hash}.jpg`);
+  if (fs.existsSync(cacheFile)) {
+    return { url: `/imagen-cache/${hash}.jpg`, alt: query };
+  }
+
+  try {
+    let b64;
+    if (provider === 'pollinations') {
+      // Pollinations: URL-based, retorna a imagem direta. Seed pra cache-bust por nonce.
+      const seed = opts.nonce ? `&seed=${encodeURIComponent(opts.nonce)}` : '';
+      const pUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1350&model=flux&nologo=true${seed}`;
+      console.log(`[CarouselService/AiImage] Pollinations Flux para "${query.slice(0, 60)}"${nonce ? ` (nonce ${opts.nonce})` : ''}`);
+      const r = await axios.get(pUrl, { responseType: 'arraybuffer', timeout: 90000 });
+      b64 = Buffer.from(r.data).toString('base64');
+    } else {
+      // Google AI: Imagen (:predict) ou Nano Banana/Gemini (:generateContent).
+      // EXIGE billing ativo no Google Cloud — free tier do AI Studio retorna 429 quota:0.
+      const key = process.env.GOOGLE_AI_API_KEY;
+      if (!key) throw new Error('GOOGLE_AI_API_KEY não configurada (necessária pra provider=google)');
+      const isGeminiImage = /^gemini-/.test(model);
+      const endpoint = isGeminiImage ? 'generateContent' : 'predict';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${key}`;
+      const body = isGeminiImage
+        ? { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'] } }
+        : { instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: '9:16', personGeneration: 'ALLOW_ADULT' } };
+      console.log(`[CarouselService/AiImage] Google ${model} (${endpoint}) para "${query.slice(0, 60)}"${nonce ? ` (nonce ${opts.nonce})` : ''}`);
+      const r = await axios.post(url, body, { timeout: 60000, headers: { 'Content-Type': 'application/json' } });
+      let blockedReason = '';
+      if (isGeminiImage) {
+        const cand = r.data?.candidates?.[0];
+        const parts = cand?.content?.parts || [];
+        const imgPart = parts.find(p => p?.inlineData?.data);
+        b64 = imgPart?.inlineData?.data;
+        blockedReason = cand?.finishReason === 'SAFETY' ? 'bloqueado por política de conteúdo (SAFETY)' : '';
+      } else {
+        const pred = r.data?.predictions?.[0];
+        b64 = pred?.bytesBase64Encoded || pred?.image?.bytesBase64Encoded || pred?.imageBytes;
+        blockedReason = pred?.raiFilteredReason || pred?.safetyAttributes?.blocked ? 'bloqueado por política de conteúdo' : '';
+      }
+      if (!b64) {
+        console.warn(`[CarouselService/AiImage] resposta sem bytes para "${query}". Preview: ${JSON.stringify(r.data).slice(0, 400)}`);
+        throw new Error(blockedReason || 'sem bytes na resposta (formato inesperado)');
+      }
+    }
+
+    fs.writeFileSync(cacheFile, Buffer.from(b64, 'base64'));
+    console.log(`[CarouselService/AiImage] gerou "${query}"${nonce ? ` (nonce ${opts.nonce})` : ''} → ${hash}.jpg (${provider})`);
+    return { url: `/imagen-cache/${hash}.jpg`, alt: query };
+  } catch (err) {
+    const status = err.response?.status;
+    const apiErr = err.response?.data?.error;
+    const detail = apiErr?.message || err.message;
+    console.warn(`[CarouselService/AiImage] erro ${status || ''} (${provider}) para "${query}": ${detail}`);
+    if (fallbackQuery && fallbackQuery !== query) return fetchImagenImage(fallbackQuery, null, opts);
+    const wrapped = new Error(`AI image ${status || ''} (${provider}): ${detail}`);
+    wrapped.imagenStatus = status;
+    throw wrapped;
+  }
+}
+
+// Cascata: tenta Imagen (se configurado) → Unsplash → Pexels (1 imagem por query)
+async function fetchImages(query, count = 12) {
+  // Imagen gera 1 por vez — só usa quando count=1 (single-slide) ou quando preferir AI quality
+  // Para count>1 (galeria), mantém o fluxo Unsplash→Pexels que devolve N de uma vez
+  const images = await fetchUnsplashImages(query, count);
+  if (images.length) return images;
+  console.log('[CarouselService] Unsplash vazio, tentando Pexels...');
+  return fetchPexelsImages(query, count);
+}
+
+// Busca uma imagem por slide com query específica (fallback para o tema geral)
+// Cascata: Unsplash → Pexels → AI (Pollinations free ou Google paid).
+// AI fica por último porque Unsplash entrega fotos reais com anatomia/iluminação
+// melhores pra fitness na maioria das queries genéricas. O usuário pode usar o
+// botão "Gerar com IA" no editor pra forçar AI quando o stock não der bom.
+async function fetchOneImage(query, fallbackQuery, imageSubject = '') {
+  try {
+    let imgs = await fetchUnsplashImages(query, 1);
+    if (!imgs.length) imgs = await fetchPexelsImages(query, 1);
+    if (!imgs.length && fallbackQuery) {
+      imgs = await fetchUnsplashImages(fallbackQuery, 1);
+      if (!imgs.length) imgs = await fetchPexelsImages(fallbackQuery, 1);
+    }
+    if (imgs.length) return imgs[0];
+
+    // Último recurso: AI (não cai aqui se Unsplash/Pexels entregaram).
+    const provider = (process.env.IMAGE_PROVIDER || 'pollinations').toLowerCase();
+    const aiEnabled = provider === 'pollinations' || (provider === 'google' && !!process.env.GOOGLE_AI_API_KEY);
+    if (aiEnabled) {
+      try {
+        const ai = await fetchImagenImage(query, fallbackQuery, imageSubject ? { imageSubject } : {});
+        if (ai) return ai;
+      } catch (e) {
+        console.log(`[CarouselService] AI fallback falhou para "${query}": ${e.message}`);
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Normaliza URL de foto pra dedup: tira a querystring (params de tamanho/ixid mudam
+// a cada request, mas o caminho identifica a foto). Assim "mesma foto" colide mesmo
+// quando vem com parâmetros diferentes.
+function photoKey(url) {
+  return String(url || '').split('?')[0].trim();
+}
+
+// Como fetchOneImage, mas devolve VÁRIOS candidatos (Unsplash + Pexels) pra dar margem
+// de deduplicar entre slides do mesmo carrossel e entre carrosséis recentes.
+async function fetchImageCandidates(query, fallbackQuery, count = 12) {
+  let imgs = await fetchUnsplashImages(query, count);
+  if (imgs.length < count) {
+    const more = await fetchPexelsImages(query, count);
+    if (more.length) imgs = imgs.concat(more);
+  }
+  if (!imgs.length && fallbackQuery && fallbackQuery !== query) {
+    imgs = await fetchUnsplashImages(fallbackQuery, count);
+    if (!imgs.length) imgs = await fetchPexelsImages(fallbackQuery, count);
+  }
+  return imgs;
+}
+
+// Gera queries de imagem específicas por slide via Claude (chamada leve)
+async function generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle = '', imageSubject = '') {
+  const roteiroContext = roteiro
+    ? `Roteiro:\n${roteiro.slice(0, 1200)}`
+    : `Tema: "${topic}" — nicho: ${niche}`;
+
+  // fmteam: o último slide é o CTA (foto do criador, não Unsplash) → gera slidesCount-1
+  // queries. Inclui hint de orientação portrait/landscape por posição (layouts alternados).
+  const isFmteam = layoutStyle === 'fmteam';
+  const isFmteam9 = isFmteam && slidesCount === 9;
+  const isFmteam7 = isFmteam && slidesCount === 7;
+  const queryCount = isFmteam ? slidesCount - 1 : slidesCount;
+
+  const slideDesc = isFmteam9
+    ? `Slide 1 = capa PORTRAIT (pessoa ou cena vertical impactante)
+Slide 2 = conteúdo PORTRAIT (dark, pessoa ou cena dramática)
+Slide 3 = conteúdo PORTRAIT (dark, pessoa ou cena dramática)
+Slide 4 = LANDSCAPE (gradient, cena ampla ou dado visual horizontal)
+Slide 5 = LANDSCAPE (light dados, infográfico ou ambiente amplo)
+Slide 6 = conteúdo PORTRAIT (dark, pessoa ou cena forte)
+Slide 7 = LANDSCAPE (light, cena ampla ou visual do tema)
+Slide 8 = PORTRAIT (dark, foto de impacto para frase final)`
+    : isFmteam7
+    ? `Slide 1 = capa PORTRAIT (pessoa ou cena vertical impactante)
+Slide 2 = conteúdo PORTRAIT (dark, pessoa ou cena dramática)
+Slide 3 = LANDSCAPE (light, cena ampla ou visual do tema)
+Slide 4 = LANDSCAPE (gradient, cena ampla ou dado visual horizontal)
+Slide 5 = LANDSCAPE (light dados, infográfico ou ambiente amplo)
+Slide 6 = PORTRAIT (dark, foto de impacto para a frase final)`
+    : isFmteam
+    ? `Slide 1 = capa (foto vertical impactante), slides 2 a ${queryCount} = conteúdo específico de cada ponto (alterne cenas verticais e amplas)`
+    : `Slide 1 = capa (foto impactante do tema), slides 2 a ${queryCount - 1} = conteúdo específico de cada ponto, slide ${queryCount} = CTA/motivação`;
+
+  // imageSubject (opcional): quando setado, cada query deve incluir o sujeito
+  // (ex.: "muscular bodybuilder") junto da cena do slide — usado pelo job do
+  // John Hulk pra enviesar TODA busca de imagem pra bodybuilder. Sem mudar
+  // comportamento quando vazio (default).
+  const subjectRule = imageSubject
+    ? `\nIMPORTANTE: cada query DEVE incluir o sujeito "${imageSubject}" combinado com a cena do slide (ex.: "${imageSubject} flexing" ou "${imageSubject} gym"). Mantenha 2-4 palavras em inglês por query.`
+    : '';
+
+  const prompt = `${roteiroContext}
+
+Gere exatamente ${queryCount} queries de busca de imagens no Unsplash/Pexels, uma por slide.
+Cada query deve ser em INGLÊS, 2-4 palavras, descrevendo a imagem ideal para aquele slide.
+${slideDesc}${subjectRule}
+
+Responda APENAS com um JSON array de strings, sem markdown:
+["query slide 1", "query slide 2", ...]`;
+
+  try {
+    const res = await anthropicWithRetry({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = (res.content[0]?.text || '').trim();
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return null;
+    const queries = JSON.parse(match[0]);
+    return Array.isArray(queries) ? queries : null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Passo 3: CSS template completo (baseado no gist) ────────────────────────
+
+// URL única que carrega todas as fontes disponíveis no editor
+const ALL_FONTS_URL =
+  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800;900' +
+  '&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800' +
+  '&family=Inter:wght@300;400;500;600;700;800;900' +
+  '&family=Poppins:wght@300;400;500;600;700;800;900' +
+  '&family=Montserrat:wght@300;400;500;600;700;800;900' +
+  '&family=Raleway:wght@300;400;500;600;700;800;900' +
+  '&family=Oswald:wght@300;400;500;600;700' +
+  '&family=Playfair+Display:wght@400;500;600;700;800;900' +
+  '&family=Bebas+Neue:wght@400' +
+  '&family=Anton:wght@400' +
+  '&family=Roboto:wght@300;400;500;700;900' +
+  '&family=Lato:wght@300;400;700;900' +
+  '&family=Open+Sans:wght@300;400;500;600;700;800' +
+  '&family=Ubuntu:wght@300;400;500;700' +
+  '&family=Nunito:wght@300;400;500;600;700;800;900' +
+  '&family=DM+Sans:wght@300;400;500;600;700' +
+  '&family=Space+Grotesk:wght@300;400;500;600;700' +
+  '&family=Syne:wght@400;500;600;700;800' +
+  '&display=swap';
+
+function buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily, titleFontSize = 0, bodyFontSize = 0, bannerFontSize = 0, titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
+  const titleFF = titleFontFamily || fontFamily;
+  const bodyFF  = bodyFontFamily  || fontFamily;
+  const titleFW = titleFontWeight > 0 ? titleFontWeight : 900;
+  const bodyFW  = bodyFontWeight  > 0 ? bodyFontWeight  : 400;
+  const titleTT = titleTextTransform || 'uppercase';
+  return `
+  <link href="${ALL_FONTS_URL}" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── SLIDE CAPA / CTA (foto de fundo) ── */
+    .slide {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      font-family: '${fontFamily}', sans-serif;
+      color: #ffffff;
+      display: flex; flex-direction: column; justify-content: flex-end;
+      padding: 60px 56px 90px;
+      page-break-after: always;
+    }
+    .slide-bg {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background-size: cover; background-position: center;
+      z-index: 0;
+    }
+    .slide-overlay {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.88) 62%, rgba(0,0,0,0.97) 100%);
+      z-index: 1;
+    }
+    .slide-content {
+      position: relative; z-index: 2;
+      width: 100%; display: flex; flex-direction: column; gap: 24px;
+    }
+
+    /* ── BRANDING CENTRALIZADO (só capa) ── */
+    .cover-branding {
+      display: flex; align-items: center; justify-content: center;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .cover-branding svg { width: 32px; height: 32px; fill: #ffffff; }
+    .cover-branding span {
+      font-size: 24px; font-weight: 700; color: #ffffff;
+      text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+    }
+
+    /* ── HEADER TOPO (todos os slides) ── */
+    .top-header {
+      position: absolute; top: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 22px 40px; z-index: 10;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .top-header span {
+      font-size: 14px; font-weight: 400;
+      color: rgba(255,255,255,0.55);
+      letter-spacing: 0.8px; text-transform: uppercase;
+    }
+
+    /* ── RODAPÉ (todos os slides) ── */
+    .footer {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 18px 40px; background: rgba(0,0,0,0.5); z-index: 10;
+    }
+    .footer-left { display: flex; align-items: center; gap: 10px; }
+    .footer-left svg { width: 22px; height: 22px; fill: #ffffff; }
+    .footer-left span { font-size: 18px; font-weight: 600; color: #ffffff; }
+    .footer-right { font-size: 18px; font-weight: 500; color: rgba(255,255,255,0.6); }
+
+    /* ── TIPOGRAFIA CAPA/CTA ── */
+    .title {
+      font-size: ${titleFontSize > 0 ? titleFontSize : 56}px; font-weight: ${titleFW}; line-height: 1.1;
+      font-family: '${titleFF}', sans-serif;
+      letter-spacing: -1px; text-transform: ${titleTT};
+      text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+    }
+    .title .highlight { color: ${primaryColor}; }
+    .title .highlight-yellow { color: #D9D353; }
+    .subtitle {
+      font-size: 24px; font-weight: 500;
+      color: rgba(255,255,255,0.85); line-height: 1.5;
+      text-shadow: 1px 1px 4px rgba(0,0,0,0.8); max-width: 900px;
+    }
+    .subtitle-accent {
+      font-size: 22px; font-weight: 600; color: ${accentColor};
+      line-height: 1.5; text-shadow: 1px 1px 4px rgba(0,0,0,0.8);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    /* ── SLIDES INTERNOS (estilo editorial/narrativo) ── */
+    .slide-editorial {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      font-family: '${fontFamily}', sans-serif;
+      color: #ffffff; background: ${bgColor};
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 80px 56px 90px;
+      page-break-after: always;
+    }
+
+    /* Variante D: fundo cor sólida (roxo/primary) */
+    .slide-editorial.accent-bg { background: ${primaryColor}; }
+
+    .slide-editorial .editorial-content {
+      display: flex; flex-direction: column; gap: 22px;
+      z-index: 2; flex: 1; justify-content: center;
+    }
+
+    /* Texto principal — GRANDE, 36-42px */
+    .slide-editorial .narrative-text {
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 38}px; font-weight: ${titleFW}; line-height: 1.45; color: #ffffff;
+    }
+
+    /* Texto secundário — menor, 26-30px */
+    .slide-editorial .narrative-text.secondary {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: ${bodyFontSize > 0 ? bodyFontSize : 28}px; font-weight: ${bodyFW}; line-height: 1.5;
+    }
+
+    /* Destaques inline */
+    .slide-editorial .narrative-text .highlight {
+      color: ${primaryColor}; font-weight: 700; font-style: italic;
+    }
+    .slide-editorial .narrative-text .highlight-green {
+      color: #3CD3A4; font-weight: 700; font-style: italic;
+    }
+    .slide-editorial .narrative-text .highlight-yellow {
+      color: #D9D353; font-weight: 700; font-style: italic;
+    }
+    .slide-editorial .narrative-text strong { font-weight: 700; }
+
+    /* No fundo de cor sólida, destaques em branco/amarelo */
+    .slide-editorial.accent-bg .narrative-text .highlight {
+      color: #ffffff; text-decoration: underline; text-decoration-thickness: 3px;
+    }
+    .slide-editorial.accent-bg .narrative-text .highlight-green {
+      color: #D9D353; font-weight: 700; font-style: italic;
+    }
+
+    /* Foto contextual contida no slide (~90% largura) — altura menor pra o texto
+       caber acima do rodapé (slides com muito conteúdo estavam estourando). */
+    .slide-editorial .editorial-photo-container {
+      width: 100%; border-radius: 8px; overflow: hidden; flex-shrink: 0;
+    }
+    .slide-editorial .editorial-photo-container img {
+      width: 100%; height: 300px; object-fit: cover; display: block;
+    }
+  </style>`;
+}
+
+// ─── Passo 3: Prompt Claude para gerar o HTML ─────────────────────────────────
+
+// ─── Estrutura de conteúdo viral adaptada ao número de slides ────────────────
+
+function buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro }) {
+  const emo = (dominantEmotion || 'medo de perder').toUpperCase();
+  const roteiroNote = roteiro && roteiro.trim()
+    ? 'Distribuir o ROTEIRO DO CRIADOR por essa estrutura mantendo a emoção dominante. Não inventar nem alterar o texto.'
+    : 'Linguagem direta, sem travessão no meio das frases, sem clichês, cada slide com insight novo.';
+
+  const rules = `
+REGRAS DE ESCRITA:
+- Linguagem direta, como alguém falando com um amigo inteligente
+- Sem travessão no meio das frases
+- Sem clichês ou frases genéricas
+- Cada slide entrega um insight novo, nunca repete o anterior
+- Tom provocador e inteligente, nunca agressivo
+- Máximo 40 palavras por slide de conteúdo
+- ${roteiroNote}`;
+
+  // Blocos reutilizáveis
+  const HOOK        = (n) => `SLIDE ${n} — HOOK (para o scroll): número específico, promessa clara ou dor real. Proibido: abertura genérica, frase motivacional ou pergunta retórica fraca.`;
+  const QUEBRA      = (n) => `SLIDE ${n} — QUEBRA DE EXPECTATIVA: contradiga a crença mais comum do nicho. Gera a sensação "espera, não é isso que eu sempre ouvi?". Termine com frase que cria lacuna — o leitor precisa ir para o próximo slide.`;
+  const AMPLI       = (n, extra='') => `SLIDE ${n} — AMPLIFICAÇÃO${extra}: comportamento incoerente que a maioria tem (o leitor pensa "isso sou eu") + consequência real e específica de continuar assim.`;
+  const REVELACAO   = (n, extra='') => `SLIDE ${n} — REVELAÇÃO${extra}: insight central que reframe tudo que veio antes + metáfora simples e visual que qualquer pessoa entende em 3 segundos.`;
+  const CONSEQUENCIA = (n) => `SLIDE ${n} — CONSEQUÊNCIA: custo real e específico de ignorar a revelação — use dados, prazo ou comparação concreta. Sem generalização.`;
+  const FRASE       = (n) => `SLIDE ${n} — FRASE FINAL DE IMPACTO: uma única ideia curta que sintetize a emoção dominante (${dominantEmotion}). Sem explicação. Sem suavização.`;
+  const CTA         = (n) => `SLIDE ${n} — CTA: ação concreta e específica atrelada ao tema. Peça comentar uma palavra-chave + seguir ${handleAt} para mais conteúdos. Não use CTA genérico.`;
+
+  let structure = `━━━ ESTRUTURA DOS SLIDES (emoção dominante: ${emo}) ━━━\nMáximo 40 palavras por slide.\n\n`;
+
+  if (numSlides <= 5) {
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      `SLIDE 3 — AMPLIFICAÇÃO + REVELAÇÃO: comportamento incoerente da maioria + insight central que reframe. Metáfora simples e visual.`,
+      `SLIDE 4 — CONSEQUÊNCIA + FRASE FINAL: custo específico de ignorar + uma frase curta que sintetize a emoção (${dominantEmotion}).`,
+      CTA(5),
+    ].join('\n\n');
+  } else if (numSlides === 6) {
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      AMPLI(3),
+      REVELACAO(4),
+      `SLIDE 5 — CONSEQUÊNCIA + FRASE FINAL: custo específico de ignorar (dados/prazo/comparação) + frase curta que sintetize a emoção (${dominantEmotion}).`,
+      CTA(6),
+    ].join('\n\n');
+  } else if (numSlides === 7) {
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      AMPLI(3),
+      REVELACAO(4),
+      CONSEQUENCIA(5),
+      FRASE(6),
+      CTA(7),
+    ].join('\n\n');
+  } else if (numSlides === 8) {
+    structure += [
+      HOOK(1),
+      QUEBRA(2),
+      AMPLI(3, ' pt.1'),
+      AMPLI(4, ' pt.2'),
+      REVELACAO(5),
+      CONSEQUENCIA(6),
+      FRASE(7),
+      CTA(8),
+    ].join('\n\n');
+  } else {
+    // 9 slides — estrutura fmteam v2 (posições fixas por tipo visual)
+    structure += [
+      `SLIDE 1 — CAPA (hook visual): headline de gancho — promessa clara ou dor real em até 6 palavras + UM subtítulo curto de apoio. NÃO adicione uma frase entre parênteses no final (nada de "(...)"). Proibido abertura genérica.`,
+      QUEBRA(2),
+      AMPLI(3, ' pt.1'),
+      `SLIDE 4 — AMPLIFICAÇÃO pt.2 (slide GRADIENT dourado — virada narrativa): o momento de maior tensão editorial. Comportamento incoerente da maioria + consequência real. Usar arrow-rows (máx 3 pontos curtos). Texto SEMPRE escuro, nunca branco.`,
+      `SLIDE 5 — REVELAÇÃO com DADOS (slide LIGHT — prova social): insight central + 2 stat-rows com números reais, fonte confiável e título claro. Use dados que surpreendem.`,
+      REVELACAO(6, ' pt.2'),
+      `SLIDE 7 — CONSEQUÊNCIA (slide LIGHT): custo real e específico de ignorar o problema — prazo, dado ou comparação concreta. Termina preparando para o CTA.`,
+      `SLIDE 8 — FRASE FINAL DE IMPACTO (slide DARK): uma única ideia curta que sintetize a emoção dominante (${dominantEmotion}). Pode usar dark-h1 apenas, sem dark-body, ou uma frase de dark-body sem título.`,
+      ...(numSlides >= 10 ? [`SLIDE 9 — REFORÇO: exemplo real ou dado extra que solidifica a revelação. Direto e específico.`] : []),
+      CTA(numSlides),
+    ].join('\n\n');
+  }
+
+  return structure + rules;
+}
+
+// ─── Prompt HTML layout "Editorial" ──────────────────────────────────────────
+
+function buildHTMLPrompt({ topic, instructions, niche, primaryColor, accentColor, bgColor, fontFamily,
+  instagramHandle, profilePhotoUrl, numSlides, contentTone, dominantEmotion, redditTrends, unsplashImages, roteiro,
+  titleFontSize = 0, bodyFontSize = 0, bannerFontSize = 0,
+  titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
+
+  const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const handleAt = `@${handle}`;
+  const monthYear = currentMonthYear();
+  const totalContent = numSlides - 2;
+  const cssTemplate = buildCSSTemplate({ primaryColor, accentColor, bgColor, fontFamily, titleFontSize, bodyFontSize, bannerFontSize, titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily });
+
+  const trendsSection = (!roteiro?.trim() && redditTrends.length)
+    ? `\nTendências do Reddit sobre "${niche}" esta semana:\n${redditTrends.map((t, i) =>
+        `${i + 1}. [r/${t.subreddit}] ${t.title} (${t.score} upvotes)`).join('\n')}`
+    : '';
+
+  const imagesSection = unsplashImages.length
+    ? `\nImagens — cada uma foi buscada para aquele slide específico. Use a URL exata na ordem:\n${unsplashImages.map((img, i) =>
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem — use gradiente CSS)`).join('\n')}`
+    : '\n(Sem imagens — use gradientes CSS criativos no fundo dos slides de foto)';
+
+  const roteiroSection = roteiro && roteiro.trim()
+    ? `\n━━━ ROTEIRO DO CRIADOR — siga este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n\nDistribua este roteiro pelos ${numSlides} slides:\n- SLIDE 1 (capa): gancho principal / título do roteiro\n- SLIDES 2 a ${numSlides - 1}: divida o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): use o CTA do roteiro ou crie um adequado\nUse APENAS o conteúdo acima — não adicione informações externas.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  const instructionsSection = instructions && instructions.trim()
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  const typographyLines = [
+    titleFontSize > 0    ? `Tamanho títulos: ${titleFontSize}px`                                        : '',
+    bodyFontSize  > 0    ? `Tamanho corpo: ${bodyFontSize}px`                                           : '',
+    titleFontWeight > 0  ? `Peso dos títulos: ${titleFontWeight}`                                       : '',
+    bodyFontWeight  > 0  ? `Peso do corpo: ${bodyFontWeight}`                                           : '',
+    titleTextTransform   ? `Caixa dos títulos: ${titleTextTransform}`                                   : '',
+    titleFontFamily      ? `Fonte dos títulos: ${titleFontFamily}`                                      : '',
+    bodyFontFamily       ? `Fonte do corpo: ${bodyFontFamily}`                                          : '',
+  ].filter(Boolean);
+  const fontSizeNote = typographyLines.length
+    ? `\n━━━ TIPOGRAFIA DEFINIDA PELO CRIADOR — USE NO CSS ━━━\n${typographyLines.join('\n')}\nEssas configurações já estão aplicadas no CSS template abaixo. Não as altere.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo editorial/investigativo.
+
+Tema: "${topic}"
+Nicho: ${niche}
+Tom: ${contentTone}
+Instagram: ${handleAt}
+Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
+${instructionsSection}
+${trendsSection}
+${imagesSection}
+${roteiroSection}
+${fontSizeNote}
+
+━━━ REGRAS ABSOLUTAS ━━━
+- Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
+- NÃO use markdown, code fences, comentários explicativos ou qualquer texto fora do HTML
+- Use EXATAMENTE as classes CSS do template abaixo — não invente outras
+- Substitua TODOS os [SEU_INSTAGRAM] e [handle] por "${handleAt}"
+
+━━━ HEADER TOPO (obrigatório em TODOS os slides) ━━━
+<div class="top-header">
+  <span>Powered by Postlab</span>
+  <span>${handleAt}</span>
+  <span>${monthYear}</span>
+</div>
+
+━━━ RODAPÉ (obrigatório em TODOS os slides) ━━━
+Footer esquerdo: SVG do Instagram + "${handleAt}"
+Footer direito: número N/${totalContent} — APENAS slides 2 a ${numSlides - 1}
+A CAPA (slide 1) e o CTA (slide ${numSlides}) NÃO têm número no rodapé direito
+
+━━━ CLASSES HTML OBRIGATÓRIAS POR TIPO DE SLIDE ━━━
+SLIDE 1 (capa) → use .slide: slide-bg + slide-overlay + top-header + cover-branding + slide-content (.title CAIXA ALTA + .subtitle) + .footer SEM número
+SLIDES INTERNOS → use .slide-editorial: top-header + editorial-content (.narrative-text 38px + .narrative-text.secondary 28px) + .footer com número N/${totalContent}
+  Variantes de foto: A (meio) | B (base) | C (topo) | D (.accent-bg sem foto, use em 1-2 slides de impacto)
+  Destaques: <span class="highlight"> ou <span class="highlight-green">
+SLIDE ${numSlides} (CTA) → use .slide: foto + overlay + top-header + .title com CTA + box "SIGA ${handleAt}" em #D9D353 + .footer com ${numSlides - 1}/${totalContent}
+
+${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
+
+━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
+${cssTemplate}
+
+━━━ SVG DO INSTAGRAM (copie exatamente em todos os footer-left e cover-branding) ━━━
+${IG_SVG}
+
+Gere o HTML completo agora (apenas HTML, nada mais):`;
+}
+
+// ─── CSS template layout "Clean" (estilo Fabricio Moura) ─────────────────────
+
+function buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize = 0, bodyFontSize = 0, bannerFontSize = 0, titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
+  const titleFF = titleFontFamily || fontFamily;
+  const bodyFF  = bodyFontFamily  || fontFamily;
+  const titleFW = titleFontWeight > 0 ? titleFontWeight : 900;
+  const bodyFW  = bodyFontWeight  > 0 ? bodyFontWeight  : 400;
+  const titleTT = titleTextTransform || 'none';
+  return `
+  <link href="${ALL_FONTS_URL}" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── CAPA ── */
+    .clean-cover {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      font-family: '${fontFamily}', sans-serif;
+      page-break-after: always;
+    }
+    .clean-cover .bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      z-index: 0;
+    }
+    .clean-cover .overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 38%, rgba(0,0,0,0.88) 60%, rgba(0,0,0,0.97) 100%);
+      z-index: 1;
+    }
+    /* ── CAPA: bloco compacto na metade inferior ── */
+    .clean-cover .profile-badge {
+      position: absolute;
+      top: 52%; left: 50%; transform: translateX(-50%);
+      z-index: 2;
+      display: flex; flex-direction: row; align-items: center; gap: 22px;
+      white-space: nowrap;
+    }
+    /* Anel degradê estilo Instagram Stories */
+    .clean-cover .avatar-ring {
+      width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+      padding: 4px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .clean-cover .avatar-circle {
+      width: 100%; height: 100%; border-radius: 50%;
+      background: #111;
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 800; color: white;
+    }
+    .clean-cover .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+    .clean-cover .profile-text {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .clean-cover .profile-name {
+      font-size: 34px; font-weight: 700; color: white;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .clean-cover .verified-badge svg { width: 28px; height: 28px; display: block; flex-shrink: 0; }
+    .clean-cover .profile-handle {
+      font-size: 22px; font-weight: 400; color: rgba(255,255,255,0.60);
+    }
+    /* Título centralizado abaixo do badge */
+    .clean-cover .cover-title {
+      position: absolute; bottom: 130px; left: 60px; right: 60px; z-index: 2;
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 68}px; font-weight: ${titleFW}; line-height: 1.1; color: white;
+      text-align: center; text-transform: ${titleTT};
+    }
+    .clean-cover .cover-title .hl { color: ${primaryColor}; }
+    .clean-cover .swipe-hint {
+      position: absolute; bottom: 64px; left: 0; right: 0;
+      text-align: center; z-index: 2;
+      font-size: 22px; color: rgba(255,255,255,0.50);
+      font-weight: 400;
+    }
+
+    /* ── SLIDE DE CONTEÚDO — fundo escuro + foto em card ── */
+    .clean-content {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      background: #0f0f0f;
+      font-family: '${fontFamily}', sans-serif;
+      padding: 80px 64px 110px;
+      display: flex; flex-direction: column;
+      page-break-after: always;
+    }
+    .clean-content .content-title {
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 66}px; font-weight: ${titleFW}; line-height: 1.08;
+      color: #ffffff; margin-bottom: 32px; text-transform: ${titleTT};
+    }
+    .clean-content .content-title .hl { color: ${primaryColor}; }
+    .clean-content .content-body {
+      font-family: '${bodyFF}', sans-serif;
+      font-size: ${bodyFontSize > 0 ? bodyFontSize : 30}px; font-weight: ${bodyFW}; line-height: 1.55;
+      color: rgba(255,255,255,0.68);
+    }
+    .clean-content .photo-card {
+      margin-top: auto; margin-bottom: 84px;
+      width: 100%; height: 510px;
+      border-radius: 24px; overflow: hidden; flex-shrink: 0;
+    }
+    .clean-content .photo-card img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .clean-content .slide-footer {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 28px 56px;
+    }
+    .clean-content .footer-name-pill {
+      background: linear-gradient(90deg, #f58529 0%, #dd2a7b 50%, #8134af 100%);
+      border-radius: 60px;
+      padding: 16px 40px;
+      font-size: 26px; font-weight: 700; color: white;
+      white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .clean-content .footer-name-pill .verified-badge svg { width: 26px; height: 26px; display: block; flex-shrink: 0; }
+    .clean-content .footer-handle-pill {
+      border: 2px solid rgba(255,255,255,0.30);
+      border-radius: 60px;
+      padding: 16px 40px;
+      font-size: 26px; font-weight: 500; color: rgba(255,255,255,0.88);
+      background: rgba(255,255,255,0.04);
+      white-space: nowrap;
+    }
+    .clean-content .footer-swipe {
+      font-size: 22px; color: rgba(255,255,255,0.42);
+      white-space: nowrap;
+    }
+
+    /* ── SLIDE DE CONTEÚDO — variante com foto no TOPO (meia altura) ── */
+    .clean-content.top-photo {
+      padding: 0 0 110px;
+      flex-direction: column;
+    }
+    .clean-content.top-photo .top-photo-wrap {
+      width: 100%; height: 540px; overflow: hidden; flex-shrink: 0;
+    }
+    .clean-content.top-photo .top-photo-wrap img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .clean-content.top-photo .text-section {
+      padding: 48px 64px 0;
+      display: flex; flex-direction: column; gap: 24px;
+    }
+    /* faixa "Me siga" no topo (usada uma vez) */
+    .follow-banner {
+      background: #FF7B8B; width: 100%;
+      padding: 22px 64px;
+      display: flex; align-items: center; gap: 18px; flex-shrink: 0;
+      font-size: ${bannerFontSize > 0 ? bannerFontSize : 27}px; font-weight: 700; color: white;
+    }
+    .follow-banner svg { width: 36px; height: 36px; fill: white; flex-shrink: 0; }
+
+    /* ── CTA FINAL ── */
+    .clean-cta {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      font-family: '${fontFamily}', sans-serif;
+      page-break-after: always;
+    }
+    .clean-cta .bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      filter: brightness(0.3); z-index: 0;
+    }
+    .clean-cta .overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.62); z-index: 1;
+    }
+    .clean-cta .cta-inner {
+      position: relative; z-index: 2; height: 100%;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      padding: 80px 72px; text-align: center; gap: 48px;
+    }
+    .clean-cta .cta-title {
+      font-family: '${titleFF}', sans-serif;
+      font-size: ${titleFontSize > 0 ? titleFontSize : 70}px; font-weight: ${titleFW}; line-height: 1.08; color: white;
+      text-transform: ${titleTT};
+    }
+    .clean-cta .cta-title .hl { color: ${primaryColor}; }
+    .clean-cta .follow-pill {
+      background: white; color: #0f0f0f;
+      border-radius: 60px; padding: 28px 72px;
+      font-size: 34px; font-weight: 900;
+      display: inline-flex; align-items: center; gap: 10px;
+    }
+    .clean-cta .follow-pill .verified-badge svg { width: 30px; height: 30px; display: block; flex-shrink: 0; }
+    .clean-cta .cta-footer {
+      position: absolute; bottom: 60px; left: 0; right: 0;
+      text-align: center; z-index: 2;
+      font-size: 22px; color: rgba(255,255,255,0.5);
+    }
+
+    /* ── SLIDE ANTES/DEPOIS (split screen vertical) ── */
+    .clean-split {
+      width: 1080px; height: 1350px;
+      position: relative; overflow: hidden;
+      background: #0f0f0f;
+      font-family: '${fontFamily}', sans-serif;
+      display: flex; flex-direction: column;
+      page-break-after: always;
+    }
+    .clean-split .split-photos {
+      /* Altura fixa: 840 px = 62% do slide (1350 px).
+         flex-shrink:0 impede que o conteúdo de baixo comprima as fotos. */
+      display: flex; height: 840px; flex-shrink: 0; gap: 0; overflow: hidden;
+    }
+    .clean-split .split-panel {
+      flex: 1; position: relative; overflow: hidden;
+    }
+    .clean-split .split-panel + .split-panel {
+      border-left: 4px solid #0f0f0f;
+    }
+    .clean-split .split-img,
+    .clean-split .split-panel img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .clean-split .split-label {
+      position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); color: white; backdrop-filter: blur(4px);
+      padding: 12px 40px; border-radius: 60px;
+      font-size: 30px; font-weight: 900; letter-spacing: 3px; white-space: nowrap;
+    }
+    .clean-split .split-label.after {
+      background: ${primaryColor};
+    }
+    .clean-split .split-divider {
+      position: absolute; top: 0; bottom: 0; left: 50%;
+      width: 4px; background: #0f0f0f; transform: translateX(-50%);
+      z-index: 2;
+    }
+    .clean-split .split-content {
+      /* Ocupa os 510 px restantes (1350 - 840) */
+      flex: 1; overflow: hidden;
+      padding: 32px 64px 100px; background: #0f0f0f;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .clean-split .split-eyebrow {
+      font-size: 24px; font-weight: 700; letter-spacing: 3px;
+      color: ${primaryColor}; text-transform: uppercase;
+    }
+    .clean-split .split-title {
+      font-family: '${titleFF}', sans-serif;
+      font-size: 58px; font-weight: ${titleFW}; line-height: 1.1; color: white;
+      text-transform: ${titleTT};
+    }
+    .clean-split .split-title .hl { color: ${primaryColor}; }
+    .clean-split .split-stats {
+      font-size: 30px; font-weight: 600; color: rgba(255,255,255,0.65);
+    }
+    .clean-split .split-footer {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 28px 56px; background: transparent;
+    }
+  </style>`;
+}
+
+// ─── CSS template layout "fmteam" v2 (Fabricio Moura — sistema de design 2026) ─
+//
+// Fixos (identidade visual FIXA — não sobrescrever):
+//   - Accent bar 7px no topo com gradiente dourado var(--G)
+//   - Brand bar: handle (esq) + ano dinâmico (dir), 13px/700/1.5px tracking
+//   - Slides dark: foto full-bleed + overlay-shadow-up + texto sobre foto
+//   - Slides light: fundo off-white + img-box-top (img element) + texto dark
+//   - Slide gradient: fundo var(--G) + texto SEMPRE escuro
+//   - Capa: foto full-bleed + overlay-capa + capa-badge + capa-headline 116px
+//   - CTA: slide light com cta-kbox (card branco) + cta-footer-badge
+//   - Progress bar .prog no rodapé de todos os slides
+//   - Sem swipe hint
+//
+function buildFmteamCSSTemplate({ primaryColor, headlineSize = 114, bodySize = 42, contextSize = 64, coverColors = {}, format = '4:5' }) {
+  // format '1:1' (quadrado 1080x1080) recalibra a altura e os valores verticais
+  // (imagem, fontes, espaçamentos) pra caber sem estourar — MESMO estilo visual.
+  const SQ = format === '1:1';
+  const H  = SQ ? 1080 : 1350;
+  const P  = primaryColor || '#FFC300';
+  const HS = SQ ? Math.round((Number(headlineSize) || 114) * 0.86) : (Number(headlineSize) || 114);
+  const BS = SQ ? Math.round((Number(bodySize) || 42) * 0.90)      : (Number(bodySize) || 42);
+  const CS = SQ ? Math.round((Number(contextSize) || 64) * 0.86)   : (Number(contextSize) || 64);
+  // Cores customizáveis dos textos da capa (vazio = default da identidade fmteam).
+  // Os <em> internos mantêm o gradiente dourado — só a cor base do texto muda.
+  const headlineColor = (coverColors.headlineColor || '').trim() || '#fff';
+  const subColor      = (coverColors.subColor || '').trim()      || 'rgba(255,255,255,0.88)';
+  const contextColor  = (coverColors.contextColor || '').trim()  || 'rgba(255,255,255,0.52)';
+  const PL = '#FFD54F';
+  const PD = '#B8860B';
+  const LB = '#F2F2F0';
+  const LR = '#DDDCDA';
+  const DB = '#0D0D0F';
+  const S  = '#1C1C1E';
+  const G  = `linear-gradient(165deg, ${PD} 0%, ${P} 50%, ${PL} 100%)`;
+
+  return `
+  <link href="${ALL_FONTS_URL}" rel="stylesheet">
+  <style>
+    :root {
+      --P:  ${P};
+      --PL: ${PL};
+      --PD: ${PD};
+      --LB: ${LB};
+      --LR: ${LR};
+      --DB: ${DB};
+      --S:  ${S};
+      --G:  ${G};
+      --F-HEAD: 'Barlow Condensed', sans-serif;
+      --F-BODY: 'Plus Jakarta Sans', sans-serif;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    /* ── SLIDE BASE ── */
+    .slide {
+      width:1080px; height:${H}px;
+      position:relative; overflow:hidden; flex-shrink:0;
+      font-family:var(--F-BODY);
+      page-break-after:always;
+    }
+    .slide-dark  { background:var(--DB); }
+    .slide-light { background:var(--LB); }
+    .slide-grad  { background:var(--G); }
+
+    /* ── ACCENT BAR ── */
+    .accent-bar {
+      position:absolute; top:0; left:0; right:0;
+      height:7px; z-index:30; background:var(--G);
+    }
+    .slide-grad .accent-bar { background:rgba(15,13,8,0.25); }
+
+    /* ── BRAND BAR ── */
+    .brand-bar {
+      position:absolute; top:7px; left:0; right:0;
+      padding:${SQ ? '22px 56px 0' : '28px 56px 0'};
+      display:flex; justify-content:space-between; align-items:center;
+      z-index:20; font-family:var(--F-BODY);
+      font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    }
+    .on-dark  .brand-bar { color:rgba(255,255,255,0.38); }
+    .on-light .brand-bar { color:rgba(15,13,8,0.38); }
+    .slide-grad .brand-bar { color:rgba(15,13,8,0.42); }
+
+    /* ── PROGRESS BAR ── */
+    .prog {
+      position:absolute; bottom:0; left:0; right:0;
+      padding:${SQ ? '0 56px 22px' : '0 56px 28px'}; z-index:20;
+      display:flex; align-items:center; gap:16px;
+    }
+    .prog-track { flex:1; height:3px; border-radius:2px; overflow:hidden; }
+    .prog-fill  { height:100%; border-radius:2px; }
+    .prog-num   { font-family:var(--F-BODY); font-size:13px; font-weight:600; flex-shrink:0; }
+    .on-dark  .prog-track { background:rgba(255,255,255,0.10); }
+    .on-dark  .prog-fill  { background:rgba(255,255,255,0.65); }
+    .on-dark  .prog-num   { color:rgba(255,255,255,0.22); }
+    .on-light .prog-track { background:rgba(0,0,0,0.08); }
+    .on-light .prog-fill  { background:var(--G); }
+    .on-light .prog-num   { color:rgba(0,0,0,0.22); }
+    .slide-grad .prog-track { background:rgba(15,13,8,0.15); }
+    .slide-grad .prog-fill  { background:rgba(15,13,8,0.40); }
+    .slide-grad .prog-num   { color:rgba(15,13,8,0.35); }
+
+    /* ── TAG ── */
+    .tag {
+      font-family:var(--F-BODY); font-size:${SQ ? 22 : 26}px; font-weight:900;
+      letter-spacing:3px; text-transform:uppercase; margin-bottom:${SQ ? 14 : 20}px;
+    }
+    .on-dark  .tag { color:var(--PL); }
+    .on-light .tag { color:var(--PD); }
+    .slide-grad .tag { color:rgba(15,13,8,0.50); }
+
+    /* ── CONTENT AREA ── */
+    .content {
+      position:absolute; top:${SQ ? 92 : 110}px; left:56px; right:56px; bottom:${SQ ? 70 : 80}px;
+      display:flex; flex-direction:column; justify-content:flex-end;
+      padding-bottom:${SQ ? 24 : 36}px; z-index:10;
+    }
+    /* Light e gradient slides: conteúdo flui de cima para baixo.
+       overflow:hidden = trava de segurança: se o texto for longo demais, clipa
+       dentro da área em vez de vazar por cima da barra de progresso/linha. */
+    .slide-light .content,
+    .slide-grad  .content {
+      justify-content:flex-start;
+      padding-top:${SQ ? 12 : 20}px;
+      overflow:hidden;
+    }
+
+    /* ── FOTO DE FUNDO (dark full-bleed) ── */
+    .photo-bg { position:absolute; inset:0; z-index:0; }
+    /* object-position puxado pra cima (32%): em foto de pessoa/corpo o rosto e o
+       tronco ficam na parte de cima — e nas capas/darks o texto fica embaixo (sob
+       o gradiente), então mostrar mais o topo deixa o sujeito visível na área clara. */
+    .photo-bg img { width:100%; height:100%; object-fit:cover; object-position:center 32%; display:block; }
+
+    /* overlay capa — escurece da base */
+    .overlay-capa {
+      position:absolute; inset:0; z-index:1;
+      background:linear-gradient(to bottom,
+        rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.06) 20%,
+        rgba(0,0,0,0.10) 38%, rgba(0,0,0,0.72) 58%,
+        rgba(0,0,0,0.96) 76%, rgba(0,0,0,0.99) 100%);
+    }
+
+    /* overlay slides internos dark — escurece de baixo até o meio */
+    .overlay-shadow-up {
+      position:absolute; inset:0; z-index:1;
+      background:linear-gradient(to top,
+        rgba(0,0,0,0.99) 0%, rgba(0,0,0,0.98) 30%,
+        rgba(0,0,0,0.90) 50%, rgba(0,0,0,0.50) 67%,
+        rgba(0,0,0,0.00) 82%);
+    }
+
+    /* z-index boost para slides com foto de fundo */
+    .slide-with-bg .content,
+    .slide-with-bg .accent-bar,
+    .slide-with-bg .brand-bar,
+    .slide-with-bg .prog { z-index:3; }
+
+    /* ── IMG BOX (light e gradient slides) ── */
+    /* A imagem é FLEXÍVEL: cresce pra preencher o espaço que o texto deixar e
+       encolhe (até min-height) quando o texto é longo. Assim o slide se auto-ajusta
+       sem precisar adivinhar altura por slide — imagem nunca fica espremida e o
+       texto nunca vaza (o overflow:hidden do .content é a trava de segurança). */
+    .img-box-top {
+      width:100%; flex:1 1 auto;
+      min-height:${SQ ? 150 : 200}px; max-height:${SQ ? 560 : 680}px;
+      border-radius:18px; overflow:hidden; margin-bottom:${SQ ? 18 : 24}px;
+      position:relative; /* necessário para overlay de brightness posicionar-se corretamente */
+    }
+    .img-box-top img { width:100%; height:100%; object-fit:cover; display:block; }
+    /* Só a IMAGEM flexiona; os blocos de texto mantêm a altura natural (não encolhem). */
+    .slide-light .content > *, .slide-grad .content > * { flex:0 0 auto; }
+    .slide-light .img-box-top, .slide-grad .img-box-top { flex:1 1 auto; }
+    /* Gradient slide: img-box com borda escura sutil */
+    .slide-grad .img-box-top { border:1.5px solid rgba(15,13,8,0.12); }
+
+    /* ── TIPOGRAFIA DARK ── */
+    .dark-h1 {
+      font-family:var(--F-HEAD); font-size:${HS}px; font-weight:800;
+      line-height:0.90; letter-spacing:-4px; text-transform:uppercase;
+      color:#fff; margin-bottom:${SQ ? 20 : 28}px;
+    }
+    .dark-h1 em {
+      font-style:normal;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .dark-body {
+      font-family:var(--F-BODY); font-size:${BS}px; font-weight:300;
+      line-height:1.45; color:rgba(255,255,255,0.78);
+    }
+    .dark-body + .dark-body { margin-top:18px; }
+    .dark-body strong { color:#fff; font-weight:500; }
+    .dark-body em     { color:var(--PL); font-style:normal; }
+
+    /* ── TIPOGRAFIA LIGHT ── */
+    .light-h1 {
+      font-family:var(--F-HEAD); font-size:${Math.max(60, HS - 6)}px; font-weight:800;
+      line-height:0.90; letter-spacing:-4px; text-transform:uppercase;
+      color:var(--DB); margin-bottom:${SQ ? 16 : 22}px;
+    }
+    .light-h1 em {
+      font-style:normal;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .light-body {
+      font-family:var(--F-BODY); font-size:${BS}px; font-weight:300;
+      line-height:1.45; color:rgba(15,13,8,0.78);
+    }
+    .light-body + .light-body { margin-top:18px; }
+    .light-body strong { color:var(--DB); font-weight:600; }
+    .light-body em     { color:var(--PD); font-style:normal; }
+
+    /* Gradient slide usa mesma tipografia light mas ainda mais escuro */
+    .slide-grad .light-h1 { color:var(--DB); }
+    .slide-grad .light-h1 em { background:none; -webkit-text-fill-color:rgba(15,13,8,0.60); color:rgba(15,13,8,0.60); }
+    .slide-grad .light-body { color:rgba(15,13,8,0.72); }
+    .slide-grad .light-body strong { color:var(--DB); }
+
+    /* ── STAT ROWS ── */
+    .stat-row {
+      display:flex; align-items:stretch; margin-bottom:${SQ ? 12 : 18}px;
+      background:#fff; border-radius:16px; overflow:hidden;
+      border:1.5px solid var(--LR);
+      box-shadow:0 2px 12px rgba(184,134,11,0.08);
+    }
+    .stat-num {
+      background:var(--G); color:#0D0D0F;
+      font-family:var(--F-HEAD); font-size:${SQ ? 40 : 48}px; font-weight:900;
+      padding:16px 20px; min-width:${SQ ? 118 : 140}px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      text-align:center; line-height:1.2; letter-spacing:-0.5px;
+    }
+    .stat-content { padding:${SQ ? '14px 22px' : '20px 24px'}; display:flex; flex-direction:column; justify-content:center; }
+    .stat-title { font-family:var(--F-BODY); font-size:${SQ ? 26 : 30}px; font-weight:800; color:var(--DB); margin-bottom:${SQ ? 6 : 8}px; line-height:1.25; }
+    .stat-desc  { font-family:var(--F-BODY); font-size:${SQ ? 22 : 24}px; font-weight:400; color:rgba(15,13,8,0.62); line-height:1.4; }
+
+    /* ── CAPA HEADLINE ── */
+    .capa-headline-area {
+      position:absolute; bottom:${SQ ? 54 : 70}px; left:0; right:0;
+      padding:0 52px; z-index:10;
+    }
+    .capa-headline {
+      font-family:var(--F-HEAD); font-size:${HS + 2}px; font-weight:800;
+      line-height:0.90; letter-spacing:-4px; text-transform:uppercase; color:${headlineColor};
+    }
+    .capa-headline em {
+      font-style:normal;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .capa-sub {
+      font-family:var(--F-HEAD); font-size:${HS + 2}px; font-weight:800;
+      line-height:0.92; color:${subColor};
+      margin-top:14px; letter-spacing:-4px; text-transform:uppercase;
+    }
+    /* Texto opcional entre parênteses (linha 3 da capa) */
+    .capa-context {
+      font-family:var(--F-HEAD); font-size:${CS}px; font-weight:800;
+      line-height:1; letter-spacing:-2px; text-transform:uppercase;
+      text-align:left;
+      color:${contextColor}; margin-top:16px;
+    }
+    .capa-context em {
+      font-style:normal;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    /* Modificador para aplicar gradiente em todo o texto da linha 3 */
+    .capa-context.gradient {
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+      color:transparent;
+    }
+
+    /* ── BADGE DA CAPA ── */
+    .capa-badge { display:flex; align-items:center; gap:18px; width:fit-content; margin-bottom:${SQ ? 18 : 28}px; }
+    .badge-ring {
+      width:88px; height:88px; flex-shrink:0; border-radius:50%;
+      background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
+      padding:3px; display:flex; align-items:center; justify-content:center;
+    }
+    .badge-avatar {
+      width:82px; height:82px; border-radius:50%; overflow:hidden;
+      border:3px solid #000;
+      background:#1a1a1a; display:flex; align-items:center; justify-content:center;
+      font-family:var(--F-HEAD); font-size:28px; font-weight:800; color:#fff;
+    }
+    .badge-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+    .badge-info { display:flex; flex-direction:column; gap:10px; }
+    .badge-name-row { display:flex; align-items:center; gap:10px; }
+    .badge-name   { font-family:var(--F-BODY); font-size:34px; font-weight:800; color:#fff; line-height:1; }
+    .badge-verified svg { width:26px; height:26px; display:block; flex-shrink:0; }
+    .badge-handle { font-family:var(--F-BODY); font-size:24px; font-weight:400; color:rgba(255,255,255,0.55); line-height:1; }
+
+    /* ── CTA SLIDE ── */
+    .cta-bridge {
+      font-family:var(--F-BODY); font-size:${SQ ? 28 : 32}px; font-weight:500;
+      line-height:1.5; color:rgba(15,13,8,0.50); margin-bottom:${SQ ? 20 : 28}px;
+    }
+    .cta-bridge strong { color:var(--DB); font-weight:800; }
+    .cta-kbox {
+      background:#fff; border:2px solid rgba(184,134,11,0.20);
+      border-radius:20px; padding:${SQ ? '24px 36px' : '32px 40px'}; margin-bottom:${SQ ? 16 : 22}px;
+      box-shadow:0 2px 16px rgba(184,134,11,0.10);
+    }
+    .cta-kbox-label {
+      font-family:var(--F-BODY); font-size:${SQ ? 26 : 30}px; font-weight:500;
+      letter-spacing:4px; text-transform:uppercase; color:rgba(15,13,8,0.35);
+      margin-bottom:12px; text-align:center;
+    }
+    .cta-kbox-keyword {
+      font-family:var(--F-HEAD); font-size:${SQ ? 90 : 110}px; font-weight:900;
+      letter-spacing:-4px; line-height:0.90; text-align:center;
+      text-transform:uppercase;
+      background:var(--G);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .cta-kbox-divider {
+      height:1px; margin:12px 0;
+      background:linear-gradient(to right, transparent, rgba(184,134,11,0.45) 30%, rgba(184,134,11,0.45) 70%, transparent);
+    }
+    .cta-kbox-benefit {
+      font-family:var(--F-BODY); font-size:${SQ ? 24 : 26}px; font-weight:500;
+      color:rgba(15,13,8,0.55); text-align:center;
+    }
+    .cta-kbox-sub {
+      font-family:var(--F-BODY); font-size:${SQ ? 19 : 21}px; font-weight:400;
+      font-style:italic; color:rgba(15,13,8,0.38); text-align:center; margin-top:8px;
+    }
+    .cta-footer-badge {
+      display:flex; align-items:center; justify-content:center; gap:14px;
+    }
+    .cta-badge-ring {
+      width:62px; height:62px; border-radius:50%;
+      background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
+      padding:2px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    .cta-badge-avatar {
+      width:58px; height:58px; border-radius:50%; overflow:hidden;
+      border:2px solid var(--LB);
+      background:#1a1a1a; display:flex; align-items:center; justify-content:center;
+      font-family:var(--F-HEAD); font-size:20px; font-weight:800; color:#fff;
+    }
+    .cta-badge-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+    .cta-badge-info { display:flex; flex-direction:column; gap:4px; }
+    .cta-badge-name {
+      font-family:var(--F-BODY); font-size:26px; font-weight:800; color:var(--DB);
+      display:flex; align-items:center; gap:6px;
+    }
+    .cta-badge-name svg { width:22px; height:22px; flex-shrink:0; }
+    .cta-badge-handle { font-family:var(--F-BODY); font-size:18px; font-weight:400; color:rgba(15,13,8,0.42); }
+
+    /* ── CTA DARK VARIANT (slide-with-bg = foto full-bleed atrás) ── */
+    .slide-with-bg .cta-bridge { color:rgba(255,255,255,0.85); }
+    .slide-with-bg .cta-bridge strong { color:#fff; font-weight:800; }
+    .slide-with-bg .cta-kbox {
+      background:rgba(0,0,0,0.55);
+      border:2px solid rgba(255,195,0,0.55);
+      box-shadow:0 4px 24px rgba(0,0,0,0.4);
+      backdrop-filter:blur(2px);
+    }
+    .slide-with-bg .cta-kbox-label { color:rgba(255,255,255,0.55); }
+    .slide-with-bg .cta-kbox-divider {
+      background:linear-gradient(to right, transparent, rgba(255,195,0,0.45) 30%, rgba(255,195,0,0.45) 70%, transparent);
+    }
+    .slide-with-bg .cta-kbox-benefit { color:rgba(255,255,255,0.85); }
+    .slide-with-bg .cta-kbox-sub { color:rgba(255,255,255,0.55); }
+    .slide-with-bg .cta-badge-name { color:#fff; }
+    .slide-with-bg .cta-badge-handle { color:rgba(255,255,255,0.65); }
+
+    /* ── ARROW ROWS (listas de pontos no gradient/dark) ── */
+    .arrow-row {
+      display:flex; align-items:flex-start; gap:16px; padding:${SQ ? '6px 0' : '8px 0'};
+      font-family:var(--F-BODY); font-size:${SQ ? 32 : 36}px; line-height:1.4;
+    }
+    .arrow-icon { font-weight:800; flex-shrink:0; margin-top:4px; line-height:1; }
+    .on-dark  .arrow-icon { color:var(--PL); }
+    .on-light .arrow-icon { color:var(--PD); }
+    .slide-grad .arrow-icon { color:rgba(15,13,8,0.35); }
+    .arrow-text { font-weight:500; }
+    .on-dark  .arrow-text { color:rgba(255,255,255,0.75); }
+    .on-light .arrow-text { color:rgba(15,13,8,0.72); }
+    .slide-grad .arrow-text { color:rgba(15,13,8,0.72); }
+    .arrow-text strong { font-weight:700; }
+    .on-dark  .arrow-text strong { color:#fff; }
+    .on-light .arrow-text strong { color:var(--DB); }
+    .slide-grad .arrow-text strong { color:var(--DB); }
+
+    /* ── NÚMERO DECORATIVO DE FUNDO (slide gradient) ── */
+    .grad-num {
+      position:absolute; right:-10px; bottom:30px;
+      font-family:var(--F-HEAD); font-size:${SQ ? 300 : 400}px; font-weight:900;
+      line-height:1; color:rgba(15,13,8,0.06); user-select:none;
+      pointer-events:none; z-index:0;
+    }
+  </style>`;
+}
+
+// ─── Prompt baseado em template HTML salvo ────────────────────────────────────
+
+function buildTemplateHTMLPrompt({ templateHtml, topic, instructions, niche, instagramHandle, creatorName, contentTone, dominantEmotion, unsplashImages, roteiro, numSlides }) {
+  const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const handleAt = `@${handle}`;
+  const displayName = creatorName
+    || handle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+         .replace(/\b\w/g, c => c.toUpperCase())
+    || handle;
+
+  // Limpa o HTML do template para reduzir tokens no prompt:
+  // 1. Remove base64 URIs (muito grandes)
+  // 2. Remove bloco <style> (Claude deve manter CSS idêntico; o CSS é re-injetado server-side)
+  // 3. Remove <link> de fontes (idem)
+  // 4. Limita a 20k chars para evitar prompts > 30k
+  const MAX_TEMPLATE_CHARS = 20000;
+  const cleanedHtml = templateHtml
+    .replace(/src="data:[^"]{10,}"/g, 'src=""')
+    .replace(/url\('data:[^']{10,}'\)/g, "url('')")
+    .replace(/url\("data:[^"]{10,}"\)/g, 'url("")')
+    .replace(/<style[\s\S]*?<\/style>/gi, '<!-- CSS omitido — re-injetado automaticamente pelo servidor -->')
+    .replace(/<link[^>]+stylesheet[^>]*>/gi, '')
+    .slice(0, MAX_TEMPLATE_CHARS)
+    + (templateHtml.length > MAX_TEMPLATE_CHARS ? '\n<!-- [HTML truncado — use o mesmo padrão dos slides acima para os slides restantes] -->' : '');
+
+  const validImages = (unsplashImages || []).filter(img => img.url);
+  const imagesSection = validImages.length
+    ? `Novas imagens — substitua as URLs de imagem existentes por essas, na ordem dos slides:\n${validImages.map((img, i) => `Slide ${i + 1}: ${img.url}`).join('\n')}`
+    : '(Sem novas imagens — mantenha as URLs existentes no template)';
+
+  const roteiroSection = roteiro && roteiro.trim()
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo nos textos ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  const instructionsSection = instructions && instructions.trim()
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  return `Você é um especialista em carrosseis para Instagram. Sua tarefa é criar um NOVO carrossel reutilizando EXATAMENTE o layout visual de um template existente.
+
+Tema: "${topic}"
+Nicho: ${niche}
+Tom: ${contentTone}
+Emoção dominante: ${dominantEmotion || 'medo de perder'}
+Instagram: ${handleAt} | Nome: ${displayName}
+${instructionsSection}
+${roteiroSection}
+
+${buildViralStructure({ numSlides, dominantEmotion: dominantEmotion || 'medo de perder', handleAt, roteiro })}
+
+━━━ O QUE VOCÊ DEVE MANTER IDÊNTICO (NÃO ALTERE) ━━━
+1. O bloco <style>...</style> INTEIRO — copie caractere por caractere
+2. A estrutura HTML de cada slide (tags, classes, hierarquia de divs)
+3. Todos os atributos "style" inline de TODOS os elementos — posição (top, left, right, bottom), transform, tamanhos, margens, cores de fundo
+4. FONTES: mantenha EXATAMENTE o font-family, font-size, font-weight, line-height, letter-spacing de cada elemento. NÃO mude nenhum tamanho de letra nem fonte.
+5. SLIDE DE CAPA: preserve a posição e estilo de TODOS os elementos (.profile-badge, .avatar-circle, .profile-name, .profile-handle, .verified-badge, .cover-title, .swipe-hint, .follow-pill, .follow-banner)
+6. SLIDES INTERNOS: preserve EXATAMENTE a posição e estilo de:
+   - .slide-footer / .footer-name-pill / .footer-handle-pill (badges inferiores com nome/handle)
+   - .top-header / header com numeração
+   - .subtitle-accent / bullets decorativos
+   - Qualquer elemento com position:absolute — mantenha top/left/right/bottom idênticos
+6. SLIDE CTA (último): preserve toda a estrutura de layout, botões, posicionamento
+7. Número de slides: EXATAMENTE igual ao template
+
+━━━ O QUE VOCÊ DEVE SUBSTITUIR ━━━
+- Textos de conteúdo: .title, .narrative-text, .content-title, .content-body, .cover-title (trocar pelo novo tema)
+- Handle do Instagram → ${handleAt}
+- Nome do criador → ${displayName}
+- URLs de imagens de fundo (se novas imagens forem fornecidas abaixo)
+- Máximo 35 palavras por slide de conteúdo
+
+━━━ REGRAS DE FORMATO ━━━
+- Retorne APENAS o HTML completo. Comece com <!DOCTYPE html> e termine com </html>
+- NÃO use markdown, code fences ou texto fora do HTML
+- NÃO altere font-size, color, ou qualquer propriedade CSS dos elementos
+- NÃO mova badges, footers, headers ou elementos de perfil — eles ficam onde estão
+
+${imagesSection}
+
+━━━ TEMPLATE HTML BASE ━━━
+${cleanedHtml}`;
+}
+
+// ─── Prompt HTML layout "Clean" ───────────────────────────────────────────────
+
+function buildCleanHTMLPrompt({ topic, instructions, niche, primaryColor, fontFamily,
+  instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro,
+  titleFontSize = 0, bodyFontSize = 0, bannerFontSize = 0,
+  titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '' }) {
+
+  const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const handleAt = `@${handle}`;
+  const displayName = creatorName
+    || handle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+         .replace(/\b\w/g, c => c.toUpperCase())
+    || handle;
+  const totalContent = numSlides - 2;
+  const cssTemplate = buildCleanCSSTemplate({ primaryColor, fontFamily, titleFontSize, bodyFontSize, bannerFontSize, titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily });
+
+  const validImages = unsplashImages.filter(img => img.url);
+  const imagesSection = validImages.length
+    ? `\nImagens — cada uma foi buscada especificamente para aquele slide. Use a URL exata na ordem indicada:\n${unsplashImages.map((img, i) =>
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem — use fundo escuro)`).join('\n')}`
+    : '\n(Sem imagens — omita os .photo-card e .top-photo-wrap; use apenas texto nos slides de conteúdo)';
+
+  const roteiroSection = roteiro && roteiro.trim()
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  const instructionsSection = instructions && instructions.trim()
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  // Avatar: Claude gera apenas as iniciais; a foto é injetada em pós-processamento
+  const avatarContent = handle.slice(0, 2).toUpperCase();
+
+  const typographyLines = [
+    titleFontSize > 0    ? `Tamanho títulos: ${titleFontSize}px`  : '',
+    bodyFontSize  > 0    ? `Tamanho corpo: ${bodyFontSize}px`     : '',
+    titleFontWeight > 0  ? `Peso dos títulos: ${titleFontWeight}` : '',
+    bodyFontWeight  > 0  ? `Peso do corpo: ${bodyFontWeight}`     : '',
+    titleTextTransform   ? `Caixa dos títulos: ${titleTextTransform}` : '',
+    titleFontFamily      ? `Fonte dos títulos: ${titleFontFamily}`    : '',
+    bodyFontFamily       ? `Fonte do corpo: ${bodyFontFamily}`        : '',
+  ].filter(Boolean);
+  const fontSizeNote = typographyLines.length
+    ? `\n━━━ TIPOGRAFIA DEFINIDA PELO CRIADOR — USE NO CSS ━━━\n${typographyLines.join('\n')}\nEssas configurações já estão aplicadas no CSS template abaixo. Não as altere.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo limpo/minimalista.
+
+Tema: "${topic}"
+Nicho: ${niche}
+Tom: ${contentTone}
+Emoção dominante: ${dominantEmotion}
+Instagram: ${handleAt}
+Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
+${instructionsSection}
+${imagesSection}
+${roteiroSection}
+${fontSizeNote}
+
+━━━ REGRAS ABSOLUTAS ━━━
+- Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
+- NÃO use markdown, code fences, comentários ou qualquer texto fora do HTML
+- Use EXATAMENTE as classes CSS do template abaixo
+- Máximo 40 palavras por slide de conteúdo
+
+${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
+
+━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
+
+SLIDE 1 — CAPA (.clean-cover):
+<div class="clean-cover">
+  <div class="bg" style="background-image: url('FOTO_1')"></div>
+  <div class="overlay"></div>
+  <div class="profile-badge">
+    <div class="avatar-ring">
+      <div class="avatar-circle">${avatarContent}</div>
+    </div>
+    <div class="profile-text">
+      <div class="profile-name">
+        ${displayName}
+        <span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </div>
+      <div class="profile-handle">${handleAt}</div>
+    </div>
+  </div>
+  <div class="cover-title">[título impactante — até 12 palavras — 1-2 palavras em <span class="hl">destaque</span>]</div>
+  <div class="swipe-hint">Arrasta para o lado ›</div>
+</div>
+
+SLIDE 2 — COM FAIXA "ME SIGA" + FOTO NO TOPO (.clean-content.top-photo):
+<div class="clean-content top-photo">
+  <div class="follow-banner">
+    <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+    Me siga para mais conteúdos como esse!
+  </div>
+  <div class="top-photo-wrap"><img src="FOTO_2" alt="${topic}" /></div>
+  <div class="text-section">
+    <div class="content-title">[título do 1º ponto]</div>
+    <div class="content-body">[texto de apoio]</div>
+  </div>
+  <div class="slide-footer">
+    <span class="footer-name-pill">${displayName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+    <span class="footer-handle-pill">${handleAt}</span>
+    <span class="footer-swipe">Arrasta para o lado ›</span>
+  </div>
+</div>
+
+SLIDES 3 a ${numSlides - 1} — CONTEÚDO (.clean-content):
+<div class="clean-content">
+  <div class="content-title">[título do ponto — até 10 palavras — 1-2 em <span class="hl">destaque</span>]</div>
+  <div class="content-body">[texto de apoio — até 30 palavras]</div>
+  <div class="photo-card"><img src="FOTO_N" alt="${topic}" /></div>
+  <div class="slide-footer">
+    <span class="footer-name-pill">${displayName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+    <span class="footer-handle-pill">${handleAt}</span>
+    <span class="footer-swipe">Arrasta para o lado ›</span>
+  </div>
+</div>
+
+SLIDE OPCIONAL — ANTES/DEPOIS (.clean-split) — use quando o tema envolver transformação, resultado de aluno, comparação visual:
+<div class="clean-split">
+  <div class="split-photos">
+    <div class="split-panel">
+      <img src="FOTO_ANTES" alt="Antes" class="split-img" />
+      <div class="split-label">ANTES</div>
+    </div>
+    <div class="split-panel">
+      <img src="FOTO_DEPOIS" alt="Depois" class="split-img" />
+      <div class="split-label after">DEPOIS</div>
+    </div>
+  </div>
+  <div class="split-content">
+    <div class="split-eyebrow">Resultado real</div>
+    <div class="split-title">[conquista em destaque — até 8 palavras — 1-2 em <span class="hl">destaque</span>]</div>
+    <div class="split-stats">[dado concreto, ex: -8kg · 12 semanas · 3x/semana]</div>
+  </div>
+  <div class="split-footer">
+    <span class="footer-name-pill">${displayName}<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+    <span class="footer-handle-pill">${handleAt}</span>
+    <span class="footer-swipe">Arrasta para o lado ›</span>
+  </div>
+</div>
+
+SLIDE ${numSlides} — CTA (.clean-cta):
+<div class="clean-cta">
+  <div class="bg" style="background-image: url('ULTIMA_FOTO')"></div>
+  <div class="overlay"></div>
+  <div class="cta-inner">
+    <div class="cta-title">Salve esse post e <span class="hl">compartilhe</span> com quem precisa</div>
+    <div class="follow-pill">Siga ${handleAt}</div>
+  </div>
+  <div class="cta-footer">${handleAt}</div>
+</div>
+
+━━━ CSS TEMPLATE OBRIGATÓRIO ━━━
+${cssTemplate}
+
+Gere o HTML completo agora (apenas HTML, nada mais):`;
+}
+
+// ─── CTA fmteam: 2 variantes selecionáveis (dark-fullbleed default ou light-card) ─
+
+// Linhas opcionais da capa (subtítulo + contexto/linha 3). Quando o usuário
+// desativa uma delas no briefing, o div correspondente é omitido do prompt para
+// que o Claude não o gere. A headline (linha 1) é sempre obrigatória.
+function buildFmteamCapaSubContext({ showCoverSub = true, showCoverContext = true } = {}) {
+  let out = '';
+  if (showCoverSub) {
+    out += `\n    <div class="capa-sub">[SUBTÍTULO COMPLEMENTAR — mesma escala, sem em]</div>`;
+  }
+  if (showCoverContext) {
+    out += `\n    <div class="capa-context">[(CONTEXTO EM PARÊNTESES — 3–6 palavras em CAIXA ALTA — ex: A VERDADE QUE NINGUÉM TE CONTA — pode usar <em>palavra</em> para destacar com gradiente dourado, ou adicionar a classe "gradient" no div para todo o texto receber o gradiente — incluir SEMPRE)]</div>`;
+  }
+  return out;
+}
+
+// Descrição da capa na seção "CLASSES DISPONÍVEIS" — reflete os toggles para
+// não induzir o Claude a recriar linhas que o usuário desativou.
+function buildFmteamCapaClassesNote({ showCoverSub = true, showCoverContext = true } = {}) {
+  let note = `Capa:         .capa-headline-area > .capa-badge (.badge-ring > .badge-avatar | .badge-info > .badge-name-row (.badge-name + .badge-verified) + .badge-handle) + .capa-headline (em=destaque)`;
+  if (showCoverSub) note += ` + .capa-sub`;
+  if (showCoverContext) note += ` + .capa-context (contexto entre parênteses, em=dourado)`;
+  if (!showCoverSub && !showCoverContext) note += ` (use APENAS a headline na capa — NÃO inclua .capa-sub nem .capa-context)`;
+  else if (!showCoverSub) note += ` (NÃO inclua .capa-sub)`;
+  else if (!showCoverContext) note += ` (NÃO inclua .capa-context)`;
+  return note;
+}
+
+function buildFmteamCtaTemplate({ ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor, ctaOverride }) {
+  // CTA configurável (db.getCarouselCta) — não mais chumbado em SHAPE/Acompanhamento.
+  // Default: comenta uma palavra pra receber valor (mecânica de comentário que reativa o
+  // alcance), coerente com o CTA dos reels — em vez de um pitch de venda em todo carrossel.
+  // `ctaOverride` (opcional — modo anúncio): { label?, keyword?, benefit? } — quando um
+  // campo vem preenchido, substitui o valor de db.getCarouselCta() SÓ nesse campo (os
+  // demais continuam vindo do CTA orgânico configurado). Ausente/vazio = comportamento
+  // 100% igual ao de antes.
+  const cfgCta = (db.getCarouselCta && db.getCarouselCta()) || {};
+  const override = ctaOverride || {};
+  const ctaLabel   = (override.label && String(override.label).trim()) || cfgCta.label || 'COMENTA:';
+  const ctaKeyword = String((override.keyword && String(override.keyword).trim()) || cfgCta.keyword || 'TESTO').toUpperCase().trim();
+  const ctaBenefit = (override.benefit && String(override.benefit).trim()) || cfgCta.benefit || 'Pra receber meu passo a passo pra subir a testosterona de forma natural';
+
+  const dark = `SLIDE ${numSlides} — CTA (slide-dark, slide-with-bg, on-dark — foto full-bleed do criador):
+ATENÇÃO — O conteúdo deste slide tem PARTES FIXAS que NÃO podem ser alteradas:
+  • .cta-kbox-label deve ser EXATAMENTE: "${ctaLabel}"
+  • .cta-kbox-keyword deve ser EXATAMENTE: "${ctaKeyword}"
+  • .cta-kbox-benefit deve ser EXATAMENTE: "${ctaBenefit}"
+  • NÃO inclua .cta-kbox-sub
+A ÚNICA parte dinâmica é a .cta-bridge (frase-ponte conectando o tema do carrossel ao CTA).
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img src="${ctaPhotoSrc}" alt="${displayName}"></div>
+  <div class="overlay-shadow-up"></div>
+  <div class="content on-dark">
+    <div class="cta-bridge">[FRASE-PONTE DINÂMICA — conecta o tema do carrossel ao CTA — <strong>palavra forte</strong> em negrito — máx 2 linhas]</div>
+    <div class="cta-kbox">
+      <div class="cta-kbox-label">${ctaLabel}</div>
+      <div class="cta-kbox-keyword">${ctaKeyword}</div>
+      <div class="cta-kbox-divider"></div>
+      <div class="cta-kbox-benefit">${ctaBenefit}</div>
+    </div>
+    <div class="cta-footer-badge">
+      <div class="cta-badge-ring">
+        <div class="cta-badge-avatar">${badgeAvatarInner}</div>
+      </div>
+      <div class="cta-badge-info">
+        <div class="cta-badge-name">${displayName} ${verifiedSvg}</div>
+        <div class="cta-badge-handle">${handleAt}</div>
+      </div>
+    </div>
+  </div>
+  ${progFor(numSlides, 'dark')}
+</div>`;
+
+  // Variante: layout original — foto em card no topo (380px), card branco,
+  // keyword e benefit gerados pelo Claude com base no tema.
+  const light = `SLIDE ${numSlides} — CTA (slide-light, on-light, com foto portrait 380px no topo):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:380px"><img src="${ctaPhotoSrc}" alt="${displayName}" style="object-position:top"></div>
+    <div class="cta-bridge">[frase-ponte conectando o conteúdo ao CTA — <strong>palavra forte</strong> em negrito]</div>
+    <div class="cta-kbox">
+      <div class="cta-kbox-label">Comenta a palavra abaixo:</div>
+      <div class="cta-kbox-keyword">[KEYWORD]</div>
+      <div class="cta-kbox-divider"></div>
+      <div class="cta-kbox-benefit">[benefício direto — 1 linha]</div>
+      <div class="cta-kbox-sub">[detalhe extra opcional — itálico]</div>
+    </div>
+    <div class="cta-footer-badge">
+      <div class="cta-badge-ring">
+        <div class="cta-badge-avatar">${badgeAvatarInner}</div>
+      </div>
+      <div class="cta-badge-info">
+        <div class="cta-badge-name">${displayName} ${verifiedSvg}</div>
+        <div class="cta-badge-handle">${handleAt}</div>
+      </div>
+    </div>
+  </div>
+  ${progFor(numSlides, 'light')}
+</div>`;
+
+  if (ctaStyle === 'light-card') {
+    return {
+      ctaSlideTemplate: light,
+      ctaDescription: `slide-light on-light — img-box-top 380px + .cta-bridge + .cta-kbox + .cta-footer-badge`,
+    };
+  }
+  return {
+    ctaSlideTemplate: dark,
+    ctaDescription: `slide-dark slide-with-bg on-dark — foto full-bleed do criador + overlay-shadow-up + .cta-bridge (DINÂMICO) + .cta-kbox (FIXO: label "${ctaLabel}", keyword "${ctaKeyword}", benefit "${ctaBenefit}") + .cta-footer-badge`,
+  };
+}
+
+// ─── Prompt HTML layout "fmteam" v2 ──────────────────────────────────────────
+
+function buildFmteamHTMLPrompt({ topic, instructions, niche, primaryColor, fontFamily,
+  instagramHandle, creatorName, profilePhotoUrl, numSlides, contentTone, dominantEmotion, unsplashImages, roteiro,
+  titleFontSize = 0, bodyFontSize = 0,
+  titleFontWeight = 0, bodyFontWeight = 0, titleTextTransform = '', titleFontFamily = '', bodyFontFamily = '',
+  ctaStyle = 'dark-fullbleed', showCoverSub = true, showCoverContext = true, ctaOverride = null }) {
+
+  const handle = (instagramHandle || 'fabriciomourateam').replace('@', '');
+  const handleAt = `@${handle}`;
+  const handleUpper = handleAt.toUpperCase();
+  // fmteam é Fabricio Moura: handle "fabriciomourateam" não tem separadores
+  // para o algoritmo achar — força default explícito quando creatorName não vem.
+  const isFmteamHandle = /fabriciomoura/i.test(handle);
+  const displayName = creatorName
+    || (isFmteamHandle ? 'Fabricio Moura' : null)
+    || handle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+         .replace(/\b\w/g, c => c.toUpperCase())
+    || handle;
+  const totalContent = numSlides - 2;
+  // Nota: CSS NÃO é incluído no prompt — será injetado server-side após a geração.
+  // Isso economiza ~3.000 tokens de input E ~3.500 tokens de output por chamada.
+
+  const validImages = unsplashImages.filter(img => img.url);
+  // fmteam: o último slide (CTA) usa foto do criador, não Unsplash — exclui da lista de imagens
+  const fmteamImageSlots = numSlides - 1;
+  const imagesSection = validImages.length
+    ? `\nImagens — use a URL exata na ordem indicada:\n${unsplashImages.slice(0, fmteamImageSlots).map((img, i) =>
+        img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}\nSlide ${numSlides} (CTA): usa foto do criador — NÃO substitua o src desta imagem`
+    : '\n(Sem imagens fornecidas)';
+
+  const roteiroSection = roteiro && roteiro.trim()
+    ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${numSlides - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${numSlides} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  const instructionsSection = instructions && instructions.trim()
+    ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    : '';
+
+  const avatarInitials = handle.slice(0, 2).toUpperCase();
+  // Usa placeholder para não embutir o base64 do avatar no prompt (~10KB cada, 2x = ~20KB).
+  // O servidor substitui __CREATOR_PHOTO__ após a geração (ver pós-processamento em generateCarousel).
+  const avatarSrc = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : '__CREATOR_PHOTO__';
+  // Badge avatar: sempre <img> (fmteam tem foto default embutida — nunca cai em iniciais)
+  const badgeAvatarInner = `<img src="${avatarSrc}" alt="${displayName}">`;
+  // Foto de fundo do slide CTA — placeholder; pós-processado para /assets/fmteam-cta-bg.png
+  // (servido via express; evita embutir ~1.7MB de base64 no JS e no prompt)
+  const ctaPhotoSrc = '__CTA_BG_PHOTO__';
+
+  // Progress bar — .on-dark ou .on-light conforme tipo de slide
+  const progFor = (current, ctx = 'dark') => {
+    const pct = Math.round((current / numSlides) * 100);
+    return `<div class="prog">
+    <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+    <div class="prog-num">${current}/${numSlides}</div>
+  </div>`;
+  };
+
+  // Header padrão (accent bar + brand bar)
+  const currentYear = new Date().getFullYear();
+  const header = `<div class="accent-bar"></div>
+  <div class="brand-bar">
+    <span>${handleUpper}</span>
+    <span>${currentYear}</span>
+  </div>`;
+
+  const verifiedSvg = `<svg viewBox="0 0 24 24" fill="#1D9BF0" xmlns="http://www.w3.org/2000/svg"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>`;
+
+  // CTA: helper retorna o template HTML + descrição curta da estrutura,
+  // selecionando entre 'dark-fullbleed' (default) e 'light-card' via ctaStyle.
+  const { ctaSlideTemplate, ctaDescription } = buildFmteamCtaTemplate({
+    ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor, ctaOverride,
+  });
+
+  const capaSubContext = buildFmteamCapaSubContext({ showCoverSub, showCoverContext });
+  const capaClassesNote = buildFmteamCapaClassesNote({ showCoverSub, showCoverContext });
+
+  return `Você é um agente especializado em criar carrosseis profissionais para Instagram no estilo fmteam (Fabricio Moura): identidade visual dourada, slides dark com foto full-bleed e headline grande, slides light com imagem no topo e texto escuro, slide gradient com texto escuro, CTA com card branco.
+
+Tema: "${topic}"
+Nicho: ${niche}
+Tom: ${contentTone}
+Emoção dominante: ${dominantEmotion}
+Instagram: ${handleAt}
+Total de slides: ${numSlides} (1 capa + ${totalContent} conteúdo + 1 CTA final)
+${instructionsSection}
+${imagesSection}
+${roteiroSection}
+
+${FMTEAM_EDITORIAL}
+
+━━━ REGRAS ABSOLUTAS — FMTEAM v2 ━━━
+- Retorne APENAS o código HTML completo. Comece com <!DOCTYPE html> e termine com </html>
+- NÃO use markdown, code fences, comentários ou texto fora do HTML
+- NÃO inclua tags <style> nem <link rel="stylesheet"> no HTML — o CSS e fontes são injetados automaticamente pelo servidor
+- No <head> inclua apenas: <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>...</title>
+- Use EXATAMENTE as classes listadas abaixo
+- TODOS os slides: wrapper = <div class="slide [tipo] [ctx]"> onde:
+    tipos de fundo: slide-dark | slide-light | slide-grad
+    contexto: on-dark (dark slides) | on-light (light e gradient slides)
+- TODOS os slides começam com .accent-bar + .brand-bar e terminam com .prog
+- Brand bar: APENAS "${handleUpper}" à esquerda + "${currentYear}" à direita. NADA mais.
+- Sem swipe hint, sem badges de tipo (ANÁLISE, TENDÊNCIA etc.)
+
+${numSlides === 9 ? `DISTRIBUIÇÃO FIXA DOS 9 SLIDES (estrutura fmteam v2 — siga exatamente):
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 3: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 300px, arrow-rows, grad-num
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 300px, stat-rows (dados/prova)
+- Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 7: LIGHT — slide-light on-light — img-box-top 300px, light-h1 + light-body
+- Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 9 (CTA): ${ctaDescription}
+
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.` : numSlides === 7 ? `DISTRIBUIÇÃO FIXA DOS 7 SLIDES (curto e com LAYOUTS ALTERNADOS — nunca 2 slides seguidos do mesmo tipo):
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up, dark-h1 + dark-body
+- Slide 3: LIGHT — slide-light on-light — img-box-top 300px, light-h1 + light-body
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 300px, arrow-rows, grad-num (virada narrativa)
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 300px, stat-rows (dados/prova)
+- Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up (frase final de impacto)
+- Slide 7 (CTA): ${ctaDescription}
+
+SEM PODAR CONTEÚDO: cubra o tema TODO nesses 5 slides de conteúdo. Se um ponto for denso, use arrow-rows/stat-rows pra caber a ideia inteira — NÃO deixe o carrossel raso só por ter menos slides.
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6). CTA usa foto sem ID.` : `DISTRIBUIÇÃO DOS ${numSlides} SLIDES:
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top) — nunca 2 seguidos iguais
+- Inclua 1 slide gradient (slide-grad on-light) no meio do carrossel (virada narrativa)
+- Slide ${numSlides} (CTA): ${ctaDescription}
+- IDs: id="img-capa" (slide 1), id="img-s2" até id="img-s${numSlides - 1}" (slides internos). CTA sem ID.`}
+Máximo 35 palavras por slide de conteúdo.
+
+${buildViralStructure({ numSlides, dominantEmotion, handleAt, roteiro })}
+
+━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
+
+SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img id="img-capa" src="FOTO_1" alt="${topic}"></div>
+  <div class="overlay-capa"></div>
+  <div class="capa-headline-area">
+    <div class="capa-badge">
+      <div class="badge-ring">
+        <div class="badge-avatar">${badgeAvatarInner}</div>
+      </div>
+      <div class="badge-info">
+        <div class="badge-name-row">
+          <span class="badge-name">${displayName}</span>
+          <span class="badge-verified">${verifiedSvg}</span>
+        </div>
+        <div class="badge-handle">${handleAt}</div>
+      </div>
+    </div>
+    <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>${capaSubContext}
+  </div>
+  ${progFor(1, 'dark')}
+</div>
+
+SLIDES DARK INTERNOS (os slides marcados DARK na distribuição acima):
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
+  <div class="overlay-shadow-up"></div>
+  <div class="content on-dark">
+    <div class="tag">[CATEGORIA EM 1–2 PALAVRAS]</div>
+    <div class="dark-h1"><em>PALAVRA-CHAVE</em><br>COMPLEMENTO</div>
+    <div class="dark-body">[corpo — até 30 palavras — <em>destaques</em> em amarelo]</div>
+  </div>
+NOTA: quando o conteúdo for uma lista de pontos, substitua dark-body por arrow-rows:
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto</strong> explicação</span></div>
+  [PROG_N]
+</div>
+
+SLIDE 4 — GRADIENT (slide-grad on-light — fundo dourado, texto SEMPRE escuro, nunca branco):
+<div class="slide slide-grad on-light">
+  ${header}
+  <div class="grad-num">4</div>
+  <div class="content on-light">
+    <div class="img-box-top" style="height:300px"><img id="img-s4" src="FOTO_4" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">TÍTULO<br>DO PONTO</div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 1</strong> — detalhe do argumento</span></div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 2</strong> — consequência ou dado</span></div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text">Ponto 3 — conclusão ou solução</span></div>
+  </div>
+  [PROG_4]
+</div>
+
+SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 300px + stat-rows para dados numéricos):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:300px"><img id="img-s5" src="FOTO_5" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">DADO<br><em>REAL</em></div>
+    <div class="stat-row">
+      <div class="stat-num">00%</div>
+      <div class="stat-content">
+        <div class="stat-title">[Título do dado]</div>
+        <div class="stat-desc">[Fonte ou contexto do dado]</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-num">00x</div>
+      <div class="stat-content">
+        <div class="stat-title">[Outro dado]</div>
+        <div class="stat-desc">[Explicação breve]</div>
+      </div>
+    </div>
+  </div>
+  [PROG_5]
+</div>
+
+SLIDE LIGHT CONTEÚDO — exemplo (img-box 300px + light-h1 + light-body) — aplique no slide marcado LIGHT na distribuição, com o id de imagem correto (img-sN) e o [PROG_N] daquele slide:
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:300px"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
+    <div class="light-body">[corpo — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
+  </div>
+  [PROG_N]
+</div>
+
+${ctaSlideTemplate}
+
+Instrução de progresso: Para cada slide interno substitua [PROG_N] pela tag:
+<div class="prog"><div class="prog-track"><div class="prog-fill" style="width:[PERCENT]%"></div></div><div class="prog-num">[N]/${numSlides}</div></div>
+Onde [N] é o número do slide e [PERCENT] = round(N/${numSlides}*100).
+
+━━━ CLASSES DISPONÍVEIS (use exatamente esses nomes) ━━━
+Slides:       .slide  .slide-dark  .slide-light  .slide-grad  .slide-with-bg  .on-dark  .on-light
+Fundo:        .photo-bg > img  |  .img-box-top > img  |  .overlay-capa  |  .overlay-shadow-up
+Header:       .accent-bar  |  .brand-bar (2 spans: handle + ano)
+Textos dark:  .dark-h1 (em=amarelo)  |  .dark-body (em=amarelo)  |  .tag
+Textos light: .light-h1 (em=dourado escuro)  |  .light-body (em=dourado escuro)  |  .tag
+Gradient:     .grad-num (número decorativo de fundo)
+Listas:       .arrow-row > .arrow-icon + .arrow-text  (strong=bold)
+Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
+Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
+${capaClassesNote}
+CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
+IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s${numSlides - 1} (slides internos)  |  CTA sem ID
+
+Gere o HTML completo agora (apenas HTML, nada mais):`;
+}
+
+// ─── Bloco de estrutura HTML obrigatória (separado para uso com templates) ────
+
+/**
+ * Retorna apenas a seção "━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━" do prompt fmteam.
+ * É sempre adicionada pelo servidor ao final do preamble (template ou padrão),
+ * garantindo que o usuário não possa quebrar a estrutura técnica dos slides.
+ */
+function buildFmteamHTMLStructureBlock({ topic, numSlides, handleAt, displayName, badgeAvatarInner, ctaPhotoSrc, header, verifiedSvg, progFor, ctaStyle = 'dark-fullbleed', showCoverSub = true, showCoverContext = true, ctaOverride = null }) {
+  const { ctaSlideTemplate } = buildFmteamCtaTemplate({
+    ctaStyle, numSlides, header, ctaPhotoSrc, displayName, badgeAvatarInner, verifiedSvg, handleAt, progFor, ctaOverride,
+  });
+  const capaSubContext = buildFmteamCapaSubContext({ showCoverSub, showCoverContext });
+  const capaClassesNote = buildFmteamCapaClassesNote({ showCoverSub, showCoverContext });
+  return `━━━ ESTRUTURA HTML OBRIGATÓRIA ━━━
+
+SLIDE 1 — CAPA (slide-dark, on-dark, slide-with-bg):
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img id="img-capa" src="FOTO_1" alt="${topic}"></div>
+  <div class="overlay-capa"></div>
+  <div class="capa-headline-area">
+    <div class="capa-badge">
+      <div class="badge-ring">
+        <div class="badge-avatar">${badgeAvatarInner}</div>
+      </div>
+      <div class="badge-info">
+        <div class="badge-name-row">
+          <span class="badge-name">${displayName}</span>
+          <span class="badge-verified">${verifiedSvg}</span>
+        </div>
+        <div class="badge-handle">${handleAt}</div>
+      </div>
+    </div>
+    <div class="capa-headline">[HEADLINE IMPACTANTE — até 6 palavras — 1–2 em <em>DESTAQUE</em>]</div>${capaSubContext}
+  </div>
+  ${progFor(1, 'dark')}
+</div>
+
+SLIDES DARK INTERNOS (os slides marcados DARK na distribuição acima):
+<div class="slide slide-dark slide-with-bg on-dark">
+  ${header}
+  <div class="photo-bg"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
+  <div class="overlay-shadow-up"></div>
+  <div class="content on-dark">
+    <div class="tag">[CATEGORIA EM 1–2 PALAVRAS]</div>
+    <div class="dark-h1"><em>PALAVRA-CHAVE</em><br>COMPLEMENTO</div>
+    <div class="dark-body">[corpo — até 30 palavras — <em>destaques</em> em amarelo]</div>
+  </div>
+NOTA: quando o conteúdo for uma lista de pontos, substitua dark-body por arrow-rows:
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto</strong> explicação</span></div>
+  [PROG_N]
+</div>
+
+SLIDE 4 — GRADIENT (slide-grad on-light — fundo dourado, texto SEMPRE escuro, nunca branco):
+<div class="slide slide-grad on-light">
+  ${header}
+  <div class="grad-num">4</div>
+  <div class="content on-light">
+    <div class="img-box-top" style="height:300px"><img id="img-s4" src="FOTO_4" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">TÍTULO<br>DO PONTO</div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 1</strong> — detalhe do argumento</span></div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text"><strong>Ponto 2</strong> — consequência ou dado</span></div>
+    <div class="arrow-row"><span class="arrow-icon">→</span><span class="arrow-text">Ponto 3 — conclusão ou solução</span></div>
+  </div>
+  [PROG_4]
+</div>
+
+SLIDE 5 — LIGHT DADOS/PROVA SOCIAL (img-box 300px + stat-rows para dados numéricos):
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:300px"><img id="img-s5" src="FOTO_5" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">DADO<br><em>REAL</em></div>
+    <div class="stat-row">
+      <div class="stat-num">00%</div>
+      <div class="stat-content">
+        <div class="stat-title">[Título do dado]</div>
+        <div class="stat-desc">[Fonte ou contexto do dado]</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-num">00x</div>
+      <div class="stat-content">
+        <div class="stat-title">[Outro dado]</div>
+        <div class="stat-desc">[Explicação breve]</div>
+      </div>
+    </div>
+  </div>
+  [PROG_5]
+</div>
+
+SLIDE LIGHT CONTEÚDO — exemplo (img-box 300px + light-h1 + light-body) — aplique no slide marcado LIGHT na distribuição, com o id de imagem correto (img-sN) e o [PROG_N] daquele slide:
+<div class="slide slide-light on-light">
+  ${header}
+  <div class="content on-light">
+    <div class="img-box-top" style="height:300px"><img id="img-sN" src="FOTO_N" alt="${topic}"></div>
+    <div class="tag">[CATEGORIA]</div>
+    <div class="light-h1">PALAVRA-CHAVE<br><em>COMPLEMENTO</em></div>
+    <div class="light-body">[corpo — até 30 palavras — <em>destaques</em> em dourado escuro]</div>
+  </div>
+  [PROG_N]
+</div>
+
+${ctaSlideTemplate}
+
+Instrução de progresso: Para cada slide interno substitua [PROG_N] pela tag:
+<div class="prog"><div class="prog-track"><div class="prog-fill" style="width:[PERCENT]%"></div></div><div class="prog-num">[N]/${numSlides}</div></div>
+Onde [N] é o número do slide e [PERCENT] = round(N/${numSlides}*100).
+
+━━━ CLASSES DISPONÍVEIS (use exatamente esses nomes) ━━━
+Slides:       .slide  .slide-dark  .slide-light  .slide-grad  .slide-with-bg  .on-dark  .on-light
+Fundo:        .photo-bg > img  |  .img-box-top > img  |  .overlay-capa  |  .overlay-shadow-up
+Header:       .accent-bar  |  .brand-bar (2 spans: handle + ano)
+Textos dark:  .dark-h1 (em=amarelo)  |  .dark-body (em=amarelo)  |  .tag
+Textos light: .light-h1 (em=dourado escuro)  |  .light-body (em=dourado escuro)  |  .tag
+Gradient:     .grad-num (número decorativo de fundo)
+Listas:       .arrow-row > .arrow-icon + .arrow-text  (strong=bold)
+Dados:        .stat-row > .stat-num + .stat-content > .stat-title + .stat-desc
+Progress:     .prog > .prog-track > .prog-fill (style="width:N%") + .prog-num
+${capaClassesNote}
+CTA:          .cta-bridge | .cta-kbox (.cta-kbox-label + .cta-kbox-keyword + .cta-kbox-divider + .cta-kbox-benefit + .cta-kbox-sub) | .cta-footer-badge (.cta-badge-ring > .cta-badge-avatar | .cta-badge-info > .cta-badge-name + .cta-badge-handle)
+IDs:          #img-capa (slide 1)  |  #img-s2 ... #img-s${numSlides - 1} (slides internos)  |  CTA sem ID
+
+Gere o HTML completo agora (apenas HTML, nada mais):`;
+}
+
+// ─── Passo 4: Legenda via Claude ──────────────────────────────────────────────
+
+// Remove preâmbulo/rótulo/separador que o modelo às vezes cola no TOPO da legenda
+// (ex.: "Texto puro e sem rótulos, pronto para copiar e colar:" seguido de "---"),
+// mesmo o prompt pedindo pra não fazer. Só mexe nas linhas do INÍCIO — o corpo da
+// legenda fica intacto. Conservador: só tira linhas que claramente são meta-texto.
+function sanitizeLegenda(raw) {
+  let text = String(raw || '').trim();
+  if (!text) return text;
+
+  const PREAMBLE_RE = /(copiar e colar|sem r[óo]tulos?|aqui (est[áa]|vai)|segue (a legenda|abaixo)|legenda pronta|pront[ao] (pra|para) (postar|copiar)|conforme solicitad|espero que)/i;
+  const SEP_RE = /^(\s*[-*_]{3,}\s*)$/;                    // --- *** ___ (regra horizontal)
+  const LABEL_RE = /^\s*\[?\s*(legenda|hashtags?)\s*\]?\s*:?\s*$/i; // [LEGENDA] / Legenda: / Hashtags:
+
+  let lines = text.split('\n');
+  // Remove do topo, repetidamente: linha vazia, separador, rótulo, ou 1 linha de
+  // preâmbulo (uma frase curta de meta-texto terminando ou não em ":").
+  let guard = 0;
+  while (lines.length && guard++ < 8) {
+    const first = lines[0].trim();
+    if (first === '' || SEP_RE.test(first) || LABEL_RE.test(first)) { lines.shift(); continue; }
+    // Preâmbulo: linha curta (<= 120 chars) que casa o padrão de meta-texto.
+    if (first.length <= 120 && PREAMBLE_RE.test(first)) { lines.shift(); continue; }
+    break;
+  }
+  return lines.join('\n').trim();
+}
+
+function buildLegendaPrompt({ topic, instagramHandle, niche, cta }) {
+  const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const keyword = String((cta && cta.keyword) || 'DIETA').toUpperCase().trim();
+  // A legenda TEM que terminar no CTA de comentário (cai no funil: auto-DM do
+  // cardápio) + uma linha passiva de SALVAR (salvamento = mais alcance a
+  // não-seguidor = mais gente comentando).
+  return `Crie uma legenda profissional para um post do Instagram sobre: "${topic}" (nicho: ${niche}).
+
+Retorne SÓ a legenda pronta pra copiar e colar — SEM rótulos (nada de "[LEGENDA]", "[HASHTAGS]", "Legenda:", etc.), SEM explicações e SEM aspas em volta. Separe cada parágrafo com UMA linha em branco. Siga EXATAMENTE esta estrutura:
+
+Corpo da legenda — 3 a 5 parágrafos curtos, tom direto e impactante, em português (sem jargão gringo). A PRIMEIRA linha tem que fisgar sozinha. Uma linha em branco entre cada parágrafo.
+
+📌 Salva esse post pra aplicar depois.
+
+Comenta ${keyword} para receber um cardápio que vai te fazer secar sem passar fome.
+
+#emagrecimento #dieta #nutricao #vidasaudavel #saudedohomem #saudehormonal
+
+Regras de formatação (obrigatórias):
+- NÃO escreva nenhum rótulo/marcador (ex.: [LEGENDA], [HASHTAGS], "Hashtags:").
+- Parágrafos separados por UMA linha em branco (nunca colados, nunca com 2+ linhas em branco).
+- As 2 últimas linhas ANTES das hashtags são exatamente a de "📌 Salva..." e a de "Comenta ${keyword}...".
+- Termine com UMA linha de 6 a 10 hashtags relevantes ao tema, todas na MESMA linha, após uma linha em branco.`;
+}
+
+// ─── Passo 5: Screenshots com Playwright (lógica DPR do gist) ────────────────
+
+// ─── Browser pool: reutiliza instância entre requisições ─────────────────────
+let _browserInstance = null;
+let _browserLaunchPromise = null;
+
+async function getBrowser() {
+  if (_browserInstance) {
+    try { await _browserInstance.version(); return _browserInstance; } catch (_) { _browserInstance = null; }
+  }
+  if (_browserLaunchPromise) return _browserLaunchPromise;
+  let chromium;
+  try { ({ chromium } = require('playwright')); } catch (_) { return null; }
+  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+  _browserLaunchPromise = chromium.launch({
+    headless: true, executablePath,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  }).then(b => { _browserInstance = b; _browserLaunchPromise = null; return b; })
+    .catch(e => { _browserLaunchPromise = null; throw e; });
+  return _browserLaunchPromise;
+}
+
+async function takeScreenshots(htmlFilePath, outputDir, bgColor, primaryColor, folderName) {
+  const browser = await getBrowser();
+  if (!browser) {
+    console.warn('[CarouselService] Playwright não disponível — pulando screenshots');
+    return [];
+  }
+
+  const context = await browser.newContext({
+    viewport: { width: 1080, height: 1350 },
+    deviceScaleFactor: 1,
+  });
+  const page = await context.newPage();
+
+  try {
+    // Usa HTTP em vez de file:// para que o Chromium carregue imagens externas (Unsplash)
+    const port = process.env.PORT || 3001;
+    const httpUrl = `http://localhost:${port}/output/${folderName}/carrossel.html`;
+    await page.goto(httpUrl, { waitUntil: 'networkidle', timeout: 30000 });
+
+    // Aguarda todas as imagens do DOM carregarem antes de capturar
+    await page.evaluate(() => Promise.all(
+      Array.from(document.images).map(img =>
+        img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+      )
+    ));
+    await page.waitForTimeout(400);
+
+    // Verificar DPR e viewport CSS real (conforme gist)
+    const cssW = await page.evaluate(() => window.innerWidth);
+    const cssH = await page.evaluate(() => window.innerHeight);
+    const scale = cssW / 1080;
+
+    const slides = await page.locator('body > div').all();
+    const total = slides.length;
+
+    // Esconder todos os slides
+    for (let i = 0; i < total; i++) {
+      await slides[i].evaluate(el => el.style.display = 'none');
+    }
+
+    const screenshots = [];
+
+    for (let i = 0; i < total; i++) {
+      const num = String(i + 1).padStart(2, '0');
+      const filePath = path.join(outputDir, `slide_${num}.png`);
+
+      // Detectar cor de fundo do slide
+      const classes = await slides[i].evaluate(el => el.className);
+      const isAccentBg = classes.includes('accent-bg');
+      const isEditorial = classes.includes('slide-editorial');
+      const slideBg = isAccentBg ? primaryColor : isEditorial ? bgColor : '#1a1a1a';
+
+      // Setar background html+body para a cor do slide (conforme gist)
+      await page.evaluate(c => {
+        document.documentElement.style.background = c;
+        document.body.style.background = c;
+        document.body.style.margin = '0';
+        document.body.style.padding = '0';
+        document.body.style.overflow = 'hidden';
+      }, slideBg);
+
+      // Posicionar slide fixed + aplicar scale para preencher viewport CSS
+      await slides[i].evaluate((el, s) => {
+        el.style.display = 'flex';
+        el.style.position = 'fixed';
+        el.style.top = '0';
+        el.style.left = '0';
+        el.style.width = '1080px';
+        el.style.height = '1350px';
+        el.style.zIndex = '9999';
+        if (s !== 1) {
+          el.style.transform = `scale(${s})`;
+          el.style.transformOrigin = 'top left';
+        }
+      }, scale);
+
+      await page.waitForTimeout(150);
+
+      // Screenshot com clip no tamanho do viewport CSS (conforme gist)
+      await page.screenshot({
+        path: filePath,
+        clip: { x: 0, y: 0, width: cssW, height: cssH },
+      });
+
+      screenshots.push(`slide_${num}.png`);
+
+      // Resetar slide
+      await slides[i].evaluate(el => {
+        el.style.display = 'none';
+        el.style.position = '';
+        el.style.top = '';
+        el.style.left = '';
+        el.style.width = '';
+        el.style.height = '';
+        el.style.zIndex = '';
+        el.style.transform = '';
+        el.style.transformOrigin = '';
+      });
+    }
+
+    // Restaurar
+    await page.evaluate(() => {
+      document.documentElement.style.background = '';
+      document.body.style.background = '';
+    });
+    for (let i = 0; i < total; i++) {
+      await slides[i].evaluate(el => el.style.display = '');
+    }
+
+    return screenshots;
+
+  } finally {
+    await context.close(); // fecha só o contexto, mantém browser vivo para próxima geração
+  }
+}
+
+// ─── Função principal ─────────────────────────────────────────────────────────
+
+async function generateCarousel(config, setStep = () => {}) {
+  const {
+    topic,
+    instructions = '',             // foco / diretrizes de conteúdo (opcional)
+    niche = 'Inteligência Artificial',
+    primaryColor = '#B078FF',
+    accentColor = '#5197b5',
+    bgColor = '#292A25',
+    fontFamily = 'Raleway',
+    instagramHandle = '',
+    creatorName = '',
+    profilePhotoUrl = '',
+    numSlides = 7,
+    contentTone = 'investigativo',
+    dominantEmotion = 'medo de perder',
+    roteiro = '',
+    layoutStyle = 'editorial',
+    templateHtml = '',   // HTML de modelo salvo para usar como base de layout
+    titleFontSize = 0,
+    bodyFontSize = 0,
+    bannerFontSize = 0,
+    titleFontWeight = 0,
+    bodyFontWeight = 0,
+    titleTextTransform = '',
+    titleFontFamily = '',
+    bodyFontFamily = '',
+    fmteamFontSizes = {},
+    ctaStyle = 'dark-fullbleed',  // 'dark-fullbleed' (default) | 'light-card'
+    fmteamCover = {},             // personalização da capa fmteam (cores + toggles + imagem do CTA)
+    avoidPhotoUrls = [],          // URLs de fotos a evitar (carrosséis recentes) — dedup
+    imageSubject = '',            // opcional: enviesa TODAS as imagens (queries + reserva IA) pro sujeito (ex.: "muscular bodybuilder physique")
+    ctaOverride = null,            // opcional (modo anúncio): { label?, keyword?, benefit? } — substitui o CTA orgânico (db.getCarouselCta()) campo a campo no slide de CTA fmteam
+  } = config;
+
+  // Opções de personalização da capa fmteam (com defaults seguros)
+  const fmCoverShowSub     = fmteamCover.showSub !== false;      // default: mostra subtítulo
+  const fmCoverShowContext = fmteamCover.showContext !== false;  // default: mostra linha 3
+  const fmCoverColors = {
+    headlineColor: fmteamCover.headlineColor || '',
+    subColor:      fmteamCover.subColor || '',
+    contextColor:  fmteamCover.contextColor || '',
+  };
+  // Imagem customizada do último slide (CTA) — aceita http(s) ou data URI.
+  // Diferente do prompt (onde data URIs inflam tokens), aqui a imagem só entra no
+  // HTML via pós-processamento do placeholder __CTA_BG_PHOTO__, então data: é ok.
+  const fmCtaImageUrl = (fmteamCover.ctaImageUrl && /^(https?:\/\/|data:image\/)/i.test(String(fmteamCover.ctaImageUrl).trim()))
+    ? String(fmteamCover.ctaImageUrl).trim()
+    : '';
+
+  if (!topic || !topic.trim()) throw new Error('Tema obrigatório');
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
+
+  // Sanitiza profilePhotoUrl: data URIs base64 podem ter 50k+ chars e inflam o prompt.
+  // Mantém apenas URLs http/https — data URIs ficam no cliente (não precisam ir ao Anthropic).
+  const safeProfilePhotoUrl = (profilePhotoUrl && /^https?:\/\//i.test(profilePhotoUrl.trim()))
+    ? profilePhotoUrl.trim()
+    : '';
+
+  console.log(`[GenerateCarousel] Iniciando: layout="${layoutStyle}" topic="${topic.substring(0, 60)}" numSlides=${numSlides} roteiroLen=${(roteiro||'').length} instructionsLen=${(instructions||'').length} profilePhotoIsUrl=${!!safeProfilePhotoUrl}`);
+
+  // Conta slides reais se roteiro tiver marcadores "SLIDE N"
+  let slidesCount = Math.min(12, Math.max(5, Number(numSlides)));
+  if (roteiro) {
+    const count = (roteiro.match(/^SLIDE\s+\d+/gim) || []).length;
+    if (count >= 3) slidesCount = Math.min(12, count);
+  }
+
+  // Passo 1: Reddit (skip se tiver roteiro) + queries por slide, em paralelo
+  setStep('Pesquisando tendências e buscando imagens...');
+  console.log(`[GenerateCarousel] Passo 1 — buscando tendências Reddit + queries de imagem...`);
+  const [redditTrends, slideQueries] = await Promise.all([
+    roteiro ? Promise.resolve([]) : fetchRedditTrends(topic),
+    generateSlideImageQueries(topic, roteiro, slidesCount, niche, layoutStyle, imageSubject),
+  ]);
+
+  // Passo 2: busca imagem específica para cada slide em paralelo
+  setStep('Selecionando imagens para os slides...');
+  console.log(`[GenerateCarousel] Passo 2 — buscando imagens Unsplash (${slideQueries?.length ?? 0} queries)...`);
+  // fmteam: o último slide (CTA) usa foto do criador — gera slidesCount-1 queries.
+  const minQueriesRequired = (layoutStyle === 'fmteam') ? slidesCount - 1 : slidesCount;
+  let unsplashImages;
+  if (slideQueries && slideQueries.length >= minQueriesRequired) {
+    // Busca os candidatos de TODOS os slides em paralelo (rede), depois escolhe um por
+    // slide de forma SEQUENCIAL evitando repetir foto no mesmo carrossel e nas dos
+    // carrosséis recentes (avoidPhotoUrls). Resolve "foto repetida no mesmo carrossel"
+    // e "foto igual à dos 1-3 anteriores".
+    const candidateLists = await Promise.all(
+      slideQueries.map(q => fetchImageCandidates(q, topic, 12))
+    );
+    const usedKeys = new Set((avoidPhotoUrls || []).map(photoKey).filter(Boolean));
+    const perSlide = [];
+    for (let i = 0; i < slideQueries.length; i++) {
+      const candidates = candidateLists[i] || [];
+      // 1ª foto ainda não usada; se todas já usadas, repete a melhor; se Unsplash/Pexels
+      // não trouxeram nada, cai pro AI (fetchOneImage) como último recurso.
+      let choice = candidates.find(img => img && img.url && !usedKeys.has(photoKey(img.url)));
+      if (!choice && candidates.length) choice = candidates.find(img => img && img.url);
+      if (!choice) choice = await fetchOneImage(slideQueries[i], topic, imageSubject);
+      if (choice && choice.url) usedKeys.add(photoKey(choice.url));
+      perSlide.push(choice || null);
+    }
+    unsplashImages = perSlide.map((img, i) => img || { url: '', query: slideQueries[i] });
+    console.log(`[CarouselService] Imagens por slide (dedup): ${perSlide.filter(Boolean).length}/${slidesCount} — evitando ${usedKeys.size - perSlide.filter(p => p && p.url).length} fotos recentes`);
+  } else {
+    // Fallback: busca genérica pelo tema
+    unsplashImages = await fetchImages(topic, slidesCount + 2);
+  }
+
+  // Passo 3 + 4: HTML e legenda em paralelo
+  let htmlPrompt;
+  if (templateHtml && templateHtml.trim()) {
+    htmlPrompt = buildTemplateHTMLPrompt({
+      templateHtml: templateHtml.trim(),
+      topic: topic.trim(), instructions: instructions.trim(), niche, instagramHandle, creatorName,
+      contentTone, dominantEmotion, roteiro, unsplashImages, numSlides: slidesCount,
+    });
+  } else if (layoutStyle === 'clean') {
+    // Layout Clean usa paleta própria — ignora cores do usuário
+    htmlPrompt = buildCleanHTMLPrompt({
+      topic: topic.trim(), instructions: instructions.trim(), niche,
+      primaryColor: '#ff5c4d', // cor fixa do Clean (vermelho-coral da identidade)
+      fontFamily,
+      instagramHandle, creatorName, profilePhotoUrl: safeProfilePhotoUrl, numSlides: slidesCount,
+      contentTone, dominantEmotion, roteiro, unsplashImages,
+      titleFontSize, bodyFontSize, bannerFontSize,
+      titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
+    });
+  } else if (layoutStyle === 'fmteam') {
+    // Layout Fmteam usa paleta própria — ignora cores do usuário
+    // Verifica se há template ativo para usar no preamble
+    const promptTplSvc = require('./promptTemplateService');
+    const activeTemplate = promptTplSvc.getActiveTemplate();
+    if (activeTemplate) {
+      // Reconstrói as variáveis que buildFmteamHTMLPrompt calcularia internamente
+      const fmHandle = (instagramHandle || 'fabriciomourateam').replace('@', '');
+      const fmHandleAt = `@${fmHandle}`;
+      const fmHandleUpper = fmHandleAt.toUpperCase();
+      const isFmteamHandle = /fabriciomoura/i.test(fmHandle);
+      const fmDisplayName = creatorName
+        || (isFmteamHandle ? 'Fabricio Moura' : null)
+        || fmHandle.replace(/team$/i, '').replace(/[._-]/g, ' ').trim()
+             .replace(/\b\w/g, c => c.toUpperCase())
+        || fmHandle;
+      const fmTotalContent = slidesCount - 2;
+      const fmCurrentYear = new Date().getFullYear();
+
+      const fmValidImages = unsplashImages.filter(img => img.url);
+      const fmImageSlots = slidesCount - 1; // fmteam: CTA (último) usa foto do criador
+      const fmImagesSection = fmValidImages.length
+        ? `\nImagens — use a URL exata na ordem indicada:\n${unsplashImages.slice(0, fmImageSlots).map((img, i) =>
+            img.url ? `Slide ${i + 1}: ${img.url}` : `Slide ${i + 1}: (sem imagem)`).join('\n')}\nSlide ${slidesCount} (CTA): usa foto do criador — NÃO substitua o src desta imagem`
+        : '\n(Sem imagens fornecidas)';
+
+      const fmRoteiroSection = roteiro && roteiro.trim()
+        ? `\n━━━ ROTEIRO DO CRIADOR — use este conteúdo, não invente ━━━\n${roteiro.trim().slice(0, 6000)}${roteiro.trim().length > 6000 ? " [roteiro truncado]" : ""}\n\n- SLIDE 1 (capa): gancho/título do roteiro\n- SLIDES 2 a ${slidesCount - 1}: distribua o desenvolvimento ponto a ponto\n- SLIDE ${slidesCount} (CTA): CTA do roteiro ou adequado\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        : '';
+
+      const fmInstructionsSection = instructions && instructions.trim()
+        ? `\n━━━ DIRETRIZ DE CONTEÚDO — OBRIGATÓRIO SEGUIR EM TODOS OS SLIDES ━━━\n${instructions.trim().slice(0, 3000)}\nEsta diretriz define como o conteúdo deve ser abordado. Aplique em CADA slide sem exceção.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        : '';
+
+      const { ctaDescription: fmCtaDescription } = buildFmteamCtaTemplate({
+        ctaStyle, numSlides: slidesCount, header: fmHeader, ctaPhotoSrc: fmCtaPhotoSrc,
+        displayName: fmDisplayName, badgeAvatarInner: fmBadgeAvatarInner,
+        verifiedSvg: fmVerifiedSvg, handleAt: fmHandleAt, progFor: fmProgFor, ctaOverride,
+      });
+      const fmSlideDistText = slidesCount === 9
+        ? `DISTRIBUIÇÃO FIXA DOS 9 SLIDES (estrutura fmteam v2 — siga exatamente):
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 3: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 300px, arrow-rows, grad-num
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 300px, stat-rows (dados/prova)
+- Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 7: LIGHT — slide-light on-light — img-box-top 300px, light-h1 + light-body
+- Slide 8: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up
+- Slide 9 (CTA): ${fmCtaDescription}
+
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s8" (slides 2-8). CTA usa foto sem ID.`
+        : slidesCount === 7
+        ? `DISTRIBUIÇÃO FIXA DOS 7 SLIDES (curto e com LAYOUTS ALTERNADOS — nunca 2 slides seguidos do mesmo tipo):
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slide 2: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up, dark-h1 + dark-body
+- Slide 3: LIGHT — slide-light on-light — img-box-top 300px, light-h1 + light-body
+- Slide 4: GRADIENT — slide-grad on-light — img-box-top 300px, arrow-rows, grad-num (virada narrativa)
+- Slide 5: LIGHT DADOS — slide-light on-light — img-box-top 300px, stat-rows (dados/prova)
+- Slide 6: DARK — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-shadow-up (frase final de impacto)
+- Slide 7 (CTA): ${fmCtaDescription}
+
+SEM PODAR CONTEÚDO: cubra o tema TODO nesses 5 slides de conteúdo. Se um ponto for denso, use arrow-rows/stat-rows pra caber a ideia inteira — NÃO deixe o carrossel raso só por ter menos slides.
+IDs de imagem: id="img-capa" (slide 1), id="img-s2" até id="img-s6" (slides 2-6). CTA usa foto sem ID.`
+        : `DISTRIBUIÇÃO DOS ${slidesCount} SLIDES:
+- Slide 1: CAPA — slide-dark slide-with-bg on-dark — foto full-bleed, overlay-capa
+- Slides internos: alterne dark (slide-dark + overlay-shadow-up) e light (slide-light + img-box-top) — nunca 2 seguidos iguais
+- Inclua 1 slide gradient (slide-grad on-light) no meio do carrossel (virada narrativa)
+- Slide ${slidesCount} (CTA): ${fmCtaDescription}
+- IDs: id="img-capa" (slide 1), id="img-s2" até id="img-s${slidesCount - 1}" (slides internos). CTA sem ID.`;
+
+      const fmViralStructureText = buildViralStructure({ numSlides: slidesCount, dominantEmotion, handleAt: fmHandleAt, roteiro });
+
+      const fmVars = {
+        TOPIC: topic.trim(),
+        NICHE: niche,
+        TONE: contentTone,
+        EMOTION: dominantEmotion,
+        HANDLE_AT: fmHandleAt,
+        HANDLE_UPPER: fmHandleUpper,
+        DISPLAY_NAME: fmDisplayName,
+        NUM_SLIDES: String(slidesCount),
+        TOTAL_CONTENT: String(fmTotalContent),
+        YEAR: String(fmCurrentYear),
+        INSTRUCTIONS_BLOCK: fmInstructionsSection,
+        IMAGES_BLOCK: fmImagesSection,
+        ROTEIRO_BLOCK: fmRoteiroSection,
+        SLIDE_DISTRIBUTION: fmSlideDistText,
+        VIRAL_STRUCTURE: fmViralStructureText,
+      };
+
+      const fmPreamble = promptTplSvc.instantiateTemplate(activeTemplate.content, fmVars);
+
+      // Reconstrói os helpers para o bloco de estrutura (iguais ao buildFmteamHTMLPrompt)
+      const fmAvatarSrc = (safeProfilePhotoUrl && safeProfilePhotoUrl.trim()) ? safeProfilePhotoUrl.trim() : '__CREATOR_PHOTO__';
+      const fmBadgeAvatarInner = `<img src="${fmAvatarSrc}" alt="${fmDisplayName}">`;
+      // Foto de fundo do CTA: placeholder pós-processado para /assets/fmteam-cta-bg.png
+      const fmCtaPhotoSrc = '__CTA_BG_PHOTO__';
+      const fmProgFor = (current, _ctx = 'dark') => {
+        const pct = Math.round((current / slidesCount) * 100);
+        return `<div class="prog">
+    <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+    <div class="prog-num">${current}/${slidesCount}</div>
+  </div>`;
+      };
+      const fmHeader = `<div class="accent-bar"></div>
+  <div class="brand-bar">
+    <span>${fmHandleUpper}</span>
+    <span>${fmCurrentYear}</span>
+  </div>`;
+      const fmVerifiedSvg = `<svg viewBox="0 0 24 24" fill="#1D9BF0" xmlns="http://www.w3.org/2000/svg"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>`;
+
+      const fmStructure = buildFmteamHTMLStructureBlock({
+        topic: topic.trim(),
+        numSlides: slidesCount,
+        handleAt: fmHandleAt,
+        displayName: fmDisplayName,
+        badgeAvatarInner: fmBadgeAvatarInner,
+        ctaPhotoSrc: fmCtaPhotoSrc,
+        header: fmHeader,
+        verifiedSvg: fmVerifiedSvg,
+        progFor: fmProgFor,
+        ctaStyle,
+        showCoverSub: fmCoverShowSub,
+        showCoverContext: fmCoverShowContext,
+        ctaOverride,
+      });
+
+      htmlPrompt = fmPreamble + '\n\n' + fmStructure;
+    } else {
+      htmlPrompt = buildFmteamHTMLPrompt({
+        topic: topic.trim(), instructions: instructions.trim(), niche,
+        primaryColor: '#FFC300', // cor fixa do Fmteam (amarelo dourado da identidade)
+        fontFamily,
+        instagramHandle, creatorName, profilePhotoUrl: safeProfilePhotoUrl, numSlides: slidesCount,
+        contentTone, dominantEmotion, roteiro, unsplashImages,
+        titleFontSize, bodyFontSize,
+        titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
+        ctaStyle,
+        showCoverSub: fmCoverShowSub,
+        showCoverContext: fmCoverShowContext,
+        ctaOverride,
+      });
+    }
+  } else {
+    htmlPrompt = buildHTMLPrompt({
+      topic: topic.trim(), instructions: instructions.trim(), niche, primaryColor, accentColor, bgColor,
+      fontFamily, instagramHandle, creatorName, profilePhotoUrl: safeProfilePhotoUrl, numSlides: slidesCount,
+      contentTone, dominantEmotion, roteiro, redditTrends, unsplashImages,
+      titleFontSize, bodyFontSize, bannerFontSize,
+      titleFontWeight, bodyFontWeight, titleTextTransform, titleFontFamily, bodyFontFamily,
+    });
+  }
+
+  setStep(`Gerando conteúdo com IA (prompt ~${Math.round(htmlPrompt.length / 1000)}k chars)...`);
+  console.log(`[GenerateCarousel] Passo 3 — chamando Anthropic (HTML + legenda em paralelo, prompt ~${htmlPrompt.length} chars)...`);
+  const t0 = Date.now();
+  // fmteam: sem CSS no output → ~8.000 tokens suficientes (HTML puro dos 9 slides)
+  // outros layouts: mantém 16.000 (têm CSS embutido no output)
+  const htmlMaxTokens = layoutStyle === 'fmteam' ? 8000 : 16000;
+
+  const [htmlRes, legendaRes] = await Promise.all([
+    anthropicWithRetry({
+      model: 'claude-sonnet-4-6',
+      max_tokens: htmlMaxTokens,
+      messages: [{ role: 'user', content: htmlPrompt }],
+    }),
+    anthropicWithRetry({
+      model: 'claude-haiku-4-5-20251001', // legenda = tarefa simples (caption + hashtags)
+      max_tokens: 500,
+      messages: [{ role: 'user', content: buildLegendaPrompt({ topic: topic.trim(), instagramHandle, niche, cta: (db.getCarouselCta && db.getCarouselCta()) }) }],
+    }),
+  ]);
+  console.log(`[GenerateCarousel] Anthropic respondeu em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+
+  // Limpa possíveis code fences que Claude retorne
+  let html = (htmlRes.content[0]?.text || '').trim()
+    .replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+  // Extrai HTML se Claude adicionou preâmbulo
+  if (!/^<!doctype/i.test(html) && !/^<html/i.test(html)) {
+    const idx = html.search(/<!doctype\s+html|<html[\s>]/i);
+    if (idx > 0) {
+      html = html.substring(idx);
+    } else {
+      throw new Error('Claude não retornou HTML válido. Tente novamente.');
+    }
+  }
+
+  const legenda = stripAiTells(sanitizeLegenda(legendaRes.content[0]?.text || ''));
+
+  // ── Limpeza anti-IA: tira o travessão (—/–) do texto dos slides ─────────────
+  // É a marca d'água nº1 de IA. Feito ANTES de injetar o CSS (o CSS usa só hífen).
+  // Seguro no HTML: travessão só aparece em texto visível, nunca em tag/classe.
+  html = html
+    .replace(/&mdash;|&#8212;|&#x2014;|&ndash;|&#8211;|&#x2013;/gi, ', ')
+    .replace(/(\d)\s*[—–]\s*(?=\d)/g, '$1 a ')
+    .replace(/\s*[—–]\s*/g, ', ');
+
+  // ── Pós-processamento fmteam: injeta CSS + avatar + fontes no HTML ──────────
+  // O prompt fmteam não inclui o CSS nem o avatar base64 (economia de ~25k chars por chamada).
+  // Aqui removemos qualquer <style>/<link> que Claude possa ter gerado e
+  // injetamos o CSS correto + substituímos o placeholder __CREATOR_PHOTO__.
+  if (layoutStyle === 'fmteam') {
+    const fmteamCss = buildFmteamCSSTemplate({
+      primaryColor: '#FFC300',
+      headlineSize: fmteamFontSizes.headlineSize,
+      bodySize:     fmteamFontSizes.bodySize,
+      contextSize:  fmteamFontSizes.contextSize,
+      coverColors:  fmCoverColors,
+    });
+    // Remove qualquer <style> e <link> de fontes que Claude gerou por engano
+    html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+    html = html.replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, '');
+    // Injeta CSS correto antes de </head>
+    if (html.includes('</head>')) {
+      html = html.replace('</head>', `${fmteamCss}\n</head>`);
+    } else {
+      // fallback: insere antes do primeiro <div class="slide"
+      html = html.replace(/(<div[^>]*class="slide)/, `${fmteamCss}\n$1`);
+    }
+    // Substitui placeholder do avatar pelo data URI real (não foi enviado no prompt)
+    if (html.includes('__CREATOR_PHOTO__')) {
+      const creatorPhoto = (profilePhotoUrl && profilePhotoUrl.trim()) ? profilePhotoUrl.trim() : FABRICIO_AVATAR_DATA_URL;
+      html = html.replace(/__CREATOR_PHOTO__/g, creatorPhoto);
+    }
+    // Substitui placeholder da foto de fundo do CTA por URL relativa servida via express.
+    // URL relativa funciona em qualquer host (localhost dev ou produção). Para
+    // takeScreenshotsPixelPerfect (page.setContent sem baseURL), o próprio método
+    // injeta uma <base> tag apontando para localhost:PORT antes do setContent.
+    if (html.includes('__CTA_BG_PHOTO__')) {
+      // Usa a imagem customizada do usuário no último slide quando fornecida;
+      // caso contrário, mantém a foto padrão fmteam servida via express.
+      const ctaPhoto = fmCtaImageUrl || '/assets/fmteam-cta-bg.png';
+      html = html.replace(/__CTA_BG_PHOTO__/g, ctaPhoto);
+    }
+  }
+
+  // Pós-processamento: reescreve alt das imagens fmteam pra refletir a query em inglês
+  // que foi usada na busca. Importante pro auto-fill do "Gerar com IA" no editor —
+  // o user vê a keyword real (em inglês) em vez do tópico genérico em português.
+  if (Array.isArray(slideQueries) && slideQueries.length > 0) {
+    let queryIdx = 0;
+    html = html.replace(/<img\b[^>]*\bid="img-[^"]+"[^>]*>/g, (tag) => {
+      if (queryIdx >= slideQueries.length) return tag;
+      const q = String(slideQueries[queryIdx++]).replace(/"/g, '&quot;').slice(0, 200);
+      if (/\balt="[^"]*"/.test(tag)) {
+        return tag.replace(/\balt="[^"]*"/, `alt="${q}"`);
+      }
+      return tag.replace(/(\s*\/?>)$/, ` alt="${q}"$1`);
+    });
+  }
+
+  // Pós-processamento: injeta foto de perfil no avatar-circle (evita passar base64 enorme pro Claude)
+  if (profilePhotoUrl && profilePhotoUrl.trim()) {
+    const imgTag = `<img src="${profilePhotoUrl}" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`;
+    html = html.replace(
+      /(<div[^>]*class="avatar-circle"[^>]*>)([\s\S]*?)(<\/div>)/,
+      `$1${imgTag}$3`
+    );
+
+    // Pós-processamento fmteam: injeta foto de perfil nos badges (badge-avatar e cta-badge-avatar)
+    // Substitui texto de iniciais se a foto não foi colocada pelo Claude
+    if (layoutStyle === 'fmteam') {
+      const fmteamImgTag = `<img src="${profilePhotoUrl}" alt="${creatorName || 'avatar'}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+      // Badge da capa (.badge-avatar) — só substitui se não tem <img> já
+      html = html.replace(
+        /(<div[^>]*class="badge-avatar"[^>]*>)(?![\s\S]*?<img)([\s\S]*?)(<\/div>)/g,
+        `$1${fmteamImgTag}$3`
+      );
+      // Badge do CTA (.cta-badge-avatar) — idem
+      html = html.replace(
+        /(<div[^>]*class="cta-badge-avatar"[^>]*>)(?![\s\S]*?<img)([\s\S]*?)(<\/div>)/g,
+        `$1${fmteamImgTag}$3`
+      );
+    }
+  }
+
+  // Pós-processamento: garante que o selo verificado aparece no .profile-name
+  // (Claude às vezes omite ou corrompe o SVG inline)
+  const VERIFIED_SVG = `<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0095f6"/><path d="M6.5 12.5l3.5 3.5 7.5-8" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+  // Se já tem o badge, não faz nada; caso contrário injeta antes do </div> do profile-name
+  if (!html.includes('verified-badge')) {
+    html = html.replace(
+      /(<div[^>]*class="profile-name"[^>]*>)([\s\S]*?)(<\/div>)/,
+      (_, open, inner, close) => {
+        // Remove qualquer ✓ ou ✔ textual que Claude possa ter colocado
+        const cleaned = inner.replace(/[✓✔☑✅]/g, '').trimEnd();
+        return `${open}${cleaned}${VERIFIED_SVG}${close}`;
+      }
+    );
+  }
+
+  // Se profilePhotoUrl era base64 (não incluída no prompt), reinsere no HTML gerado
+  // para que o carrossel exiba a foto corretamente no cliente.
+  if (profilePhotoUrl && profilePhotoUrl.trim() && !safeProfilePhotoUrl) {
+    html = html.replace(/FOTO_PERFIL_CRIADOR/g, profilePhotoUrl.trim());
+  }
+
+  // Passo 4: Salvar arquivos (output/<slug>-<ts>/)
+  setStep('Salvando arquivos...');
+  console.log(`[GenerateCarousel] Passo 4 — salvando arquivos em disco...`);
+  const slug = topic.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').substring(0, 40).replace(/-$/, '');
+  const folderName = `${slug}-${Date.now()}`;
+  const outputDir = path.join(OUTPUT_DIR, folderName);
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const htmlFilePath = path.join(outputDir, 'carrossel.html');
+  fs.writeFileSync(htmlFilePath, html, 'utf8');
+  fs.writeFileSync(path.join(outputDir, 'legenda.txt'), legenda, 'utf8');
+
+  // Screenshots gerados no cliente (browser) via html-to-image — sem Playwright no servidor
+  const screenshots = [];
+
+  console.log(`[GenerateCarousel] ✅ Concluído! folder="${folderName}" slides=${slidesCount} htmlSize=${html.length}`);
+  return {
+    html,
+    legenda,
+    topic: topic.trim(),
+    folderName,
+    numSlides: slidesCount,
+    screenshots,
+    redditTrendsUsed: redditTrends.length,
+    unsplashImagesUsed: unsplashImages.length,
+    photoUrlsUsed: unsplashImages.map(i => i && i.url).filter(Boolean),
+  };
+}
+
+// ─── Regenerar slide individual ───────────────────────────────────────────────
+
+async function regenerateSlide({ slideIndex, numSlides, slideHtml, topic, instructions, niche,
+  contentTone, dominantEmotion, instagramHandle, userHint }) {
+
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
+
+  const handle = (instagramHandle || 'seucanal').replace('@', '');
+  const handleAt = `@${handle}`;
+  const slideNum = (slideIndex ?? 0) + 1;
+  const n = numSlides || 7;
+
+  // Extrai descrição da função deste slide a partir da estrutura viral
+  const fullStructure = buildViralStructure({ numSlides: n, dominantEmotion: dominantEmotion || 'medo de perder', handleAt, roteiro: '' });
+  const typeDesc = fullStructure.split('\n\n').find(s => s.trimStart().startsWith(`SLIDE ${slideNum} —`)) || `SLIDE ${slideNum}`;
+
+  const instructionsLine = instructions && instructions.trim() ? `\nDiretriz de conteúdo: ${instructions.trim().slice(0, 3000)}` : '';
+  const hintLine = userHint && userHint.trim() ? `\nPedido do criador: "${userHint.trim()}"` : '';
+
+  const prompt = `Você é especialista em carrosseis virais para Instagram.
+
+Regenere APENAS o conteúdo de texto do SLIDE ${slideNum} de ${n}, mantendo EXATAMENTE a estrutura HTML.
+
+Tema: "${topic}"
+Nicho: ${niche || 'Geral'}
+Tom: ${contentTone || 'investigativo'}
+Emoção dominante: ${dominantEmotion || 'medo de perder'}${instructionsLine}${hintLine}
+
+Função deste slide:
+${typeDesc}
+
+REGRAS OBRIGATÓRIAS:
+- Retorne SOMENTE o elemento <div> externo do slide, nada mais
+- NÃO altere: classes CSS, atributos style, estrutura de divs, src de imagens, IDs, nem qualquer atributo que não seja o conteúdo de texto
+- Substitua APENAS os textos dentro dos elementos com estas classes (use as que existirem no HTML):
+  Layout editorial/clean: .title, .subtitle, .narrative-text, .content-title, .content-body, .cover-title, .cta-title
+  Layout fmteam: .capa-headline, .capa-sub, .dark-h1, .light-h1, .dark-body, .light-body, .tag, .cta-bridge, .cta-kbox-keyword, .cta-kbox-benefit, .cta-kbox-sub, .stat-num, .stat-title, .stat-desc, .arrow-text, .grad-num
+- Ao substituir .dark-h1 / .light-h1 / .capa-headline: mantenha a tag <em> exatamente onde está, troque apenas o texto (a cor/gradiente do <em> é aplicada via CSS)
+- Máximo 40 palavras por slide
+- Sem travessão (—) no meio de frases
+- Sem clichês ou frases genéricas
+
+HTML atual:
+${slideHtml}
+
+Retorne apenas o <div> externo com novo conteúdo:`;
+
+  const response = await anthropicWithRetry({
+    model: 'claude-haiku-4-5-20251001', // regeneração de slide = tarefa isolada, não precisa de Sonnet
+    max_tokens: 3000,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  let result = (response.content[0]?.text || '').trim()
+    .replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // Garante que retornou um <div> (não HTML completo)
+  if (!result.startsWith('<div') && !result.startsWith('<section')) {
+    const match = result.match(/<div[\s\S]*<\/div>/);
+    if (match) result = match[0];
+    else throw new Error('Resposta inválida: Claude não retornou um elemento de slide');
+  }
+
+  return result;
+}
+
+/**
+ * Screenshots pixel-perfect via Playwright (alternativa ao html2canvas-pro).
+ *
+ * Vantagens:
+ *  - Carrega Pexels/Unsplash direto pelo Chromium (sem proxy + base64 inline)
+ *  - Renderiza CSS 100%: background-clip:text, filter:brightness, calc(),
+ *    letter-spacing negativo, gradient text — tudo nativo
+ *  - Sem hacks de fix-* funcionais
+ *
+ * Estratégia de velocidade:
+ *  - Reusa instância de browser via getBrowser() (sem cold start em chamadas seguintes)
+ *  - setContent + waitUntil:'load' + Promise.all(images.complete) — explícito,
+ *    sem depender de networkidle que pode esperar requests fantasmas
+ *  - Single pass: todos os slides visíveis, tira screenshot por bounding box
+ *    de cada elemento (Playwright .screenshot() em locator)
+ */
+async function takeScreenshotsPixelPerfect(html, outputDir, format = '4:5') {
+  const browser = await getBrowser();
+  if (!browser) throw new Error('Playwright não disponível neste server');
+
+  const context = await browser.newContext({
+    viewport: { width: 1080, height: format === '1:1' ? 1080 : format === '9:16' ? 1920 : 1350 },
+    deviceScaleFactor: 2,  // retina-quality (2160x2700 internamente)
+  });
+  const page = await context.newPage();
+
+  try {
+    // page.setContent não usa baseURL do context para resolver URLs relativas em <img>.
+    // Injetamos uma <base> tag apontando para o próprio servidor (localhost) — Playwright
+    // roda sempre na mesma máquina do express, então localhost:PORT é acessível.
+    // Isso permite que URLs relativas (ex.: /assets/fmteam-cta-bg.png) resolvam corretamente.
+    const port = process.env.PORT || 3001;
+    const baseTag = `<base href="http://localhost:${port}/">`;
+    const htmlWithBase = html.includes('<head>')
+      ? html.replace('<head>', `<head>${baseTag}`)
+      : `${baseTag}${html}`;
+    await page.setContent(htmlWithBase, { waitUntil: 'load', timeout: 30000 });
+
+    // Garante que TODA <img> chegou (timeout individual de 8s por imagem)
+    await page.evaluate(() => Promise.all(
+      Array.from(document.images).map(img =>
+        new Promise(resolve => {
+          if (img.complete && img.naturalWidth > 0) return resolve();
+          const t = setTimeout(resolve, 8000);
+          img.addEventListener('load',  () => { clearTimeout(t); resolve(); }, { once: true });
+          img.addEventListener('error', () => { clearTimeout(t); resolve(); }, { once: true });
+        })
+      )
+    ));
+    // Garante fontes
+    await page.evaluate(() => document.fonts && document.fonts.ready ? document.fonts.ready : null);
+    await page.waitForTimeout(150); // settle
+
+    // ── Capa: título não pode "ficar grande" ───────────────────────────────────
+    // A .cover-title é 68px fixo. Quando a IA junta hook + subtítulo ela vira 3+ linhas
+    // e fica gigante/dominante (reclamação real do Fabricio). Aqui encolhemos o font-size
+    // até no MÁXIMO 2 linhas (piso 42px) e garantindo que não cole no selo acima — hooks
+    // curtos de 1-2 linhas continuam grandes (68px). Roda no DOM real antes do screenshot;
+    // a MESMA lógica existe no render do cliente (clientScreenshots.ts) pra bater igual.
+    await page.evaluate(() => {
+      const MINFS = 42, STEP = 2, MAXLINES = 2;
+      document.querySelectorAll('.cover-title').forEach((el) => {
+        const slide = el.closest('.clean-cover') || el.parentElement;
+        if (!slide) return;
+        const sTop = slide.getBoundingClientRect().top;
+        const badge = slide.querySelector('.profile-badge');
+        const limit = badge
+          ? (badge.getBoundingClientRect().bottom - sTop + 24)
+          : slide.getBoundingClientRect().height * 0.42;
+        let guard = 0;
+        while (guard++ < 80) {
+          const cs = getComputedStyle(el);
+          const fs = parseFloat(cs.fontSize) || 0;
+          const lh = parseFloat(cs.lineHeight) || fs * 1.1;
+          const lines = Math.round(el.scrollHeight / lh);
+          const top = el.getBoundingClientRect().top - sTop;
+          if (lines <= MAXLINES && top >= limit) break;
+          if (fs <= MINFS) break;
+          el.style.fontSize = (fs - STEP) + 'px';
+        }
+      });
+    });
+
+    // ── Story: texto encolhe pra caber na faixa segura (não colar no selo/rodapé) ──
+    // O texto do story (.content .txt) é centralizado; quando é longo (lista 1/2/3) ele
+    // estoura pra cima (cola no selo) e pra baixo. Encolhe o font-size até o bloco caber
+    // entre ~16% e ~88% da altura. Só afeta stories (.story); carrossel não tem .story.
+    await page.evaluate(() => {
+      const MINFS = 30, STEP = 2;
+      document.querySelectorAll('.story').forEach((story) => {
+        const txt = story.querySelector('.content .txt');
+        const content = story.querySelector('.content');
+        if (!txt || !content) return;
+        const r = story.getBoundingClientRect();
+        const topSafe = r.top + r.height * 0.16;
+        const botSafe = r.top + r.height * 0.88;
+        let guard = 0;
+        while (guard++ < 120) {
+          const c = content.getBoundingClientRect();
+          if (c.top >= topSafe && c.bottom <= botSafe) break;
+          const fs = parseFloat(getComputedStyle(txt).fontSize) || 0;
+          if (fs <= MINFS) break;
+          txt.style.fontSize = (fs - STEP) + 'px';
+        }
+      });
+    });
+
+    // ── Capa fmteam: headline não pode tampar a foto inteira ────────────────────
+    // A .capa-headline-area é ancorada em baixo e cresce PRA CIMA. Headline longo
+    // (ex.: 3 frases) enche a capa toda e estoura por cima do selo/foto. Encolhe o
+    // headline (+ sub + context, que escalam juntos) até a área começar no máx. na
+    // metade da altura (~50%), deixando a metade de cima da foto respirar. Piso 40px.
+    await page.evaluate(() => {
+      const slideOf = (el) => { let s = el; while (s.parentElement && s.parentElement !== document.body) s = s.parentElement; return s; };
+      document.querySelectorAll('.capa-headline-area').forEach((area) => {
+        const slide = slideOf(area);
+        const sRect = slide.getBoundingClientRect();
+        const minTop = sRect.top + sRect.height * 0.50;
+        const els = area.querySelectorAll('.capa-headline, .capa-sub, .capa-context');
+        if (!els.length) return;
+        let guard = 0;
+        while (guard++ < 200) {
+          if (area.getBoundingClientRect().top >= minTop) break;
+          let shrunk = false;
+          els.forEach((el) => {
+            const fs = parseFloat(getComputedStyle(el).fontSize) || 0;
+            if (fs > 40) { el.style.fontSize = (fs - 3) + 'px'; shrunk = true; }
+          });
+          if (!shrunk) break;
+        }
+      });
+    });
+
+    // Cada filho direto de body é 1 slide
+    const slidesCount = await page.evaluate(() => document.body.children.length);
+    if (slidesCount === 0) throw new Error('Nenhum slide encontrado no HTML');
+
+    fs.mkdirSync(outputDir, { recursive: true });
+    const screenshots = [];
+
+    for (let i = 0; i < slidesCount; i++) {
+      const num = String(i + 1).padStart(2, '0');
+      const filePath = path.join(outputDir, `slide_${num}.png`);
+      const locator = page.locator('body > *').nth(i);
+      await locator.screenshot({ path: filePath, type: 'png' });
+      screenshots.push(`slide_${num}.png`);
+    }
+
+    return screenshots;
+  } finally {
+    await context.close();
+  }
+}
+
+module.exports = { generateCarousel, takeScreenshots, takeScreenshotsPixelPerfect, OUTPUT_DIR, regenerateSlide, buildFmteamCSSTemplate, buildFmteamHTMLStructureBlock, fetchOneImage, fetchImagenImage };

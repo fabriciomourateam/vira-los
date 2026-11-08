@@ -1,0 +1,20 @@
+name: Debug — reagendar último story (teste)
+
+# Testa o agendamento de STORY pela via nova (canal instagram_stories id 4) usando o
+# último pack já renderizado, sem regerar. Só manual. Remover depois do teste.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  reagendar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/stories/reschedule-latest
+        env:
+          BASE: https://vira-los.fly.dev
+        run: |
+          set -e
+          echo "Reagendando o último pack de story no mLabs..."
+          resp=$(curl -sS -m 180 -X POST "$BASE/api/stories/reschedule-latest" -H "Content-Type: application/json" || echo '{}')
+          echo "$resp" | jq '.' || echo "$resp"

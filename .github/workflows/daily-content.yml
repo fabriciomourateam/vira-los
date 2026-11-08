@@ -1,0 +1,63 @@
+name: Conteúdo diário (09h BRT)
+
+# Roda todo dia de manhã (America/Sao_Paulo) e tem um horário de BACKUP à tarde.
+# O agendamento do GitHub Actions é "melhor esforço" e às vezes DROPA execuções (pior
+# no minuto :00 do topo da hora). Por isso: (1) o horário sai de :00 pra :17, o que
+# reduz muito a chance de ser descartado; (2) tem um segundo disparo à tarde — se o da
+# manhã cair, o de backup gera o dia. O guard de idempotência do serviço evita gerar
+# em dobro: se a manhã já gerou, o backup só confere e sai.
+#   09:17 BRT = 12:17 UTC  ·  13:17 BRT (backup) = 16:17 UTC
+
+on:
+  schedule:
+    - cron: '17 12 * * *'   # manhã (~09:17 BRT)
+    - cron: '17 16 * * *'   # backup à tarde (~13:17 BRT) — cobre se a manhã dropar
+  workflow_dispatch: {}   # permite rodar manualmente pelo botão do GitHub
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar a geração diária (fire-and-forget)
+        env:
+          BASE: https://vira-los.fly.dev
+          KEY: ${{ secrets.DAILY_CRON_SECRET }}   # opcional; só é exigida se setada no Fly
+        run: |
+          set -e
+          today=$(TZ=America/Sao_Paulo date +%F)
+          echo "Acordando a máquina e disparando a geração de $today..."
+          curl -sS -m 90 -X POST "$BASE/api/daily-content/generate" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-key: $KEY" \
+            -d '{"trigger":"cron"}' || true
+          echo ""
+
+          # FIRE-AND-FORGET: a geração (carrossel + reel) leva vários minutos e TERMINA
+          # sozinha no servidor. Este job NÃO fica preso esperando o "done" — isso só
+          # gerava falsa-falha por timeout de polling (o GitHub às vezes também tira o
+          # runner no meio). A gente só confere por ~2 min pra pegar ERRO RÁPIDO (ex.:
+          # a geração nem começou, ou já falhou de cara) e aí sim falhar com visibilidade.
+          # Se ainda estiver gerando, sai com SUCESSO: o servidor conclui depois.
+          echo "Conferindo o arranque (fire-and-forget; o servidor conclui sozinho)..."
+          for i in $(seq 1 6); do
+            sleep 20
+            resp=$(curl -sS -m 30 "$BASE/api/daily-content" || echo '{}')
+            status=$(echo "$resp" | jq -r --arg d "$today" '
+              [.batches[]? | select(.date==$d)] as $t
+              | if   ([$t[] | select(.status=="done" or .status=="partial")] | length) > 0 then "done"
+                elif ([$t[] | select(.status=="generating")] | length) > 0 then "generating"
+                elif ([$t[] | select(.status=="error")] | length) > 0 then "error"
+                else "none" end')
+            echo "  check $i — status de hoje: $status"
+            if [ "$status" = "done" ] || [ "$status" = "partial" ]; then
+              echo "✅ Conteúdo de $today já ficou pronto (status: $status)."
+              exit 0
+            fi
+            if [ "$status" = "error" ]; then
+              errs=$(echo "$resp" | jq -r --arg d "$today" '[.batches[]? | select(.date==$d and .status=="error") | .errors[]?] | unique | join(" || ")')
+              echo "❌ Geração de $today falhou no servidor logo de cara. Erros: $errs"
+              exit 1
+            fi
+          done
+          echo "🚀 Geração de $today segue rodando no servidor (fire-and-forget) — job encerrado com sucesso."
+          exit 0

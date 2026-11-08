@@ -1,0 +1,3023 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { HexColorPicker } from 'react-colorful';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import {
+  Loader2, Sparkles, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
+  Palette, Type, Hash, Layers, Mic2, Copy, CopyPlus, Check, FileText, Image, Search,
+  Trash2, Clock, FolderOpen, Edit3, Eye, UploadCloud, LayoutTemplate, Settings2,
+  Archive, ArchiveRestore, Save, X, Code2, Video, CalendarClock, Square,
+} from 'lucide-react';
+import CarouselEditor, { downloadAsJpeg } from './CarouselEditor';
+import PromptTemplateModal from './PromptTemplateModal';
+import { MlabsScheduleButton } from './MlabsScheduler';
+import CarouselReviewPanel from './CarouselReviewPanel';
+import { generateAndSaveScreenshots as libGenerateScreenshots } from '@/lib/clientScreenshots';
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
+
+interface CarouselConfig {
+  topic: string;
+  instructions: string;          // foco / diretrizes de conteúdo (opcional)
+  niche: string;
+  primaryColor: string;
+  accentColor: string;
+  bgColor: string;
+  fontFamily: string;
+  instagramHandle: string;
+  creatorName: string;
+  profilePhotoUrl: string;
+  numSlides: number;
+  contentTone: string;
+  dominantEmotion: string;
+  roteiro: string;
+  layoutStyle: 'editorial' | 'clean' | 'fmteam';
+  format?: '4:5' | '1:1';
+  titleFontSize: number;       // 0 = auto, otherwise px
+  bodyFontSize: number;        // 0 = auto, otherwise px
+  bannerFontSize: number;      // 0 = auto, otherwise px
+  titleFontWeight: number;     // 0 = auto (900), or 300/400/500/600/700/800/900
+  bodyFontWeight: number;      // 0 = auto (400), or 300/400/500/600/700/800/900
+  titleTextTransform: string;  // '' = auto, 'uppercase', 'none'
+  titleFontFamily: string;     // '' = global fontFamily, or specific override
+  bodyFontFamily: string;      // '' = global fontFamily, or specific override
+  fmteamFontSizes: { headlineSize: number; bodySize: number; contextSize: number };
+  ctaStyle: 'dark-fullbleed' | 'light-card';
+  // Personalização da capa fmteam: cores por linha, toggles e imagem do último slide.
+  fmteamCover: {
+    headlineColor: string;   // '' = padrão (branco)
+    subColor: string;        // '' = padrão (branco 88%)
+    contextColor: string;    // '' = padrão (branco 52%)
+    showSub: boolean;        // mostrar subtítulo da capa (linha 2)
+    showContext: boolean;    // mostrar contexto/linha 3 da capa
+    ctaImageUrl: string;     // '' = foto padrão; URL = sua imagem no último slide
+  };
+}
+
+interface CarouselResult {
+  id?: string;
+  html: string;
+  legenda: string;
+  topic: string;
+  folderName: string;
+  numSlides: number;
+  screenshots: string[];
+  redditTrendsUsed: number;
+  unsplashImagesUsed: number;
+}
+
+// ─── Cores do projeto (tokens do index.css) + neutros escuros para fundo ─────
+
+const PROJECT_SWATCHES = [
+  { hex: '#F97316', label: 'Laranja' },
+  { hex: '#34D399', label: 'Esmeralda' },
+  { hex: '#FDE047', label: 'Amarelo' },
+  { hex: '#3B82F6', label: 'Azul' },
+  { hex: '#7C3AED', label: 'Roxo' },
+  { hex: '#F87171', label: 'Rosa' },
+  { hex: '#B078FF', label: 'Lilás' },
+  { hex: '#5197b5', label: 'Ciano' },
+  { hex: '#292A25', label: 'Escuro' },
+  { hex: '#0f172a', label: 'Noite' },
+  { hex: '#1e293b', label: 'Ardósia' },
+  { hex: '#18181b', label: 'Zinc' },
+];
+
+// ─── Sub-componente: seletor de cor drag + presets + hex ─────────────────────
+
+function ColorPicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fecha ao clicar fora
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  function isValidHex(s: string) {
+    return /^#[0-9A-Fa-f]{6}$/.test(s);
+  }
+
+  function handleHexInput(raw: string) {
+    const cleaned = raw.startsWith('#') ? raw : `#${raw}`;
+    onChange(cleaned);
+  }
+
+  const safeValue = isValidHex(value) ? value : '#888888';
+
+  return (
+    <div ref={containerRef} className="rounded-xl border border-border bg-background p-3 space-y-2.5 relative">
+      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">{label}</span>
+
+      {/* Botão de preview + input hex */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          title="Abrir seletor"
+          className="w-9 h-9 rounded-lg border-2 border-border shadow-sm shrink-0 transition-transform hover:scale-105"
+          style={{ backgroundColor: safeValue }}
+        />
+        <input
+          type="text"
+          value={value}
+          maxLength={7}
+          onChange={e => handleHexInput(e.target.value)}
+          spellCheck={false}
+          className="flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+          placeholder="#000000"
+        />
+      </div>
+
+      {/* Picker de arrastar (react-colorful) */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            className="fixed sm:absolute left-2 right-2 bottom-2 sm:left-0 sm:right-0 sm:bottom-auto sm:top-full sm:mt-1 z-50 rounded-xl border border-border bg-card shadow-xl p-3 space-y-3"
+          >
+            {/* Gradiente de arrastar */}
+            <HexColorPicker color={safeValue} onChange={onChange} style={{ width: '100%', height: 180 }} />
+
+            {/* Presets do projeto */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {PROJECT_SWATCHES.map(s => (
+                <button
+                  key={s.hex}
+                  type="button"
+                  title={s.label}
+                  onClick={() => { onChange(s.hex); setOpen(false); }}
+                  className={`w-6 h-6 rounded-md border-2 transition-transform hover:scale-110 ${value === s.hex ? 'border-foreground scale-110' : 'border-transparent'}`}
+                  style={{ backgroundColor: s.hex }}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Opções ───────────────────────────────────────────────────────────────────
+
+const TONE_OPTIONS = [
+  { value: 'investigativo',  label: 'Investigativo' },
+  { value: 'provocativo',    label: 'Provocativo' },
+  { value: 'educativo',      label: 'Educativo' },
+  { value: 'motivacional',   label: 'Motivacional' },
+  { value: 'informativo',    label: 'Informativo' },
+];
+
+const EMOTION_OPTIONS = [
+  {
+    value: 'medo de perder',
+    label: 'Medo de perder',
+    badge: '🔥 Mais viral',
+    description: 'Use quando o tema é sobre erros que custam resultado, tempo desperdiçado ou armadilhas comuns. A audiência já sabe que tem um problema — "você está perdendo resultado por causa disso" para o scroll melhor que qualquer promessa positiva.',
+  },
+  {
+    value: 'curiosidade',
+    label: 'Curiosidade',
+    badge: 'Top de funil',
+    description: 'Use para verdades contraintuitivas, "o que poucos sabem", a ciência por trás de algo. Funciona melhor para atrair audiência nova que ainda não conhece você.',
+  },
+  {
+    value: 'urgência',
+    label: 'Urgência',
+    badge: 'Timing',
+    description: 'Use quando há uma janela de oportunidade, timing específico (fase do ciclo, período de bulking/cutting) ou prazo real. Força ação imediata.',
+  },
+  {
+    value: 'surpresa',
+    label: 'Surpresa',
+    badge: 'Mito-busting',
+    description: 'Use para quebrar mitos, revelar o oposto do que todo mundo faz. Ótimo para compartilhamento — as pessoas adoram compartilhar o que contradiz o senso comum.',
+  },
+  {
+    value: 'aspiração',
+    label: 'Aspiração',
+    badge: 'Transformação',
+    description: 'Use para mostrar transformação possível, resultado real com contexto, antes/depois com substância. Ideal quando você quer inspirar e não assustar.',
+  },
+];
+
+const FONT_OPTIONS = [
+  'Raleway', 'Montserrat', 'Poppins', 'Inter', 'Oswald', 'Playfair Display',
+  'Bebas Neue', 'Anton', 'Syne', 'Space Grotesk',
+];
+
+const DEFAULT_CONFIG: CarouselConfig = {
+  topic: '',
+  instructions: '',
+  niche: 'Inteligência Artificial',
+  primaryColor: '#B078FF',
+  accentColor: '#5197b5',
+  bgColor: '#292A25',
+  fontFamily: 'Raleway',
+  instagramHandle: '',
+  creatorName: '',
+  profilePhotoUrl: '',
+  numSlides: 7,
+  contentTone: 'investigativo',
+  dominantEmotion: 'medo de perder',
+  roteiro: '',
+  layoutStyle: 'editorial',
+  titleFontSize: 0,
+  bodyFontSize: 0,
+  bannerFontSize: 0,
+  titleFontWeight: 0,
+  bodyFontWeight: 0,
+  titleTextTransform: '',
+  titleFontFamily: '',
+  bodyFontFamily: '',
+  fmteamFontSizes: { headlineSize: 114, bodySize: 42, contextSize: 64 },
+  ctaStyle: 'dark-fullbleed',
+  fmteamCover: {
+    headlineColor: '',
+    subColor: '',
+    contextColor: '',
+    showSub: true,
+    showContext: true,
+    ctaImageUrl: '',
+  },
+};
+
+// ─── Linha de cor por texto da capa (com reset ao padrão) ────────────────────
+
+function CoverColorRow({
+  label, value, fallback, onChange,
+}: { label: string; value: string; fallback: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <label className="text-[11px] text-muted-foreground leading-tight">{label}</label>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <input
+          type="color"
+          value={value || fallback}
+          onChange={e => onChange(e.target.value)}
+          className="w-7 h-7 rounded cursor-pointer bg-transparent border border-border p-0"
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-[10px] text-muted-foreground hover:text-yellow-400 underline"
+          >
+            padrão
+          </button>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/60 w-[38px] text-center">auto</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Toggle simples (switch) ─────────────────────────────────────────────────
+
+function ToggleRow({
+  label, checked, onChange,
+}: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex items-center justify-between gap-2 w-full text-left"
+    >
+      <span className="text-[11px] text-muted-foreground leading-tight">{label}</span>
+      <span
+        className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${
+          checked ? 'bg-yellow-500' : 'bg-border'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            checked ? 'translate-x-4' : ''
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
+
+// ─── Prévia de cores ──────────────────────────────────────────────────────────
+
+function SlidePreview({
+  bgColor, primaryColor, accentColor, fontFamily,
+}: {
+  bgColor: string; primaryColor: string; accentColor: string; fontFamily: string;
+}) {
+  return (
+    <div
+      className="relative rounded-xl overflow-hidden shadow-lg select-none"
+      style={{ background: bgColor, aspectRatio: '4/5', fontFamily: `'${fontFamily}', sans-serif` }}
+    >
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.65) 60%, rgba(0,0,0,0.85) 100%)' }} />
+      <div className="absolute top-0 left-0 right-0 flex justify-between items-center px-3 py-2 z-10">
+        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>{fontFamily}</span>
+        <div className="w-3 h-3 rounded-full" style={{ background: primaryColor }} />
+      </div>
+      <div className="absolute bottom-0 left-0 right-0 p-3 z-10 space-y-1.5">
+        <div className="text-[11px] font-black uppercase leading-tight" style={{ color: '#ffffff', textShadow: '1px 1px 6px rgba(0,0,0,0.8)' }}>
+          TÍTULO DO <span style={{ color: primaryColor }}>SLIDE</span>
+        </div>
+        <div className="text-[9px] leading-snug" style={{ color: 'rgba(255,255,255,0.7)' }}>Subtítulo com informações de apoio</div>
+        <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: accentColor }}>• Destaque do conteúdo</div>
+        <div className="flex items-center justify-between pt-1 mt-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.15)' }}>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full" style={{ background: primaryColor }} />
+            <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.5)' }}>@seucanal</span>
+          </div>
+          <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>1/7</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
+
+interface SavedCarousel {
+  id: string;
+  topic: string;
+  folderName: string;
+  numSlides: number;
+  screenshots: string[];
+  legenda: string;
+  config: CarouselConfig;
+  created_at: string;
+  isTemplate?: boolean;
+  archived?: boolean;
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+
+interface CarrosselInstagramProps {
+  prefillScript?: string;
+  prefillTopic?: string;
+  onGenerateReels?: (carouselId: string) => void;
+}
+
+export default function CarrosselInstagram({ prefillScript, prefillTopic, onGenerateReels }: CarrosselInstagramProps = {}) {
+  const [config, setConfig] = useState<CarouselConfig>(DEFAULT_CONFIG);
+  const [configReady, setConfigReady] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState('');
+  const [result, setResult] = useState<CarouselResult | null>(null);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [savedCarousels, setSavedCarousels] = useState<SavedCarousel[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
+  // "Carrosseis Salvos": com 100+ itens a lista vira rolagem sem fim. Colapsável
+  // (estado lembrado) + busca por tema pra localizar sem rolar.
+  const [savedOpen, setSavedOpen] = useState(() => localStorage.getItem('carouselsSavedOpen') !== '0');
+  const [carouselSearch, setCarouselSearch] = useState('');
+  useEffect(() => { localStorage.setItem('carouselsSavedOpen', savedOpen ? '1' : '0'); }, [savedOpen]);
+  // Carrosséis salvos como miniaturas: mostra os N primeiros (Carregar mais/Colapsar
+  // de 5 em 5), clicar numa miniatura abre o detalhe completo (preview + ações +
+  // legenda), e o título é editável inline.
+  const CAROUSEL_PAGE = 10;         // mostra 10 (2 linhas de 5) por padrão
+  const CAROUSEL_STEP = 5;          // Carregar mais / Colapsar de 5 em 5
+  const [visibleCount, setVisibleCount] = useState(CAROUSEL_PAGE);
+  const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [regeneratingCoverId, setRegeneratingCoverId] = useState<string | null>(null);
+  const [viewingSlides, setViewingSlides] = useState<SavedCarousel | null>(null);
+  const [viewingSlideIndex, setViewingSlideIndex] = useState(0);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [inlineEditMode, setInlineEditMode] = useState(false);
+  const [savingEdits, setSavingEdits] = useState(false);
+  const editIframeRef = useRef<HTMLIFrameElement>(null);
+  const [editingSaved, setEditingSaved] = useState<SavedCarousel | null>(null);
+  const [editingSavedHtml, setEditingSavedHtml] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [ctaImgUploading, setCtaImgUploading] = useState(false);
+  const [showPersonalization, setShowPersonalization] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const ctaImgInputRef = useRef<HTMLInputElement>(null);
+  const htmlImportRef  = useRef<HTMLInputElement>(null);
+  const [importingHtml, setImportingHtml] = useState(false);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
+
+  // ── Modo Antes/Depois ──────────────────────────────────────────────────────
+  const [beforeAfterMode, setBeforeAfterMode] = useState(false);
+  const [baAluno,    setBaAluno]    = useState('');
+  const [baPeriodo,  setBaPeriodo]  = useState('');
+  const [baResultado,setBaResultado]= useState('');
+  const [baStats,    setBaStats]    = useState('');
+  const [baCta,      setBaCta]      = useState('');
+  const saveConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Responsive preview: mede largura do container ──
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [previewWidth, setPreviewWidth] = useState(360);
+
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = Math.floor(entry.contentRect.width);
+        setPreviewWidth(Math.min(w, 400));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [result]);
+
+  // ── Touch swipe para navegar slides ──
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }
+
+  function handleTouchEnd(e: React.TouchEvent, total: number) {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    // Só swipe horizontal (dx > dy para não interferir com scroll vertical)
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0 && currentSlide < total - 1) setCurrentSlide(s => s + 1);
+      if (dx > 0 && currentSlide > 0) setCurrentSlide(s => s - 1);
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  }
+
+  // Carrega config e histórico do servidor na montagem
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/carousel/config`).then(r => r.json()).catch(() => ({})),
+      fetch(`${API}/api/carousel/saved`).then(r => r.json()).catch(() => []),
+    ]).then(([cfg, saved]) => {
+      if (cfg && Object.keys(cfg).filter(k => k !== 'updated_at').length > 0) {
+        setConfig(prev => ({ ...DEFAULT_CONFIG, ...prev, ...cfg }));
+      }
+      setSavedCarousels(Array.isArray(saved) ? saved : []);
+      setConfigReady(true);
+    });
+  }, []);
+
+  // Auto-fill de props externas (prefillTopic, prefillScript)
+  // Aguarda configReady para garantir que o prefill não seja sobrescrito pelo config do servidor
+  useEffect(() => {
+    if (!configReady) return;
+    if (prefillTopic) setConfig(prev => ({ ...prev, topic: prefillTopic }));
+    if (prefillScript) setConfig(prev => ({ ...prev, roteiro: prefillScript }));
+  }, [prefillScript, prefillTopic, configReady]);
+
+  // Salva config no servidor com debounce de 800ms
+  useEffect(() => {
+    if (!configReady) return;
+    if (saveConfigTimer.current) clearTimeout(saveConfigTimer.current);
+    saveConfigTimer.current = setTimeout(() => {
+      fetch(`${API}/api/carousel/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      }).catch(() => {});
+    }, 800);
+    return () => { if (saveConfigTimer.current) clearTimeout(saveConfigTimer.current); };
+  }, [config, configReady]);
+
+  function set<K extends keyof CarouselConfig>(key: K, value: CarouselConfig[K]) {
+    setConfig(prev => ({ ...prev, [key]: value }));
+  }
+
+  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoUploading(true);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Redimensiona para 300x300 via canvas para não inflar o JSON
+      const img = new window.Image();
+      img.onload = () => {
+        const SIZE = 300;
+        const canvas = document.createElement('canvas');
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        const ctx = canvas.getContext('2d')!;
+        // Crop centralizado
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, SIZE, SIZE);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        set('profilePhotoUrl', dataUrl);
+        setPhotoUploading(false);
+        toast.success('Foto carregada!');
+        if (photoInputRef.current) photoInputRef.current.value = '';
+      };
+      img.onerror = () => {
+        toast.error('Não foi possível ler a imagem');
+        setPhotoUploading(false);
+      };
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => {
+      toast.error('Erro ao ler o arquivo');
+      setPhotoUploading(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Upload da imagem do último slide (CTA) do fmteam. Redimensiona para 1080px de
+  // largura (mantendo proporção) para servir como foto full-bleed sem inflar demais.
+  function handleCtaImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCtaImgUploading(true);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        const MAX_W = 1080;
+        const scale = Math.min(1, MAX_W / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        set('fmteamCover', { ...config.fmteamCover, ctaImageUrl: dataUrl });
+        setCtaImgUploading(false);
+        toast.success('Imagem do último slide carregada!');
+        if (ctaImgInputRef.current) ctaImgInputRef.current.value = '';
+      };
+      img.onerror = () => {
+        toast.error('Não foi possível ler a imagem');
+        setCtaImgUploading(false);
+      };
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => {
+      toast.error('Erro ao ler o arquivo');
+      setCtaImgUploading(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ── Importar HTML externo como modelo ─────────────────────────────────────
+  async function handleHtmlImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.html') && !file.name.endsWith('.htm')) {
+      toast.error('Selecione um arquivo .html');
+      if (htmlImportRef.current) htmlImportRef.current.value = '';
+      return;
+    }
+
+    const modelName = window.prompt(
+      'Nome para o modelo:',
+      file.name.replace(/\.(html|htm)$/i, '').replace(/[-_]/g, ' '),
+    );
+    if (!modelName?.trim()) {
+      if (htmlImportRef.current) htmlImportRef.current.value = '';
+      return;
+    }
+
+    setImportingHtml(true);
+    try {
+      const html = await file.text();
+      const res = await fetch(`${API}/api/carousel/save-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html,
+          name: modelName.trim(),
+          numSlides: (html.match(/clean-cover|clean-content|clean-cta|clean-split/g) || []).length,
+          legenda: '',
+          config: { ...config },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar modelo');
+      refreshSavedCarousels();
+      toast.success(`Modelo importado! Gerando capa…`);
+
+      // Gera screenshots no cliente e faz PATCH do template com elas
+      try {
+        const screenshots = await generateAndSaveScreenshots(html, data.folderName);
+        await fetch(`${API}/api/carousel/saved/${data.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshots }),
+        });
+        refreshSavedCarousels();
+        toast.success(`Modelo "${modelName.trim()}" pronto com capa!`);
+      } catch (e: any) {
+        console.error('[ImportHtml/Screenshots]', e);
+        toast.error(`Modelo salvo, mas falhou ao gerar capa: ${e.message || e}`);
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setImportingHtml(false);
+      if (htmlImportRef.current) htmlImportRef.current.value = '';
+    }
+  }
+
+  // ── Gera screenshots no browser via html-to-image ────────────────────────────
+  function generateAndSaveScreenshots(
+    html: string,
+    folderName: string,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<string[]> {
+    return libGenerateScreenshots(API, html, folderName, onProgress);
+  }
+
+  async function handleGenerate() {
+    // Validação: modo normal exige topic; modo antes/depois exige resultado
+    if (beforeAfterMode) {
+      if (!baResultado.trim()) {
+        toast.error('Informe o resultado do aluno (ex: -8kg em 3 meses)');
+        return;
+      }
+    } else if (!config.topic.trim()) {
+      toast.error('Informe o tema do carrossel');
+      return;
+    }
+    setLoading(true);
+    setLoadingStep('Iniciando...');
+    setResult(null);
+    setCurrentSlide(0);
+    try {
+      // ── Antes/Depois: monta topic + instructions + roteiro fortes ──────────
+      let finalConfig = { ...config };
+      if (beforeAfterMode) {
+        const nomeAluno = baAluno.trim() || 'meu aluno';
+        const periodo   = baPeriodo.trim()   || 'poucos meses';
+        const resultado = baResultado.trim();
+        const stats     = baStats.trim();
+        const cta       = baCta.trim() || 'Quer o mesmo resultado? Me chama no direct.';
+
+        finalConfig = {
+          ...config,
+          topic: `Transformação de ${nomeAluno}: ${resultado}${periodo ? ` em ${periodo}` : ''}`,
+          instructions: `
+MODO ANTES/DEPOIS — siga EXATAMENTE esta estrutura de slides:
+
+Slide 1 — CAPA (.clean-cover):
+  Fundo escuro com gradiente. Título impactante baseado em: "${resultado}${periodo ? ` em ${periodo}` : ''}".
+  Crie um gancho forte que faça o seguidor parar o scroll.
+
+Slide 2 — ANTES/DEPOIS (.clean-split) — OBRIGATÓRIO:
+  Use a classe .clean-split com split-photos lado a lado.
+  Painel esquerdo: label "ANTES", painel direito: label "DEPOIS" (classe "after").
+  split-eyebrow: "Resultado real"
+  split-title: "${resultado}" (1-2 palavras em <span class="hl">destaque</span>)
+  split-stats: "${stats || `${periodo ? periodo : 'resultado comprovado'}`}"
+
+Slides 3 a N-1 — COMO FOI FEITO (.clean-content):
+  Distribua o processo: treino, alimentação, mentalidade, consistência.
+  Use dados reais e concretos. Linguagem direta, sem enrolação.
+  Cada slide = 1 ponto específico do que o aluno mudou.
+
+Último slide — CTA (.clean-cta):
+  "${cta}"
+  Botão: "Fale comigo" ou "Siga @${(config.instagramHandle||'seucanal').replace('@','')}"
+
+DADOS DO ALUNO:
+- Nome: ${nomeAluno}
+- Período: ${periodo}
+- Resultado: ${resultado}
+${stats ? `- Stats: ${stats}` : ''}
+`.trim(),
+          roteiro: '',  // limpa roteiro manual — as instruções já guiam a IA
+        };
+      }
+
+      // Se um template foi selecionado, busca o HTML dele para enviar ao backend
+      let templateHtml = '';
+      if (selectedTemplateId) {
+        const tpl = savedCarousels.find(c => c.id === selectedTemplateId);
+        if (tpl) {
+          try {
+            const tplRes = await fetch(`${API}/output/${tpl.folderName}/carrossel.html`);
+            if (tplRes.ok) templateHtml = await tplRes.text();
+          } catch { /* ignora — gera sem template */ }
+        }
+      }
+
+      // ── Passo 1: inicia o job (resposta imediata < 2s) ──────────────────────
+      const startRes = await fetch(`${API}/api/carousel/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...finalConfig, templateHtml }),
+      });
+      const startData = await startRes.json();
+      if (!startRes.ok) throw new Error(startData.error || 'Erro ao iniciar geração');
+      const { jobId } = startData;
+      if (!jobId) throw new Error('Servidor não retornou jobId');
+
+      // ── Passo 2: polling até completar ───────────────────────────────────────
+      const POLL_INTERVAL = 4000;   // 4s entre cada check
+      const POLL_TIMEOUT  = 900000; // 15 min máximo total
+      const pollStart = Date.now();
+      let data: any = null;
+
+      while (true) {
+        if (Date.now() - pollStart > POLL_TIMEOUT) {
+          throw new Error('Tempo limite de 15 minutos excedido. O servidor pode estar lento — tente novamente.');
+        }
+        await new Promise(r => setTimeout(r, POLL_INTERVAL));
+        const pollRes = await fetch(`${API}/api/carousel/jobs/${jobId}`);
+        if (!pollRes.ok) throw new Error(`Erro ao consultar job: HTTP ${pollRes.status}`);
+        const job = await pollRes.json();
+
+        if (job.status === 'error') throw new Error(job.error || 'Erro na geração');
+        if (job.status === 'done') { data = job.result; break; }
+        // status === 'processing': mostra etapa atual e continua polling
+        if (job.step) setLoadingStep(job.step);
+      }
+
+      const carouselId = `c_${Date.now()}`;
+      setResult({ ...data, id: carouselId, screenshots: [] });
+      toast.success(`${data.numSlides} slides gerados! Salvando no histórico…`);
+
+      // 1) Grava metadata imediatamente com screenshots vazios — garante que o
+      //    carrossel apareça na lista mesmo se a geração de imagens falhar.
+      try {
+        const saveRes = await fetch(`${API}/api/carousel/saved`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: carouselId,
+            topic: data.topic,
+            folderName: data.folderName,
+            numSlides: data.numSlides,
+            screenshots: [],
+            legenda: data.legenda,
+            config: { ...config },
+          }),
+        });
+        if (!saveRes.ok) throw new Error(`HTTP ${saveRes.status}`);
+        const saved = await fetch(`${API}/api/carousel/saved`).then(r => r.json());
+        setSavedCarousels(Array.isArray(saved) ? saved : []);
+      } catch (e: any) {
+        console.error('[SaveCarousel]', e);
+        toast.error(`Não foi possível salvar no histórico: ${e.message || e}`);
+      }
+
+      // 2) Gera screenshots no browser e atualiza o registro via PATCH.
+      //    Se falhar, o registro já está salvo (sem preview) e o usuário pode
+      //    re-tentar depois.
+      try {
+        toast.success('Gerando imagens dos slides…');
+        const screenshots = await generateAndSaveScreenshots(
+          data.html,
+          data.folderName,
+          (done, total) => {
+            if (done < total) {
+              setResult(prev => prev ? { ...prev, screenshots: Array(done).fill('') } : prev);
+            }
+          },
+        );
+        setResult(prev => prev ? { ...prev, screenshots } : prev);
+
+        await fetch(`${API}/api/carousel/saved/${carouselId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshots }),
+        });
+
+        const saved = await fetch(`${API}/api/carousel/saved`).then(r => r.json());
+        setSavedCarousels(Array.isArray(saved) ? saved : []);
+        toast.success('Imagens prontas para download!');
+      } catch (e: any) {
+        console.error('[Screenshots]', e);
+        toast.error(`Erro ao gerar imagens: ${e.message || e}. Carrossel salvo sem preview.`);
+      }
+    } catch (err: any) {
+      console.error('[Generate] Erro:', err);
+      toast.error(err.message || 'Erro desconhecido ao gerar carrossel', { duration: 8000 });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDeleteSaved(id: string) {
+    await fetch(`${API}/api/carousel/saved/${id}`, { method: 'DELETE' });
+    setSavedCarousels(prev => prev.filter(c => c.id !== id));
+    if (editingSaved?.id === id) {
+      setEditingSaved(null);
+      setEditingSavedHtml(null);
+    }
+  }
+
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [squaringId, setSquaringId] = useState<string | null>(null);
+  async function handleRenderSquare(saved: SavedCarousel) {
+    setSquaringId(saved.id);
+    try {
+      const res = await fetch(`${API}/api/carousel/saved/${saved.id}/render-square`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falhou');
+      toast.success('Versão quadrada criada!');
+      const list = await fetch(`${API}/api/carousel/saved`).then(r => r.json()).catch(() => null);
+      if (Array.isArray(list)) setSavedCarousels(list);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falhou');
+    } finally {
+      setSquaringId(null);
+    }
+  }
+  async function handleDuplicate(saved: SavedCarousel) {
+    setDuplicatingId(saved.id);
+    try {
+      const res = await fetch(`${API}/api/carousel/saved/${saved.id}/duplicate`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao duplicar');
+      const dup: SavedCarousel = data.carousel;
+      setSavedCarousels(prev => [dup, ...prev]);
+      setExpandedCarousels(prev => new Set(prev).add(dup.id));
+      toast.success('Cópia criada! Abrindo o editor da cópia…');
+      handleEditSaved(dup); // abre o editor já na cópia
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao duplicar');
+    } finally {
+      setDuplicatingId(null);
+    }
+  }
+
+  // Salva o título editado inline (PATCH topic). Otimista: já atualiza a lista.
+  async function saveTitle(saved: SavedCarousel) {
+    const t = titleDraft.trim();
+    setEditingTitleId(null);
+    if (!t || t === saved.topic) return;
+    setSavedCarousels(prev => prev.map(c => c.id === saved.id ? { ...c, topic: t } : c));
+    try {
+      const res = await fetch(`${API}/api/carousel/saved/${saved.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: t }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Título atualizado');
+    } catch {
+      toast.error('Falha ao salvar o título');
+    }
+  }
+
+  // Painel de detalhe do carrossel ativo (capa maior + todas as ações + legenda).
+  function renderSavedDetail(saved: SavedCarousel) {
+    const thumb = saved.screenshots?.[0] ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}` : null;
+    const date = new Date(saved.created_at).toLocaleDateString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+    return (
+      <div className="rounded-xl border border-violet-500/40 bg-card overflow-hidden">
+        <div className="flex flex-col sm:flex-row">
+          <div className="relative sm:w-44 shrink-0 aspect-[4/5] bg-secondary">
+            {thumb ? (
+              <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-3">
+                <FolderOpen className="w-8 h-8 opacity-30" />
+                <button
+                  onClick={() => handleRegenerateCover(saved)}
+                  disabled={regeneratingCoverId === saved.id}
+                  className="flex items-center gap-1.5 text-[11px] bg-foreground text-background font-bold px-2.5 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50"
+                >
+                  {regeneratingCoverId === saved.id
+                    ? <><Loader2 className="w-3 h-3 animate-spin" /> Gerando…</>
+                    : <><RefreshCw className="w-3 h-3" /> Regenerar capa</>}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0 p-3 space-y-2">
+            <p className="text-sm font-semibold text-foreground">{saved.topic}</p>
+            <p className="text-[10px] text-muted-foreground">{saved.numSlides} slides · {date}</p>
+            <div className="flex flex-wrap items-center gap-1">
+              {saved.isTemplate ? (
+                <button onClick={() => handleUseAsBase(saved)} className="px-2 py-1 rounded bg-emerald-500 text-white text-[11px] font-bold hover:bg-emerald-400 transition-colors">Usar como base</button>
+              ) : (
+                <button onClick={() => handleLoadConfig(saved)} className="px-2 py-1 rounded bg-secondary text-foreground text-[11px] font-bold hover:bg-secondary/70 transition-colors">Carregar config</button>
+              )}
+              <button onClick={() => handleDuplicate(saved)} disabled={duplicatingId === saved.id} className="p-1.5 rounded text-muted-foreground hover:text-blue-400 transition-colors disabled:opacity-50" title="Duplicar (cópia editável)">
+                {duplicatingId === saved.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CopyPlus className="w-4 h-4" />}
+              </button>
+              {saved.config?.format !== '1:1' && (!saved.config?.layoutStyle || saved.config.layoutStyle === 'fmteam') && (
+                <button onClick={() => handleRenderSquare(saved)} disabled={squaringId === saved.id} className="p-1.5 rounded text-muted-foreground hover:text-amber-400 transition-colors disabled:opacity-50" title="Gerar versão quadrada (1:1)">
+                  {squaringId === saved.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
+                </button>
+              )}
+              {!saved.archived && (
+                <button onClick={() => handleEditSaved(saved)} className={`p-1.5 rounded transition-colors ${editingSaved?.id === saved.id ? 'text-purple-400 bg-purple-500/10' : 'text-muted-foreground hover:text-purple-400'}`} title="Editar"><Edit3 className="w-4 h-4" /></button>
+              )}
+              {saved.legenda && (
+                <button onClick={() => { navigator.clipboard.writeText(saved.legenda); toast.success('Legenda copiada!'); }} className="p-1.5 rounded text-muted-foreground hover:text-blue-400 transition-colors" title="Copiar legenda"><Copy className="w-4 h-4" /></button>
+              )}
+              {(saved.screenshots?.length ?? 0) > 0 && (
+                <button onClick={() => openSavedSlidesViewer(saved)} className="p-1.5 rounded text-muted-foreground hover:text-emerald-400 transition-colors" title="Baixar slides"><Download className="w-4 h-4" /></button>
+              )}
+              <a href={`${API}/output/${saved.folderName}/carrossel.html`} target="_blank" rel="noreferrer" className="p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Abrir HTML"><FileText className="w-4 h-4" /></a>
+              {onGenerateReels && (
+                <button onClick={() => onGenerateReels(saved.id)} className="p-1.5 rounded text-muted-foreground hover:text-rose-500 transition-colors" title="Gerar Reels"><Video className="w-4 h-4" /></button>
+              )}
+              {(saved.screenshots?.length ?? 0) > 0 && !saved.isTemplate && (
+                <MlabsScheduleButton kind="carousel" contentId={saved.id} caption={saved.legenda} />
+              )}
+              <button onClick={() => toggleArchive(saved)} className={`p-1.5 rounded transition-colors ${saved.archived ? 'text-amber-400 hover:text-foreground' : 'text-muted-foreground hover:text-amber-400'}`} title={saved.archived ? 'Restaurar' : 'Arquivar (já postei)'}>
+                {saved.archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+              </button>
+              <button onClick={() => handleDeleteSaved(saved.id)} className="p-1.5 rounded text-muted-foreground hover:text-red-500 transition-colors" title="Excluir"><Trash2 className="w-4 h-4" /></button>
+            </div>
+            {saved.legenda && <LegendaPreview legenda={saved.legenda} />}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  async function toggleArchive(saved: SavedCarousel) {
+    const next = !saved.archived;
+    await fetch(`${API}/api/carousel/saved/${saved.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: next }),
+    });
+    setSavedCarousels(prev => prev.map(c => c.id === saved.id ? { ...c, archived: next } : c));
+    if (next && editingSaved?.id === saved.id) { setEditingSaved(null); setEditingSavedHtml(null); }
+    toast.success(next ? 'Carrossel arquivado' : 'Carrossel restaurado');
+  }
+
+  async function handleEditSaved(saved: SavedCarousel) {
+    if (editingSaved?.id === saved.id) {
+      setEditingSaved(null);
+      setEditingSavedHtml(null);
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/output/${saved.folderName}/carrossel.html`);
+      if (!res.ok) throw new Error('HTML não encontrado');
+      const html = await res.text();
+      setEditingSaved(saved);
+      setEditingSavedHtml(html);
+    } catch {
+      toast.error('Não foi possível carregar o HTML deste carrossel');
+    }
+  }
+
+  // Cria uma cópia do modelo como novo carrossel e abre no editor
+  async function handleUseAsBase(template: SavedCarousel) {
+    try {
+      const res = await fetch(`${API}/output/${template.folderName}/carrossel.html`);
+      if (!res.ok) throw new Error('HTML não encontrado');
+      const html = await res.text();
+
+      // Registra como novo carrossel (cópia do template) no histórico
+      const newId = `c_${Date.now()}`;
+      const newTopic = `${template.topic} (cópia)`;
+      await fetch(`${API}/api/carousel/saved`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newId,
+          topic: newTopic,
+          folderName: template.folderName,
+          numSlides: template.numSlides,
+          screenshots: template.screenshots,
+          legenda: template.legenda,
+          config: template.config,
+        }),
+      });
+
+      const newEntry: SavedCarousel = {
+        id: newId,
+        topic: newTopic,
+        folderName: template.folderName,
+        numSlides: template.numSlides,
+        screenshots: template.screenshots,
+        legenda: template.legenda,
+        config: template.config,
+        created_at: new Date().toISOString(),
+      };
+      setSavedCarousels(prev => [newEntry, ...prev]);
+
+      setEditingSaved(newEntry);
+      setEditingSavedHtml(html);
+      toast.success(`Modelo "${template.topic}" copiado — edite e gere os screenshots`);
+    } catch {
+      toast.error('Não foi possível carregar o modelo');
+    }
+  }
+
+  function refreshSavedCarousels() {
+    fetch(`${API}/api/carousel/saved`)
+      .then(r => r.json())
+      .then(saved => setSavedCarousels(Array.isArray(saved) ? saved : []))
+      .catch(() => {});
+  }
+
+  async function handleRegenerateCover(saved: SavedCarousel) {
+    setRegeneratingCoverId(saved.id);
+    try {
+      const htmlRes = await fetch(`${API}/output/${saved.folderName}/carrossel.html`);
+      if (!htmlRes.ok) throw new Error(`HTML não encontrado (HTTP ${htmlRes.status})`);
+      const html = await htmlRes.text();
+      toast.success('Regerando imagens do carrossel…');
+      const screenshots = await generateAndSaveScreenshots(html, saved.folderName);
+      await fetch(`${API}/api/carousel/saved/${saved.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screenshots }),
+      });
+      refreshSavedCarousels();
+      toast.success('Capa regenerada!');
+    } catch (e: any) {
+      console.error('[RegenerateCover]', e);
+      toast.error(`Falha: ${e.message || e}`);
+    } finally {
+      setRegeneratingCoverId(null);
+    }
+  }
+
+  function openSavedSlidesViewer(saved: SavedCarousel) {
+    if (!saved.screenshots?.length) {
+      toast.error('Esse carrossel não tem imagens geradas. Clique em "Regenerar capa".');
+      return;
+    }
+    setViewingSlides(saved);
+    setViewingSlideIndex(0);
+  }
+
+  function openSavedSlideInNewTab(folderName: string, filename: string) {
+    const url = `${API}/output/${folderName}/${filename}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.click();
+  }
+
+  function handleLoadConfig(saved: SavedCarousel) {
+    setConfig({ ...DEFAULT_CONFIG, ...saved.config });
+    toast.success(`Config "${saved.topic}" carregada`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function handleDownloadHTML() {
+    if (!result) return;
+    const blob = new Blob([result.html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `carrossel-${result.topic.replace(/\s+/g, '-').toLowerCase()}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadPNG(filename: string) {
+    const url = `${API}/output/${result!.folderName}/${filename}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    a.click();
+  }
+
+  async function handleCopyLegenda() {
+    if (!result?.legenda) return;
+    await navigator.clipboard.writeText(result.legenda);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleLegendaChange(text: string) {
+    setResult(prev => prev ? { ...prev, legenda: text } : prev);
+  }
+
+  // ── Edição inline no preview ──────────────────────────────────────────────
+
+  function getEditableSlideHtml(slideIndex: number): string {
+    if (!result) return '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(result.html, 'text/html');
+    const slides = Array.from(doc.body.children) as HTMLElement[];
+    const slide = slides[slideIndex];
+    if (!slide) return '';
+    const head = doc.head.innerHTML;
+
+    const editScript = `
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var SELS = [
+    '.title','.subtitle','.subtitle-accent','.narrative-text',
+    '.content-title','.content-body','.cover-title','.cta-title',
+    '.split-title','.split-stats','.split-eyebrow',
+    '.profile-name','.profile-handle','.swipe-hint',
+    '.footer-left span','.footer-right','.footer-name-pill',
+    '.footer-handle-pill','.follow-banner',
+    // ── Layout fmteam ──
+    '.fmt-cover-title','.fmt-title','.fmt-body','.fmt-tag',
+    '.fmt-cta-title','.fmt-cta-bridge',
+    '.fmt-cta-box-label','.fmt-cta-box-keyword','.fmt-cta-box-after',
+    '.fmt-cta-footer','.fmt-arrow-text',
+    '.fmt-profile-name','.fmt-profile-handle',
+    '.fmt-brand-handle','.fmt-brand-year','.fmt-progress-count','.fmt-decor-number'
+  ];
+  // ── Toolbar flutuante de tamanho de fonte ──
+  var toolbar=document.createElement('div');
+  toolbar.setAttribute('data-no-edit','1');
+  toolbar.style.cssText='display:none;position:fixed;z-index:99999;background:#1e1e2e;border:1px solid rgba(176,120,255,0.5);border-radius:10px;padding:6px 10px;gap:6px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,0.6);pointer-events:all;';
+  toolbar.innerHTML='<span style="color:rgba(255,255,255,0.5);font-size:11px;font-family:sans-serif;margin-right:2px;">Fonte</span>'
+    +'<button data-no-edit="1" id="tb-minus" style="background:#333;color:white;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;font-family:sans-serif;">−</button>'
+    +'<span id="tb-size" style="color:white;font-size:13px;font-family:monospace;min-width:36px;text-align:center;">–</span>'
+    +'<button data-no-edit="1" id="tb-plus" style="background:#333;color:white;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;font-family:sans-serif;">+</button>'
+    +'<div style="width:1px;height:20px;background:rgba(255,255,255,0.15);margin:0 2px;"></div>'
+    +'<button data-no-edit="1" id="tb-bold" style="background:#333;color:white;border:none;border-radius:6px;width:28px;height:28px;font-size:14px;font-weight:900;cursor:pointer;font-family:sans-serif;">B</button>';
+  document.body.appendChild(toolbar);
+  var activeEl=null;
+  function getFs(el){
+    var s=el.style.fontSize||window.getComputedStyle(el).fontSize||'30px';
+    return parseInt(s)||30;
+  }
+  function showToolbar(el){
+    activeEl=el;
+    var rect=el.getBoundingClientRect();
+    toolbar.style.display='flex';
+    var top=rect.top-46;
+    if(top<4) top=rect.bottom+4;
+    toolbar.style.top=Math.max(4,top)+'px';
+    toolbar.style.left=Math.max(4,rect.left)+'px';
+    document.getElementById('tb-size').textContent=getFs(el)+'px';
+    var fw=parseInt(el.style.fontWeight||window.getComputedStyle(el).fontWeight||'400');
+    document.getElementById('tb-bold').style.background=fw>=700?'rgba(176,120,255,0.7)':'#333';
+  }
+  function hideToolbar(e){
+    if(e&&(e.relatedTarget===toolbar||toolbar.contains(e.relatedTarget))) return;
+    toolbar.style.display='none'; activeEl=null;
+  }
+  toolbar.addEventListener('mouseleave',function(e){ if(!activeEl) toolbar.style.display='none'; });
+  document.getElementById('tb-minus').addEventListener('click',function(e){
+    e.stopPropagation(); if(!activeEl) return;
+    var s=Math.max(10,getFs(activeEl)-2);
+    activeEl.style.fontSize=s+'px';
+    document.getElementById('tb-size').textContent=s+'px';
+  });
+  document.getElementById('tb-plus').addEventListener('click',function(e){
+    e.stopPropagation(); if(!activeEl) return;
+    var s=getFs(activeEl)+2;
+    activeEl.style.fontSize=s+'px';
+    document.getElementById('tb-size').textContent=s+'px';
+  });
+  document.getElementById('tb-bold').addEventListener('click',function(e){
+    e.stopPropagation(); if(!activeEl) return;
+    var fw=parseInt(activeEl.style.fontWeight||window.getComputedStyle(activeEl).fontWeight||'400');
+    var next=fw>=700?400:700;
+    activeEl.style.fontWeight=next;
+    document.getElementById('tb-bold').style.background=next>=700?'rgba(176,120,255,0.7)':'#333';
+  });
+
+  SELS.forEach(function(sel){
+    document.querySelectorAll(sel).forEach(function(el){
+      if(el.closest('[contenteditable]')) return;
+      el.setAttribute('contenteditable','true');
+      el.style.cursor='text';
+      el.style.outline='2px dashed rgba(176,120,255,0.45)';
+      el.style.outlineOffset='3px';
+      el.style.borderRadius='4px';
+      el.addEventListener('focus',function(){
+        el.style.outline='2px solid rgba(176,120,255,0.9)';
+        el.style.background='rgba(176,120,255,0.07)';
+        showToolbar(el);
+      });
+      el.addEventListener('blur',function(e){
+        el.style.outline='2px dashed rgba(176,120,255,0.45)';
+        el.style.background='';
+        hideToolbar(e);
+      });
+      el.addEventListener('keydown',function(e){
+        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();}
+      });
+    });
+  });
+  // Clique em imagens <img> abre prompt de URL
+  document.querySelectorAll('img').forEach(function(img){
+    if(img.getAttribute('data-no-edit')) return;
+    img.style.cursor='pointer';
+    img.title='Clique para trocar imagem';
+    img.addEventListener('click',function(e){
+      e.stopPropagation();
+      var url=window.prompt('URL da nova imagem:',img.src||'');
+      if(url&&url.trim()){img.src=url.trim();}
+    });
+  });
+  // Botão flutuante "🖼️" para trocar background-image (funciona mesmo com overlay por cima)
+  function addBgBtn(bgEl, parentEl) {
+    var btn=document.createElement('button');
+    btn.textContent='🖼️';
+    btn.title='Trocar imagem de fundo';
+    btn.setAttribute('data-no-edit','1');
+    btn.style.cssText='position:absolute;top:10px;left:10px;z-index:9999;background:rgba(0,0,0,0.75);color:white;border:2px solid rgba(255,255,255,0.3);border-radius:8px;padding:8px 14px;font-size:20px;cursor:pointer;line-height:1;';
+    btn.addEventListener('mouseenter',function(){btn.style.background='rgba(176,120,255,0.85)';});
+    btn.addEventListener('mouseleave',function(){btn.style.background='rgba(0,0,0,0.75)';});
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var cur=bgEl.style.backgroundImage.replace(/url\\(['"]?|['"]?\\)/g,'');
+      var url=window.prompt('Cole a URL da nova imagem de fundo:',cur||'');
+      if(url&&url.trim()){bgEl.style.backgroundImage="url('"+url.trim()+"')";}
+    });
+    parentEl.style.position='relative';
+    parentEl.appendChild(btn);
+  }
+  // Slides com .slide-bg (capa editorial + CTA editorial)
+  document.querySelectorAll('.slide-bg').forEach(function(bg){
+    var parent=bg.closest('.slide')||bg.parentElement;
+    if(parent) addBgBtn(bg,parent);
+  });
+  // Slides clean: .bg dentro de .clean-cover ou .clean-cta
+  document.querySelectorAll('.clean-cover .bg, .clean-cta .bg').forEach(function(bg){
+    var parent=bg.closest('.clean-cover,.clean-cta')||bg.parentElement;
+    if(parent) addBgBtn(bg,parent);
+  });
+  // Slides fmteam: .fmt-cover-bg, .fmt-cta-bg (full-bleed) e .fmt-img-box (interno)
+  document.querySelectorAll('.fmt-cover-bg, .fmt-cta-bg, .fmt-img-box').forEach(function(bg){
+    var parent=bg.closest('.fmt-slide')||bg.parentElement;
+    if(parent) addBgBtn(bg,parent);
+  });
+  // Foto no topo (.top-photo-wrap img) e photo-card
+  document.querySelectorAll('.top-photo-wrap img, .photo-card img, .split-panel img').forEach(function(img){
+    img.style.cursor='pointer';
+    var btn=document.createElement('button');
+    btn.textContent='🖼️';
+    btn.title='Trocar imagem';
+    btn.setAttribute('data-no-edit','1');
+    btn.style.cssText='position:absolute;bottom:10px;right:10px;z-index:9999;background:rgba(0,0,0,0.75);color:white;border:2px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 10px;font-size:18px;cursor:pointer;line-height:1;';
+    btn.addEventListener('mouseenter',function(){btn.style.background='rgba(176,120,255,0.85)';});
+    btn.addEventListener('mouseleave',function(){btn.style.background='rgba(0,0,0,0.75)';});
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var url=window.prompt('Cole a URL da nova imagem:',img.src||'');
+      if(url&&url.trim()){img.src=url.trim();}
+    });
+    var wrap=img.parentElement;
+    if(wrap){wrap.style.position='relative';wrap.appendChild(btn);}
+  });
+});
+<\/script>`;
+
+    return `<!DOCTYPE html><html><head>${head}${editScript}</head><body style="margin:0;padding:0;overflow:hidden;">${slide.outerHTML}</body></html>`;
+  }
+
+  async function saveInlineEdits(andGenerateScreenshots = false) {
+    if (!result || !editIframeRef.current) return;
+    setSavingEdits(true);
+    try {
+      const iframeDoc = editIframeRef.current.contentDocument;
+      if (!iframeDoc) throw new Error('iframe não acessível');
+
+      const editedSlide = iframeDoc.body.querySelector(':scope > div') as HTMLElement;
+      if (!editedSlide) throw new Error('Slide não encontrado no iframe');
+
+      // Remove atributos de edição antes de salvar
+      editedSlide.querySelectorAll('[contenteditable]').forEach((el: any) => {
+        el.removeAttribute('contenteditable');
+        el.style.removeProperty('outline');
+        el.style.removeProperty('outline-offset');
+        el.style.removeProperty('cursor');
+        el.style.removeProperty('background');
+        el.style.removeProperty('border-radius');
+      });
+      editedSlide.querySelectorAll('[title]').forEach((el: any) => {
+        if (el.title === 'Clique para trocar imagem' || el.title === 'Clique para trocar imagem de fundo')
+          el.removeAttribute('title');
+      });
+
+      // Substitui o slide no HTML completo
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(result.html, 'text/html');
+      const slides = Array.from(doc.body.children);
+      if (slides[currentSlide]) {
+        slides[currentSlide].replaceWith(editedSlide.cloneNode(true));
+      }
+      const newHtml = doc.documentElement.outerHTML;
+
+      setResult(prev => prev ? { ...prev, html: newHtml } : prev);
+
+      // Salva no servidor
+      await fetch(`${API}/api/carousel/save-html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: newHtml, folderName: result.folderName }),
+      }).catch(() => {});
+
+      if (andGenerateScreenshots) {
+        toast.success('Slide salvo! Gerando imagens…');
+        const screenshots = await generateAndSaveScreenshots(newHtml, result.folderName);
+        setResult(prev => prev ? { ...prev, html: newHtml, screenshots } : prev);
+        if (result.id) {
+          await fetch(`${API}/api/carousel/saved/${result.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ screenshots }),
+          }).catch((e) => console.error('[PatchScreenshots]', e));
+        }
+        toast.success('Imagens atualizadas!');
+        setInlineEditMode(false);
+      } else {
+        toast.success('Slide salvo!');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar');
+    } finally {
+      setSavingEdits(false);
+    }
+  }
+
+  // Slides para preview: PNGs se disponíveis, senão extrai do HTML
+  const hasPNGs = (result?.screenshots?.length ?? 0) > 0;
+
+  function extractSlides(html: string): string[] {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const slides = Array.from(doc.querySelectorAll('.slide, .slide-editorial, .fmt-slide'));
+    if (!slides.length) return [html];
+    const head = doc.head.innerHTML;
+    return slides.map(slide =>
+      `<!DOCTYPE html><html><head>${head}</head><body style="margin:0;padding:0;overflow:hidden;">${slide.outerHTML}</body></html>`
+    );
+  }
+
+  const htmlSlides = result && !hasPNGs ? extractSlides(result.html) : [];
+  const totalSlides = hasPNGs
+    ? result!.screenshots.length
+    : htmlSlides.length;
+
+  return (
+    <div className="space-y-6">
+
+      {/* Cabeçalho */}
+      <div>
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-purple-500" />
+          Gerador de Carrossel para Instagram
+        </h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Crie carrosseis profissionais com IA. Personaliza cor, fonte e estilo.
+        </p>
+      </div>
+
+      {/* Banner: roteiro prefilled via props */}
+      {config.roteiro && prefillScript && (
+        <div className="rounded-xl border border-purple-500/40 bg-purple-500/10 p-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-purple-300">
+            <FileText className="w-4 h-4 shrink-0" />
+            <span>Script do Analisador carregado — o carrossel usará este conteúdo.</span>
+          </div>
+          <button
+            onClick={() => set('roteiro', '')}
+            className="text-xs text-muted-foreground hover:text-foreground underline shrink-0"
+          >
+            Remover
+          </button>
+        </div>
+      )}
+
+      {/* Formulário */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+
+        {/* Layout Style */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+            <Palette className="w-3.5 h-3.5" /> Layout
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => set('layoutStyle', 'editorial')}
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all ${
+                config.layoutStyle === 'editorial'
+                  ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                  : 'border-border bg-secondary text-muted-foreground hover:border-border/80'
+              }`}
+            >
+              <Layers className="w-5 h-5" />
+              <span className="text-xs font-bold">Editorial</span>
+              <span className="text-[10px] opacity-70 text-center leading-tight">Investigativo com header</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => set('layoutStyle', 'clean')}
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all ${
+                config.layoutStyle === 'clean'
+                  ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                  : 'border-border bg-secondary text-muted-foreground hover:border-border/80'
+              }`}
+            >
+              <Image className="w-5 h-5" />
+              <span className="text-xs font-bold">Clean / Minimal</span>
+              <span className="text-[10px] opacity-70 text-center leading-tight">Dark + badge + foto card</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => set('layoutStyle', 'fmteam')}
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all ${
+                config.layoutStyle === 'fmteam'
+                  ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400'
+                  : 'border-border bg-secondary text-muted-foreground hover:border-border/80'
+              }`}
+            >
+              <Palette className="w-5 h-5" />
+              <span className="text-xs font-bold">fmteam</span>
+              <span className="text-[10px] opacity-70 text-center leading-tight">Amarelo #FFC300 + brand bar + número decor</span>
+            </button>
+          </div>
+          {config.layoutStyle === 'fmteam' && (
+            <div className="mt-3 space-y-3">
+              {/* Botão Prompt */}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowPromptEditor(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-yellow-500/40 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-xs font-semibold transition-colors"
+                >
+                  <Code2 className="w-3.5 h-3.5" />
+                  Prompt
+                </button>
+              </div>
+
+              {/* Estilo do CTA fmteam */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+                  Estilo do último slide (CTA)
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => set('ctaStyle', 'dark-fullbleed')}
+                    className={`flex-1 py-2 px-2.5 rounded-lg border text-[11px] font-bold transition-colors text-left leading-tight ${
+                      config.ctaStyle === 'dark-fullbleed'
+                        ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400'
+                        : 'border-border bg-background text-muted-foreground hover:border-yellow-500/50'
+                    }`}
+                  >
+                    Foto full-bleed
+                    <span className="block text-[10px] font-normal opacity-75 mt-0.5">"COMENTA: SHAPE" fixo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => set('ctaStyle', 'light-card')}
+                    className={`flex-1 py-2 px-2.5 rounded-lg border text-[11px] font-bold transition-colors text-left leading-tight ${
+                      config.ctaStyle === 'light-card'
+                        ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400'
+                        : 'border-border bg-background text-muted-foreground hover:border-yellow-500/50'
+                    }`}
+                  >
+                    Card claro
+                    <span className="block text-[10px] font-normal opacity-75 mt-0.5">keyword + benefit dinâmicos</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Número de slides fmteam */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+                  <Layers className="w-3.5 h-3.5" /> Nº de slides fmteam
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => set('numSlides', n)}
+                      className={`py-1.5 rounded-lg border text-sm font-bold transition-colors ${
+                        config.numSlides === n
+                          ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400'
+                          : 'border-border bg-background text-muted-foreground hover:border-yellow-500/50 hover:text-yellow-400'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tamanhos de fonte fmteam */}
+              <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-3">
+                <p className="text-[10px] font-semibold text-yellow-400 uppercase tracking-wide">Fontes fmteam</p>
+
+                {/* Headline */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] text-muted-foreground">Headline (títulos)</label>
+                    <span className="text-[11px] font-bold text-yellow-400">{config.fmteamFontSizes.headlineSize}px</span>
+                  </div>
+                  <input
+                    type="range" min={72} max={160} step={2}
+                    value={config.fmteamFontSizes.headlineSize}
+                    onChange={e => set('fmteamFontSizes', { ...config.fmteamFontSizes, headlineSize: Number(e.target.value) })}
+                    className="w-full accent-yellow-500"
+                  />
+                </div>
+
+                {/* Body */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] text-muted-foreground">Body (texto de apoio)</label>
+                    <span className="text-[11px] font-bold text-yellow-400">{config.fmteamFontSizes.bodySize}px</span>
+                  </div>
+                  <input
+                    type="range" min={28} max={72} step={2}
+                    value={config.fmteamFontSizes.bodySize}
+                    onChange={e => set('fmteamFontSizes', { ...config.fmteamFontSizes, bodySize: Number(e.target.value) })}
+                    className="w-full accent-yellow-500"
+                  />
+                </div>
+
+                {/* Context */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] text-muted-foreground">Contexto (linha 3 da capa)</label>
+                    <span className="text-[11px] font-bold text-yellow-400">{config.fmteamFontSizes.contextSize}px</span>
+                  </div>
+                  <input
+                    type="range" min={32} max={100} step={2}
+                    value={config.fmteamFontSizes.contextSize}
+                    onChange={e => set('fmteamFontSizes', { ...config.fmteamFontSizes, contextSize: Number(e.target.value) })}
+                    className="w-full accent-yellow-500"
+                  />
+                </div>
+              </div>
+
+              {/* Personalização da capa fmteam */}
+              <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-3">
+                <p className="text-[10px] font-semibold text-yellow-400 uppercase tracking-wide">Capa fmteam</p>
+
+                {/* Cores por linha */}
+                <CoverColorRow
+                  label="Cor da headline (linha 1)"
+                  value={config.fmteamCover.headlineColor}
+                  fallback="#ffffff"
+                  onChange={v => set('fmteamCover', { ...config.fmteamCover, headlineColor: v })}
+                />
+                {config.fmteamCover.showSub && (
+                  <CoverColorRow
+                    label="Cor do subtítulo (linha 2)"
+                    value={config.fmteamCover.subColor}
+                    fallback="#ffffff"
+                    onChange={v => set('fmteamCover', { ...config.fmteamCover, subColor: v })}
+                  />
+                )}
+                {config.fmteamCover.showContext && (
+                  <CoverColorRow
+                    label="Cor do contexto (linha 3)"
+                    value={config.fmteamCover.contextColor}
+                    fallback="#ffffff"
+                    onChange={v => set('fmteamCover', { ...config.fmteamCover, contextColor: v })}
+                  />
+                )}
+
+                {/* Toggles de linhas */}
+                <ToggleRow
+                  label="Incluir subtítulo da capa (linha 2)"
+                  checked={config.fmteamCover.showSub}
+                  onChange={v => set('fmteamCover', { ...config.fmteamCover, showSub: v })}
+                />
+                <ToggleRow
+                  label="Incluir linha 3 / contexto da capa"
+                  checked={config.fmteamCover.showContext}
+                  onChange={v => set('fmteamCover', { ...config.fmteamCover, showContext: v })}
+                />
+              </div>
+
+              {/* Imagem do último slide (CTA) */}
+              <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-2">
+                <p className="text-[10px] font-semibold text-yellow-400 uppercase tracking-wide">Imagem do último slide</p>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  Por padrão usa a foto fmteam. Envie uma imagem para usar a sua no último slide.
+                </p>
+                <div className="flex items-center gap-2">
+                  {config.fmteamCover.ctaImageUrl ? (
+                    <img
+                      src={config.fmteamCover.ctaImageUrl}
+                      alt="Imagem do último slide"
+                      className="w-12 h-12 rounded-lg object-cover border border-yellow-500/40"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg border border-dashed border-yellow-500/40 flex items-center justify-center text-yellow-500/60">
+                      <Image className="w-5 h-5" />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => ctaImgInputRef.current?.click()}
+                    disabled={ctaImgUploading}
+                    className="flex-1 py-2 px-2.5 rounded-lg border border-yellow-500/40 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-[11px] font-bold transition-colors disabled:opacity-50"
+                  >
+                    {ctaImgUploading ? 'Carregando…' : config.fmteamCover.ctaImageUrl ? 'Trocar imagem' : 'Enviar imagem'}
+                  </button>
+                  {config.fmteamCover.ctaImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => set('fmteamCover', { ...config.fmteamCover, ctaImageUrl: '' })}
+                      className="py-2 px-2.5 rounded-lg border border-border bg-background hover:border-yellow-500/50 text-muted-foreground text-[11px] font-bold transition-colors"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+                <input ref={ctaImgInputRef} type="file" accept="image/*" className="hidden" onChange={handleCtaImageUpload} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Tema */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Hash className="w-3.5 h-3.5" /> Tema / Assunto *
+          </label>
+          <input
+            type="text"
+            value={config.topic}
+            onChange={e => set('topic', e.target.value)}
+            placeholder="Ex: IA generativa está matando empregos criativos"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+          />
+        </div>
+
+        {/* Foco / Instruções adicionais */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Mic2 className="w-3.5 h-3.5" /> Foco / Instruções
+            <span className="normal-case font-normal text-[10px] ml-1">(opcional — diretriz de conteúdo para a IA)</span>
+          </label>
+          <textarea
+            value={config.instructions}
+            onChange={e => set('instructions', e.target.value)}
+            placeholder={`Ex: fale sobre os benefícios sem induzir ao uso, sem fazer promessas médicas, foque em como funciona e resultados esperados`}
+            rows={2}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none placeholder:text-muted-foreground/50"
+          />
+          {config.instructions.trim() && (
+            <p className="text-[10px] text-orange-400 mt-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3" /> A IA vai seguir essa diretriz em todos os slides
+            </p>
+          )}
+        </div>
+
+        {/* ── Toggle Antes/Depois ───────────────────────────────────── */}
+        <div className={`rounded-xl border-2 transition-colors overflow-hidden ${beforeAfterMode ? 'border-orange-500/60 bg-orange-500/5' : 'border-border'}`}>
+          <button
+            type="button"
+            onClick={() => setBeforeAfterMode(p => !p)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🏆</span>
+              <div>
+                <span className="text-sm font-semibold text-foreground">Carrossel de Resultado (Antes/Depois)</span>
+                <p className="text-[11px] text-muted-foreground leading-tight">Fotos lado a lado + estrutura de transformação</p>
+              </div>
+            </div>
+            <div className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 ${beforeAfterMode ? 'bg-orange-500' : 'bg-muted'}`}>
+              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${beforeAfterMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </div>
+          </button>
+
+          {beforeAfterMode && (
+            <div className="px-4 pb-4 space-y-3 border-t border-orange-500/20">
+              <p className="text-[11px] text-orange-400 pt-3 flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3 flex-shrink-0" />
+                A IA vai gerar o slide de comparação side-by-side (.clean-split) + estrutura completa de transformação.
+                Após gerar, faça upload das fotos reais nos painéis Antes/Depois.
+              </p>
+
+              {/* Nome do aluno */}
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                  Nome do aluno
+                  <span className="normal-case font-normal ml-1">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={baAluno}
+                  onChange={e => setBaAluno(e.target.value)}
+                  placeholder="Ex: João, Maria, Carlos…"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                />
+              </div>
+
+              {/* Resultado + Período */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                    Resultado <span className="text-orange-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={baResultado}
+                    onChange={e => setBaResultado(e.target.value)}
+                    placeholder="Ex: de 35% gordura a físico de competição"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                    Período
+                  </label>
+                  <input
+                    type="text"
+                    value={baPeriodo}
+                    onChange={e => setBaPeriodo(e.target.value)}
+                    placeholder="Ex: 6 meses, 12 semanas"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                  />
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                  Stats / números
+                  <span className="normal-case font-normal ml-1">(aparecem no slide comparativo)</span>
+                </label>
+                <input
+                  type="text"
+                  value={baStats}
+                  onChange={e => setBaStats(e.target.value)}
+                  placeholder="Ex: -8kg · +12% massa magra · 3x/semana"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                />
+              </div>
+
+              {/* CTA */}
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
+                  CTA do último slide
+                  <span className="normal-case font-normal ml-1">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={baCta}
+                  onChange={e => setBaCta(e.target.value)}
+                  placeholder="Ex: Quer o mesmo resultado? Me chama no direct."
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Tema — oculto quando modo Antes/Depois ativo */}
+        {beforeAfterMode && (
+          <div className="rounded-lg bg-orange-500/5 border border-orange-500/20 px-3 py-2">
+            <p className="text-[11px] text-orange-400 flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3 flex-shrink-0" />
+              Tema gerado automaticamente a partir dos dados acima — não é necessário preencher o campo Tema.
+            </p>
+          </div>
+        )}
+
+        {/* ── Personalização (colapsável) ─────────────────────────────── */}
+        <div className="rounded-lg border border-border overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowPersonalization(p => !p)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-secondary/50 hover:bg-secondary transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Personalização</span>
+              <span className="text-[10px] text-muted-foreground font-normal">
+                — nicho, perfil, cores, fonte
+              </span>
+              {/* Badges de resumo quando colapsado */}
+              {!showPersonalization && (
+                <div className="flex items-center gap-1.5 ml-1">
+                  {config.layoutStyle === 'editorial' ? (
+                    <>
+                      <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.primaryColor }} />
+                      <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.accentColor }} />
+                      <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: config.bgColor }} />
+                    </>
+                  ) : config.layoutStyle === 'clean' ? (
+                    <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: '#ff5c4d' }} />
+                  ) : config.layoutStyle === 'fmteam' ? (
+                    <span className="w-3.5 h-3.5 rounded-full border border-border inline-block" style={{ background: '#FFC300' }} />
+                  ) : null}
+                  <span className="text-[10px] text-muted-foreground">{config.fontFamily}</span>
+                </div>
+              )}
+            </div>
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${showPersonalization ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showPersonalization && (
+            <div className="p-4 space-y-5 border-t border-border">
+
+              {/* Nicho + Nome + Handle + Foto */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                    Nicho / Área
+                  </label>
+                  <input
+                    type="text"
+                    value={config.niche}
+                    onChange={e => set('niche', e.target.value)}
+                    placeholder="Ex: Fitness, Dieta, Hormônios"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                    <Mic2 className="w-3.5 h-3.5" /> Seu Nome
+                    {!config.creatorName && (
+                      <span className="ml-1 text-[10px] font-bold text-orange-400 bg-orange-400/15 px-1.5 py-0.5 rounded-full">
+                        obrigatório
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    value={config.creatorName}
+                    onChange={e => set('creatorName', e.target.value)}
+                    placeholder="Ex: Fabricio Moura"
+                    className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${
+                      !config.creatorName ? 'border-orange-400/60 focus:ring-orange-400/40' : 'border-border'
+                    }`}
+                  />
+                  {!config.creatorName && (
+                    <p className="text-[11px] text-orange-400/80 mt-1">Aparece no badge da capa e no rodapé de cada slide.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                    <Mic2 className="w-3.5 h-3.5" /> Handle do Instagram
+                  </label>
+                  <input
+                    type="text"
+                    value={config.instagramHandle}
+                    onChange={e => set('instagramHandle', e.target.value)}
+                    placeholder="@seucanal"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                    <Mic2 className="w-3.5 h-3.5" /> Foto de Perfil
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 border-border bg-secondary flex items-center justify-center">
+                      {config.profilePhotoUrl ? (
+                        <img
+                          src={config.profilePhotoUrl}
+                          alt="Foto de perfil"
+                          className="w-full h-full object-cover"
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-muted-foreground">
+                          {config.instagramHandle ? config.instagramHandle.replace('@', '').slice(0, 2).toUpperCase() : 'FM'}
+                        </span>
+                      )}
+                    </div>
+                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      disabled={photoUploading}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border hover:border-purple-500 hover:bg-purple-500/10 text-sm text-muted-foreground hover:text-purple-400 transition-colors disabled:opacity-60"
+                    >
+                      {photoUploading
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando…</>
+                        : <><UploadCloud className="w-4 h-4" /> Fazer upload</>}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">JPG/PNG até 5 MB — aparece no badge do 1º slide.</p>
+                </div>
+              </div>
+
+              {/* Paleta de Cores — somente Editorial */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                  <Palette className="w-3.5 h-3.5" /> Paleta de Cores
+                </label>
+                {config.layoutStyle === 'editorial' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <ColorPicker label="Cor Principal"   value={config.primaryColor} onChange={v => set('primaryColor', v)} />
+                    <ColorPicker label="Cor de Destaque" value={config.accentColor}  onChange={v => set('accentColor', v)} />
+                    <ColorPicker label="Fundo Slides"    value={config.bgColor}      onChange={v => set('bgColor', v)} />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+                    <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      O layout <span className="font-semibold text-foreground capitalize">{config.layoutStyle}</span> usa sua própria paleta de cores — disponível apenas no <span className="font-semibold text-foreground">Editorial</span>.
+                    </p>
+                    {config.layoutStyle === 'clean' && (
+                      <span className="ml-auto shrink-0 w-4 h-4 rounded-full border border-border" style={{ background: '#ff5c4d' }} title="#ff5c4d" />
+                    )}
+                    {config.layoutStyle === 'fmteam' && (
+                      <span className="ml-auto shrink-0 w-4 h-4 rounded-full border border-border" style={{ background: '#FFC300' }} title="#FFC300" />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Prévia Visual das Cores */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                  <Eye className="w-3.5 h-3.5" /> Prévia das Cores
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <SlidePreview
+                    bgColor={config.bgColor}
+                    primaryColor={config.primaryColor}
+                    accentColor={config.accentColor}
+                    fontFamily={config.fontFamily}
+                  />
+                  <div
+                    className="relative rounded-xl overflow-hidden shadow-lg select-none"
+                    style={{ background: config.bgColor, aspectRatio: '4/5', fontFamily: `'${config.fontFamily}', sans-serif` }}
+                  >
+                    <div className="absolute inset-0 p-3 flex flex-col justify-center gap-1.5">
+                      <div className="w-1/3 h-0.5 rounded-full" style={{ background: config.primaryColor }} />
+                      <div className="text-[10px] font-black uppercase leading-tight" style={{ color: config.primaryColor }}>
+                        Slide Editorial
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="flex items-start gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full mt-0.5 shrink-0" style={{ background: config.accentColor }} />
+                            <div className="h-1.5 rounded-full flex-1" style={{ background: 'rgba(255,255,255,0.15)' }} />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-[8px] font-bold uppercase tracking-widest" style={{ color: config.accentColor }}>
+                        {config.fontFamily}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tipografia */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-3">
+                  <Type className="w-3.5 h-3.5" /> Tipografia
+                  <span className="ml-auto text-[10px] font-normal normal-case text-green-500/80">salvo automaticamente</span>
+                </label>
+                <div className="space-y-3">
+
+                  {/* ── TÍTULOS ── */}
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground">Títulos</span>
+                      <span className="text-[9px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">cover-title · content-title · cta-title</span>
+                    </div>
+
+                    {/* Tamanho + Fonte */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-[11px] text-muted-foreground">Tamanho</span>
+                          <span className="text-[11px] font-mono font-bold text-foreground">
+                            {config.titleFontSize === 0 ? 'Auto' : `${config.titleFontSize}px`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input type="range" min={0} max={100} step={2}
+                            value={config.titleFontSize}
+                            onChange={e => set('titleFontSize', Number(e.target.value))}
+                            className="flex-1 accent-purple-500" />
+                          {config.titleFontSize !== 0 && (
+                            <button type="button" onClick={() => set('titleFontSize', 0)}
+                              className="text-[10px] text-muted-foreground hover:text-foreground px-1 py-0.5 rounded border border-border shrink-0">↺</button>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-muted-foreground block mb-1">Fonte</span>
+                        <select value={config.titleFontFamily} onChange={e => set('titleFontFamily', e.target.value)}
+                          className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50">
+                          <option value="">Global ({config.fontFamily})</option>
+                          <option value="Inter">Inter</option>
+                          {FONT_OPTIONS.filter(f => f !== 'Inter').map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Peso */}
+                    <div>
+                      <div className="flex justify-between mb-1.5">
+                        <span className="text-[11px] text-muted-foreground">Peso</span>
+                        <span className="text-[11px] font-mono font-bold text-foreground">
+                          {config.titleFontWeight === 0 ? 'Auto' : config.titleFontWeight}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {([0, 300, 400, 500, 600, 700, 800, 900] as const).map(w => (
+                          <button key={w} type="button" onClick={() => set('titleFontWeight', w)}
+                            className={`px-2 py-1 rounded text-[10px] border transition-colors ${config.titleFontWeight === w ? 'bg-purple-600 border-purple-600 text-white' : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40'}`}
+                            style={{ fontWeight: w || undefined }}>
+                            {w === 0 ? 'Auto' : w === 300 ? 'Light' : w === 400 ? 'Regular' : w === 500 ? 'Medium' : w === 600 ? 'Semi' : w === 700 ? 'Bold' : w === 800 ? 'Extra' : 'Black'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Caixa */}
+                    <div>
+                      <span className="text-[11px] text-muted-foreground block mb-1.5">Caixa</span>
+                      <div className="flex gap-1">
+                        {([{ v: '' as const, l: 'Auto' }, { v: 'uppercase' as const, l: 'MAIÚSC' }, { v: 'none' as const, l: 'normal' }]).map(({ v, l }) => (
+                          <button key={v} type="button" onClick={() => set('titleTextTransform', v)}
+                            className={`flex-1 py-1 rounded text-[10px] font-semibold border transition-colors ${config.titleTextTransform === v ? 'bg-purple-600 border-purple-600 text-white' : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40'}`}>
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── CORPO ── */}
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground">Corpo</span>
+                      <span className="text-[9px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">content-body</span>
+                    </div>
+
+                    {/* Tamanho + Fonte */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-[11px] text-muted-foreground">Tamanho</span>
+                          <span className="text-[11px] font-mono font-bold text-foreground">
+                            {config.bodyFontSize === 0 ? 'Auto' : `${config.bodyFontSize}px`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input type="range" min={0} max={60} step={2}
+                            value={config.bodyFontSize}
+                            onChange={e => set('bodyFontSize', Number(e.target.value))}
+                            className="flex-1 accent-purple-500" />
+                          {config.bodyFontSize !== 0 && (
+                            <button type="button" onClick={() => set('bodyFontSize', 0)}
+                              className="text-[10px] text-muted-foreground hover:text-foreground px-1 py-0.5 rounded border border-border shrink-0">↺</button>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-muted-foreground block mb-1">Fonte</span>
+                        <select value={config.bodyFontFamily} onChange={e => set('bodyFontFamily', e.target.value)}
+                          className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50">
+                          <option value="">Global ({config.fontFamily})</option>
+                          <option value="Inter">Inter</option>
+                          {FONT_OPTIONS.filter(f => f !== 'Inter').map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Peso */}
+                    <div>
+                      <div className="flex justify-between mb-1.5">
+                        <span className="text-[11px] text-muted-foreground">Peso</span>
+                        <span className="text-[11px] font-mono font-bold text-foreground">
+                          {config.bodyFontWeight === 0 ? 'Auto' : config.bodyFontWeight}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {([0, 300, 400, 500, 600, 700, 800, 900] as const).map(w => (
+                          <button key={w} type="button" onClick={() => set('bodyFontWeight', w)}
+                            className={`px-2 py-1 rounded text-[10px] border transition-colors ${config.bodyFontWeight === w ? 'bg-purple-600 border-purple-600 text-white' : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40'}`}
+                            style={{ fontWeight: w || undefined }}>
+                            {w === 0 ? 'Auto' : w === 300 ? 'Light' : w === 400 ? 'Regular' : w === 500 ? 'Medium' : w === 600 ? 'Semi' : w === 700 ? 'Bold' : w === 800 ? 'Extra' : 'Black'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Banner "Me siga" */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] text-muted-foreground">Banner <span className="font-mono text-[9px] bg-muted px-1 py-0.5 rounded">follow-banner</span></span>
+                      <span className="text-[11px] font-mono font-bold text-foreground">
+                        {config.bannerFontSize === 0 ? 'Auto' : `${config.bannerFontSize}px`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input type="range" min={0} max={50} step={2}
+                        value={config.bannerFontSize}
+                        onChange={e => set('bannerFontSize', Number(e.target.value))}
+                        className="flex-1 accent-purple-500" />
+                      {config.bannerFontSize !== 0 && (
+                        <button type="button" onClick={() => set('bannerFontSize', 0)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground px-1 py-0.5 rounded border border-border shrink-0">↺</button>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+          )}
+        </div>
+
+        {/* Fonte + Tom */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+              <Type className="w-3.5 h-3.5" /> Fonte
+            </label>
+            <select
+              value={config.fontFamily}
+              onChange={e => set('fontFamily', e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            >
+              {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+              <Image className="w-3.5 h-3.5" /> Tom
+            </label>
+            <select
+              value={config.contentTone}
+              onChange={e => set('contentTone', e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            >
+              {TONE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Emoção Dominante */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="w-3.5 h-3.5" /> Emoção Dominante
+            <span className="normal-case font-normal text-[10px] ml-1">(define o gatilho emocional de todos os slides)</span>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+            {EMOTION_OPTIONS.map(em => (
+              <button
+                key={em.value}
+                type="button"
+                onClick={() => set('dominantEmotion', em.value)}
+                className={`relative flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                  config.dominantEmotion === em.value
+                    ? 'border-purple-500 bg-purple-500/15 shadow-sm shadow-purple-500/20'
+                    : 'border-border bg-background hover:border-purple-400/50 hover:bg-purple-500/5'
+                }`}
+              >
+                {em.value === 'medo de perder' && (
+                  <span className="absolute -top-2 -right-1 text-[9px] font-bold bg-orange-500 text-white px-1.5 py-0.5 rounded-full leading-none">
+                    {em.badge}
+                  </span>
+                )}
+                <span className={`text-xs font-semibold ${config.dominantEmotion === em.value ? 'text-purple-300' : 'text-foreground'}`}>
+                  {em.label}
+                </span>
+              </button>
+            ))}
+          </div>
+          {/* Descrição da emoção selecionada */}
+          {(() => {
+            const selected = EMOTION_OPTIONS.find(e => e.value === config.dominantEmotion);
+            return selected ? (
+              <div className="mt-2 flex items-start gap-2 rounded-lg bg-purple-500/8 border border-purple-500/20 px-3 py-2">
+                <span className="text-purple-400 mt-0.5 shrink-0">→</span>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{selected.description}</p>
+              </div>
+            ) : null;
+          })()}
+        </div>
+
+        {/* Nº de Slides — oculto no fmteam (controle próprio no bloco de layout) */}
+        {config.layoutStyle !== 'fmteam' && <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <Layers className="w-3.5 h-3.5" /> Nº de Slides
+          </label>
+          <div className="flex items-center gap-2 mt-1">
+            <input
+              type="range" min={5} max={10}
+              value={config.numSlides}
+              onChange={e => set('numSlides', Number(e.target.value))}
+              className="flex-1 accent-purple-500"
+            />
+            <span className="text-sm font-bold w-5 text-center text-foreground">{config.numSlides}</span>
+          </div>
+        </div>}
+
+        {/* Roteiro (opcional) */}
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+            <FileText className="w-3.5 h-3.5" /> Roteiro / Script
+            <span className="normal-case font-normal text-[10px] ml-1">(opcional — IA distribui seu conteúdo pelos slides)</span>
+          </label>
+          <textarea
+            value={config.roteiro}
+            onChange={e => set('roteiro', e.target.value)}
+            placeholder={'Cole aqui seu roteiro ou pontos que quer cobrir.\nEx:\nGancho: "Você está errando no treino e nem sabe"\nPonto 1: treinar sem planejamento\nPonto 2: ignorar recuperação\nPonto 3: não medir progresso\nCTA: salve esse post'}
+            rows={5}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none placeholder:text-muted-foreground/50"
+          />
+          {config.roteiro.trim() && (
+            <p className="text-[10px] text-purple-500 mt-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3" /> A IA vai distribuir seu roteiro pelos {config.numSlides} slides
+            </p>
+          )}
+        </div>
+
+        {/* Modelo base (opcional) */}
+        {savedCarousels.some(c => c.isTemplate) && (
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+              <LayoutTemplate className="w-3.5 h-3.5" /> Modelo base
+              <span className="normal-case font-normal text-[10px] ml-1">(opcional — preserva layout, fontes e posicionamento)</span>
+            </label>
+            <select
+              value={selectedTemplateId}
+              onChange={e => setSelectedTemplateId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-foreground"
+            >
+              <option value="">— Sem modelo (gerar do zero) —</option>
+              {savedCarousels.filter(c => c.isTemplate).map(tpl => (
+                <option key={tpl.id} value={tpl.id}>{tpl.topic}</option>
+              ))}
+            </select>
+            {selectedTemplateId && (
+              <p className="text-[10px] text-emerald-500 mt-1 flex items-center gap-1">
+                <LayoutTemplate className="w-3 h-3" /> O Claude vai usar o layout deste modelo — só o conteúdo muda
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Botões gerar + restaurar */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 transition-colors"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> {loadingStep || 'Gerando carrossel…'}</>
+            ) : beforeAfterMode ? (
+              <><span className="text-base">🏆</span> Gerar Carrossel Antes/Depois</>
+            ) : selectedTemplateId ? (
+              <><LayoutTemplate className="w-4 h-4" /> Gerar com Modelo</>
+            ) : (
+              <><Sparkles className="w-4 h-4" /> Gerar Carrossel</>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfig(DEFAULT_CONFIG)}
+            title="Restaurar configurações padrão"
+            className="px-3 rounded-xl border border-border bg-secondary text-muted-foreground hover:text-foreground transition-colors text-xs"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Resultado */}
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            className="space-y-4"
+          >
+            {/* ── Preview de slides ── */}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+
+              {/* Barra */}
+              <div className="px-4 py-3 border-b border-border space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <span className="text-sm font-semibold text-foreground block truncate">{result.topic}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {totalSlides} slide{totalSlides !== 1 ? 's' : ''}
+                      {hasPNGs && ` · ${result.screenshots.length} PNGs`}
+                      {result.unsplashImagesUsed > 0 && ` · ${result.unsplashImagesUsed} imgs`}
+                      {result.redditTrendsUsed > 0 && ` · ${result.redditTrendsUsed} trends`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleGenerate}
+                    disabled={loading}
+                    title="Regenerar"
+                    className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors shrink-0"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => {
+                      setInlineEditMode(o => !o);
+                      setEditorOpen(false);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      inlineEditMode
+                        ? 'bg-purple-600 text-white hover:bg-purple-500'
+                        : 'bg-secondary hover:bg-border text-foreground'
+                    }`}
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> {inlineEditMode ? 'Fechar edição' : 'Editar inline'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditorOpen(o => !o);
+                      setInlineEditMode(false);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      editorOpen
+                        ? 'bg-blue-600 text-white hover:bg-blue-500'
+                        : 'bg-secondary hover:bg-border text-foreground'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" /> Editor avançado
+                  </button>
+                  <button
+                    onClick={handleDownloadHTML}
+                    title="Baixar HTML"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> HTML
+                  </button>
+                  {hasPNGs && (
+                    <>
+                      <button
+                        onClick={() => result.screenshots.forEach(f => handleDownloadPNG(f))}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" /> PNGs
+                      </button>
+                      <button
+                        onClick={async () => {
+                          for (let i = 0; i < result.screenshots.length; i++) {
+                            const url = `${API}/output/${result.folderName}/${result.screenshots[i]}`;
+                            await downloadAsJpeg(url, `slide_${String(i + 1).padStart(2, '0')}.jpg`);
+                            await new Promise(r => setTimeout(r, 150));
+                          }
+                          toast.success(`${result.screenshots.length} JPEGs baixados!`);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" /> JPEGs
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Navegação */}
+              <div className="p-3 sm:p-4">
+                {totalSlides > 1 && (
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <button
+                      onClick={() => setCurrentSlide(s => Math.max(0, s - 1))}
+                      disabled={currentSlide === 0}
+                      className="p-1.5 rounded-lg hover:bg-secondary active:bg-secondary disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      Slide {currentSlide + 1} / {totalSlides}
+                    </span>
+                    <button
+                      onClick={() => setCurrentSlide(s => Math.min(totalSlides - 1, s + 1))}
+                      disabled={currentSlide === totalSlides - 1}
+                      className="p-1.5 rounded-lg hover:bg-secondary active:bg-secondary disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Dots */}
+                {totalSlides > 1 && (
+                  <div className="flex justify-center gap-1.5 mb-4 flex-wrap">
+                    {Array.from({ length: totalSlides }).map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentSlide(i)}
+                        className={`w-2.5 h-2.5 sm:w-2 sm:h-2 rounded-full transition-colors ${i === currentSlide ? 'bg-purple-500' : 'bg-border hover:bg-purple-300'}`}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Barra de ações de edição inline */}
+                {inlineEditMode && (
+                  <div className="flex items-center gap-2 mb-3 p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 flex-wrap">
+                    <span className="text-xs text-purple-300 flex items-center gap-1.5 flex-1 min-w-0">
+                      <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Clique nos textos para editar • Clique nas imagens para trocar</span>
+                    </span>
+                    <button
+                      onClick={() => saveInlineEdits(false)}
+                      disabled={savingEdits}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors shrink-0"
+                    >
+                      {savingEdits ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Salvar slide
+                    </button>
+                    <button
+                      onClick={() => saveInlineEdits(true)}
+                      disabled={savingEdits}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors shrink-0"
+                    >
+                      {savingEdits ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      Salvar + imagens
+                    </button>
+                  </div>
+                )}
+
+                {/* Preview: PNG ou iframe — responsivo */}
+                <div
+                  ref={previewContainerRef}
+                  className="flex justify-center"
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={e => handleTouchEnd(e, totalSlides)}
+                >
+                  <div
+                    className={`rounded-xl overflow-hidden shadow-lg w-full ${inlineEditMode ? 'border-2 border-purple-500/60' : 'border border-border'}`}
+                    style={{ maxWidth: previewWidth }}
+                  >
+                    {inlineEditMode ? (
+                      /* Modo edição inline — iframe interativo */
+                      <div style={{ position: 'relative', paddingBottom: '125%' }}>
+                        <iframe
+                          ref={editIframeRef}
+                          key={`edit-${currentSlide}-${result.html.length}`}
+                          srcDoc={getEditableSlideHtml(currentSlide)}
+                          sandbox="allow-scripts allow-same-origin"
+                          style={{
+                            position: 'absolute', top: 0, left: 0,
+                            width: '1080px', height: '1350px', border: 'none',
+                            transform: `scale(${previewWidth / 1080})`,
+                            transformOrigin: 'top left',
+                            pointerEvents: 'all',
+                          }}
+                          title={`Slide ${currentSlide + 1} (editando)`}
+                        />
+                      </div>
+                    ) : hasPNGs ? (
+                      /* PNG real do servidor */
+                      <div style={{ position: 'relative', paddingBottom: '125%' }}>
+                        <img
+                          key={currentSlide}
+                          src={`${API}/output/${result.folderName}/${result.screenshots[currentSlide]}`}
+                          alt={`Slide ${currentSlide + 1}`}
+                          className="select-none"
+                          draggable={false}
+                          style={{
+                            position: 'absolute', top: 0, left: 0,
+                            width: '100%', height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                        {/* Botão download individual */}
+                        <button
+                          onClick={() => handleDownloadPNG(result.screenshots[currentSlide])}
+                          className="absolute bottom-2 right-2 p-2 rounded-lg bg-black/60 hover:bg-black/80 active:bg-black/90 text-white transition-colors"
+                          title="Baixar este slide"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      /* Fallback: iframe HTML — escala responsiva */
+                      <div style={{ position: 'relative', paddingBottom: '125%' }}>
+                        <iframe
+                          key={currentSlide}
+                          srcDoc={htmlSlides[currentSlide]}
+                          sandbox="allow-scripts allow-same-origin"
+                          style={{
+                            position: 'absolute', top: 0, left: 0,
+                            width: '1080px', height: '1350px', border: 'none',
+                            transform: `scale(${previewWidth / 1080})`,
+                            transformOrigin: 'top left',
+                            pointerEvents: 'none',
+                          }}
+                          title={`Slide ${currentSlide + 1}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Dica de swipe no mobile */}
+                {totalSlides > 1 && (
+                  <p className="text-center text-[10px] text-muted-foreground/60 mt-2 sm:hidden">
+                    ← Deslize para navegar entre slides →
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* ── Editor de Slides ── */}
+            {editorOpen && (
+              <CarouselEditor
+                html={result.html}
+                folderName={result.folderName}
+                topic={result.topic}
+                numSlides={result.numSlides}
+                legenda={result.legenda}
+                config={config as Record<string, unknown>}
+                onScreenshotsUpdated={(screenshots) => {
+                  setResult(prev => prev ? { ...prev, screenshots } : prev);
+                  setCurrentSlide(0);
+                }}
+                onHtmlUpdated={(html) => setResult(prev => prev ? { ...prev, html } : prev)}
+                onTemplateSaved={refreshSavedCarousels}
+              />
+            )}
+
+            {/* ── Legenda ── */}
+            {result.legenda && (
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-purple-500" /> Legenda
+                  </span>
+                  <button
+                    onClick={handleCopyLegenda}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-border text-foreground text-xs font-semibold transition-colors"
+                  >
+                    {copied ? <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copiado!</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
+                  </button>
+                </div>
+                <textarea
+                  value={result.legenda}
+                  onChange={e => handleLegendaChange(e.target.value)}
+                  rows={8}
+                  className="w-full p-4 text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30 rounded-b-xl"
+                />
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Input oculto para importar HTML ── */}
+      <input
+        ref={htmlImportRef}
+        type="file"
+        accept=".html,.htm"
+        className="hidden"
+        onChange={handleHtmlImport}
+      />
+
+      {/* ── Revisar e aprovar (carrosséis do robô) ── */}
+      <CarouselReviewPanel
+        api={API}
+        onApproved={() => { fetch(`${API}/api/carousel/saved`).then(r => r.json()).then(l => { if (Array.isArray(l)) setSavedCarousels(l); }).catch(() => {}); }}
+      />
+
+      {/* ── Carrosseis Salvos ── */}
+      {savedCarousels.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border p-6 text-center space-y-3">
+          <p className="text-sm text-muted-foreground">Nenhum carrossel salvo ainda.</p>
+          <button
+            type="button"
+            onClick={() => htmlImportRef.current?.click()}
+            disabled={importingHtml}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            {importingHtml ? <><Loader2 className="w-4 h-4 animate-spin" /> Importando…</> : <><UploadCloud className="w-4 h-4" /> Importar HTML como Modelo</>}
+          </button>
+        </div>
+      )}
+      {savedCarousels.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSavedOpen(o => !o)}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              title={savedOpen ? 'Recolher lista' : 'Expandir lista'}
+            >
+              {savedOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Carrosseis Salvos</span>
+              <span className="text-xs text-muted-foreground">({savedCarousels.filter(c => !c.archived).length} ativos)</span>
+            </button>
+            {savedCarousels.some(c => c.isTemplate) && (
+              <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+                <LayoutTemplate className="w-3 h-3" /> inclui modelos
+              </span>
+            )}
+            {/* Botão importar HTML */}
+            <button
+              type="button"
+              onClick={() => htmlImportRef.current?.click()}
+              disabled={importingHtml}
+              title="Importar arquivo .html como modelo"
+              className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-dashed border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-xs font-semibold transition-colors disabled:opacity-50"
+            >
+              {importingHtml
+                ? <><Loader2 className="w-3 h-3 animate-spin" /> Importando…</>
+                : <><UploadCloud className="w-3.5 h-3.5" /> Importar HTML</>}
+            </button>
+            {savedCarousels.some(c => c.archived) && (
+              <button
+                onClick={() => setShowArchived(v => !v)}
+                className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${showArchived ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+              >
+                <Archive className="w-3.5 h-3.5" />
+                Arquivados ({savedCarousels.filter(c => c.archived).length})
+              </button>
+            )}
+          </div>
+          {savedOpen && (() => {
+            const q = carouselSearch.trim().toLowerCase();
+            const list = savedCarousels
+              .filter(c => showArchived ? c.archived : !c.archived)
+              .filter(c => !q || (c.topic || '').toLowerCase().includes(q));
+            const shown = list.slice(0, visibleCount);
+            return (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input
+                    value={carouselSearch}
+                    onChange={e => setCarouselSearch(e.target.value)}
+                    placeholder="Buscar carrossel por tema..."
+                    className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                </div>
+
+                {list.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-2 text-center">Nenhum carrossel encontrado{q ? ` pra "${carouselSearch}"` : ''}.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+                      {shown.map(saved => {
+                        const thumb = saved.screenshots?.[0]
+                          ? `${API}/output/${saved.folderName}/${saved.screenshots[0]}`
+                          : null;
+                        const isActive = activeSavedId === saved.id;
+                        return (
+                          <React.Fragment key={saved.id}>
+                          <div
+                            className={`rounded-lg border overflow-hidden bg-card ${isActive ? 'border-violet-500 ring-1 ring-violet-500/40' : saved.isTemplate ? 'border-emerald-500/40' : 'border-border'}`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setActiveSavedId(id => (id === saved.id ? null : saved.id))}
+                              className="relative block w-full aspect-[4/5] bg-secondary"
+                              title={isActive ? 'Fechar' : 'Abrir'}
+                            >
+                              {thumb ? (
+                                <img src={thumb} alt={saved.topic} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                  <FolderOpen className="w-6 h-6 opacity-30" />
+                                </div>
+                              )}
+                              {saved.isTemplate && (
+                                <span className="absolute top-1 left-1 bg-emerald-600 text-white rounded-full p-0.5" title="Modelo"><LayoutTemplate className="w-2.5 h-2.5" /></span>
+                              )}
+                              {(saved as any).source === 'daily' && (
+                                <span className="absolute top-1 right-1 bg-purple-600 text-white rounded-full p-0.5" title="Diário"><CalendarClock className="w-2.5 h-2.5" /></span>
+                              )}
+                            </button>
+                            <div className="p-1.5">
+                              {editingTitleId === saved.id ? (
+                                <input
+                                  autoFocus
+                                  value={titleDraft}
+                                  onChange={e => setTitleDraft(e.target.value)}
+                                  onBlur={() => saveTitle(saved)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+                                    if (e.key === 'Escape') { setEditingTitleId(null); }
+                                  }}
+                                  className="w-full text-[10px] leading-tight rounded border border-violet-500/60 bg-background px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                                />
+                              ) : (
+                                <p
+                                  onClick={() => { setEditingTitleId(saved.id); setTitleDraft(saved.topic); }}
+                                  className="text-[10px] leading-tight line-clamp-2 cursor-text hover:text-violet-400 transition-colors"
+                                  title="Clique pra editar o título"
+                                >
+                                  {saved.topic}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {isActive && (
+                            <div className="col-span-full">
+                              {renderSavedDetail(saved)}
+                            </div>
+                          )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      {visibleCount < list.length && (
+                        <button
+                          onClick={() => setVisibleCount(n => Math.min(list.length, n + CAROUSEL_STEP))}
+                          className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/70 transition-colors"
+                        >
+                          Carregar mais {CAROUSEL_STEP}
+                        </button>
+                      )}
+                      {visibleCount > CAROUSEL_PAGE && (
+                        <button
+                          onClick={() => setVisibleCount(n => Math.max(CAROUSEL_PAGE, n - CAROUSEL_STEP))}
+                          className="px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground text-xs font-semibold hover:text-foreground transition-colors"
+                        >
+                          Colapsar {CAROUSEL_STEP}
+                        </button>
+                      )}
+                      <span className="text-[10px] text-muted-foreground">mostrando {shown.length} de {list.length}</span>
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
+
+          {/* ── Editor de carrossel salvo ── */}
+          <AnimatePresence>
+            {editingSaved && editingSavedHtml && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-2 sm:p-4"
+                onClick={() => { setEditingSaved(null); setEditingSavedHtml(null); }}
+              >
+                <div
+                  id="saved-carousel-editor"
+                  onClick={e => e.stopPropagation()}
+                  className="bg-card rounded-2xl w-full max-w-4xl my-2 sm:my-4 border border-border shadow-xl"
+                >
+                  <div className="flex items-center justify-between gap-2 p-3 border-b border-border sticky top-0 bg-card rounded-t-2xl z-10">
+                    <span className="text-xs font-semibold text-purple-400 flex items-center gap-1.5 min-w-0">
+                      <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Editando: <span className="text-foreground">{editingSaved.topic}</span></span>
+                    </span>
+                    <button
+                      onClick={() => { setEditingSaved(null); setEditingSavedHtml(null); }}
+                      className="shrink-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-secondary"
+                    >
+                      <X className="w-4 h-4" /> Fechar
+                    </button>
+                  </div>
+                  <div className="p-3">
+                    <CarouselEditor
+                      html={editingSavedHtml}
+                      folderName={editingSaved.folderName}
+                      topic={editingSaved.topic}
+                      numSlides={editingSaved.numSlides}
+                      legenda={editingSaved.legenda}
+                      config={editingSaved.config as Record<string, unknown>}
+                      onScreenshotsUpdated={(screenshots) => {
+                        setSavedCarousels(prev =>
+                          prev.map(c => c.id === editingSaved.id ? { ...c, screenshots } : c)
+                        );
+                        // Persiste no banco de dados
+                        fetch(`${API}/api/carousel/saved/${editingSaved.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ screenshots }),
+                        }).catch(() => {});
+                      }}
+                      onHtmlUpdated={(html) => setEditingSavedHtml(html)}
+                      onTemplateSaved={refreshSavedCarousels}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* ── Modal: visualizador de slides de um carrossel salvo ──────────── */}
+      {viewingSlides && viewingSlides.screenshots && (
+        <SavedSlidesModal
+          saved={viewingSlides}
+          index={viewingSlideIndex}
+          onIndexChange={setViewingSlideIndex}
+          onClose={() => setViewingSlides(null)}
+          onDownload={(filename) => openSavedSlideInNewTab(viewingSlides.folderName, filename)}
+          apiBase={API}
+        />
+      )}
+
+      {/* ── Modal: editor de templates de prompt fmteam ─────────────────── */}
+      <PromptTemplateModal
+        open={showPromptEditor}
+        onClose={() => setShowPromptEditor(false)}
+      />
+    </div>
+  );
+}
+
+// ─── Componente: modal de slides do histórico ──────────────────────────────────
+
+function SavedSlidesModal({
+  saved, index, onIndexChange, onClose, onDownload, apiBase,
+}: {
+  saved: SavedCarousel;
+  index: number;
+  onIndexChange: (i: number) => void;
+  onClose: () => void;
+  onDownload: (filename: string) => void;
+  apiBase: string;
+}) {
+  const total = saved.screenshots.length;
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  function prev() { if (index > 0) onIndexChange(index - 1); }
+  function next() { if (index < total - 1) onIndexChange(index + 1); }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') prev();
+      if (e.key === 'ArrowRight') next();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [index, total]);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) next();
+      else prev();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  }
+
+  const filename = saved.screenshots[index];
+  const src = `${apiBase}/output/${saved.folderName}/${filename}`;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-2 px-1">
+          <p className="text-white text-sm font-semibold truncate">{saved.topic}</p>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0"
+            title="Fechar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Slide */}
+        <div
+          className="relative aspect-[4/5] bg-black rounded-xl overflow-hidden select-none"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <img
+            src={src}
+            alt={`Slide ${index + 1}`}
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+          <button
+            onClick={() => onDownload(filename)}
+            className="absolute bottom-2 right-2 p-2 rounded-lg bg-black/60 hover:bg-black/80 active:bg-black/90 text-white transition-colors"
+            title="Abrir em nova aba / baixar"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Nav + indicador */}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <button
+            onClick={prev}
+            disabled={index === 0}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-colors"
+            title="Anterior"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1.5">
+            {saved.screenshots.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => onIndexChange(i)}
+                className={`rounded-full transition-all ${
+                  i === index ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40'
+                }`}
+                title={`Slide ${i + 1}`}
+              />
+            ))}
+          </div>
+          <button
+            onClick={next}
+            disabled={index === total - 1}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-colors"
+            title="Próximo"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* "Baixar todos" */}
+        <button
+          onClick={() => saved.screenshots.forEach((f) => onDownload(f))}
+          className="w-full mt-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-400 active:bg-orange-600 text-white text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
+        >
+          <Download className="w-4 h-4" />
+          Baixar todos ({total}) em novas abas
+        </button>
+
+        <p className="text-white/60 text-xs text-center mt-2">
+          {index + 1} / {total} · toque nas setas ou arraste
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Componente: preview colapsável da legenda ─────────────────────────────────
+
+function LegendaPreview({ legenda }: { legenda: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const preview = legenda.substring(0, 80);
+  return (
+    <div className="mt-1 rounded-lg bg-secondary/60 border border-border overflow-hidden">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full px-2.5 py-1.5 text-left flex items-center justify-between gap-2 hover:bg-secondary transition-colors"
+      >
+        <span className="text-[10px] text-muted-foreground truncate flex-1">
+          📝 {expanded ? 'Legenda' : preview + (legenda.length > 80 ? '…' : '')}
+        </span>
+        <span className="text-[10px] text-muted-foreground shrink-0">{expanded ? '▲' : '▼'}</span>
+      </button>
+      {expanded && (
+        <div className="px-2.5 pb-2.5 space-y-2">
+          <p className="text-[11px] text-foreground whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+            {legenda}
+          </p>
+          <button
+            onClick={() => { navigator.clipboard.writeText(legenda); toast.success('Legenda copiada!'); }}
+            className="w-full py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <Copy className="w-3 h-3" /> Copiar legenda completa
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

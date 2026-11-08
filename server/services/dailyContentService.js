@@ -1,0 +1,782 @@
+/**
+ * dailyContentService.js — Rotina diária automática do Fabricio Moura.
+ *
+ * Todo dia (cron 09h America/Sao_Paulo) gera 2 CARROSSÉIS de temas DISTINTOS
+ * (template fmteam, com o cérebro editorial: voz + anti-ban + ângulos) e 1 REEL
+ * CURTO metric-driven MIRANDO O HOMEM 25-40 (o comprador): escolhe um tema
+ * vencedor (hormônio/caneta/história-homem/comparação) com anti-repetição, gera no
+ * dourado e agenda no PICO de alcance (11h, dado Metricool). Fonte do reel: tema →
+ * (fallback) fila de roteiros → (fallback) IA a partir de um carrossel do dia.
+ * Salva tudo DENTRO do viralos (carousels.json + reels.json + daily_content.json).
+ *
+ * Substitui a rotina do fmteam-gerador. Mira o HOMEM 25-40, evita repetir
+ * temas das últimas 2 semanas.
+ */
+
+const path = require('path');
+const db = require('../db/database');
+const {
+  generateCarousel, takeScreenshotsPixelPerfect, OUTPUT_DIR,
+} = require('./carouselService');
+const { generateShortReelFromCarousel, generateShortReelFromTheme } = require('./reelsGeneratorService');
+const { SUBSTANCE_INTEL } = require('./substanceIntel');
+const { stripAiTells } = require('./fmteamEditorial');
+
+const HANDLE = 'fabriciomourateam';
+const CREATOR = 'Fabricio Moura';
+// MIRA = comprador HOMEM 25-40 que desconfia de algo hormonal (testo baixa, cortisol,
+// insulina) ou quer repor/usar GLP-1 com segurança. O cérebro editorial (fmteam)
+// reforça a voz; aqui o `niche` é só um hint secundário passado pro carrossel.
+const NICHE = 'Saúde hormonal, performance e emagrecimento para o homem 25-40';
+
+// ── Banco de temas (ângulos comprovados do PERFORMANCE-LOG, por SINTOMA = ban-safe) ──
+// O cérebro editorial (fmteamEditorial.js) cuida da voz/anti-ban; aqui é só O QUE falar.
+// `keywords` = termos pra casar com legendas dos posts reais (ponderação por performance).
+// Cada tema tem um `group` (assunto macro) e várias variações de ângulo (`topics`).
+// - `group` evita que os 2 carrosséis do dia (e os de dias seguidos) falem do MESMO
+//   assunto: metade dos temas antigos era "testosterona", então caíam parecidos.
+// - `topics` dá 3 ângulos por tema, então mesmo quando um tema volta, o título/enfoque
+//   muda (antes o tema = sempre o MESMO título exato → posts iguais).
+const THEMES = [
+  // ── COMIDA (comparações/prático — o lane campeão do Fabricio) ──
+  // `format:'comparacao'` = carrossel de NÚMERO/COMPARAÇÃO (formato dos posts de
+  // 8-20k views: cru x cozido, X kcal x Y kcal, tabela de cortes, ÓTIMO/BOM/EVITE).
+  // A rotina garante 1 desses por dia (pickThemes) com instrução de comparação.
+  { id: 'comparacao-refeicao', group: 'comida', format: 'comparacao', tone: 'direto', emotion: 'surpresa', keywords: ['calorias', 'refeição', 'café da manhã', 'prato'],
+    topics: ['A mesma refeição, o dobro de calorias — e você escolhe errado', 'Café da manhã de 280 x 500 kcal: a diferença que trava seu peso', 'Pão com ovo x tapioca com frango: qual seca de verdade?'] },
+  { id: 'calorias-liquidas', group: 'comida', format: 'comparacao', tone: 'investigativo', emotion: 'surpresa', keywords: ['suco', 'bebida', 'líquido', 'refrigerante', 'café com leite'],
+    topics: ['As calorias que você BEBE sem perceber (com números)', 'Suco natural x refrigerante: a diferença de kcal que engana', 'O cafezinho com leite e açúcar que soma o dia inteiro'] },
+  { id: 'cru-cozido', group: 'comida', format: 'comparacao', tone: 'direto', emotion: 'surpresa', keywords: ['cru', 'cozido', 'porção', 'arroz', 'macarrão', 'gramas'],
+    topics: ['Cru x cozido: a porção que você pesa errado todo dia', '100g de arroz cru viram quanto no prato? A conta que muda tudo', 'Você mede a comida crua ou cozida? A diferença é enorme'] },
+  { id: 'cortes-carne', group: 'comida', format: 'comparacao', tone: 'investigativo', emotion: 'surpresa', keywords: ['carne', 'corte', 'proteína', 'patinho', 'calorias'],
+    topics: ['Carne na dieta não é só patinho: a tabela de cortes por kcal e proteína', 'O corte de carne mais barato que tem tanta proteína quanto o filé', 'Kcal x proteína dos cortes: qual escolher pra secar'] },
+  { id: 'otimo-bom-evite', group: 'comida', format: 'comparacao', tone: 'direto', emotion: 'curiosidade', keywords: ['ovo', 'batata', 'queijo', 'ótimo', 'evite', 'escolha'],
+    topics: ['Ovo, batata e queijo: ÓTIMO x BOM x EVITE (o mapa do preparo)', 'A forma de preparar que transforma comida boa em vilã', 'Mesmo alimento, 3 preparos: qual seca e qual engorda'] },
+  { id: 'proteina-saciedade', group: 'comida', tone: 'direto', emotion: 'curiosidade', keywords: ['proteína', 'saciedade', 'fome', 'ovo', 'frango'],
+    topics: ['Você come muito menos proteína do que imagina', 'A proteína que segura a fome até a próxima refeição', 'Prato sem proteína é fome garantida daqui 2 horas'] },
+  { id: 'montar-prato', group: 'comida', tone: 'direto', emotion: 'curiosidade', keywords: ['prato', 'montar', 'porção', 'refeição'],
+    topics: ['Como montar o prato pra secar sem passar fome', 'A ordem dos alimentos no prato muda o teu resultado', 'O prato que enche o olho e ainda seca'] },
+  // ── TROCAS (parece igual mas não é — viraliza no teu perfil) ──
+  { id: 'parece-igual', group: 'trocas', format: 'comparacao', tone: 'provocativo', emotion: 'surpresa', keywords: ['parece igual', 'troca', 'leite em pó', 'composto'],
+    topics: ['Parece igual, mas um seca e o outro engorda', 'Leite em pó x composto lácteo: a pegadinha do mercado', 'Duas comidas idênticas no olho, opostas no corpo'] },
+  { id: 'fit-que-nao-e', group: 'trocas', format: 'comparacao', tone: 'provocativo', emotion: 'indignação', keywords: ['fit', 'zero', 'diet', 'barrinha'],
+    topics: ['A comida "fit" que não é fit', 'O "zero açúcar" que engorda do mesmo jeito', 'Barrinha de proteína x chocolate: surpresa no rótulo'] },
+  { id: 'rotulo', group: 'trocas', format: 'comparacao', tone: 'investigativo', emotion: 'curiosidade', keywords: ['rótulo', 'ingredientes', 'tabela', 'industrializado'],
+    topics: ['O que o rótulo esconde de você', '3 palavras no rótulo que denunciam que engorda', 'Como ler um rótulo em 10 segundos'] },
+  // ── HÁBITOS (rotina real da mulher 35-44) ──
+  { id: 'correria', group: 'habitos', tone: 'direto', emotion: 'acolhimento', keywords: ['correria', 'tempo', 'rotina', 'trabalho', 'filho'],
+    topics: ['Emagrecer na correria (trabalho, filho, casa)', 'Sem tempo pra dieta? O problema quase nunca é tempo', 'Como não sabotar a semana inteira no domingo'] },
+  { id: 'doce-noite', group: 'habitos', tone: 'investigativo', emotion: 'curiosidade', keywords: ['doce', 'noite', 'vontade', 'açúcar'],
+    topics: ['A vontade de doce à noite tem explicação', 'Por que você segura o dia todo e ataca a geladeira à noite', 'Fome de doce não é falta de força de vontade'] },
+  { id: 'ansiedade-comida', group: 'habitos', tone: 'direto', emotion: 'acolhimento', keywords: ['ansiedade', 'compulsão', 'emocional', 'automático'],
+    topics: ['Você não come de fome, come de ansiedade', 'O gatilho que te faz comer sem nem perceber', 'Comer no automático: o vilão silencioso da dieta'] },
+  { id: 'balanca', group: 'habitos', tone: 'direto', emotion: 'acolhimento', keywords: ['balança', 'peso', 'pesar'],
+    topics: ['Para de surtar com a balança todo dia', 'O número da balança te engana — olha o que importa', 'Peso subiu 2kg da noite pro dia? Calma, é isso'] },
+  // ── CANETA / GLP-1 (o lane DISRUPTIVO campeão do Fabricio — Mounjaro fez 42k views).
+  //    Fala com o HOMEM que usa/pensa em usar. ANTI-BAN DURO: por sintoma/mecanismo,
+  //    nunca dose/protocolo/nome de venda, sempre direciona pra acompanhamento. ──
+  { id: 'caneta-musculo', group: 'caneta', tone: 'investigativo', emotion: 'alerta', keywords: ['caneta', 'mounjaro', 'ozempic', 'emagrecedor', 'glp', 'músculo'],
+    topics: ['Emagreceu na caneta e perdeu músculo junto?', 'O que a caneta faz sumir junto com a gordura (e você não quer perder)', 'Perder peso rápido demais na caneta cobra a conta depois'] },
+  { id: 'caneta-parou', group: 'caneta', tone: 'direto', emotion: 'alerta', keywords: ['parou', 'efeito rebote', 'voltou', 'caneta', 'glp'],
+    topics: ['Parou a caneta e o peso voltou com tudo?', 'A fome que volta em dobro quando você para', 'Caneta sem estratégia é resultado alugado'] },
+  { id: 'caneta-sozinho', group: 'caneta', tone: 'provocativo', emotion: 'alerta', keywords: ['caneta', 'sozinho', 'sem acompanhamento', 'errado', 'glp'],
+    topics: ['Usar a caneta por conta é o erro que custa teu músculo', 'Caneta funciona — mas sem acompanhamento vira magro flácido', 'O que ninguém te fala antes de começar a caneta'] },
+  // ── HORMÔNIO (o assunto que mais te viraliza e diferencia — o teu público responde).
+  //    Fala com o HOMEM 25-40 que desconfia que algo hormonal trava o resultado.
+  //    ANTI-BAN DURO: sempre por SINTOMA/mecanismo, nunca dose/nome de droga/protocolo,
+  //    destino é SEMPRE investigar com exame e acompanhamento (a consultoria). ──
+  { id: 'testo-baixa', group: 'hormonio', tone: 'investigativo', emotion: 'preocupação', keywords: ['testosterona', 'libido', 'cansaço', 'disposição', 'barriga', 'hormônio'],
+    topics: ['Cansaço, libido baixa e barriga que não sai: e se for hormonal?', '3 sinais de que teus hormônios podem estar te travando', 'Faz tudo certo e não seca? Pode não ser preguiça, pode ser hormônio'] },
+  { id: 'cortisol', group: 'hormonio', tone: 'investigativo', emotion: 'preocupação', keywords: ['cortisol', 'estresse', 'gordura abdominal', 'sono', 'hormônio'],
+    topics: ['O hormônio do estresse que segura tua gordura abdominal', 'Estresse alto travando teu emagrecimento (o cortisol)', 'Por que a barriga não sai mesmo com dieta e treino'] },
+  { id: 'falso-magro', group: 'hormonio', tone: 'provocativo', emotion: 'surpresa', keywords: ['falso magro', 'magro', 'gordura', 'flácido', 'skinny fat', 'hormônio'],
+    topics: ['Magro na roupa, mole sem ela: o falso magro', 'Peso normal mas corpo flácido? O problema pode ser hormonal', 'Você não precisa emagrecer, precisa recompor (e talvez investigar o hormônio)'] },
+  { id: 'sono-hormonio', group: 'hormonio', tone: 'investigativo', emotion: 'alerta', keywords: ['sono', 'dormir', 'testosterona', 'recuperação', 'hormônio'],
+    topics: ['Dormindo mal você sabota teus próprios hormônios', 'Sono ruim derruba testosterona e trava teu shape', 'A noite mal dormida que rouba tua disposição e teu músculo'] },
+  { id: 'treino-sem-evolucao', group: 'hormonio', tone: 'direto', emotion: 'preocupação', keywords: ['treino', 'não evolui', 'platô', 'recuperação', 'hormônio'],
+    topics: ['Treina forte e não evolui? Pode ser hormonal, não falta de esforço', 'Sem recuperação e sem ganho: o sinal que o corpo dá', 'Quando o treino para de responder, olha além da academia'] },
+  { id: 'reposicao-segura', group: 'hormonio', tone: 'investigativo', emotion: 'curiosidade', keywords: ['repor', 'reposição', 'trt', 'hormônio', 'seguro'],
+    topics: ['Pensa em repor hormônio? O jeito certo (e o perigoso) de fazer', 'Repor hormônio sem exame e acompanhamento é roleta-russa', 'O que investigar ANTES de pensar em repor qualquer hormônio'] },
+  { id: 'exames-hormonais', group: 'hormonio', tone: 'direto', emotion: 'curiosidade', keywords: ['exame', 'sangue', 'testosterona', 'investigar', 'hormônio'],
+    topics: ['Os exames que mostram se teu problema é hormonal', 'Antes de culpar a preguiça, faz esses exames', 'O que teu sangue diz sobre por que você não seca'] },
+  // ── SUBSTÂNCIA (nomeia a substância pra ALERTAR do erro/risco — nunca dose/protocolo;
+  //    a INSTRUCTION_HORMONIO + SUBSTANCE_INTEL cuidam do anti-ban e do enquadramento). ──
+  { id: 'sub-testosterona', group: 'hormonio', tone: 'direto', emotion: 'alerta', keywords: ['testosterona', 'repor', 'trt', 'reposição', 'exame', 'hormônio'],
+    topics: ['Repor testosterona sem exame é apostar no escuro', 'Reposição de verdade começa no sangue, não no "todo mundo toma"', 'O erro de quem trata dose de ciclo como se fosse reposição'] },
+  { id: 'sub-deca', group: 'hormonio', tone: 'investigativo', emotion: 'alerta', keywords: ['deca', 'nandrolona', 'libido', 'anabolizante', 'hormônio'],
+    topics: ['A "tranquila" que mais derruba a libido', 'Por que a Deca sozinha cobra caro na cama', 'O anabólico que demora meses pra sair do teu corpo'] },
+  { id: 'sub-primobolan', group: 'hormonio', tone: 'provocativo', emotion: 'indignação', keywords: ['primobolan', 'metenolona', 'falsificado', 'fake', 'hormônio'],
+    topics: ['O "hormônio de elite" é o mais falsificado do mercado', 'Você paga caro no Primobolan e nem sabe o que veio na ampola', 'O maior risco não é o hormônio, é não saber o que você aplica'] },
+  { id: 'sub-stano', group: 'hormonio', tone: 'provocativo', emotion: 'alerta', keywords: ['stanozolol', 'winstrol', 'articulação', 'colesterol', 'hormônio'],
+    topics: ['O "secador" que arrebenta tua articulação e teu colesterol', 'Stanozolol seca? Seca teu HDL e teu tendão também', 'A definição que te ilude no espelho e cobra no coração'] },
+  { id: 'sub-oxandrolona', group: 'hormonio', tone: 'investigativo', emotion: 'surpresa', keywords: ['oxandrolona', 'anavar', 'leve', 'falsificado', 'hormônio'],
+    topics: ['A "leve" que não é leve — o maior mito dos anabólicos', 'Oxandrolona: das mais faladas e das mais falsificadas', 'Por que "seguro" é a palavra mais perigosa aqui'] },
+  { id: 'sub-retatrutida', group: 'hormonio', tone: 'investigativo', emotion: 'curiosidade', keywords: ['retatrutida', 'emagrecedor', 'experimental', 'glp', 'hormônio'],
+    topics: ['A promessa mais nova é a que menos tem resposta de longo prazo', 'Retatrutida: forte pra emagrecer, curta em segurança comprovada', 'O emagrecedor experimental que virou moda antes da resposta'] },
+  { id: 'sub-tren', group: 'hormonio', tone: 'direto', emotion: 'alerta', keywords: ['trembolona', 'tren', 'humor', 'sono', 'hormônio'],
+    topics: ['A mais potente é a que mais rouba teu sono e teu humor', 'O anabólico que te dá shape e te tira a paz', 'Potência não é sinônimo de resultado — é de estrago'] },
+  { id: 'sub-gh-insulina', group: 'hormonio', tone: 'direto', emotion: 'medo', keywords: ['insulina', 'gh', 'hormônio do crescimento', 'perigo', 'hormônio'],
+    topics: ['Insulina por conta é o erro que mais mata na academia', 'GH não é mágica: é caro, falsificado e cobra o resto', 'Os hormônios que menos perdoam erro'] },
+  // ── MENTE (relação com a comida — emocional, conecta) ──
+  { id: 'odiar-espelho', group: 'mente', tone: 'provocativo', emotion: 'conexão', keywords: ['espelho', 'autoestima', 'se odiar', 'aceitar'],
+    topics: ['Você quer emagrecer ou parar de se odiar no espelho?', 'A dieta muda quando o motivo muda', 'Emagrecer por raiva x por autocuidado dá resultado diferente'] },
+  { id: 'tentou-tudo', group: 'mente', tone: 'acolhedor', emotion: 'acolhimento', keywords: ['tentou de tudo', 'dieta', 'desistir', 'fracasso'],
+    topics: ['Já tentou de tudo e não desce? O problema não é você', 'Por que toda dieta funciona 2 semanas e depois trava', 'A dieta da fome não te faz secar, te faz desistir'] },
+  { id: 'terceira-semana', group: 'mente', tone: 'direto', emotion: 'curiosidade', keywords: ['terceira semana', 'desiste', 'constância', 'platô'],
+    topics: ['Por que você desiste exatamente na terceira semana', 'O ponto onde quase todo mundo larga a dieta', 'A semana que separa quem seca de quem desiste'] },
+  // ── CORPO 35+ (mudanças da idade, ban-safe) ──
+  { id: 'metabolismo-35', group: 'corpo35', tone: 'investigativo', emotion: 'preocupação', keywords: ['metabolismo', 'idade', 'depois dos 35', 'depois dos 40'],
+    topics: ['Depois dos 35 o corpo muda — e por quê', 'O que emagrecia aos 25 e parou de funcionar', 'Metabolismo mais lento com a idade: mito ou real?'] },
+  { id: 'inchaco', group: 'corpo35', tone: 'direto', emotion: 'curiosidade', keywords: ['inchaço', 'retenção', 'líquido', 'inchada'],
+    topics: ['Vive inchada e retendo líquido?', 'Não é tudo gordura: parte é inchaço (e tem solução)', 'A retenção que te faz parecer 3kg a mais'] },
+  { id: 'sono-emagrecer', group: 'corpo35', tone: 'investigativo', emotion: 'surpresa', keywords: ['sono', 'dormir', 'noite', 'fome'],
+    topics: ['Dormir mal engorda — e ninguém te conta', 'A noite mal dormida que sabota tua dieta no dia seguinte', 'Sono ruim vira mais fome de doce no dia seguinte'] },
+
+  // ── HISTÓRIA DE CLIENTE (format:'historia') — o DNA do post nº1 do Fabricio
+  // (38k views, 280 shares, 36 seguidores): "[Ele/Ela] usava X há Y e [problema
+  // oculto] — o que mudamos". Mix de público: homem (comprador) e mulher (alcance).
+  // A rotina garante 1 desses por dia (pickThemes) com INSTRUCTION_HISTORIA.
+  { id: 'hist-caneta-musculo-h', group: 'historia', format: 'historia', audience: 'homem', tone: 'história', emotion: 'curiosidade', keywords: ['caneta', 'músculo', 'tirzepatida', 'mounjaro', 'ozempic', 'flácido'],
+    topics: ['Ele usava a caneta há 6 meses e perdia músculo sem saber. O que mudamos', 'Ele secou na caneta mas ficou fraco e flácido. O que mudamos', 'Ele emagreceu rápido e o shape sumiu junto. O que mudamos'] },
+  { id: 'hist-testo-cansaco-h', group: 'historia', format: 'historia', audience: 'homem', tone: 'história', emotion: 'curiosidade', keywords: ['cansaço', 'testosterona', 'energia', 'libido', 'reposição'],
+    topics: ['Ele repunha testosterona há 8 meses e ainda vivia cansado. O que mudamos', 'Ele tinha tudo pra render e vivia sem energia. O que mudamos', 'Ele achava que o cansaço era da idade — era a rotina. O que mudamos'] },
+  { id: 'hist-barriga-treino-h', group: 'historia', format: 'historia', audience: 'homem', tone: 'história', emotion: 'surpresa', keywords: ['barriga', 'treino', 'shape', 'gordura', 'cardio'],
+    topics: ['Ele treinava pesado e a barriga não saía. O que mudamos', 'Ele cortava tudo e não secava. O que mudamos', 'Ele fazia cardio todo dia e travou. O que mudamos'] },
+  { id: 'hist-caneta-flacida-m', group: 'historia', format: 'historia', audience: 'mulher', tone: 'história', emotion: 'curiosidade', keywords: ['caneta', 'flácida', 'músculo', 'tirzepatida', 'emagrecer'],
+    topics: ['Ela usava tirzepatida há 6 meses e perdia músculo sem saber. O que mudamos', 'Ela emagreceu na caneta e ficou magra flácida. O que mudamos', 'Ela secou rápido e a pele não acompanhou. O que mudamos'] },
+  { id: 'hist-dieta-travou-m', group: 'historia', format: 'historia', audience: 'mulher', tone: 'história', emotion: 'acolhimento', keywords: ['dieta', 'travou', 'platô', 'emagrecer', 'tentou de tudo'],
+    topics: ['Ela tentou de tudo e não descia. O que mudamos', 'Ela vivia de dieta e não secava. O que mudamos', 'Ela comia quase nada e a balança parada. O que mudamos'] },
+  { id: 'hist-doce-noite-m', group: 'historia', format: 'historia', audience: 'mulher', tone: 'história', emotion: 'curiosidade', keywords: ['doce', 'noite', 'ansiedade', 'compulsão'],
+    topics: ['Ela segurava o dia todo e atacava a geladeira à noite. O que mudamos', 'Ela achava que era falta de força de vontade. O que mudamos', 'Ela vivia refém do doce à noite. O que mudamos'] },
+];
+
+// Estado em memória (só 1 geração por vez)
+const state = { generating: false, startedAt: null, lastError: null, lastFinishedAt: null };
+
+// Teto por tema: se um carrossel/reel travar (Anthropic retentando, Playwright preso etc.),
+// não deixa a geração inteira pendurar sem salvar nada — registra o erro e segue.
+const DAILY_THEME_TIMEOUT_MS = 6 * 60 * 1000;
+function withTimeout(promise, ms, label) {
+  let t;
+  const timeout = new Promise((_, reject) => {
+    t = setTimeout(() => reject(new Error(`${label}: timeout ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
+
+// Temas usados nos últimos N dias (pra não repetir)
+function recentThemeIds(days = 14) {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const used = new Set();
+  for (const b of db.getAllDailyBatches()) {
+    if (new Date(b.created_at).getTime() >= cutoff) {
+      (b.themes || []).forEach((t) => used.add(t.id));
+    }
+  }
+  return used;
+}
+
+// Grupos (assuntos macro) usados nos últimos N batches — pra não cair no mesmo
+// assunto em dias seguidos (ex.: 3 dias falando de hormônio).
+function recentGroups(nBatches = 3) {
+  const batches = db.getAllDailyBatches()
+    .slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+    .slice(0, nBatches);
+  const g = new Set();
+  batches.forEach((b) => (b.themes || []).forEach((t) => { if (t.group) g.add(t.group); }));
+  return g;
+}
+
+// Escolhe 2 temas/dia combinando a PRIORIDADE do Fabricio com a VARIEDADE do feed:
+//   1º = SEMPRE hormônio/GLP-1 (o lane disruptivo campeão — pedido dele: pelo menos 1
+//        dos 2 posts é hormônio). Lane fixo → só varia o tema/ângulo dentro dele.
+//   2º = um formato VENCEDOR (comparação/número OU história de cliente, ~50/50 pra o
+//        feed não ficar previsível), de grupo E formato DIFERENTES do 1º.
+// Evita ids recentes (14d) e desincentiva grupos usados nos últimos dias. Fallback
+// progressivo se o pool apertar.
+const isHormoneTheme = (t) => t.group === 'hormonio' || t.group === 'caneta';
+
+function pickThemes() {
+  const recentIds = recentThemeIds();
+  const recentG = recentGroups(3);
+  let pool = THEMES.filter((t) => !recentIds.has(t.id));
+  if (pool.length < 2) pool = THEMES.slice(); // todos recentes → libera geral
+
+  const scores = scoreThemes();
+  const maxScore = Math.max(0, ...pool.map((t) => scores[t.id] || 0));
+  const perf = (t) => 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4;
+  const weightOf = (t) => {
+    // base 1 + até +4 por performance real; grupo usado recentemente pesa 1/4.
+    let w = perf(t);
+    if (recentG.has(t.group)) w *= 0.25;
+    return w;
+  };
+
+  // 1º tema: SEMPRE hormônio/GLP-1 (pedido do Fabricio: 1 dos 2 é hormônio). Lane fixo
+  // todo dia → NÃO penaliza por "grupo recente" (só varia o tema/ângulo); peso = perf.
+  // Se todos os de hormônio caíram nos recentes (14d), libera todos (fallback).
+  let hormPool = pool.filter(isHormoneTheme);
+  if (!hormPool.length) hormPool = THEMES.filter(isHormoneTheme);
+  const first = hormPool.length ? weightedSample(hormPool, hormPool.map(perf), 1)[0]
+                                : weightedSample(pool, pool.map(weightOf), 1)[0];
+  if (!first) return [];
+
+  // 2º tema: um formato VENCEDOR — comparação/número OU história de cliente, sorteando
+  // o LANE (~50/50) pra o feed não ficar previsível — de grupo E formato DIFERENTES do
+  // 1º. Se o lane sorteado não tiver tema fresco, tenta o outro; depois fallbacks.
+  const lanes = Math.random() < 0.5 ? ['comparacao', 'historia'] : ['historia', 'comparacao'];
+  let second = null;
+  for (const lane of lanes) {
+    let lanePool = pool.filter((t) => t.format === lane && t.id !== first.id && t.group !== first.group);
+    if (!lanePool.length) lanePool = THEMES.filter((t) => t.format === lane && t.id !== first.id && t.group !== first.group);
+    if (lanePool.length) { second = weightedSample(lanePool, lanePool.map(weightOf), 1)[0]; break; }
+  }
+  if (!second) {
+    let rest = pool.filter((t) => t.id !== first.id && t.group !== first.group);
+    if (!rest.length) rest = pool.filter((t) => t.id !== first.id);
+    second = rest.length ? weightedSample(rest, rest.map(weightOf), 1)[0] : null;
+  }
+  return [first, second].filter(Boolean);
+}
+
+// Escolhe um ângulo (variação de título) do tema, evitando os títulos usados
+// recentemente (recent_topics). Assim, quando um tema volta, o enfoque muda.
+function pickAngle(theme) {
+  const topics = (Array.isArray(theme.topics) && theme.topics.length)
+    ? theme.topics
+    : [theme.topic].filter(Boolean);
+  if (topics.length <= 1) return topics[0] || theme.topic || '';
+  const recent = (db.getRecentTopics && db.getRecentTopics()) || [];
+  const fresh = topics.filter((tp) => !recent.includes(tp));
+  const from = fresh.length ? fresh : topics;
+  return from[Math.floor(Math.random() * from.length)];
+}
+
+// Score de cada tema a partir dos posts reais do Instagram (Analytics).
+// Casa keywords do tema nas legendas; pontua saves/shares/follows acima de likes.
+function scoreThemes() {
+  const posts = (db.getInstagramPosts && db.getInstagramPosts()) || [];
+  const scores = {};
+  for (const t of THEMES) {
+    const matched = posts.filter((p) => {
+      const cap = (p.caption || '').toLowerCase();
+      return (t.keywords || []).some((k) => cap.includes(k));
+    });
+    if (!matched.length) { scores[t.id] = 0; continue; }
+    // Comentário pesa MAIS (×6): a CTA é "comenta DIETA" → cada comentário é um
+    // LEAD no funil. Depois seguidor (×5), salvamento (×4, alcance), share (×3).
+    const sum = matched.reduce((s, p) =>
+      s + (p.comments || 0) * 6 + (p.follows || 0) * 5 + (p.saves || 0) * 4 + (p.shares || 0) * 3 + (p.likes || 0), 0);
+    scores[t.id] = sum / matched.length;
+  }
+  return scores;
+}
+
+// Amostragem ponderada sem reposição (k itens).
+function weightedSample(items, weights, k) {
+  const pool = items.map((it, i) => ({ it, w: Math.max(weights[i], 0.0001) }));
+  const chosen = [];
+  while (chosen.length < k && pool.length) {
+    const total = pool.reduce((s, p) => s + p.w, 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    for (; idx < pool.length; idx++) { r -= pool[idx].w; if (r <= 0) break; }
+    idx = Math.min(idx, pool.length - 1);
+    chosen.push(pool[idx].it);
+    pool.splice(idx, 1);
+  }
+  return chosen;
+}
+
+// Instrução PADRÃO (habitos/mente/corpo — conteúdo de ideia).
+const INSTRUCTION_DEFAULT = 'Fale com quem quer emagrecer sem passar fome, na correria da vida real (trabalho, filhos, casa) — serve pro homem e pra mulher. Gancho na capa que para o scroll. Ponto prático traduzido, sem jargão de academia.';
+
+// Instrução de COMPARAÇÃO/NÚMERO — o formato dos posts de 8-20k views do Fabricio
+// (cru x cozido, X kcal x Y kcal, tabela de cortes, ÓTIMO/BOM/EVITE). Força número
+// concreto e comparação lado a lado em vez de texto genérico.
+const INSTRUCTION_COMPARACAO = [
+  'Este é um carrossel de COMPARAÇÃO COM NÚMERO — o formato que mais viraliza no perfil (salva pra consultar).',
+  'REGRAS OBRIGATÓRIAS:',
+  '• Cada slide de conteúdo compara 2 a 4 opções LADO A LADO com NÚMERO CONCRETO (kcal, gramas de proteína, porção em g). Ex.: "100g arroz = 130 kcal x 6 ovos = 470 kcal".',
+  '• Use números plausíveis e realistas de tabela nutricional. Nunca invente valor absurdo. Arredonda pra número redondo e fácil de ler.',
+  '• Formato visual de comparação: "A x B", tabela, ou ÓTIMO / BOM / EVITE. Um par ou trio por slide, número em destaque.',
+  '• Capa: gancho curto com a promessa da comparação (ex.: "O mesmo prato, o DOBRO de calorias"). Sem parágrafo na capa.',
+  '• Fecha com o aprendizado prático: o que escolher no dia a dia.',
+  '• Fala com homem 25-40 E mulher 35-44 (comida serve pros dois). Português, sem jargão gringo. Anti-ban: nada de substância.',
+].join('\n');
+
+// Instrução de HORMÔNIO / GLP-1 — o lane disruptivo campeão do Fabricio (os posts que
+// mais viralizam e mais o diferenciam). ANTI-BAN é REGRA DURA: hormônio é zona de ban
+// da Meta, então SEMPRE por sintoma/mecanismo, nunca ensinando/vendendo/dosando, e o
+// destino é sempre investigar com exame + acompanhamento (a consultoria).
+const INSTRUCTION_HORMONIO = [
+  'Este é um carrossel sobre SAÚDE HORMONAL MASCULINA (ou GLP-1/caneta) — o assunto que mais engaja e mais diferencia o Fabricio. Posicionamento disruptivo: o público dele responde a isso.',
+  'ANTI-BAN — REGRA DURA E INEGOCIÁVEL (hormônio é zona de ban da Meta):',
+  '• NUNCA ensine, indique, venda, dose ou cite nome comercial de substância/medicamento. Fale sempre por SINTOMA e por MECANISMO (o que o corpo sente e por quê).',
+  '• Proibido: "compre", "use", "tome", "aplique", miligrama, protocolo, nome de droga/marca, promessa de cura ou de resultado garantido.',
+  '• O destino é SEMPRE a avaliação/consultoria pra investigar com EXAME e ACOMPANHAMENTO — nunca fazer por conta própria.',
+  'CONTEÚDO:',
+  '• Fala com o HOMEM 25-40 que desconfia que algo hormonal trava o resultado dele (cansaço, libido baixa, gordura abdominal teimosa, treino sem evolução, sono ruim).',
+  '• Capa: gancho curto que NOMEIA o sintoma e levanta a suspeita (ex.: "Cansaço, libido baixa e barriga que não sai: e se for hormonal?"). Sem parágrafo na capa.',
+  '• Slides: liga SINTOMA → MECANISMO → o que INVESTIGAR. Prático, direto, primeira pessoa de treinador, "você", sem jargão gringo, sem clichê ("não é X é Y", "jornada").',
+  '• Fecha convidando pra avaliar o caso com exame e acompanhamento (a consultoria), sem prometer resultado.',
+].join('\n') + '\n' + SUBSTANCE_INTEL;
+
+// Instrução de HISTÓRIA DE CLIENTE — o formato do post nº1 do Fabricio (38k views,
+// 280 compartilhamentos). Capa em 3ª pessoa (compartilha), miolo em "você"
+// (identifica), arco problema→mecanismo→o que mudamos→resultado. Anti-ban rígido.
+function instructionHistoria(audience) {
+  const publico = audience === 'homem'
+    ? 'Fala com HOMEM 25-40: saúde hormonal, performance, energia, shape e composição corporal.'
+    : 'Fala com MULHER 35-44: emagrecimento na vida real (correria, trabalho, filhos, casa).';
+  return [
+    'Este é um carrossel de HISTÓRIA DE CLIENTE — o formato que MAIS compartilha e traz seguidor no perfil (foi o post nº1 do Fabricio).',
+    'REGRAS OBRIGATÓRIAS:',
+    '• CAPA em 3ª pessoa, formato história: "[Ele/Ela] + [situação com um tema quente] + há [tempo] + [problema que ninguém percebe] + O que mudamos." Lacuna ABERTA — NÃO entrega a resposta na capa. Sem parágrafo na capa.',
+    '• Os slides contam a virada num arco: (1) como a pessoa estava / o problema real, (2) POR QUE acontecia (mecanismo simples, traduzido, sem jargão), (3 a 5) "O QUE MUDAMOS" em 2-3 passos concretos e aplicáveis, (6) o resultado — firme, com energia, sustentável.',
+    '• DENTRO dos slides, vire pra 2ª pessoa ("se você tá assim...", "o teu corpo faz isso") pra a pessoa se identificar. Capa em 3ª pessoa (faz compartilhar), miolo em "você" (faz se reconhecer).',
+    '• É PROVA + EDUCAÇÃO: mostra que o treinador resolveu, com autoridade e sem se gabar. Sem números de venda, sem "antes e depois" agressivo.',
+    '• ANTI-BAN RÍGIDO: educativo, por sintoma/mecanismo. NUNCA cite dose, protocolo, "como usar", nome comercial de remédio, nem recomende substância. O tema quente (ex.: a caneta) entra como CONTEXTO da história, jamais como recomendação.',
+    '• Fecha com o aprendizado + um convite leve (comentar/DM).',
+    '• ' + publico + ' Português, sem jargão gringo.',
+  ].join('\n');
+}
+
+// Niche por público do tema (história de homem usa o nicho masculino).
+const NICHE_HOMEM = 'Saúde hormonal, performance masculina e composição corporal para homens 25-40';
+function nicheFor(theme) {
+  return theme.audience === 'homem' ? NICHE_HOMEM : NICHE;
+}
+
+async function buildOne(theme) {
+  // Fotos dos carrosséis recentes — pra NÃO repetir foto entre carrosséis seguidos.
+  // Lido fresco a cada carrossel (o anterior já salvou as dele), então os 2 do dia
+  // também não repetem entre si.
+  const avoidPhotoUrls = db.getRecentPhotoUrls ? db.getRecentPhotoUrls() : [];
+
+  // 1) Carrossel fmteam — instrução muda pelo tipo do tema. Hormônio/GLP-1 usa a
+  //    instrução com ANTI-BAN duro; comparação usa a de número; o resto, a padrão.
+  const isHormoneGroup = theme.group === 'hormonio' || theme.group === 'caneta';
+  // Viés de imagem: temas de HOMEM (hormônio/caneta/história-homem) puxam foto de
+  // homem atlético/bodybuilder em todos os slides (igual ao John Hulk). Comida/trocas
+  // e história-mulher NÃO enviesam — a cena da foto é o assunto (comida, etc.).
+  const isMaleSubjectTheme = isHormoneGroup || (theme.group === 'historia' && theme.audience === 'homem');
+  const carouselResult = await generateCarousel({
+    topic: theme.topic,
+    instructions: theme.format === 'historia' ? instructionHistoria(theme.audience)
+                : theme.format === 'comparacao' ? INSTRUCTION_COMPARACAO
+                : isHormoneGroup ? INSTRUCTION_HORMONIO
+                : INSTRUCTION_DEFAULT,
+    niche: nicheFor(theme),
+    instagramHandle: HANDLE,
+    creatorName: CREATOR,
+    numSlides: 7,
+    contentTone: theme.tone,
+    dominantEmotion: theme.emotion,
+    layoutStyle: 'fmteam',
+    ctaStyle: 'dark-fullbleed',
+    imageSubject: isMaleSubjectTheme ? 'muscular athletic man' : '',
+    // Capa SÓ com o gancho — sem a frase entre parênteses (capa-context).
+    fmteamCover: { showContext: false },
+    avoidPhotoUrls,
+  });
+
+  // Registra as fotos usadas pra os próximos carrosséis evitarem repetir.
+  try { if (db.addRecentPhotoUrls) db.addRecentPhotoUrls(carouselResult.photoUrlsUsed || []); } catch (_) {}
+
+  // 2) Screenshots server-side (Playwright). Se indisponível, segue com HTML só.
+  let screenshots = [];
+  try {
+    const outputDir = path.join(OUTPUT_DIR, carouselResult.folderName);
+    screenshots = await takeScreenshotsPixelPerfect(carouselResult.html, outputDir);
+  } catch (e) {
+    console.warn(`[DailyContent] screenshots indisponíveis (${theme.id}):`, e.message);
+  }
+
+  // 3) Persiste o carrossel
+  const carouselId = `carousel_${Date.now()}_${theme.id}`;
+  const carousel = {
+    id: carouselId,
+    topic: carouselResult.topic,
+    folderName: carouselResult.folderName,
+    numSlides: carouselResult.numSlides,
+    screenshots,
+    legenda: carouselResult.legenda,
+    layoutStyle: 'fmteam',
+    source: 'daily',
+    themeId: theme.id,
+    archived: false,
+  };
+  db.saveCarousel(carousel);
+
+  // 3b) Auto-agendamento no mLabs (se ligado nas settings e há PNGs). Best-effort:
+  //     uma falha aqui NÃO derruba a geração do dia.
+  try {
+    const cfg = db.getMlabsSettings && db.getMlabsSettings();
+    if (cfg && cfg.autoScheduleCarousel && screenshots.length) {
+      const mlabs = require('./mlabsService');
+      const { v4: uuidv4 } = require('uuid');
+      const dates = mlabs.computeDefaultDates();
+      const recId = uuidv4();
+      db.createMlabsSchedule({
+        id: recId, contentType: 'carousel', contentId: carouselId,
+        caption: carousel.legenda || '', dates, platforms: cfg.channelSourceIds, status: 'enviando',
+      });
+      try {
+        const r = await mlabs.scheduleContent({
+          type: 'IMAGE',
+          mediaPaths: screenshots.map((name) => path.join(OUTPUT_DIR, carouselResult.folderName, name)),
+          caption: carousel.legenda || '',
+          dates,
+        });
+        db.updateMlabsSchedule(recId, { status: 'agendado', mlabsResponse: r.scheduleResponse || null });
+        console.log(`[DailyContent] carrossel ${theme.id} agendado no mLabs (${dates.length} datas).`);
+      } catch (e) {
+        db.updateMlabsSchedule(recId, { status: 'erro', error: e.message });
+        console.warn(`[DailyContent] auto-agendar mLabs falhou (${theme.id}):`, e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('[DailyContent] auto-agendamento mLabs indisponível:', e.message);
+  }
+
+  // Reel NÃO é mais gerado por carrossel aqui. Agora sai 1/dia da FILA de roteiros
+  // pré-escritos (generateQueuedReel), postado às 19h30. Ver generateDailyBatch.
+  // Devolve o html do carrossel pra ser usado só na RESERVA (fila vazia → reel por IA).
+  return {
+    theme, carouselId, reelId: null, photosUsed: carouselResult.unsplashImagesUsed || 0,
+    carousel: { id: carouselId, topic: carousel.topic, legenda: carousel.legenda, numSlides: carousel.numSlides, _html: carouselResult.html },
+  };
+}
+
+// Ids dos clipes crus usados nos últimos N reels — pra o sorteio EVITAR repetir
+// vídeo em dias seguidos (anti-repetição robusta, sobrevive a reset do "saco").
+function recentRawVideoIds(n = 6) {
+  const used = [];
+  for (const r of db.getAllReels()) {            // já vem ordenado do mais novo
+    if (r.rawVideoId) used.push(r.rawVideoId);
+    if (used.length >= n) break;
+  }
+  return used;
+}
+
+// Horários do reel diário (default 14h + 19h30). Aceita reelDailyTimes (array)
+// ou o antigo reelDailyTime (string) por compatibilidade.
+function reelDailyTimes() {
+  const cfg = db.getMlabsSettings();
+  const arr = Array.isArray(cfg.reelDailyTimes) && cfg.reelDailyTimes.length
+    ? cfg.reelDailyTimes
+    : (cfg.reelDailyTime ? [cfg.reelDailyTime] : ['14:00', '19:30']);
+  return arr.map((t) => String(t).slice(0, 5)).filter((t) => /^\d{2}:\d{2}$/.test(t));
+}
+
+// Janela em torno do horário alvo (alvo, +30min, +60min) pra SEMPRE achar slot
+// livre mesmo se o horário exato colidir com outro post (gap de 1h).
+function timeWindow(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const base = h * 60 + m;
+  return [0, 30, 60].map((off) => {
+    const x = (base + off) % (24 * 60);
+    return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+  });
+}
+
+// Escolhe 1 tema pro REEL do dia — mira o HOMEM 25-40 (o comprador), metric-driven,
+// com a MESMA anti-repetição dos carrosséis. Evita os temas/grupos já usados HOJE nos
+// carrosséis (excludeThemeIds/Groups) e os temas dos últimos 14 dias. Lane do reel:
+// hormônio/caneta e história-de-homem pesam cheio; comparação (unisex) pesa menos.
+const isReelMaleTheme = (t) =>
+  t.group === 'hormonio' || t.group === 'caneta'
+  || (t.group === 'historia' && t.audience === 'homem')
+  || t.format === 'comparacao';
+
+function pickReelTheme(excludeThemeIds = [], excludeGroups = []) {
+  const recentIds = recentThemeIds();            // 14 dias
+  const exId = new Set([...(excludeThemeIds || []), ...recentIds]);
+  const exG = new Set(excludeGroups || []);
+  const scores = scoreThemes();
+  const maxScore = Math.max(0, ...THEMES.map((t) => scores[t.id] || 0));
+  const perf = (t) => 1 + (maxScore > 0 ? (scores[t.id] || 0) / maxScore : 0) * 4;
+  // história-homem e hormônio/caneta pesam cheio; comparação (unisex) pesa 0.6×.
+  const weightOf = (t) => perf(t) * (isHormoneTheme(t) || t.group === 'historia' ? 1 : 0.6);
+
+  let pool = THEMES.filter(isReelMaleTheme).filter((t) => !exId.has(t.id) && !exG.has(t.group));
+  if (!pool.length) pool = THEMES.filter(isReelMaleTheme).filter((t) => !exId.has(t.id));
+  if (!pool.length) pool = THEMES.filter(isReelMaleTheme);
+  if (!pool.length) return null;
+  const theme = weightedSample(pool, pool.map(weightOf), 1)[0];
+  if (!theme) return null;
+  return { ...theme, topic: pickAngle(theme) };
+}
+
+// Monta 1 reel e agenda no horário alvo. Ordem de fonte do conteúdo:
+//   1) reelTheme (metric-driven, mira o homem) → generateShortReelFromTheme [PADRÃO novo]
+//   2) item da FILA de roteiros (db.getNextReelQueueItem), se houver
+//   3) RESERVA por IA a partir de um carrossel do dia
+// Retorna { reelId, rawVideoId } pra encadear anti-repetição de clipe.
+async function buildAndScheduleQueuedReel({ time, carousels = [], avoidRawIds = [], reelTheme = null }) {
+  const cfg = db.getMlabsSettings();
+  let reelId = null;
+  let queueSlug = null;
+
+  // 1) Reel METRIC-DRIVEN a partir do tema escolhido (mira o homem 25-40).
+  if (reelTheme) {
+    try {
+      const isHorm = reelTheme.group === 'hormonio' || reelTheme.group === 'caneta';
+      const audience = reelTheme.audience === 'mulher' ? 'mulher' : 'homem';
+      const nicheR = audience === 'mulher' ? NICHE : NICHE_HOMEM;
+      const reel = await generateShortReelFromTheme({
+        topic: reelTheme.topic, niche: nicheR, instagramHandle: `@${HANDLE}`,
+        duration: 7, audience, isHormone: isHorm,
+      });
+      reelId = `reel_theme_${Date.now()}_${reelTheme.id}`;
+      db.saveReel({
+        ...reel, id: reelId, niche: nicheR, instagramHandle: `@${HANDLE}`,
+        source: 'daily-theme', themeId: reelTheme.id, audience, archived: false,
+      });
+      console.log(`[DailyContent] reel METRIC-DRIVEN (${time}) do tema ${reelTheme.id} (${audience}).`);
+    } catch (e) {
+      console.warn(`[DailyContent] reel por tema falhou (${reelTheme && reelTheme.id}) — tenta fila/IA:`, e.message);
+      reelId = null;
+    }
+  }
+
+  if (!reelId) {
+  const item = db.getNextReelQueueItem();
+  if (item) {
+    reelId = `reel_q_${Date.now()}_${item.slug}`;
+    queueSlug = item.slug;
+    db.saveReel({
+      id: reelId,
+      fraseTela: stripAiTells(item.fraseTela),
+      fraseTelaTiming: '0-4s',
+      ctaTela: item.ctaTela || '👇 LEIA A LEGENDA',
+      ctaTelaTiming: '4-5s',
+      legendaPost: stripAiTells(item.legendaPost),
+      title: stripAiTells(item.title || (item.fraseTela || '').replace(/\*\*/g, '').slice(0, 60)),
+      niche: NICHE, instagramHandle: `@${HANDLE}`,
+      source: 'queue', queueSlug, audience: item.audience || null, archived: false,
+    });
+    console.log(`[DailyContent] reel da FILA (${time}): ${item.slug} (${item.audience}).`);
+  } else if (carousels.length) {
+    // Reserva: fila vazia → gera reel por IA a partir de um carrossel do dia.
+    try {
+      const c = carousels[0];
+      const reel = await generateShortReelFromCarousel({
+        carousel: { id: c.id, topic: c.topic, html: c._html || '', legenda: c.legenda, numSlides: c.numSlides },
+        duration: 7, niche: NICHE, instagramHandle: `@${HANDLE}`,
+      });
+      reelId = `reel_${Date.now()}_ia`;
+      db.saveReel({
+        ...reel, id: reelId, carouselId: c.id, carouselTopic: c.topic,
+        niche: NICHE, instagramHandle: `@${HANDLE}`, source: 'daily', archived: false,
+      });
+      console.log(`[DailyContent] fila vazia — reel (${time}) por IA (reserva).`);
+    } catch (e) {
+      console.warn('[DailyContent] reserva IA do reel falhou:', e.message);
+      return { reelId: null, rawVideoId: null };
+    }
+  } else {
+    console.warn('[DailyContent] sem tema, sem item na fila e sem carrossel — reel pulado.');
+    return { reelId: null, rawVideoId: null };
+  }
+  } // fim do if (!reelId) — só cai aqui se o reel por tema não gerou
+
+  let rawVideoId = null;
+  try {
+    if (cfg.autoRenderReel && db.countUsableRawVideos() > 0) {
+      const { renderReelVideo, scheduleReelNow } = require('./reelPipelineService');
+      // Evita os clipes usados nos últimos dias + os já usados HOJE (avoidRawIds).
+      const avoid = recentRawVideoIds(6).concat(avoidRawIds);
+      // forceStyle 'fmteam' → os meus roteiros SEMPRE saem dourados (nunca branco/contorno).
+      const rendered = await renderReelVideo(reelId, { avoidRawVideoIds: avoid, forceStyle: 'fmteam' });
+      rawVideoId = rendered && rendered.rawVideoId;
+      console.log(`[DailyContent] reel ${reelId} renderizado (dourado/fmteam).`);
+      if (queueSlug) db.markReelQueueItemUsed(queueSlug, reelId);
+      if (cfg.autoScheduleReel) {
+        const dates = require('./mlabsService').computeNextReelSlots(1, { times: timeWindow(time) });
+        const sch = await scheduleReelNow(reelId, { dates });
+        console.log(`[DailyContent] reel ${reelId} agendado (~${time}) →`, (sch.dates || []).join(', '));
+      }
+    } else if (cfg.autoRenderReel) {
+      console.warn(`[DailyContent] auto-render ligado mas sem vídeo cru — reel ${reelId} sem vídeo (roteiro NÃO consumido).`);
+    } else if (queueSlug) {
+      db.markReelQueueItemUsed(queueSlug, reelId); // rascunho pra render manual
+    }
+  } catch (e) {
+    console.warn(`[DailyContent] render/agendar reel (${time}) falhou (${reelId}):`, e.message);
+  }
+
+  return { reelId, rawVideoId };
+}
+
+// Gera O REEL DO DIA — 1 só, METRIC-DRIVEN, mirando o HOMEM 25-40 (o comprador).
+// Escolhe o tema vencedor (hormônio/caneta/história-homem/comparação) evitando os
+// temas/grupos dos carrosséis de hoje e os dos últimos 14 dias, gera no dourado e
+// agenda no PICO de alcance (11h, dado do Metricool). Isolado: falha aqui não
+// derruba o batch de carrosséis. (Antes saíam 2 reels/dia mirando mulher — os dados
+// mostraram que o 2º reel não traz seguidor; 1 bem feito pro homem rende mais.)
+async function generateQueuedReel({ carousels = [], excludeThemeIds = [], excludeGroups = [] } = {}) {
+  const times = reelDailyTimes();
+  const time = times[0] || '11:00';              // 1 reel/dia no pico (11h)
+  const reelTheme = pickReelTheme(excludeThemeIds, excludeGroups);
+  const reelIds = [];
+  try {
+    const r = await withTimeout(
+      buildAndScheduleQueuedReel({ time, carousels, avoidRawIds: [], reelTheme }),
+      DAILY_THEME_TIMEOUT_MS, `reel ${time}`,
+    );
+    if (r.reelId) reelIds.push(r.reelId);
+  } catch (e) {
+    console.warn(`[DailyContent] reel ${time} falhou/timeout:`, e.message);
+  }
+  return { reelIds };
+}
+
+// Gera o batch do dia (2 temas). Resiliente: falha de 1 tema não derruba o outro.
+// Sincroniza os números REAIS dos posts do Instagram (saves/shares/seguidores/etc.)
+// pro auto-ajuste por performance (scoreThemes/weightOf) sempre pesar os temas pelo
+// dado MAIS RECENTE. Best-effort: nunca derruba a geração do dia.
+async function refreshInstagramPerformance() {
+  try {
+    const tok = db.getInstagramToken && db.getInstagramToken();
+    const plat = db.getPlatformToken && db.getPlatformToken('instagram');
+    const accessToken = (tok && tok.accessToken) || (plat && plat.access_token);
+    if (!accessToken) { console.log('[DailyContent] IG não conectado — auto-ajuste usa o último dado salvo.'); return; }
+    const { syncPosts } = require('./instagramService');
+    const posts = await withTimeout(syncPosts(accessToken), 90 * 1000, 'sync IG');
+    if (Array.isArray(posts) && posts.length) {
+      db.saveInstagramPosts(posts);
+      console.log(`[DailyContent] performance IG sincronizada (${posts.length} posts) pro auto-ajuste.`);
+    }
+  } catch (e) {
+    console.warn('[DailyContent] sync IG falhou (segue com o dado anterior):', e.message);
+  }
+}
+
+async function generateDailyBatch({ trigger = 'manual' } = {}) {
+  if (state.generating) throw new Error('Já existe uma geração em andamento.');
+
+  const date = new Date().toISOString().slice(0, 10);
+  // Cron é idempotente por dia: se já existe batch de hoje (não-erro), não regera.
+  // O botão "Gerar agora" (manual) ignora essa trava e sempre gera.
+  if (trigger !== 'manual') {
+    // só pula se o batch de hoje REALMENTE tem conteúdo — um batch vazio não bloqueia o dia.
+    const already = db.getAllDailyBatches().some(
+      (b) => b.date === date && b.status !== 'error' && ((b.carouselIds || []).length || (b.reelIds || []).length)
+    );
+    if (already) { console.log('[DailyContent] batch de hoje já existe com conteúdo — cron ignorado.'); return null; }
+  }
+
+  state.generating = true;
+  state.startedAt = new Date().toISOString();
+  state.lastError = null;
+
+  const batchId = `daily_${Date.now()}`;
+  const carouselIds = [];
+  const reelIds = [];
+  let photosUsed = 0;
+  const errors = [];
+  let resolved = [];
+
+  // Placeholder 'generating' JÁ NO INÍCIO: vira o estado corrente do dia (o poller do
+  // workflow espera em vez de ler um batch de erro ANTIGO e desistir). Atualizado no fim.
+  try { db.saveDailyBatch({ id: batchId, date, trigger, themes: [], carouselIds: [], reelIds: [], status: 'generating', errors: [] }); } catch (_) {}
+
+  try {
+    // pickThemes/pickAngle ficam DENTRO do try: se estourarem, o erro é registrado
+    // no batch (visível em /api/daily-content) em vez de sumir no log do Fly.
+    try {
+      // Auto-ajuste por performance: puxa os números REAIS do Instagram ANTES de
+      // escolher os temas, pra o scoreThemes/weightOf pesar pelos saves/shares/
+      // seguidores mais recentes (não por dado velho). Best-effort.
+      await refreshInstagramPerformance();
+      const themes = pickThemes();
+      resolved = themes.map((t) => ({ ...t, topic: pickAngle(t) }));
+
+      const dayCarousels = [];
+      for (const theme of resolved) {
+        try {
+          // Teto por tema: se travar, cai no catch e a geração segue (não pendura tudo).
+          const r = await withTimeout(buildOne(theme), DAILY_THEME_TIMEOUT_MS, `tema ${theme.id}`);
+          if (r.carouselId) carouselIds.push(r.carouselId);
+          if (r.carousel) dayCarousels.push(r.carousel);
+          photosUsed += r.photosUsed;
+          try { if (db.addRecentTopics) db.addRecentTopics([theme.topic]); } catch (_) {}
+        } catch (e) {
+          console.error(`[DailyContent] tema ${theme.id} falhou:`, e.message);
+          errors.push(`${theme.id}: ${e.message}`);
+        }
+      }
+
+      // 1 reel/dia da FILA de roteiros meus (dourado, 19h30). Reserva: IA a partir
+      // de um carrossel do dia se a fila esgotou. Isolado do loop de carrosséis.
+      try {
+        const rq = await withTimeout(generateQueuedReel({
+          carousels: dayCarousels,
+          excludeThemeIds: resolved.map((t) => t.id),
+          excludeGroups: resolved.map((t) => t.group),
+        }), 3 * DAILY_THEME_TIMEOUT_MS, 'reel-fila');
+        for (const id of (rq.reelIds || [])) reelIds.push(id);
+      } catch (e) {
+        console.error('[DailyContent] reel da fila falhou:', e.message);
+        errors.push(`reel-fila: ${e.message}`);
+      }
+    } catch (e) {
+      // Falha ANTES/FORA do loop (ex.: pickThemes). Registra pra não sumir.
+      console.error('[DailyContent] geração falhou antes do loop:', e.message);
+      errors.push(`geração: ${e.message}`);
+    }
+
+    // SEMPRE salva um batch — mesmo em falha total. Assim o erro fica VISÍVEL
+    // (status 'error' + mensagem) em vez de o batch nunca aparecer ("none").
+    const batch = {
+      id: batchId,
+      date,
+      trigger,
+      themes: resolved.map((t) => ({ id: t.id, group: t.group, topic: t.topic })),
+      carouselIds,
+      reelIds,
+      photoSource: photosUsed > 0 ? 'pexels' : 'banco/local',
+      status: errors.length === 0 ? 'done' : (carouselIds.length ? 'partial' : 'error'),
+      errors,
+    };
+    // Atualiza o placeholder 'generating' criado no início (não duplica o batch do dia).
+    try { db.updateDailyBatch(batchId, batch); } catch (e) { console.error('[DailyContent] falha ao salvar batch:', e.message); }
+    state.lastFinishedAt = new Date().toISOString();
+    state.lastError = errors.length ? errors.join(' | ') : null;
+
+    // Encadeia os STORIES do dia no MESMO ciclo. O cron do GitHub é instável pra disparar
+    // o workflow de stories (dropa/atrasa dias), mas o conteúdo diário roda de forma
+    // confiável e acorda a máquina — então geramos o story logo após o conteúdo, de forma
+    // SEQUENCIAL (sem concorrer com o render acima). Idempotente: se o workflow de stories
+    // já tiver gerado hoje, só confere e sai. Falha aqui não derruba o batch diário.
+    try {
+      const { generateDailyStories } = require('./storyService');
+      await generateDailyStories({ trigger: 'daily-chain' });
+    } catch (e) {
+      console.error('[DailyContent] encadeamento de stories falhou (ignorado):', e.message);
+    }
+
+    return batch;
+  } finally {
+    state.generating = false;
+  }
+}
+
+// Hidrata um batch com os carrosséis e reels completos (pra UI)
+function hydrateBatch(batch) {
+  const carousels = db.getAllCarousels();
+  const reels = db.getAllReels();
+  return {
+    ...batch,
+    carousels: (batch.carouselIds || []).map((id) => carousels.find((c) => c.id === id)).filter(Boolean),
+    reels: (batch.reelIds || []).map((id) => reels.find((r) => r.id === id)).filter(Boolean),
+  };
+}
+
+function getState() {
+  return { ...state };
+}
+
+module.exports = { generateDailyBatch, hydrateBatch, getState, THEMES };
