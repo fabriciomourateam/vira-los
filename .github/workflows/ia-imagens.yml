@@ -1,0 +1,44 @@
+name: Imagens IA (manual)
+
+# Gera imagens com a IA do servidor (/api/carousel/regenerate-image-ai) e salva
+# em ia/ no branch assets-capas (nao mexe na main, nao dispara deploy).
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompts:
+        description: 'Prompts em ingles separados por |'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gerar e baixar
+        env:
+          BASE: https://vira-los.fly.dev
+          P: ${{ inputs.prompts }}
+        run: |
+          set +e
+          git fetch origin assets-capas && git checkout assets-capas || git checkout --orphan assets-capas
+          mkdir -p ia
+          IFS='|' read -ra PS <<< "$P"
+          n=0
+          for p in "${PS[@]}"; do
+            n=$((n+1))
+            body=$(jq -n --arg q "$p" --arg nn "gh$GITHUB_RUN_ID-$n" '{query:$q, nonce:$nn}')
+            for t in 1 2 3; do
+              code=$(curl -sS -m 150 -o /tmp/r.json -w '%{http_code}' -H 'Content-Type: application/json' -d "$body" "$BASE/api/carousel/regenerate-image-ai")
+              echo "img $n tentativa $t: HTTP $code $(head -c 200 /tmp/r.json)"
+              [ "$code" = "200" ] && break; sleep 5
+            done
+            u=$(jq -r '.url // empty' /tmp/r.json)
+            [ -n "$u" ] && curl -sSL -m 60 "$BASE$u" -o "ia/img_$n.jpg"
+          done
+          echo '{"git":{"deploymentEnabled":false}}' > vercel.json  # branch so de fotos: sem preview na Vercel
+          git config user.name "vira-los-bot"; git config user.email "bot@users.noreply.github.com"
+          git add ia vercel.json && git commit -qm "imagens IA" && git push -f origin HEAD:assets-capas
