@@ -35,4 +35,5 @@ jobs:
             fi
           done
           git config user.name "vira-los-bot"; git config user.email "bot@users.noreply.github.com"
-          git add drive && git commit -qm "fotos do drive" && git push -q origin HEAD:assets-capas && echo pushed
+          echo '{"git":{"deploymentEnabled":false}}' > vercel.json  # branch so de fotos: sem preview na Vercel
+          git add drive vercel.json && git commit -qm "fotos do drive" && git push -q origin HEAD:assets-capas && echo pushed

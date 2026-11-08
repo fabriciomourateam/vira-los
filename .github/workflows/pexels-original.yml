@@ -30,4 +30,5 @@ jobs:
             echo "$id -> $(stat -c %s orig/$id.jpg) bytes"
           done
           git config user.name "vira-los-bot"; git config user.email "bot@users.noreply.github.com"
-          git add orig && git commit -qm "pexels originais: $IDS" && git push -f origin HEAD:assets-capas
+          echo '{"git":{"deploymentEnabled":false}}' > vercel.json  # branch so de fotos: sem preview na Vercel
+          git add orig vercel.json && git commit -qm "pexels originais: $IDS" && git push -f origin HEAD:assets-capas
