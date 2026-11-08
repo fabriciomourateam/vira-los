@@ -1,0 +1,38 @@
+name: Fotos do Drive pra capa (manual)
+
+# Baixa fotos compartilhadas por link do Google Drive (por ID), reduz pra 1600px
+# e salva no branch assets-capas (nao mexe na main).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'IDs do Drive separados por espaco'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  fotos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar, reduzir e salvar
+        env:
+          IDS: ${{ inputs.ids }}
+        run: |
+          set +e
+          git clone -q --depth 1 --branch assets-capas "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" repo || { git init -q repo; cd repo; git checkout -q -b assets-capas; cd ..; }
+          cd repo && mkdir -p drive
+          for id in $IDS; do
+            curl -sSL -m 120 -o "drive/$id.bin" "https://drive.usercontent.google.com/download?id=$id&export=download&confirm=t"
+            t=$(file -b --mime-type "drive/$id.bin")
+            if echo "$t" | grep -q image; then
+              convert "drive/$id.bin" -auto-orient -resize '1600x1600>' -quality 88 "drive/$id.jpg" && rm "drive/$id.bin"
+              echo "$id ok $(identify -format '%wx%h' drive/$id.jpg)"
+            else
+              echo "$id FALHOU ($t)"; rm -f "drive/$id.bin"
+            fi
+          done
+          git config user.name "vira-los-bot"; git config user.email "bot@users.noreply.github.com"
+          git add drive && git commit -qm "fotos do drive" && git push -q origin HEAD:assets-capas && echo pushed
