@@ -77,6 +77,12 @@ router.get('/connect-url', (req, res) => {
 router.get('/callback', async (req, res) => {
   const { code, error, error_description } = req.query;
 
+  // Conta extra (ex.: mentoria) — salva separado, sem tocar na conta principal
+  const state = String(req.query.state || '');
+  if (state.startsWith('acct:')) {
+    return require('./igAccounts').handleCallback(req, res, state.slice(5));
+  }
+
   if (error || !code) {
     const msg = error_description || error || 'Acesso negado';
     return res.redirect(`${FRONTEND_URL}?ig_error=${encodeURIComponent(msg)}`);

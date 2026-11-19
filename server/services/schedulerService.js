@@ -110,6 +110,8 @@ function start() {
           await processSchedule(s);
         }
       }
+      // Contas extras de Instagram (mentoria etc.) — também publicadas via POST /api/ig-accounts/run-due
+      await require('../routes/igAccounts').runDue();
     } catch (e) {
       console.error('Scheduler error:', e.message);
     } finally {

@@ -814,6 +814,7 @@ module.exports = {
   // Reels Scripts
   getAllReelsScripts, createReelsScript, updateReelsScript, deleteReelsScript,
   getInstagramToken, setInstagramToken, clearInstagramToken,
+  readObj, writeObj,
   getInstagramPosts, saveInstagramPosts,
   getInstagramAnalysis, saveInstagramAnalysis,
   getInstagramAudience, setInstagramAudience,
