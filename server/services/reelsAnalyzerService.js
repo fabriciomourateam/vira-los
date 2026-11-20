@@ -145,7 +145,7 @@ function downloadVideoViaYtDlp(postUrl, outputPath) {
   try {
     execFileSync(
       'yt-dlp',
-      ['-o', outputPath, '--format', 'best[ext=mp4]/best', '--no-playlist', '--no-warnings', postUrl],
+      ['-o', outputPath, '--format', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b', '--merge-output-format', 'mp4', '--no-playlist', '--no-warnings', postUrl],
       { timeout: 120000, stdio: ['ignore', 'ignore', 'ignore'] }
     );
     return fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0;
