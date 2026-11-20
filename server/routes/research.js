@@ -434,13 +434,84 @@ router.get('/instagram-creators', async (req, res) => {
 
 // ── Busca Viral Instagram (por @username via RapidAPI) ────────────────────────
 
+// Plano B da listagem por perfil: Apify (instagram-reel-scraper → instagram-scraper).
+// Devolve os reels MAIS RECENTES do perfil, já no formato da rota.
+async function apifyProfileReels(username, limit = 40) {
+  const apiKey = process.env.APIFY_API_KEY;
+  if (!apiKey) throw new Error('APIFY_API_KEY não configurada');
+  const run = async (actor, input) => {
+    const url = `https://api.apify.com/v2/acts/${actor}/run-sync-get-dataset-items?token=${apiKey}&timeout=280`;
+    const r = await axios.post(url, input, { timeout: 295000 });
+    return Array.isArray(r.data) ? r.data : [];
+  };
+  let items = [];
+  try {
+    items = await run('apify~instagram-reel-scraper', { username: [username], resultsLimit: limit });
+  } catch (e) {
+    console.warn('[Instagram viral/Apify] reel-scraper falhou:', e.response?.status, e.message);
+  }
+  if (!items.length || items.every((i) => i.error)) {
+    items = await run('apify~instagram-scraper', {
+      directUrls: [`https://www.instagram.com/${username}/`],
+      resultsType: 'posts',
+      resultsLimit: limit,
+      addParentData: false,
+    });
+  }
+  return items
+    .filter((i) => !i.error && (i.type === 'Video' || i.videoUrl || i.videoPlayCount || i.videoViewCount))
+    .map((i) => {
+      const code = i.shortCode || i.code || '';
+      return {
+        id: String(i.id || code),
+        title: String(i.caption || '').substring(0, 120),
+        caption: String(i.caption || ''),
+        author: username,
+        author_handle: username,
+        views: Number(i.videoPlayCount || i.videoViewCount || 0),
+        likes: Number(i.likesCount || 0),
+        comments: Number(i.commentsCount || 0),
+        shares: 0,
+        cover: String(i.displayUrl || ''),
+        url: `https://www.instagram.com/reel/${code}/`,
+        platform: 'instagram',
+        posted_at: i.timestamp || null,
+        duration: i.videoDuration || null,
+        video_url: i.videoUrl || null,
+        source: 'apify',
+      };
+    })
+    .filter((v) => v.url && !v.url.endsWith('/reel//'));
+}
+
+// GET /api/research/viral-instagram?q=<@user>[&sort=views|recent][&limit=30]
+//   sort=views (padrão, usado pelo front): top por views.  sort=recent: os últimos.
+//   RapidAPI primeiro; se falhar/vier vazio, cai pro Apify (plano B).
 router.get('/viral-instagram', async (req, res) => {
   const { q = '' } = req.query;
   const username = q.trim().replace(/^@/, '');
   if (!username) return res.json([]);
+  const sortMode = req.query.sort === 'recent' ? 'recent' : 'views';
+  const TARGET = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 50);
+  const sortVideos = (arr) => (sortMode === 'recent'
+    ? arr.sort((a, b) => String(b.posted_at || '').localeCompare(String(a.posted_at || '')))
+    : arr.sort((a, b) => b.views - a.views)).slice(0, TARGET);
+
+  const apifyFallback = async (motivo) => {
+    console.warn(`[Instagram viral] @${username}: RapidAPI ${motivo} → plano B Apify`);
+    try {
+      const vids = sortVideos(await apifyProfileReels(username, Math.max(TARGET, 40)));
+      console.log(`[Instagram viral/Apify] @${username}: ${vids.length} reels (${sortMode})`);
+      res.set('Cache-Control', 'no-store');
+      return res.json(vids);
+    } catch (e) {
+      console.error('[Instagram viral/Apify] Error:', e.response?.data || e.message);
+      return res.status(500).json({ error: `RapidAPI ${motivo}; Apify: ${e.response?.data?.error?.message || e.message}` });
+    }
+  };
 
   const apiKey = process.env.RAPIDAPI_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'RAPIDAPI_KEY não configurada' });
+  if (!apiKey) return apifyFallback('sem RAPIDAPI_KEY');
 
   try {
     // 1. Busca o user_id pelo username
@@ -451,14 +522,13 @@ router.get('/viral-instagram', async (req, res) => {
     });
 
     const userId = userRes.data?.UserID;
-    if (!userId) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (!userId) return apifyFallback('não achou o usuário');
 
     // 2. Busca os reels do usuário — pagina pra montar um pool grande de candidatos
     //    antes de ordenar por views (a API devolve ~12 por página em ordem cronológica,
     //    então um reel viral antigo só entra no ranking se buscarmos páginas suficientes).
     const RAPID_HOST = 'instagram-api-fast-reliable-data-scraper.p.rapidapi.com';
     const headers = { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': RAPID_HOST };
-    const TARGET = 30;          // quantos reels retornar (top por views)
     const MAX_PAGES = 12;       // pool de candidatos (~144 reels) — cobre quase todo perfil
     const MAX_CANDIDATES = 200; // teto de segurança
     let items = [];
@@ -504,16 +574,17 @@ router.get('/viral-instagram', async (req, res) => {
           posted_at: postedAt,
         };
       })
-      // Ordena por alcance (views) desc e limita a 30
-      .sort((a, b) => b.views - a.views)
-      .slice(0, TARGET);
+      ;
+    if (!videos.length) return apifyFallback('veio vazio');
+    sortVideos(videos);
+    videos.splice(TARGET);
 
     console.log(`[Instagram viral] @${username}: ${items.length} reels analisados → top ${videos.length} por views`);
     res.set('Cache-Control', 'no-store');
     res.json(videos);
   } catch (e) {
     console.error('[Instagram viral] Error:', e.response?.data || e.message);
-    res.status(500).json({ error: e.response?.data?.message || e.message });
+    return apifyFallback(`erro ${e.response?.status || ''} ${e.response?.data?.message || e.message}`.trim());
   }
 });
 
