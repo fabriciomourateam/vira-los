@@ -101,10 +101,16 @@ Palavras-chave de CTA sugeridas: `CONSULTORIA` (aluno final), `MENTORIA` (treina
 
 ## 6. Produção automática com o clone (pipeline — validar na 1ª produção)
 
-Ferramentas escolhidas pelo Fabricio: **ElevenLabs** (voz clonada) + **OpenRouter → Kling** (vídeo do clone) + **Remotion** (texto/overlays) + **ffmpeg**.
-Pendências antes de rodar: (a) chaves de API cadastradas como credencial do ambiente pros hosts `api.elevenlabs.io` e `openrouter.ai`; (b) character sheet do Fabricio (10–20 fotos: frente, perfis, meio corpo, luz boa); (c) 1–3 min de áudio limpo dele pra clonar a voz.
+Ferramentas: **voz clonada grátis** (Chatterbox, abaixo) + vídeo do rosto (Kling via OpenRouter, pago ~US$ 0,08–0,11/s; ou lip-sync sobre vídeos reais dele) + **Remotion** (texto/overlays) + **ffmpeg**.
+Pendências do vídeo do rosto: o notebook do Fabricio NÃO tem GPU NVIDIA (só AMD Radeon integrada) → geração/lip-sync local de graça não roda nele; pra vídeo pago, cadastrar a chave do OpenRouter como credencial do ambiente; pro clone 100% IA, 10–20 fotos variadas (hoje há só 2, mesma roupa).
 
-1. **Voz**: roteiro → TTS na voz clonada, pedindo timestamps por palavra (alinhamento) → `voz.mp3` + `palavras.json`.
+1. **Voz** (PADRÃO aprovado 21/11/2026 = "versão F", grátis): `scripts/voz.py` com **Chatterbox Multilingual** (MIT, roda em CPU, ~30 s por frase de 8 s).
+   Timbre = média das amostras B (vídeo do quiz) + C; energia 1.0; cfg 0.3; silêncio > 0,15 s vira 0,09 s; frases de ênfase terminam em "!".
+   **Amostras e digital da voz ficam SÓ no Google Drive do Fabricio**, pasta "FM Voz Clone (PRIVADO)" (id `1-OtjmN2iwz5-0sQ6PSjwJX124TwG8PqQ`):
+   `ref_v1.wav`, `ref_v3.wav`, `voz_fabricio_F.pt`. **Nunca commitar áudio/digital de voz neste repo — ele é PÚBLICO.**
+   Baixe pra uma pasta local → `VOZ_DIR=<pasta> python3 -I scripts/voz.py "roteiro" voz.wav`. Mudar a voz = mudar `PADRAO` no script
+   ou recriar a digital (`--criar-digital`) com outras amostras. Depois rode Whisper com `word_timestamps` no `voz.wav` → `palavras.json`.
+   Fallback pago se a qualidade não bastar: ElevenLabs Starter (~US$ 6/mês).
 2. **Planos**: quebre nos tempos das frases segundo o formato (F1: 1,9–2,4 s; listas 0,8–1,2 s). Cada plano = trecho de áudio.
 3. **Vídeo do clone**: 1 geração por plano (ou por bloco de 5–10 s, recortado depois), mesmo character sheet, mesmo cenário/figurino em todos; alterne prompt "medium close-up" e "tight close-up" pros punch-ins; lip-sync com o trecho de áudio. Mantenha seed/cenário fixos pra consistência.
 4. **Remotion**: composição 1080x1920 30 fps com os componentes Headline (sans extra-bold itálica / serifa), Legenda palavra-a-palavra (serifa branca, y≈70%), Inset de print (topo), PílulaCTA, CartãoLista e Rodapé, todos com **entrada seca** (sem animação), exceto F4 (fade/typewriter na abertura).
