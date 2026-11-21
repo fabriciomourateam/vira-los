@@ -1,6 +1,6 @@
 ---
 name: reels-clone-fm
-description: Roteiriza e planeja a edição de reels do Fabricio (consultoria e mentoria FM Team) com o clone IA dele (rosto do character sheet + voz clonada), seguindo o formato decupado de 7 reels de referência (talking head "yap", jump cut por frase, headline no topo, legenda palavra a palavra, sem música e sem SFX). Use quando ele pedir "faz um reel/vídeo sobre X", "roteiro de reel", "vídeo pra vender a consultoria/mentoria", "vídeo com meu clone" ou quiser adicionar perfis de referência à decupagem.
+description: Roteiriza e planeja a edição de reels do Fabricio (consultoria e mentoria FM Team) com o clone IA dele (avatar HeyGen + voz clonada; pipeline em §6), seguindo o formato decupado de 7 reels de referência (talking head "yap", jump cut por frase, headline no topo, legenda palavra a palavra, sem música e sem SFX). Use quando ele pedir "faz um reel/vídeo sobre X", "roteiro de reel", "vídeo pra vender a consultoria/mentoria", "vídeo com meu clone" ou quiser adicionar perfis de referência à decupagem.
 ---
 
 # Reels com o clone do Fabricio — formato decupado
@@ -99,22 +99,43 @@ Palavras-chave de CTA sugeridas: `CONSULTORIA` (aluno final), `MENTORIA` (treina
 5. Liste os **assets**: prints/provas que o Fabricio precisa mandar; B-roll (só F4); prompts de geração por plano (clone).
 6. Se a produção automática estiver ativa (§6), gere; senão pare no plano de edição.
 
-## 6. Produção automática com o clone (pipeline — validar na 1ª produção)
+## 6. Produção automática com o clone (pipeline VALIDADO 21/11/2026 — "ficou muito bom o heygen")
 
-Ferramentas: **voz clonada grátis** (Chatterbox, abaixo) + vídeo do rosto (Kling via OpenRouter, pago ~US$ 0,08–0,11/s; ou lip-sync sobre vídeos reais dele) + **Remotion** (texto/overlays) + **ffmpeg**.
-Pendências do vídeo do rosto: o notebook do Fabricio NÃO tem GPU NVIDIA (só AMD Radeon integrada) → geração/lip-sync local de graça não roda nele; pra vídeo pago, cadastrar a chave do OpenRouter como credencial do ambiente; pro clone 100% IA, 10–20 fotos variadas (hoje há só 2, mesma roupa).
+Fluxo: **roteiro (§3) → HeyGen (rosto + voz do Fabricio) → `montar_reel.py` (corta pausas, pele, dados) → Remotion (headline + legenda) → mp4**.
 
-1. **Voz** (PADRÃO aprovado 21/11/2026 = "versão F", grátis): `scripts/voz.py` com **Chatterbox Multilingual** (MIT, roda em CPU, ~30 s por frase de 8 s).
-   Timbre = média das amostras B (vídeo do quiz) + C; energia 1.0; cfg 0.3; silêncio > 0,15 s vira 0,09 s; frases de ênfase terminam em "!".
-   **Amostras e digital da voz ficam SÓ no Google Drive do Fabricio**, pasta "FM Voz Clone (PRIVADO)" (id `1-OtjmN2iwz5-0sQ6PSjwJX124TwG8PqQ`):
-   `ref_v1.wav`, `ref_v3.wav`, `voz_fabricio_F.pt`. **Nunca commitar áudio/digital de voz neste repo — ele é PÚBLICO.**
-   Baixe pra uma pasta local → `VOZ_DIR=<pasta> python3 -I scripts/voz.py "roteiro" voz.wav`. Mudar a voz = mudar `PADRAO` no script
-   ou recriar a digital (`--criar-digital`) com outras amostras. Depois rode Whisper com `word_timestamps` no `voz.wav` → `palavras.json`.
-   Fallback pago se a qualidade não bastar: ElevenLabs Starter (~US$ 6/mês).
-2. **Planos**: quebre nos tempos das frases segundo o formato (F1: 1,9–2,4 s; listas 0,8–1,2 s). Cada plano = trecho de áudio.
-3. **Vídeo do clone**: 1 geração por plano (ou por bloco de 5–10 s, recortado depois), mesmo character sheet, mesmo cenário/figurino em todos; alterne prompt "medium close-up" e "tight close-up" pros punch-ins; lip-sync com o trecho de áudio. Mantenha seed/cenário fixos pra consistência.
-4. **Remotion**: composição 1080x1920 30 fps com os componentes Headline (sans extra-bold itálica / serifa), Legenda palavra-a-palavra (serifa branca, y≈70%), Inset de print (topo), PílulaCTA, CartãoLista e Rodapé, todos com **entrada seca** (sem animação), exceto F4 (fade/typewriter na abertura).
-5. **ffmpeg**: concat dos planos + voz, loudnorm −14 LUFS, sem música; exporta `reel_final.mp4` + `legenda.txt` (copy do post).
+1. **Roteiro** → `roteiro.txt` (fala corrida, 1 frase por linha) e `roteiro.json`
+   (`[{fala, headline, estilo: sans|serif|cta, punch}]`, 1 item por frase; ex.: `remotion/roteiro_exemplo.json`).
+   Pausa = pontuação: vírgula curta, ponto/interrogação média, "…" suspense (com moderação). Escreva "mentoria" minúsculo
+   (maiúsculo a voz soletra). O corte de pausas da etapa 3 acerta o ritmo, então não precisa caprichar.
+2. **Vídeo do clone — HeyGen** (PADRÃO): `scripts/heygen.py --texto roteiro.txt cru.mp4`.
+   Avatar de FOTO "Consultoria Esportiva FMTeam" (look `38c2485afd8543d4aefb2762b4cffbf8`, criado no site com um quadro do
+   vídeo real dele) + voz que o HeyGen clonou dele (`7b825d5b33a44813a80b6ae192269ce9`); Avatar IV ligado, 720x1280.
+   - Chave em `HEYGEN_API_KEY` ou `~/.heygen/key` (pedir pelo formulário seguro de credencial, nunca no chat; nunca commitar).
+     Rede: `api.heygen.com`, `upload.heygen.com`, `files2.heygen.ai`, `resource2.heygen.ai`.
+   - **Custo**: a API cobra de uma carteira em USD à parte do plano do site (recarga mínima US$ 5; sem crédito grátis desde
+     fev/2026). Avatar IV ≈ US$ 3–5/min → **~US$ 1,50–2,50 por reel de 25–30 s**. Sem saldo, a API responde
+     `insufficient_credit`: aí o Fabricio gera no site (3 vídeos grátis/mês, com marca d'água) e manda o mp4.
+   - O payload da API (talking_photo + Avatar IV) ainda não rodou com saldo — o 1º uso valida; se der erro de campo,
+     `--listar` mostra looks/vozes e a doc atual é a v3 (developers.heygen.com).
+   - Marca d'água "HeyGen" só sai com plano pago/API. **Não remover na edição** (termos de uso).
+   - `--audio voz.wav` usa outra voz (ex.: a voz F do `voz.py`, abaixo) em vez da do HeyGen.
+3. **Pós**: `python3 -I scripts/montar_reel.py cru.mp4 roteiro.json remotion/` → Whisper com tempo por palavra; corta todo
+   silêncio > 0,25 s (jump cut, como nas refs; 27,9 s → 24,9 s no teste); alinha cada frase às palavras (difflib);
+   suaviza a pele (bilateral 80%, `--sem-pele` desliga); grava `remotion/public/base.mp4` + `src/data/*.json`.
+4. **Remotion**: `cd remotion && npm ci && npx remotion render src/index.ts Reel2 out/reel.mp4 …` (ver `remotion/README.md`).
+   Headline no topo trocando por frase (corte seco), legenda palavra a palavra em serifa (y≈83%), punch-in 1.12 alternado,
+   sem música e sem SFX (§1).
+5. Entregue o mp4 + a legenda do post (copy) + o aviso de IA exigido pelo Meta (§4).
+
+**Voz F (alternativa grátis, Chatterbox)** — `scripts/voz.py`, aprovada 21/11/2026 antes do HeyGen: Chatterbox Multilingual (MIT, CPU,
+~30 s por frase de 8 s); timbre = média das amostras B + C; energia 1.0; cfg 0.3; silêncio > 0,15 s vira 0,09 s.
+Amostras/digital SÓ no Google Drive do Fabricio, pasta "FM Voz Clone (PRIVADO)" (id `1-OtjmN2iwz5-0sQ6PSjwJX124TwG8PqQ`):
+`ref_v1.wav`, `ref_v3.wav`, `voz_fabricio_F.pt`. **Nunca commitar áudio/digital de voz — o repo é PÚBLICO.**
+`VOZ_DIR=<pasta> python3 -I scripts/voz.py "roteiro" voz.wav`; pronúncia: "mentoría" com acento força a tônica, evite "Um:".
+
+**Descartados (21/11/2026)**: lip-sync open source sobre vídeo real (Wav2Lip: boca borrada; LatentSync 1.5 no Kaggle T4:
+boca "diferente da minha", guidance 2.2 não resolveu; LatentSync 1.6 nem rodou — fila/cota da GPU grátis); Kling Omni-Ref
+(caro pro volume). Opção paga não testada: Runware `sync:lipsync-2-pro` (~US$ 0,073/s) — mexe só a boca no vídeo real.
 
 ## 7. Adicionar novas referências
 

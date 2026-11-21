@@ -1,0 +1,1 @@
+# Coloque aqui base.mp4 (gerado pelo montar_reel.py). NUNCA commitar vídeo/áudio: o repo é público.
