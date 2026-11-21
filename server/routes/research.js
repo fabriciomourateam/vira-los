@@ -607,7 +607,7 @@ router.get('/download-reel', async (req, res) => {
   try {
     execFileSync(
       'yt-dlp',
-      ['-o', outPath, '--format', 'best[ext=mp4]/best', '--no-playlist', '--no-warnings', url],
+      ['-o', outPath, '--format', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b', '--merge-output-format', 'mp4', '--no-playlist', '--no-warnings', url],
       { timeout: 120000, stdio: ['ignore', 'ignore', 'ignore'] }
     );
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size === 0) {
