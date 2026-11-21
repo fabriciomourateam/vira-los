@@ -1,0 +1,74 @@
+[
+ {
+  "fala": "Três perguntas pra você, treinador que tá no online.",
+  "headline": "3 perguntas 👇",
+  "estilo": "sans",
+  "de": 0.0,
+  "ate": 2.79,
+  "fonte_s": 2.0,
+  "punch": false
+ },
+ {
+  "fala": "Primeira: você consegue explicar o seu serviço em uma frase?",
+  "headline": "1️⃣ Seu serviço em 1 frase?",
+  "estilo": "sans",
+  "de": 2.79,
+  "ate": 6.25,
+  "fonte_s": 24.0,
+  "punch": true
+ },
+ {
+  "fala": "Segunda: você sabe quantos alunos renovaram no último mês?",
+  "headline": "2️⃣ Quantos renovaram?",
+  "estilo": "sans",
+  "de": 6.25,
+  "ate": 9.43,
+  "fonte_s": 39.0,
+  "punch": false
+ },
+ {
+  "fala": "Terceira: você tem um jeito de conseguir aluno novo todo mês, sem depender de indicação?",
+  "headline": "3️⃣ Aluno novo sem indicação?",
+  "estilo": "sans",
+  "de": 9.43,
+  "ate": 14.01,
+  "fonte_s": 6.02,
+  "punch": true
+ },
+ {
+  "fala": "Se você respondeu não em alguma, o problema não é o seu treino.",
+  "headline": "❌ Não é o seu treino",
+  "estilo": "sans",
+  "de": 14.01,
+  "ate": 17.61,
+  "fonte_s": 43.31,
+  "punch": false
+ },
+ {
+  "fala": "É o seu negócio!",
+  "headline": "É o seu negócio.",
+  "estilo": "serif",
+  "de": 17.61,
+  "ate": 19.01,
+  "fonte_s": 12.41,
+  "punch": true
+ },
+ {
+  "fala": "E é exatamente isso que eu monto junto com você na mentoría.",
+  "headline": "Mentoria 🤝",
+  "estilo": "sans",
+  "de": 19.01,
+  "ate": 22.19,
+  "fonte_s": 28.18,
+  "punch": false
+ },
+ {
+  "fala": "Comenta mentoría, que eu te mando como funciona!",
+  "headline": "Comenta \"MENTORIA\"",
+  "estilo": "cta",
+  "de": 22.19,
+  "ate": 24.77,
+  "fonte_s": 49.25,
+  "punch": true
+ }
+]

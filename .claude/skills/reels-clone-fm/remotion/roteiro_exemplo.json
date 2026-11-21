@@ -1,0 +1,50 @@
+[
+ {
+  "fala": "Três perguntas pra você, treinador que tá no online.",
+  "headline": "3 perguntas 👇",
+  "estilo": "sans",
+  "punch": false
+ },
+ {
+  "fala": "Primeira: você consegue explicar o seu serviço em uma frase?",
+  "headline": "1️⃣ Seu serviço em 1 frase?",
+  "estilo": "sans",
+  "punch": true
+ },
+ {
+  "fala": "Segunda: você sabe quantos alunos renovaram no último mês?",
+  "headline": "2️⃣ Quantos renovaram?",
+  "estilo": "sans",
+  "punch": false
+ },
+ {
+  "fala": "Terceira: você tem um jeito de conseguir aluno novo todo mês, sem depender de indicação?",
+  "headline": "3️⃣ Aluno novo sem indicação?",
+  "estilo": "sans",
+  "punch": true
+ },
+ {
+  "fala": "Se você respondeu não em alguma, o problema não é o seu treino.",
+  "headline": "❌ Não é o seu treino",
+  "estilo": "sans",
+  "punch": false
+ },
+ {
+  "fala": "É o seu negócio!",
+  "headline": "É o seu negócio.",
+  "estilo": "serif",
+  "punch": true
+ },
+ {
+  "fala": "E é exatamente isso que eu monto junto com você na mentoría.",
+  "headline": "Mentoria 🤝",
+  "estilo": "sans",
+  "punch": false
+ },
+ {
+  "fala": "Comenta mentoría, que eu te mando como funciona!",
+  "headline": "Comenta \"MENTORIA\"",
+  "estilo": "cta",
+  "punch": true
+ }
+]
