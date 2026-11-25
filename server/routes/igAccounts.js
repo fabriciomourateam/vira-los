@@ -145,8 +145,29 @@ async function publish(acc, imageUrls, caption) {
     creationId = r.data.id;
   }
   await waitReady(creationId, t);
-  const r = await axios.post(`${base}/media_publish`, null, { params: { creation_id: creationId, access_token: t }, timeout: 60000 });
-  return r.data.id;
+  return publishWithRetry(base, creationId, t);
+}
+
+// Meta às vezes responde 9007 ("Media ID is not available") no media_publish mesmo com o container
+// FINISHED: ainda está processando do lado deles. Espera e tenta de novo, e antes de cada nova tentativa
+// confere se o container já foi publicado (evita post duplicado).
+async function publishWithRetry(base, creationId, t) {
+  const waits = [5000, 10000, 15000, 20000, 30000];
+  for (let i = 0; ; i++) {
+    try {
+      const r = await axios.post(`${base}/media_publish`, null, { params: { creation_id: creationId, access_token: t }, timeout: 60000 });
+      return r.data.id;
+    } catch (err) {
+      const code = err?.response?.data?.error?.code;
+      if (code !== 9007 || i >= waits.length) throw err;
+      console.warn(`[igAccounts] media_publish 9007, tentativa ${i + 1}; aguardando ${waits[i] / 1000}s`);
+      await new Promise((ok) => setTimeout(ok, waits[i]));
+      try {
+        const st = await axios.get(`${IG_GRAPH}/${creationId}`, { params: { fields: 'status_code', access_token: t }, timeout: 15000 });
+        if (st.data.status_code === 'PUBLISHED') return `published:${creationId}`;
+      } catch { /* segue pra nova tentativa */ }
+    }
+  }
 }
 
 // ─── Agendamento ────────────────────────────────────────────────────────────
